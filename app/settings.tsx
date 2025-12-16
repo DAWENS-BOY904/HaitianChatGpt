@@ -222,6 +222,7 @@ export default function SettingsScreen() {
           <SettingRow icon="card-outline" title="Subscription" value="Free" />
           <SettingRow icon="refresh-outline" title="Restore purchases" onPress={() => {}} />
           <SettingRow icon="receipt-outline" title="Orders" onPress={() => {}} />
+          <SettingRow icon="information-circle-outline" title="About" onPress={() => router.push('/about')} />
         </View>
 
         <View style={styles.section}>

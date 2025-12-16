@@ -11,6 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { getSupabaseClient } from '@/template';
 import { decode } from 'base64-arraybuffer';
+import { useRouter } from 'expo-router';
 
 export default function HomeScreen() {
   const { colors } = useTheme();
@@ -227,7 +228,9 @@ export default function HomeScreen() {
         <Text style={styles.headerTitle} numberOfLines={1}>
           {currentConversation?.title || 'HaitianChatGpt'}
         </Text>
-        <View style={styles.headerButton} />
+        <TouchableOpacity style={styles.headerButton} onPress={() => router.push('/social')}>
+          <Ionicons name="people" size={24} color={colors.text} />
+        </TouchableOpacity>
       </View>
 
       {loading ? (
