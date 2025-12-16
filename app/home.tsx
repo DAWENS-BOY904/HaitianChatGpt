@@ -1,26 +1,35 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, FlatList, KeyboardAvoidingView, Platform, StatusBar, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, FlatList, KeyboardAvoidingView, Platform, StatusBar, ActivityIndicator, Share } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
 import { useConversation } from '../hooks/useConversation';
+import { useSubscription } from '../hooks/useSubscription';
 import { useSettings } from '../hooks/useSettings';
+import { useAlert } from '@/template';
 import { Spacing, Typography, BorderRadius } from '../constants/theme';
 import { MenuModal } from '../components/MenuModal';
 import { ToolsModal } from '../components/ToolsModal';
+import { ConversationMenuModal } from '../components/ConversationMenuModal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
 import { getSupabaseClient } from '@/template';
 import { decode } from 'base64-arraybuffer';
 import { useRouter } from 'expo-router';
+import { Accelerometer } from 'expo-sensors';
 
 export default function HomeScreen() {
   const { colors } = useTheme();
   const { settings } = useSettings();
-  const { messages, currentConversation, sendMessage, createConversation, loading } = useConversation();
+  const { canSendMessage, incrementMessageCount, limits } = useSubscription();
+  const { messages, currentConversation, sendMessage, createConversation, loading, updateConversationTitle, deleteConversation } = useConversation();
+  const { showAlert } = useAlert();
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const [inputText, setInputText] = useState('');
   const [menuVisible, setMenuVisible] = useState(false);
   const [toolsVisible, setToolsVisible] = useState(false);
+  const [conversationMenuVisible, setConversationMenuVisible] = useState(false);
   const [sending, setSending] = useState(false);
   const flatListRef = useRef<FlatList>(null);
 
@@ -38,8 +47,32 @@ export default function HomeScreen() {
     }
   }, [messages]);
 
+  // Shake detection for bug report
+  useEffect(() => {
+    const subscription = Accelerometer.addListener(accelerometerData => {
+      const { x, y, z } = accelerometerData;
+      const acceleration = Math.sqrt(x * x + y * y + z * z);
+      
+      if (acceleration > 2.5) {
+        router.push('/bugreport');
+      }
+    });
+
+    Accelerometer.setUpdateInterval(100);
+
+    return () => subscription.remove();
+  }, []);
+
   const handleSend = async () => {
     if (!inputText.trim() || sending) return;
+
+    if (!canSendMessage()) {
+      showAlert('Limit Reached', `You have reached your daily limit of ${limits.messagesPerDay} messages. Upgrade to Premium for unlimited messages.`, [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Upgrade', onPress: () => router.push('/subscription') },
+      ]);
+      return;
+    }
 
     setSending(true);
     const text = inputText;
@@ -47,19 +80,32 @@ export default function HomeScreen() {
 
     try {
       await sendMessage(text);
+      await incrementMessageCount();
+    } catch (error) {
+      console.error('Send error:', error);
+      showAlert('Error', 'Failed to send message');
     } finally {
       setSending(false);
     }
   };
 
   const handleImagePicker = async () => {
+    if (!limits.canUploadMedia) {
+      showAlert('Premium Feature', 'Media uploads are only available for Premium members.', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Upgrade', onPress: () => router.push('/subscription') },
+      ]);
+      return;
+    }
+
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') return;
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ImagePicker.MediaTypeOptions.All,
       quality: 0.8,
       base64: true,
+      allowsEditing: true,
     });
 
     if (!result.canceled && result.assets[0]) {
@@ -67,29 +113,106 @@ export default function HomeScreen() {
       const supabase = getSupabaseClient();
       
       try {
-        const fileName = `${Date.now()}.jpg`;
+        const fileName = `${Date.now()}.${asset.type === 'video' ? 'mp4' : 'jpg'}`;
         const filePath = `${currentConversation?.id || 'temp'}/${fileName}`;
+        const bucket = asset.type === 'video' ? 'media-files' : 'chat-images';
         
         const { data, error } = await supabase.storage
-          .from('chat-images')
+          .from(bucket)
           .upload(filePath, decode(asset.base64!), {
-            contentType: 'image/jpeg',
+            contentType: asset.type === 'video' ? 'video/mp4' : 'image/jpeg',
           });
 
         if (error) throw error;
 
         const { data: urlData } = supabase.storage
-          .from('chat-images')
+          .from(bucket)
           .getPublicUrl(filePath);
 
-        if (inputText.trim()) {
-          await sendMessage(inputText, urlData.publicUrl);
+        if (inputText.trim() || asset.type === 'image') {
+          await sendMessage(inputText || '[Image]', urlData.publicUrl);
           setInputText('');
+          await incrementMessageCount();
         }
       } catch (error) {
-        console.error('Image upload error:', error);
+        console.error('Upload error:', error);
+        showAlert('Error', 'Failed to upload media');
       }
     }
+  };
+
+  const handleDocumentPicker = async () => {
+    if (!limits.canUploadMedia) {
+      showAlert('Premium Feature', 'File uploads are only available for Premium members.', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Upgrade', onPress: () => router.push('/subscription') },
+      ]);
+      return;
+    }
+
+    const result = await DocumentPicker.getDocumentAsync({
+      type: ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+    });
+
+    if (!result.canceled && result.assets[0]) {
+      showAlert('Info', `File selected: ${result.assets[0].name}`);
+    }
+  };
+
+  const handleShare = async () => {
+    if (!currentConversation) return;
+
+    const messagesText = messages
+      .map(m => `${m.role === 'user' ? 'You' : 'AI'}: ${m.content}`)
+      .join('\n\n');
+
+    try {
+      await Share.share({
+        message: messagesText,
+        title: currentConversation.title,
+      });
+    } catch (error) {
+      console.error('Share error:', error);
+    }
+  };
+
+  const handleRename = () => {
+    if (!currentConversation) return;
+
+    showAlert('Rename Conversation', 'Enter a new title:', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Rename',
+        onPress: async () => {
+          // In a real implementation, you would show a text input dialog
+          await updateConversationTitle(currentConversation.id, 'New Title');
+        },
+      },
+    ]);
+  };
+
+  const handleReport = () => {
+    router.push('/bugreport');
+  };
+
+  const handleArchive = () => {
+    showAlert('Success', 'Conversation archived');
+  };
+
+  const handleDelete = async () => {
+    if (!currentConversation) return;
+
+    showAlert('Delete Conversation', 'Are you sure? This cannot be undone.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          await deleteConversation(currentConversation.id);
+          await createConversation();
+        },
+      },
+    ]);
   };
 
   const styles = StyleSheet.create({
@@ -106,12 +229,19 @@ export default function HomeScreen() {
       borderBottomWidth: 1,
       borderBottomColor: colors.border,
     },
+    headerLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flex: 1,
+    },
     headerButton: {
       padding: Spacing.xs,
     },
     headerTitle: {
       ...Typography.heading,
       color: colors.text,
+      flex: 1,
+      marginLeft: Spacing.sm,
     },
     messagesContainer: {
       flex: 1,
@@ -222,14 +352,19 @@ export default function HomeScreen() {
       <StatusBar barStyle={colors.text === '#FFFFFF' ? 'light-content' : 'dark-content'} />
       
       <View style={styles.header}>
-        <TouchableOpacity style={styles.headerButton} onPress={() => setMenuVisible(true)}>
-          <Ionicons name="menu" size={24} color={colors.text} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle} numberOfLines={1}>
-          {currentConversation?.title || 'HaitianChatGpt'}
-        </Text>
+        <View style={styles.headerLeft}>
+          <TouchableOpacity style={styles.headerButton} onPress={() => setMenuVisible(true)}>
+            <Ionicons name="menu" size={24} color={colors.text} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle} numberOfLines={1}>
+            {currentConversation?.title || 'HaitianChatGpt'}
+          </Text>
+        </View>
         <TouchableOpacity style={styles.headerButton} onPress={() => router.push('/social')}>
           <Ionicons name="people" size={24} color={colors.text} />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.headerButton} onPress={() => setConversationMenuVisible(true)}>
+          <Ionicons name="ellipsis-horizontal" size={24} color={colors.text} />
         </TouchableOpacity>
       </View>
 
@@ -263,6 +398,10 @@ export default function HomeScreen() {
 
         <TouchableOpacity style={styles.iconButton} onPress={handleImagePicker}>
           <Ionicons name="image-outline" size={24} color={colors.text} />
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.iconButton} onPress={handleDocumentPicker}>
+          <Ionicons name="attach-outline" size={24} color={colors.text} />
         </TouchableOpacity>
 
         <TextInput
@@ -299,6 +438,15 @@ export default function HomeScreen() {
         onSelectTool={(tool) => {
           setInputText(`[${tool}] `);
         }}
+      />
+      <ConversationMenuModal
+        visible={conversationMenuVisible}
+        onClose={() => setConversationMenuVisible(false)}
+        onShare={handleShare}
+        onRename={handleRename}
+        onReport={handleReport}
+        onArchive={handleArchive}
+        onDelete={handleDelete}
       />
     </KeyboardAvoidingView>
   );

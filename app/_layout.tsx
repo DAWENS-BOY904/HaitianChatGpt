@@ -4,6 +4,7 @@ import { ThemeProvider } from '../contexts/ThemeContext';
 import { ConversationProvider } from '../contexts/ConversationContext';
 import { SettingsProvider } from '../contexts/SettingsContext';
 import { SocialProvider } from '../contexts/SocialContext';
+import { SubscriptionProvider } from '../contexts/SubscriptionContext';
 
 export default function RootLayout() {
   return (
@@ -11,19 +12,24 @@ export default function RootLayout() {
       <AuthProvider>
         <ThemeProvider>
           <SettingsProvider>
-            <SocialProvider>
-              <ConversationProvider>
-                <Stack screenOptions={{ headerShown: false }}>
-                  <Stack.Screen name="index" />
-                  <Stack.Screen name="login" />
-                  <Stack.Screen name="home" />
-                  <Stack.Screen name="settings" />
-                  <Stack.Screen name="social" />
-                  <Stack.Screen name="chat" />
-                  <Stack.Screen name="about" />
-                </Stack>
-              </ConversationProvider>
-            </SocialProvider>
+            <SubscriptionProvider>
+              <SocialProvider>
+                <ConversationProvider>
+                  <Stack screenOptions={{ headerShown: false }}>
+                    <Stack.Screen name="index" />
+                    <Stack.Screen name="login" />
+                    <Stack.Screen name="home" />
+                    <Stack.Screen name="settings" />
+                    <Stack.Screen name="social" />
+                    <Stack.Screen name="chat" />
+                    <Stack.Screen name="about" />
+                    <Stack.Screen name="subscription" />
+                    <Stack.Screen name="admin" />
+                    <Stack.Screen name="bugreport" />
+                  </Stack>
+                </ConversationProvider>
+              </SocialProvider>
+            </SubscriptionProvider>
           </SettingsProvider>
         </ThemeProvider>
       </AuthProvider>
