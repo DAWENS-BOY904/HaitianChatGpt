@@ -17,7 +17,7 @@ import { Spacing, Typography, BorderRadius } from '../constants/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getSupabaseClient } from '@/template';
 import * as ImagePicker from 'expo-image-picker';
-import { Buffer } from 'buffer';
+import { decode } from 'base64-arraybuffer';
 
 export default function ProfileScreen() {
   const { colors } = useTheme();
@@ -40,16 +40,13 @@ export default function ProfileScreen() {
   const loadProfile = async () => {
     if (!user) return;
 
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('user_profiles')
-      .select('username, full_name, profile_photo_url, username_last_changed')
+      .select(
+        'username, full_name, profile_photo_url, username_last_changed'
+      )
       .eq('id', user.id)
       .single();
-
-    if (error) {
-      console.log('Load profile error:', error);
-      return;
-    }
 
     if (data) {
       setUsername(data.username || '');
@@ -69,7 +66,8 @@ export default function ProfileScreen() {
   };
 
   const handleChangePhoto = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    const { status } =
+      await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') return;
 
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -87,34 +85,26 @@ export default function ProfileScreen() {
     try {
       const asset = result.assets[0];
       const filePath = `${user?.id}/${Date.now()}.jpg`;
-      const fileData = Buffer.from(asset.base64!, 'base64');
 
-      const { error: uploadError } = await supabase.storage
+      await supabase.storage
         .from('chat-images')
-        .upload(filePath, fileData, {
+        .upload(filePath, decode(asset.base64!), {
           contentType: 'image/jpeg',
           upsert: true,
         });
 
-      if (uploadError) throw uploadError;
-
-      const { data: urlData, error: urlError } = supabase.storage
+      const { data: urlData } = supabase.storage
         .from('chat-images')
         .getPublicUrl(filePath);
 
-      if (urlError) throw urlError;
-
-      const { error: updateError } = await supabase
+      await supabase
         .from('user_profiles')
         .update({ profile_photo_url: urlData.publicUrl })
         .eq('id', user?.id);
 
-      if (updateError) throw updateError;
-
       setProfilePhoto(urlData.publicUrl);
       showAlert('Success', 'Photo updated');
-    } catch (err) {
-      console.log('Photo upload failed:', err);
+    } catch {
       showAlert('Error', 'Photo upload failed');
     } finally {
       setLoading(false);
@@ -138,29 +128,21 @@ export default function ProfileScreen() {
       updates.username_last_changed = new Date().toISOString();
     }
 
-    try {
-      const { error } = await supabase
-        .from('user_profiles')
-        .update(updates)
-        .eq('id', user?.id);
+    const { error } = await supabase
+      .from('user_profiles')
+      .update(updates)
+      .eq('id', user?.id);
 
-      if (error) {
-        // Check if the error is due to username conflict
-        if (error.code === '23505') {
-          showAlert('Error', 'Username already taken');
-        } else {
-          console.log('Update error:', error);
-          showAlert('Error', 'Failed to update profile');
-        }
-      } else {
-        showAlert('Success', 'Profile updated');
-        if (canChangeUsername) setCanChangeUsername(false);
-      }
-    } catch (err) {
-      console.log('Save profile exception:', err);
+    setLoading(false);
+
+    if (error) {
       showAlert('Error', 'Failed to update profile');
-    } finally {
-      setLoading(false);
+    } else {
+      showAlert('Success', 'Profile updated');
+
+      if (canChangeUsername) {
+        setCanChangeUsername(false);
+      }
     }
   };
 
