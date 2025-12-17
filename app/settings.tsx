@@ -260,7 +260,7 @@ export default function SettingsScreen() {
       </View>
 
       <ScrollView>
-        <TouchableOpacity style={styles.profileSection} onPress={checkAdminAccess}>
+        <TouchableOpacity style={styles.profileSection} onPress={() => router.push('/profile')}>
           <View style={styles.profileHeader}>
             <View style={styles.avatar}>
               <Text style={styles.avatarText}>
@@ -285,6 +285,7 @@ export default function SettingsScreen() {
             value={tierNames[tier]}
             onPress={() => router.push('/subscription')}
           />
+          <SettingRow icon="card-outline" title="Payment methods" onPress={() => router.push('/payment')} />
           <SettingRow icon="refresh-outline" title="Restore purchases" onPress={() => router.push('/subscription')} />
           <SettingRow icon="receipt-outline" title="Orders" onPress={() => {}} />
           <SettingRow icon="information-circle-outline" title="About" onPress={() => router.push('/about')} />
@@ -302,7 +303,7 @@ export default function SettingsScreen() {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>App Settings</Text>
-          <SettingRow icon="globe-outline" title="App language" value={settings.appLanguage} />
+          <SettingRow icon="globe-outline" title="App language" value={settings.appLanguage} onPress={() => router.push('/languages')} />
           
           <View style={styles.settingItem}>
             <View style={styles.settingLeft}>

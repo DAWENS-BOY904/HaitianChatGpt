@@ -1,47 +1,42 @@
 import React from 'react';
-import { View, Text, Modal, TouchableOpacity, StyleSheet, ScrollView, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Modal, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
 import { Spacing, Typography, BorderRadius } from '../constants/theme';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface ToolsModalProps {
   visible: boolean;
   onClose: () => void;
   onSelectTool: (tool: string) => void;
+  onPickMedia: (type: 'photo' | 'video' | 'file') => void;
 }
 
-const tools = [
-  { id: 'image', name: 'Create image', icon: 'image-outline' },
-  { id: 'thinking', name: 'Thinking mode', icon: 'bulb-outline' },
-  { id: 'research', name: 'Deep research', icon: 'search-outline' },
-  { id: 'web', name: 'Web search', icon: 'globe-outline' },
-  { id: 'study', name: 'Study and learn', icon: 'book-outline' },
-  { id: 'files', name: 'Add files', icon: 'document-attach-outline' },
-  { id: 'shopping', name: 'Shopping research', icon: 'cart-outline' },
-];
-
-export function ToolsModal({ visible, onClose, onSelectTool }: ToolsModalProps) {
+export function ToolsModal({ visible, onClose, onSelectTool, onPickMedia }: ToolsModalProps) {
   const { colors } = useTheme();
-  const insets = useSafeAreaInsets();
 
-  const handleSelectTool = (toolId: string) => {
-    onSelectTool(toolId);
-    onClose();
-  };
+  const tools = [
+    { id: 'photo', label: 'Add photo', icon: 'image', action: () => onPickMedia('photo') },
+    { id: 'video', label: 'Add video', icon: 'videocam', action: () => onPickMedia('video') },
+    { id: 'file', label: 'Add file', icon: 'document', action: () => onPickMedia('file') },
+    { id: 'create-image', label: 'Create image', icon: 'color-wand', action: () => onSelectTool('Create Image') },
+    { id: 'thinking', label: 'Thinking mode', icon: 'bulb', action: () => onSelectTool('Thinking Mode') },
+    { id: 'research', label: 'Deep research', icon: 'search', action: () => onSelectTool('Deep Research') },
+    { id: 'web-search', label: 'Web search', icon: 'globe', action: () => onSelectTool('Web Search') },
+    { id: 'study', label: 'Study and learn', icon: 'school', action: () => onSelectTool('Study and Learn') },
+    { id: 'shopping', label: 'Shopping research', icon: 'cart', action: () => onSelectTool('Shopping Research') },
+  ];
 
   const styles = StyleSheet.create({
     overlay: {
       flex: 1,
-      backgroundColor: colors.overlay,
+      backgroundColor: 'rgba(0,0,0,0.5)',
       justifyContent: 'flex-end',
     },
     container: {
-      backgroundColor: colors.background,
-      borderTopLeftRadius: BorderRadius.lg,
-      borderTopRightRadius: BorderRadius.lg,
+      backgroundColor: colors.card,
+      borderTopLeftRadius: BorderRadius.xl,
+      borderTopRightRadius: BorderRadius.xl,
       maxHeight: '80%',
-      paddingBottom: Platform.select({ ios: insets.bottom, android: insets.bottom, default: 0 }),
     },
     header: {
       flexDirection: 'row',
@@ -49,7 +44,7 @@ export function ToolsModal({ visible, onClose, onSelectTool }: ToolsModalProps) 
       justifyContent: 'space-between',
       padding: Spacing.md,
       borderBottomWidth: 1,
-      borderBottomColor: colors.border,
+      borderBottomColor: colors.divider,
     },
     title: {
       ...Typography.heading,
@@ -61,27 +56,29 @@ export function ToolsModal({ visible, onClose, onSelectTool }: ToolsModalProps) 
     content: {
       padding: Spacing.md,
     },
-    toolItem: {
+    toolGrid: {
       flexDirection: 'row',
-      alignItems: 'center',
-      padding: Spacing.md,
-      backgroundColor: colors.surface,
-      borderRadius: BorderRadius.sm,
-      marginBottom: Spacing.sm,
+      flexWrap: 'wrap',
       gap: Spacing.md,
     },
-    toolIcon: {
-      width: 40,
-      height: 40,
-      borderRadius: BorderRadius.sm,
-      backgroundColor: colors.primaryLight,
+    toolItem: {
+      width: '30%',
+      aspectRatio: 1,
+      backgroundColor: colors.surface,
+      borderRadius: BorderRadius.md,
       alignItems: 'center',
       justifyContent: 'center',
+      padding: Spacing.sm,
+      borderWidth: 1,
+      borderColor: colors.border,
     },
-    toolText: {
-      flex: 1,
-      ...Typography.body,
+    toolIcon: {
+      marginBottom: Spacing.xs,
+    },
+    toolLabel: {
+      ...Typography.caption,
       color: colors.text,
+      textAlign: 'center',
     },
   });
 
@@ -92,31 +89,44 @@ export function ToolsModal({ visible, onClose, onSelectTool }: ToolsModalProps) 
       animationType="slide"
       onRequestClose={onClose}
     >
-      <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={onClose}>
-        <View style={styles.container} onStartShouldSetResponder={() => true}>
-          <View style={styles.header}>
-            <Text style={styles.title}>Tools</Text>
-            <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-              <Ionicons name="close" size={24} color={colors.text} />
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView style={styles.content}>
-            {tools.map(tool => (
-              <TouchableOpacity
-                key={tool.id}
-                style={styles.toolItem}
-                onPress={() => handleSelectTool(tool.id)}
-              >
-                <View style={styles.toolIcon}>
-                  <Ionicons name={tool.icon as any} size={20} color={colors.primary} />
-                </View>
-                <Text style={styles.toolText}>{tool.name}</Text>
-                <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+      <TouchableOpacity 
+        style={styles.overlay} 
+        activeOpacity={1} 
+        onPress={onClose}
+      >
+        <TouchableOpacity activeOpacity={1} onPress={(e) => e.stopPropagation()}>
+          <View style={styles.container}>
+            <View style={styles.header}>
+              <Text style={styles.title}>Tools</Text>
+              <TouchableOpacity style={styles.closeButton} onPress={onClose}>
+                <Ionicons name="close" size={24} color={colors.text} />
               </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
+            </View>
+
+            <ScrollView style={styles.content}>
+              <View style={styles.toolGrid}>
+                {tools.map(tool => (
+                  <TouchableOpacity
+                    key={tool.id}
+                    style={styles.toolItem}
+                    onPress={() => {
+                      tool.action();
+                      onClose();
+                    }}
+                  >
+                    <Ionicons 
+                      name={tool.icon as any} 
+                      size={32} 
+                      color={colors.primary} 
+                      style={styles.toolIcon}
+                    />
+                    <Text style={styles.toolLabel}>{tool.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
       </TouchableOpacity>
     </Modal>
   );

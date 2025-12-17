@@ -26,6 +26,12 @@ export default function RootLayout() {
                     <Stack.Screen name="subscription" />
                     <Stack.Screen name="admin" />
                     <Stack.Screen name="bugreport" />
+                    <Stack.Screen name="data-controls" />
+                    <Stack.Screen name="personalization" />
+                    <Stack.Screen name="profile" />
+                    <Stack.Screen name="languages" />
+                    <Stack.Screen name="payment" />
+                    <Stack.Screen name="groupinfo" />
                   </Stack>
                 </ConversationProvider>
               </SocialProvider>
