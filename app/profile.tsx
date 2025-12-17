@@ -1,5 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, TextInput, StyleSheet, ScrollView, Platform, Image } from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  TextInput,
+  StyleSheet,
+  ScrollView,
+  Platform,
+  Image,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
 import { useAuth, useAlert } from '@/template';
@@ -19,6 +28,7 @@ export default function ProfileScreen() {
   const supabase = getSupabaseClient();
 
   const [username, setUsername] = useState('');
+  const [fullName, setFullName] = useState('');
   const [profilePhoto, setProfilePhoto] = useState('');
   const [canChangeUsername, setCanChangeUsername] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -30,26 +40,36 @@ export default function ProfileScreen() {
   const loadProfile = async () => {
     if (!user) return;
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('user_profiles')
-      .select('username, profile_photo_url, username_last_changed')
+      .select(
+        'username, full_name, profile_photo_url, username_last_changed'
+      )
       .eq('id', user.id)
       .single();
 
+    if (error) return;
+
     if (data) {
       setUsername(data.username || '');
+      setFullName(data.full_name || '');
       setProfilePhoto(data.profile_photo_url || '');
 
-      // Check if user can change username (14 days cooldown)
-      const lastChanged = data.username_last_changed ? new Date(data.username_last_changed) : null;
-      const now = new Date();
-      const daysSinceChange = lastChanged ? (now.getTime() - lastChanged.getTime()) / (1000 * 60 * 60 * 24) : 999;
+      const lastChanged = data.username_last_changed
+        ? new Date(data.username_last_changed)
+        : null;
+
+      const daysSinceChange = lastChanged
+        ? (Date.now() - lastChanged.getTime()) / (1000 * 60 * 60 * 24)
+        : 999;
+
       setCanChangeUsername(daysSinceChange >= 14);
     }
   };
 
   const handleChangePhoto = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    const { status } =
+      await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') return;
 
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -60,51 +80,53 @@ export default function ProfileScreen() {
       aspect: [1, 1],
     });
 
-    if (!result.canceled && result.assets[0]) {
-      const asset = result.assets[0];
-      setLoading(true);
+    if (result.canceled || !result.assets[0]) return;
 
-      try {
-        const fileName = `${user?.id}_${Date.now()}.jpg`;
-        const filePath = `${user?.id}/${fileName}`;
+    const asset = result.assets[0];
+    setLoading(true);
 
-        const { data, error } = await supabase.storage
-          .from('chat-images')
-          .upload(filePath, decode(asset.base64!), {
-            contentType: 'image/jpeg',
-            upsert: true,
-          });
+    try {
+      const fileName = `${user?.id}_${Date.now()}.jpg`;
+      const filePath = `${user?.id}/${fileName}`;
 
-        if (error) throw error;
+      const { error: uploadError } = await supabase.storage
+        .from('chat-images')
+        .upload(filePath, decode(asset.base64!), {
+          contentType: 'image/jpeg',
+          upsert: true,
+        });
 
-        const { data: urlData } = supabase.storage
-          .from('chat-images')
-          .getPublicUrl(filePath);
+      if (uploadError) throw uploadError;
 
-        await supabase
-          .from('user_profiles')
-          .update({ profile_photo_url: urlData.publicUrl })
-          .eq('id', user?.id);
+      const { data: urlData } = supabase.storage
+        .from('chat-images')
+        .getPublicUrl(filePath);
 
-        setProfilePhoto(urlData.publicUrl);
-        showAlert('Success', 'Profile photo updated');
-      } catch (error) {
-        console.error('Upload error:', error);
-        showAlert('Error', 'Failed to upload photo');
-      } finally {
-        setLoading(false);
-      }
+      await supabase
+        .from('user_profiles')
+        .update({ profile_photo_url: urlData.publicUrl })
+        .eq('id', user?.id);
+
+      setProfilePhoto(urlData.publicUrl);
+      showAlert('Success', 'Profile photo updated');
+    } catch (e) {
+      showAlert('Error', 'Failed to upload photo');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleSaveUsername = async () => {
-    if (!username.trim()) {
-      showAlert('Error', 'Username cannot be empty');
+  const handleSaveProfile = async () => {
+    if (!fullName.trim()) {
+      showAlert('Error', 'Name cannot be empty');
       return;
     }
 
     if (!canChangeUsername) {
-      showAlert('Error', 'You can only change your username once every 14 days');
+      showAlert(
+        'Error',
+        'You can only change your username every 14 days'
+      );
       return;
     }
 
@@ -113,6 +135,7 @@ export default function ProfileScreen() {
     const { error } = await supabase
       .from('user_profiles')
       .update({
+        full_name: fullName.trim(),
         username: username.trim(),
         username_last_changed: new Date().toISOString(),
       })
@@ -123,7 +146,7 @@ export default function ProfileScreen() {
     if (error) {
       showAlert('Error', 'Username already taken or invalid');
     } else {
-      showAlert('Success', 'Username updated. You can change it again in 14 days.');
+      showAlert('Success', 'Profile updated successfully');
       setCanChangeUsername(false);
     }
   };
@@ -132,7 +155,11 @@ export default function ProfileScreen() {
     container: {
       flex: 1,
       backgroundColor: colors.background,
-      paddingTop: Platform.select({ ios: insets.top, android: insets.top, default: 0 }),
+      paddingTop: Platform.select({
+        ios: insets.top,
+        android: insets.top,
+        default: 0,
+      }),
     },
     header: {
       flexDirection: 'row',
@@ -172,7 +199,7 @@ export default function ProfileScreen() {
     },
     photoText: {
       ...Typography.title,
-      color: '#FFFFFF',
+      color: '#fff',
       fontSize: 48,
     },
     changePhotoButton: {
@@ -189,18 +216,17 @@ export default function ProfileScreen() {
     },
     label: {
       ...Typography.body,
-      color: colors.text,
       fontWeight: '600',
+      color: colors.text,
       marginBottom: Spacing.sm,
     },
     input: {
       backgroundColor: colors.inputBackground,
       borderRadius: BorderRadius.sm,
       padding: Spacing.md,
-      ...Typography.body,
-      color: colors.text,
       borderWidth: 1,
       borderColor: colors.border,
+      color: colors.text,
     },
     helperText: {
       ...Typography.caption,
@@ -214,17 +240,16 @@ export default function ProfileScreen() {
     },
     saveButton: {
       backgroundColor: colors.primary,
-      borderRadius: BorderRadius.sm,
       padding: Spacing.md,
+      borderRadius: BorderRadius.sm,
       alignItems: 'center',
-      marginTop: Spacing.lg,
     },
     saveButtonDisabled: {
       opacity: 0.5,
     },
     saveButtonText: {
       ...Typography.body,
-      color: '#FFFFFF',
+      color: '#fff',
       fontWeight: '600',
     },
   });
@@ -232,7 +257,10 @@ export default function ProfileScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => router.back()}
+        >
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Edit Profile</Text>
@@ -245,12 +273,15 @@ export default function ProfileScreen() {
               <Image source={{ uri: profilePhoto }} style={styles.photo} />
             ) : (
               <Text style={styles.photoText}>
-                {user?.email?.[0].toUpperCase() || 'U'}
+                {fullName?.[0]?.toUpperCase() ||
+                  user?.email?.[0]?.toUpperCase() ||
+                  'U'}
               </Text>
             )}
           </View>
-          <TouchableOpacity 
-            style={styles.changePhotoButton} 
+
+          <TouchableOpacity
+            style={styles.changePhotoButton}
             onPress={handleChangePhoto}
             disabled={loading}
           >
@@ -260,22 +291,32 @@ export default function ProfileScreen() {
         </View>
 
         <View style={styles.section}>
+          <Text style={styles.label}>Name</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Enter your name"
+            placeholderTextColor={colors.textSecondary}
+            value={fullName}
+            onChangeText={setFullName}
+            editable={!loading}
+          />
+        </View>
+
+        <View style={styles.section}>
           <Text style={styles.label}>Username</Text>
           <TextInput
             style={styles.input}
-            placeholder="Enter username"
-            placeholderTextColor={colors.textSecondary}
             value={username}
             onChangeText={setUsername}
             editable={canChangeUsername && !loading}
           />
           {canChangeUsername ? (
             <Text style={styles.helperText}>
-              Choose a unique username. You can change it again in 14 days.
+              You can change your username once every 14 days
             </Text>
           ) : (
             <Text style={styles.warningText}>
-              You can change your username again in 14 days from last change.
+              Username locked for 14 days
             </Text>
           )}
         </View>
@@ -287,12 +328,15 @@ export default function ProfileScreen() {
             value={user?.email || ''}
             editable={false}
           />
-          <Text style={styles.helperText}>Email cannot be changed</Text>
         </View>
 
         <TouchableOpacity
-          style={[styles.saveButton, (!canChangeUsername || loading) && styles.saveButtonDisabled]}
-          onPress={handleSaveUsername}
+          style={[
+            styles.saveButton,
+            (!canChangeUsername || loading) &&
+              styles.saveButtonDisabled,
+          ]}
+          onPress={handleSaveProfile}
           disabled={!canChangeUsername || loading}
         >
           <Text style={styles.saveButtonText}>
