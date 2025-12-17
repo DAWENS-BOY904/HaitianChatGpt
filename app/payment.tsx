@@ -1,41 +1,41 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, TextInput, StyleSheet, ScrollView, Platform, Alert } from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  TextInput,
+  StyleSheet,
+  ScrollView,
+  Platform,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
-import { useAuth } from '@/template';
+import { useAuth, useAlert } from '@/template';
 import { useRouter } from 'expo-router';
 import { Spacing, Typography, BorderRadius } from '../constants/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getSupabaseClient } from '@/template';
-import { StripeProvider, useStripe, CardField } from '@stripe/stripe-react-native';
 
-export default function PaymentMethodsScreenWrapper() {
-  // Wrap the screen with StripeProvider
-  return (
-    <StripeProvider publishableKey="pk_test_XXXX">
-      <PaymentMethodsScreen />
-    </StripeProvider>
-  );
-}
-
-function PaymentMethodsScreen() {
+export default function PaymentMethodsScreen() {
   const { colors } = useTheme();
   const { user } = useAuth();
+  const { showAlert } = useAlert();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const supabase = getSupabaseClient();
-  const { confirmPayment, presentApplePay, presentGooglePay } = useStripe();
 
   const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
   const [showAddCard, setShowAddCard] = useState(false);
   const [cardName, setCardName] = useState('');
-  const [amount, setAmount] = useState('1000'); // amount in cents for demo
+  const [cardNumber, setCardNumber] = useState('');
+  const [expiryDate, setExpiryDate] = useState('');
+  const [cvv, setCvv] = useState('');
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     loadPaymentMethods();
   }, []);
 
-  // Load saved payment methods from Supabase
   const loadPaymentMethods = async () => {
     if (!user) return;
     const { data } = await supabase
@@ -47,177 +47,328 @@ function PaymentMethodsScreen() {
     if (data) setPaymentMethods(data);
   };
 
-  // Helper to detect card brand
   const detectCardBrand = (number: string) => {
-    if (number.startsWith('4')) return 'Visa';
-    if (number.startsWith('5')) return 'Mastercard';
-    if (number.startsWith('3')) return 'Amex';
-    return 'Unknown';
+    const cleaned = number.replace(/\s/g, '');
+    if (cleaned.startsWith('4')) return 'Visa';
+    if (/^5[1-5]/.test(cleaned)) return 'Mastercard';
+    if (/^3[47]/.test(cleaned)) return 'Amex';
+    if (cleaned.startsWith('6')) return 'Discover';
+    return 'Card';
   };
 
-  // ------------------- PAYMENT HANDLERS -------------------
+  const formatCardNumber = (text: string) => {
+    const cleaned = text.replace(/\s/g, '');
+    const chunks = cleaned.match(/.{1,4}/g) || [];
+    return chunks.join(' ').substring(0, 19);
+  };
 
-  // 1️⃣ Credit/Debit Card Payment
-  const handleAddCreditCard = async (cardDetails: any) => {
-    if (!user || !cardDetails.complete) {
-      Alert.alert('Error', 'Please complete card details');
+  const formatExpiryDate = (text: string) => {
+    const cleaned = text.replace(/\D/g, '');
+    if (cleaned.length >= 2) {
+      return `${cleaned.substring(0, 2)}/${cleaned.substring(2, 4)}`;
+    }
+    return cleaned;
+  };
+
+  const handleAddApplePay = async () => {
+    if (!user) return;
+
+    if (Platform.OS !== 'ios') {
+      showAlert('Not Available', 'Apple Pay is only available on iOS devices');
       return;
     }
 
+    setLoading(true);
+
     try {
-      // Call your backend to create a PaymentIntent
-      const res = await fetch('https://your-backend.com/create-payment-intent', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: parseInt(amount), currency: 'usd' }),
-      });
-      const { clientSecret } = await res.json();
-
-      // Confirm payment with Stripe
-      const { paymentIntent, error } = await confirmPayment(clientSecret, {
-        paymentMethodType: 'Card',
-        paymentMethodData: {
-          billingDetails: { name: cardName },
-        },
-      });
-
-      if (error) {
-        Alert.alert('Payment failed', error.message || 'Unknown error');
-      } else if (paymentIntent) {
-        Alert.alert('Success', 'Payment successful!');
-
-        // Save safe info to Supabase (last 4 digits, brand)
-        const lastFour = cardDetails?.number?.slice(-4) || '';
-        const cardBrand = detectCardBrand(lastFour);
-
-        await supabase.from('payment_methods').insert({
-          user_id: user.id,
-          payment_type: 'credit_card',
-          card_last_four: lastFour,
-          card_brand: cardBrand,
-          is_default: paymentMethods.length === 0,
-        });
-
-        await loadPaymentMethods();
-        setShowAddCard(false);
-        setCardName('');
-      }
-    } catch (err) {
-      Alert.alert('Error', 'Failed to process payment');
-      console.log(err);
-    }
-  };
-
-  // 2️⃣ Apple Pay
-  const handleAddApplePay = async () => {
-    if (!user) return;
-    try {
-      const { error } = await presentApplePay({
-        cartItems: [{ label: 'Total', amount: (parseInt(amount) / 100).toFixed(2) }],
-        country: 'US',
-        currency: 'USD',
-      });
-
-      if (error) return Alert.alert('Apple Pay failed', error.message);
-
-      // Confirm payment via your backend
-      const res = await fetch('https://your-backend.com/create-payment-intent', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: parseInt(amount), currency: 'usd' }),
-      });
-      const { clientSecret } = await res.json();
-      await confirmPayment(clientSecret, { type: 'ApplePay' });
-
-      Alert.alert('Success', 'Apple Pay added!');
-      await supabase.from('payment_methods').insert({
+      const { error } = await supabase.from('payment_methods').insert({
         user_id: user.id,
         payment_type: 'apple_pay',
         is_default: paymentMethods.length === 0,
       });
+
+      if (error) throw error;
+
+      showAlert('Success', 'Apple Pay added successfully');
       await loadPaymentMethods();
     } catch (err) {
-      console.log(err);
-      Alert.alert('Error', 'Apple Pay failed');
+      showAlert('Error', 'Failed to add Apple Pay');
+    } finally {
+      setLoading(false);
     }
   };
 
-  // 3️⃣ Google Pay
   const handleAddGooglePay = async () => {
     if (!user) return;
+
+    if (Platform.OS !== 'android') {
+      showAlert('Not Available', 'Google Pay is only available on Android devices');
+      return;
+    }
+
+    setLoading(true);
+
     try {
-      const { error } = await presentGooglePay({
-        amount: (parseInt(amount) / 100).toFixed(2),
-        currencyCode: 'USD',
-      });
-
-      if (error) return Alert.alert('Google Pay failed', error.message);
-
-      // Confirm payment via backend
-      const res = await fetch('https://your-backend.com/create-payment-intent', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: parseInt(amount), currency: 'usd' }),
-      });
-      const { clientSecret } = await res.json();
-      await confirmPayment(clientSecret, { type: 'GooglePay' });
-
-      Alert.alert('Success', 'Google Pay added!');
-      await supabase.from('payment_methods').insert({
+      const { error } = await supabase.from('payment_methods').insert({
         user_id: user.id,
         payment_type: 'google_pay',
         is_default: paymentMethods.length === 0,
       });
+
+      if (error) throw error;
+
+      showAlert('Success', 'Google Pay added successfully');
       await loadPaymentMethods();
     } catch (err) {
-      console.log(err);
-      Alert.alert('Error', 'Google Pay failed');
+      showAlert('Error', 'Failed to add Google Pay');
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Delete saved payment
+  const handleAddCreditCard = async () => {
+    if (!cardName.trim() || !cardNumber.trim() || !expiryDate.trim() || !cvv.trim()) {
+      showAlert('Error', 'Please fill in all card details');
+      return;
+    }
+
+    const cleaned = cardNumber.replace(/\s/g, '');
+    if (cleaned.length < 13 || cleaned.length > 19) {
+      showAlert('Error', 'Invalid card number');
+      return;
+    }
+
+    if (!/^\d{2}\/\d{2}$/.test(expiryDate)) {
+      showAlert('Error', 'Invalid expiry date (MM/YY)');
+      return;
+    }
+
+    if (cvv.length < 3 || cvv.length > 4) {
+      showAlert('Error', 'Invalid CVV');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const cardBrand = detectCardBrand(cleaned);
+      const lastFour = cleaned.slice(-4);
+
+      const { error } = await supabase.from('payment_methods').insert({
+        user_id: user.id,
+        payment_type: 'credit_card',
+        card_last_four: lastFour,
+        card_brand: cardBrand,
+        is_default: paymentMethods.length === 0,
+      });
+
+      if (error) throw error;
+
+      showAlert('Success', 'Card added successfully');
+      await loadPaymentMethods();
+
+      setCardName('');
+      setCardNumber('');
+      setExpiryDate('');
+      setCvv('');
+      setShowAddCard(false);
+    } catch (err) {
+      showAlert('Error', 'Failed to add card');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleDeletePayment = async (id: string) => {
-    Alert.alert('Delete Payment', 'Are you sure?', [
+    showAlert('Delete Payment Method', 'Are you sure you want to delete this payment method?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
         style: 'destructive',
         onPress: async () => {
-          await supabase.from('payment_methods').delete().eq('id', id);
-          await loadPaymentMethods();
+          const { error } = await supabase
+            .from('payment_methods')
+            .delete()
+            .eq('id', id);
+
+          if (error) {
+            showAlert('Error', 'Failed to delete payment method');
+          } else {
+            await loadPaymentMethods();
+          }
         },
       },
     ]);
   };
 
-  // ------------------- STYLES -------------------
   const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: colors.background, paddingTop: Platform.OS === 'android' ? insets.top : 0 },
-    header: { flexDirection: 'row', alignItems: 'center', padding: Spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
-    backButton: { padding: Spacing.xs, marginRight: Spacing.sm },
-    headerTitle: { ...Typography.heading, color: colors.text },
-    content: { padding: Spacing.md },
-    sectionTitle: { ...Typography.heading, color: colors.text, marginBottom: Spacing.md },
-    addButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, borderRadius: BorderRadius.md, padding: Spacing.md, marginBottom: Spacing.sm, borderWidth: 1, borderColor: colors.border, gap: Spacing.md },
-    addButtonText: { ...Typography.body, color: colors.text, flex: 1 },
-    paymentItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, borderRadius: BorderRadius.md, padding: Spacing.md, marginBottom: Spacing.sm, borderWidth: 1, borderColor: colors.border },
-    paymentInfo: { flex: 1, marginLeft: Spacing.md },
-    paymentType: { ...Typography.body, color: colors.text, fontWeight: '600' },
-    defaultBadge: { backgroundColor: colors.primary, paddingHorizontal: Spacing.sm, paddingVertical: 4, borderRadius: BorderRadius.sm, marginRight: Spacing.sm },
-    defaultText: { ...Typography.caption, color: '#FFFFFF', fontSize: 10 },
-    deleteButton: { padding: Spacing.xs },
-    cardForm: { backgroundColor: colors.card, borderRadius: BorderRadius.md, padding: Spacing.md, marginTop: Spacing.md },
-    formTitle: { ...Typography.heading, color: colors.text, marginBottom: Spacing.md },
-    button: { flex: 1, padding: Spacing.md, borderRadius: BorderRadius.sm, alignItems: 'center' },
-    primaryButton: { backgroundColor: colors.primary },
-    buttonText: { ...Typography.body, fontWeight: '600', color: '#fff' },
+    container: {
+      flex: 1,
+      backgroundColor: colors.background,
+      paddingTop: Platform.select({
+        ios: insets.top,
+        android: insets.top,
+      }),
+    },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: Spacing.md,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    backButton: {
+      padding: Spacing.xs,
+      marginRight: Spacing.sm,
+    },
+    headerTitle: {
+      ...Typography.heading,
+      color: colors.text,
+    },
+    content: {
+      padding: Spacing.md,
+    },
+    sectionTitle: {
+      ...Typography.heading,
+      color: colors.text,
+      marginBottom: Spacing.md,
+      marginTop: Spacing.md,
+    },
+    addButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.card,
+      borderRadius: BorderRadius.md,
+      padding: Spacing.md,
+      marginBottom: Spacing.sm,
+      borderWidth: 1,
+      borderColor: colors.border,
+      gap: Spacing.md,
+    },
+    addButtonDisabled: {
+      opacity: 0.5,
+    },
+    addButtonText: {
+      ...Typography.body,
+      color: colors.text,
+      flex: 1,
+    },
+    paymentItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.card,
+      borderRadius: BorderRadius.md,
+      padding: Spacing.md,
+      marginBottom: Spacing.sm,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    paymentInfo: {
+      flex: 1,
+      marginLeft: Spacing.md,
+    },
+    paymentType: {
+      ...Typography.body,
+      color: colors.text,
+      fontWeight: '600',
+    },
+    defaultBadge: {
+      backgroundColor: colors.primary,
+      paddingHorizontal: Spacing.sm,
+      paddingVertical: 4,
+      borderRadius: BorderRadius.sm,
+      marginRight: Spacing.sm,
+    },
+    defaultText: {
+      ...Typography.caption,
+      color: '#FFFFFF',
+      fontSize: 10,
+      fontWeight: '600',
+    },
+    deleteButton: {
+      padding: Spacing.xs,
+    },
+    cardForm: {
+      backgroundColor: colors.card,
+      borderRadius: BorderRadius.md,
+      padding: Spacing.lg,
+      marginTop: Spacing.md,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    formTitle: {
+      ...Typography.heading,
+      color: colors.text,
+      marginBottom: Spacing.md,
+    },
+    input: {
+      backgroundColor: colors.inputBackground,
+      borderRadius: BorderRadius.sm,
+      padding: Spacing.md,
+      borderWidth: 1,
+      borderColor: colors.border,
+      color: colors.text,
+      marginBottom: Spacing.md,
+    },
+    row: {
+      flexDirection: 'row',
+      gap: Spacing.md,
+    },
+    inputHalf: {
+      flex: 1,
+      backgroundColor: colors.inputBackground,
+      borderRadius: BorderRadius.sm,
+      padding: Spacing.md,
+      borderWidth: 1,
+      borderColor: colors.border,
+      color: colors.text,
+    },
+    buttonRow: {
+      flexDirection: 'row',
+      gap: Spacing.md,
+      marginTop: Spacing.md,
+    },
+    button: {
+      flex: 1,
+      padding: Spacing.md,
+      borderRadius: BorderRadius.sm,
+      alignItems: 'center',
+    },
+    primaryButton: {
+      backgroundColor: colors.primary,
+    },
+    secondaryButton: {
+      backgroundColor: colors.border,
+    },
+    buttonText: {
+      ...Typography.body,
+      fontWeight: '600',
+      color: '#FFFFFF',
+    },
+    secondaryButtonText: {
+      ...Typography.body,
+      fontWeight: '600',
+      color: colors.text,
+    },
+    emptyState: {
+      padding: Spacing.xl,
+      alignItems: 'center',
+    },
+    emptyText: {
+      ...Typography.body,
+      color: colors.textSecondary,
+      textAlign: 'center',
+      marginTop: Spacing.md,
+    },
   });
 
-  // ------------------- RENDER -------------------
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => router.back()}
+        >
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Payment Methods</Text>
@@ -226,24 +377,53 @@ function PaymentMethodsScreen() {
       <ScrollView style={styles.content}>
         <Text style={styles.sectionTitle}>Add Payment Method</Text>
 
-        <TouchableOpacity style={styles.addButton} onPress={handleAddApplePay}>
+        <TouchableOpacity
+          style={[
+            styles.addButton,
+            Platform.OS !== 'ios' && styles.addButtonDisabled,
+          ]}
+          onPress={handleAddApplePay}
+          disabled={loading || Platform.OS !== 'ios'}
+        >
           <Ionicons name="logo-apple" size={24} color={colors.text} />
-          <Text style={styles.addButtonText}>Apple Pay</Text>
+          <Text style={styles.addButtonText}>
+            Apple Pay {Platform.OS !== 'ios' && '(iOS only)'}
+          </Text>
+          <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.addButton} onPress={handleAddGooglePay}>
+        <TouchableOpacity
+          style={[
+            styles.addButton,
+            Platform.OS !== 'android' && styles.addButtonDisabled,
+          ]}
+          onPress={handleAddGooglePay}
+          disabled={loading || Platform.OS !== 'android'}
+        >
           <Ionicons name="logo-google" size={24} color={colors.text} />
-          <Text style={styles.addButtonText}>Google Pay</Text>
+          <Text style={styles.addButtonText}>
+            Google Pay {Platform.OS !== 'android' && '(Android only)'}
+          </Text>
+          <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.addButton} onPress={() => setShowAddCard(!showAddCard)}>
+        <TouchableOpacity
+          style={styles.addButton}
+          onPress={() => setShowAddCard(!showAddCard)}
+          disabled={loading}
+        >
           <Ionicons name="card" size={24} color={colors.text} />
           <Text style={styles.addButtonText}>Credit/Debit Card</Text>
+          <Ionicons
+            name={showAddCard ? 'chevron-up' : 'chevron-forward'}
+            size={20}
+            color={colors.textSecondary}
+          />
         </TouchableOpacity>
 
         {showAddCard && (
           <View style={styles.cardForm}>
-            <Text style={styles.formTitle}>Add Card</Text>
+            <Text style={styles.formTitle}>Card Details</Text>
 
             <TextInput
               style={styles.input}
@@ -251,43 +431,92 @@ function PaymentMethodsScreen() {
               placeholderTextColor={colors.textSecondary}
               value={cardName}
               onChangeText={setCardName}
+              autoCapitalize="words"
             />
 
-            <CardField
-              postalCodeEnabled={false}
-              placeholder={{ number: '4242 4242 4242 4242' }}
-              cardStyle={{ backgroundColor: colors.inputBackground, textColor: colors.text }}
-              style={{ height: 50, marginVertical: 10 }}
-              onCardChange={(cardDetails) => (cardFieldRef.current = cardDetails)}
+            <TextInput
+              style={styles.input}
+              placeholder="Card Number"
+              placeholderTextColor={colors.textSecondary}
+              value={cardNumber}
+              onChangeText={(text) => setCardNumber(formatCardNumber(text))}
+              keyboardType="number-pad"
+              maxLength={19}
             />
 
-            <TouchableOpacity
-              style={[styles.button, styles.primaryButton]}
-              onPress={() => handleAddCreditCard(cardFieldRef.current)}
-            >
-              <Text style={styles.buttonText}>Add Card</Text>
-            </TouchableOpacity>
+            <View style={styles.row}>
+              <TextInput
+                style={styles.inputHalf}
+                placeholder="MM/YY"
+                placeholderTextColor={colors.textSecondary}
+                value={expiryDate}
+                onChangeText={(text) => setExpiryDate(formatExpiryDate(text))}
+                keyboardType="number-pad"
+                maxLength={5}
+              />
+
+              <TextInput
+                style={styles.inputHalf}
+                placeholder="CVV"
+                placeholderTextColor={colors.textSecondary}
+                value={cvv}
+                onChangeText={(text) => setCvv(text.replace(/\D/g, ''))}
+                keyboardType="number-pad"
+                maxLength={4}
+                secureTextEntry
+              />
+            </View>
+
+            <View style={styles.buttonRow}>
+              <TouchableOpacity
+                style={[styles.button, styles.secondaryButton]}
+                onPress={() => {
+                  setShowAddCard(false);
+                  setCardName('');
+                  setCardNumber('');
+                  setExpiryDate('');
+                  setCvv('');
+                }}
+              >
+                <Text style={styles.secondaryButtonText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.button, styles.primaryButton]}
+                onPress={handleAddCreditCard}
+                disabled={loading}
+              >
+                <Text style={styles.buttonText}>
+                  {loading ? 'Adding...' : 'Add Card'}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         )}
 
-        {paymentMethods.length > 0 && (
+        {paymentMethods.length > 0 ? (
           <>
-            <Text style={[styles.sectionTitle, { marginTop: Spacing.xl }]}>Your Payment Methods</Text>
+            <Text style={styles.sectionTitle}>Your Payment Methods</Text>
             {paymentMethods.map((method) => (
               <View key={method.id} style={styles.paymentItem}>
                 <Ionicons
                   name={
-                    method.payment_type === 'apple_pay' ? 'logo-apple' :
-                    method.payment_type === 'google_pay' ? 'logo-google' : 'card'
+                    method.payment_type === 'apple_pay'
+                      ? 'logo-apple'
+                      : method.payment_type === 'google_pay'
+                      ? 'logo-google'
+                      : 'card'
                   }
                   size={24}
                   color={colors.text}
                 />
                 <View style={styles.paymentInfo}>
                   <Text style={styles.paymentType}>
-                    {method.payment_type === 'apple_pay' ? 'Apple Pay' :
-                     method.payment_type === 'google_pay' ? 'Google Pay' :
-                     `${method.card_brand} •••• ${method.card_last_four}`}
+                    {method.payment_type === 'apple_pay'
+                      ? 'Apple Pay'
+                      : method.payment_type === 'google_pay'
+                      ? 'Google Pay'
+                      : `${method.card_brand} •••• ${method.card_last_four}`}
                   </Text>
                 </View>
                 {method.is_default && (
@@ -295,12 +524,26 @@ function PaymentMethodsScreen() {
                     <Text style={styles.defaultText}>DEFAULT</Text>
                   </View>
                 )}
-                <TouchableOpacity style={styles.deleteButton} onPress={() => handleDeletePayment(method.id)}>
+                <TouchableOpacity
+                  style={styles.deleteButton}
+                  onPress={() => handleDeletePayment(method.id)}
+                >
                   <Ionicons name="trash-outline" size={20} color="#FF3B30" />
                 </TouchableOpacity>
               </View>
             ))}
           </>
+        ) : (
+          <View style={styles.emptyState}>
+            <Ionicons
+              name="wallet-outline"
+              size={64}
+              color={colors.textSecondary}
+            />
+            <Text style={styles.emptyText}>
+              No payment methods added yet.{'\n'}Add a payment method to get started.
+            </Text>
+          </View>
         )}
       </ScrollView>
     </View>
