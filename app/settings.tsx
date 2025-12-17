@@ -294,9 +294,9 @@ export default function SettingsScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Preferences</Text>
           <SettingRow icon="person-outline" title="Personalization" onPress={() => router.push('/personalization')} />
-          <SettingRow icon="notifications-outline" title="Notifications" onPress={() => {}} />
+          <SettingRow icon="notifications-outline" title="Notifications" onPress={() => router.push('/notifications')} />
           <SettingRow icon="grid-outline" title="Apps & connectors" onPress={() => {}} />
-          <SettingRow icon="shield-outline" title="Parental controls" onPress={() => {}} />
+          <SettingRow icon="shield-outline" title="Parental controls" onPress={() => router.push('/parental-controls')} />
           <SettingRow icon="document-text-outline" title="Data controls" onPress={() => router.push('/data-controls')} />
           <SettingRow icon="archive-outline" title="Archived chats" onPress={() => {}} />
         </View>

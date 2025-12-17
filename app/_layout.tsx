@@ -32,6 +32,10 @@ export default function RootLayout() {
                     <Stack.Screen name="languages" />
                     <Stack.Screen name="payment" />
                     <Stack.Screen name="groupinfo" />
+                    <Stack.Screen name="notifications" />
+                    <Stack.Screen name="notification-detail" />
+                    <Stack.Screen name="parental-controls" />
+                    <Stack.Screen name="family-member" />
                   </Stack>
                 </ConversationProvider>
               </SocialProvider>

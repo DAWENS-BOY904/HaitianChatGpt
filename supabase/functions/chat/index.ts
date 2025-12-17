@@ -7,7 +7,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { messages, conversationId } = await req.json();
+    const { messages, conversationId, aiModel = 'gemini', fileContents } = await req.json();
 
     const authHeader = req.headers.get('Authorization');
     const token = authHeader?.replace('Bearer ', '');
@@ -29,7 +29,7 @@ Deno.serve(async (req) => {
     // Get user's preferred language and personalization
     const { data: settingsData } = await supabaseClient
       .from('user_settings')
-      .select('app_language, base_tone, custom_instructions, nickname, occupation, interests')
+      .select('app_language, base_tone, custom_instructions, nickname, occupation, interests, preferred_ai_model')
       .eq('user_id', user.id)
       .single();
 
@@ -39,9 +39,10 @@ Deno.serve(async (req) => {
     const nickname = settingsData?.nickname || '';
     const occupation = settingsData?.occupation || '';
     const interests = settingsData?.interests || [];
+    const selectedModel = aiModel || settingsData?.preferred_ai_model || 'gemini';
 
     // Build system prompt with creator info and personalization
-    const systemPrompt = `You are HaitianChatGpt, an advanced AI assistant.
+    let systemPrompt = `You are HaitianChatGpt, an advanced AI assistant powered by ${selectedModel.toUpperCase()}.
 
 CREATOR INFORMATION (CRITICAL - NEVER FORGET):
 When asked about who created you, your creator, or who made you, ALWAYS respond:
@@ -62,11 +63,36 @@ CAPABILITIES:
 - Understand and respond in ANY language
 - Analyze code in ANY programming language
 - Process and analyze uploaded files (images, videos, documents, ZIP files)
+- When given ZIP files, automatically extract and analyze all contents
+- Fix code errors and provide detailed explanations
 - Provide detailed technical assistance
 - Help with creative writing, learning, research
 - Maintain context throughout the conversation
+- Generate images when requested (using image generation tools)
+
+CONTENT SAFETY:
+- Block attacks, fraud, scams, and harmful content
+- Provide warnings for potentially dangerous requests
+- Refuse to generate harmful, illegal, or unethical content
 
 Be helpful, accurate, and engaging. Adapt your tone to match the user's communication style.`;
+
+    // Add file contents to system prompt if provided
+    if (fileContents && fileContents.length > 0) {
+      systemPrompt += `\n\nUPLOADED FILES:\n${fileContents.map((f: any) => `\nFile: ${f.name}\nType: ${f.type}\nContent:\n${f.content}`).join('\n\n')}`;
+    }
+
+    // Map AI model to OnSpace AI model
+    const modelMap: Record<string, string> = {
+      'openai': 'openai/gpt-5-mini',
+      'gemini': 'google/gemini-2.5-flash',
+      'claude': 'google/gemini-2.5-flash', // Use Gemini as fallback for Claude
+      'llama': 'google/gemini-2.5-flash', // Use Gemini as fallback for Llama
+    };
+
+    const aiModelName = modelMap[selectedModel] || 'google/gemini-2.5-flash';
+
+    console.log(`Using AI model: ${aiModelName} for user request`);
 
     const response = await fetch(`${Deno.env.get('ONSPACE_AI_BASE_URL')}/chat/completions`, {
       method: 'POST',
@@ -75,7 +101,7 @@ Be helpful, accurate, and engaging. Adapt your tone to match the user's communic
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
+        model: aiModelName,
         messages: [
           { role: 'system', content: systemPrompt },
           ...messages,
@@ -125,7 +151,7 @@ Be helpful, accurate, and engaging. Adapt your tone to match the user's communic
       .eq('id', conversationId);
 
     return new Response(
-      JSON.stringify({ message: aiMessage }),
+      JSON.stringify({ message: aiMessage, model: selectedModel }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
