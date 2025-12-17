@@ -40,15 +40,13 @@ export default function ProfileScreen() {
   const loadProfile = async () => {
     if (!user) return;
 
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('user_profiles')
       .select(
         'username, full_name, profile_photo_url, username_last_changed'
       )
       .eq('id', user.id)
       .single();
-
-    if (error) return;
 
     if (data) {
       setUsername(data.username || '');
@@ -82,21 +80,18 @@ export default function ProfileScreen() {
 
     if (result.canceled || !result.assets[0]) return;
 
-    const asset = result.assets[0];
     setLoading(true);
 
     try {
-      const fileName = `${user?.id}_${Date.now()}.jpg`;
-      const filePath = `${user?.id}/${fileName}`;
+      const asset = result.assets[0];
+      const filePath = `${user?.id}/${Date.now()}.jpg`;
 
-      const { error: uploadError } = await supabase.storage
+      await supabase.storage
         .from('chat-images')
         .upload(filePath, decode(asset.base64!), {
           contentType: 'image/jpeg',
           upsert: true,
         });
-
-      if (uploadError) throw uploadError;
 
       const { data: urlData } = supabase.storage
         .from('chat-images')
@@ -108,9 +103,9 @@ export default function ProfileScreen() {
         .eq('id', user?.id);
 
       setProfilePhoto(urlData.publicUrl);
-      showAlert('Success', 'Profile photo updated');
-    } catch (e) {
-      showAlert('Error', 'Failed to upload photo');
+      showAlert('Success', 'Photo updated');
+    } catch {
+      showAlert('Error', 'Photo upload failed');
     } finally {
       setLoading(false);
     }
@@ -122,32 +117,32 @@ export default function ProfileScreen() {
       return;
     }
 
-    if (!canChangeUsername) {
-      showAlert(
-        'Error',
-        'You can only change your username every 14 days'
-      );
-      return;
-    }
-
     setLoading(true);
+
+    const updates: any = {
+      full_name: fullName.trim(),
+    };
+
+    if (canChangeUsername && username.trim()) {
+      updates.username = username.trim();
+      updates.username_last_changed = new Date().toISOString();
+    }
 
     const { error } = await supabase
       .from('user_profiles')
-      .update({
-        full_name: fullName.trim(),
-        username: username.trim(),
-        username_last_changed: new Date().toISOString(),
-      })
+      .update(updates)
       .eq('id', user?.id);
 
     setLoading(false);
 
     if (error) {
-      showAlert('Error', 'Username already taken or invalid');
+      showAlert('Error', 'Failed to update profile');
     } else {
-      showAlert('Success', 'Profile updated successfully');
-      setCanChangeUsername(false);
+      showAlert('Success', 'Profile updated');
+
+      if (canChangeUsername) {
+        setCanChangeUsername(false);
+      }
     }
   };
 
@@ -158,7 +153,6 @@ export default function ProfileScreen() {
       paddingTop: Platform.select({
         ios: insets.top,
         android: insets.top,
-        default: 0,
       }),
     },
     header: {
@@ -245,7 +239,7 @@ export default function ProfileScreen() {
       alignItems: 'center',
     },
     saveButtonDisabled: {
-      opacity: 0.5,
+      opacity: 0.6,
     },
     saveButtonText: {
       ...Typography.body,
@@ -298,7 +292,6 @@ export default function ProfileScreen() {
             placeholderTextColor={colors.textSecondary}
             value={fullName}
             onChangeText={setFullName}
-            editable={!loading}
           />
         </View>
 
@@ -308,15 +301,11 @@ export default function ProfileScreen() {
             style={styles.input}
             value={username}
             onChangeText={setUsername}
-            editable={canChangeUsername && !loading}
+            editable={canChangeUsername}
           />
-          {canChangeUsername ? (
-            <Text style={styles.helperText}>
-              You can change your username once every 14 days
-            </Text>
-          ) : (
+          {!canChangeUsername && (
             <Text style={styles.warningText}>
-              Username locked for 14 days
+              Username locked for 14 days. You can still update your name.
             </Text>
           )}
         </View>
@@ -331,13 +320,9 @@ export default function ProfileScreen() {
         </View>
 
         <TouchableOpacity
-          style={[
-            styles.saveButton,
-            (!canChangeUsername || loading) &&
-              styles.saveButtonDisabled,
-          ]}
+          style={[styles.saveButton, loading && styles.saveButtonDisabled]}
           onPress={handleSaveProfile}
-          disabled={!canChangeUsername || loading}
+          disabled={loading}
         >
           <Text style={styles.saveButtonText}>
             {loading ? 'Saving...' : 'Save Changes'}
