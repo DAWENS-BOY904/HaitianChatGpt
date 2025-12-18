@@ -111,97 +111,53 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
   const sendMessage = async (content: string, imageUrl?: string, aiModel?: string) => {
     if (!currentConversation || !user) return;
 
-    // Add user message to state immediately with proper ID
+    // Add user message to state immediately
     const tempUserMessage: Message = {
-      id: `temp-user-${Date.now()}`,
+      id: `temp-${Date.now()}`,
       role: 'user',
       content,
       image_url: imageUrl,
       created_at: new Date().toISOString(),
     };
-    
-    // Add temp AI message placeholder
-    const tempAiMessage: Message = {
-      id: `temp-ai-${Date.now()}`,
-      role: 'assistant',
-      content: '...',
-      created_at: new Date().toISOString(),
-    };
+    setMessages(prev => [...prev, tempUserMessage]);
 
-    setMessages(prev => [...prev, tempUserMessage, tempAiMessage]);
+    // Build context messages for AI
+    const contextMessages = [...messages, tempUserMessage].map(m => ({
+      role: m.role,
+      content: m.image_url 
+        ? [
+            { type: 'text', text: m.content },
+            { type: 'image_url', image_url: { url: m.image_url } }
+          ]
+        : m.content,
+    }));
 
-    try {
-      // Build context messages for AI (exclude temp AI message)
-      const contextMessages = [...messages, tempUserMessage].map(m => ({
-        role: m.role,
-        content: m.image_url 
-          ? [
-              { type: 'text', text: m.content },
-              { type: 'image_url', image_url: { url: m.image_url } }
-            ]
-          : m.content,
-      }));
+    // Call AI Edge Function
+    const { data: aiResponse, error: aiError } = await supabase.functions.invoke('chat', {
+      body: {
+        messages: contextMessages,
+        conversationId: currentConversation.id,
+        aiModel: aiModel || 'gemini',
+      },
+    });
 
-      console.log('Calling chat edge function with model:', aiModel);
+    if (aiError) {
+      console.error('AI error:', aiError);
+      return;
+    }
 
-      // Call AI Edge Function
-      const { data: aiResponse, error: aiError } = await supabase.functions.invoke('chat', {
-        body: {
-          messages: contextMessages,
-          conversationId: currentConversation.id,
-          aiModel: aiModel || 'gemini',
-        },
-      });
+    // The Edge Function already saved messages to the database, so reload them
+    await selectConversation(currentConversation.id);
 
-      // Handle FunctionsHttpError
-      if (aiError) {
-        console.error('AI error:', aiError);
-        let errorMessage = 'Failed to send message';
-        
-        // Check if it's a FunctionsHttpError with response body
-        if (aiError.context) {
-          try {
-            const errorText = await aiError.context.text();
-            errorMessage = errorText || errorMessage;
-          } catch (e) {
-            console.error('Error reading error context:', e);
-          }
-        }
-        
-        // Remove temp messages and throw error
-        setMessages(prev => prev.filter(m => 
-          m.id !== tempUserMessage.id && m.id !== tempAiMessage.id
-        ));
-        throw new Error(errorMessage);
-      }
-
-      if (!aiResponse) {
-        console.error('No response from AI');
-        setMessages(prev => prev.filter(m => 
-          m.id !== tempUserMessage.id && m.id !== tempAiMessage.id
-        ));
-        throw new Error('No response from AI');
-      }
-
-      console.log('AI response received, reloading messages...');
-
-      // The Edge Function already saved messages to the database, so reload them
-      // Wait a bit to ensure DB write is complete
-      await new Promise(resolve => setTimeout(resolve, 500));
-      await selectConversation(currentConversation.id);
-
-      // Update conversation title if first message
-      if (messages.length === 0) {
-        const title = content.slice(0, 50);
-        await updateConversationTitle(currentConversation.id, title);
-      }
-    } catch (error) {
-      console.error('Send message error:', error);
-      // Remove temp messages on error
-      setMessages(prev => prev.filter(m => 
-        m.id !== tempUserMessage.id && m.id !== tempAiMessage.id
-      ));
-      throw error;
+    // Update conversation title if first message
+    if (messages.length === 0) {
+      const title = content.slice(0, 50);
+      await updateConversationTitle(currentConversation.id, title);
+    } else {
+      await supabase
+        .from('conversations')
+        .update({ updated_at: new Date().toISOString() })
+        .eq('id', currentConversation.id);
     }
   };
 
