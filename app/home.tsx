@@ -23,7 +23,7 @@ export default function HomeScreen() {
   const { colors } = useTheme();
   const { settings, updateSetting } = useSettings();
   const { canSendMessage, incrementMessageCount, limits } = useSubscription();
-  const { messages, currentConversation, sendMessage, createConversation, loading, updateConversationTitle, deleteConversation } = useConversation();
+  const { messages, currentConversation, sendMessage, updateMessage, createConversation, loading, updateConversationTitle, deleteConversation } = useConversation();
   const { showAlert } = useAlert();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -38,6 +38,7 @@ export default function HomeScreen() {
   const [isRecording, setIsRecording] = useState(false);
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [lastShake, setLastShake] = useState(0);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const flatListRef = useRef<FlatList>(null);
   const supabase = getSupabaseClient();
 
@@ -77,7 +78,7 @@ export default function HomeScreen() {
   const handleSend = async () => {
     if ((!inputText.trim() && selectedMedia.length === 0) || sending) return;
 
-    if (!canSendMessage()) {
+    if (!canSendMessage() && !editingMessageId) {
       showAlert('Limit Reached', `You have reached your daily limit of ${limits.messagesPerDay} messages. Upgrade to Premium for unlimited messages.`, [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Upgrade', onPress: () => router.push('/subscription') },
@@ -89,40 +90,49 @@ export default function HomeScreen() {
     setGenerating(true);
     const text = inputText;
     const media = selectedMedia;
+    const editingId = editingMessageId;
     setInputText('');
     setSelectedMedia([]);
+    setEditingMessageId(null);
 
     try {
-      let imageUrl: string | undefined;
-      
-      // Upload media if any
-      if (media.length > 0) {
-        const firstMedia = media[0];
+      // If editing an existing message
+      if (editingId) {
+        await updateMessage(editingId, text);
+        showAlert('Success', 'Message updated successfully');
+      } else {
+        // Creating a new message
+        let imageUrl: string | undefined;
         
-        if (firstMedia.type === 'image' && firstMedia.base64) {
-          const fileName = `${Date.now()}.jpg`;
-          const filePath = `${currentConversation?.id}/${fileName}`;
+        // Upload media if any
+        if (media.length > 0) {
+          const firstMedia = media[0];
           
-          const { error: uploadError } = await supabase.storage
-            .from('chat-images')
-            .upload(filePath, decode(firstMedia.base64), {
-              contentType: 'image/jpeg',
-            });
-
-          if (!uploadError) {
-            const { data: urlData } = supabase.storage
+          if (firstMedia.type === 'image' && firstMedia.base64) {
+            const fileName = `${Date.now()}.jpg`;
+            const filePath = `${currentConversation?.id}/${fileName}`;
+            
+            const { error: uploadError } = await supabase.storage
               .from('chat-images')
-              .getPublicUrl(filePath);
-            imageUrl = urlData.publicUrl;
+              .upload(filePath, decode(firstMedia.base64), {
+                contentType: 'image/jpeg',
+              });
+
+            if (!uploadError) {
+              const { data: urlData } = supabase.storage
+                .from('chat-images')
+                .getPublicUrl(filePath);
+              imageUrl = urlData.publicUrl;
+            }
           }
         }
-      }
 
-      await sendMessage(text || '[Image]', imageUrl, currentAIModel);
-      await incrementMessageCount();
+        await sendMessage(text || '[Image]', imageUrl, currentAIModel);
+        await incrementMessageCount();
+      }
     } catch (error) {
       console.error('Send error:', error);
-      showAlert('Error', 'Failed to send message');
+      showAlert('Error', editingId ? 'Failed to update message' : 'Failed to send message');
     } finally {
       setSending(false);
       setGenerating(false);
@@ -134,8 +144,14 @@ export default function HomeScreen() {
     showAlert('Cancelled', 'AI response generation stopped');
   };
 
-  const handleEditMessage = (content: string) => {
+  const handleEditMessage = (messageId: string, content: string) => {
+    setEditingMessageId(messageId);
     setInputText(content);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingMessageId(null);
+    setInputText('');
   };
 
   const handleMediaPicked = (media: any[]) => {
@@ -313,13 +329,28 @@ export default function HomeScreen() {
       alignItems: 'center',
       justifyContent: 'center',
     },
+    editingIndicator: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: Spacing.xs,
+      paddingHorizontal: Spacing.md,
+      paddingVertical: Spacing.sm,
+      backgroundColor: `${colors.primary}20`,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    editingText: {
+      ...Typography.caption,
+      color: colors.primary,
+      flex: 1,
+    },
   });
 
   const renderMessage = ({ item, index }: { item: any; index: number }) => (
     <MessageItem
       message={item}
       onCancel={handleCancelGeneration}
-      onEdit={handleEditMessage}
+      onEdit={(messageId, content) => handleEditMessage(messageId, content)}
       isGenerating={generating && index === messages.length - 1}
     />
   );
@@ -412,14 +443,24 @@ export default function HomeScreen() {
         </View>
       )}
 
+      {editingMessageId && (
+        <View style={styles.editingIndicator}>
+          <Ionicons name="pencil" size={16} color={colors.primary} />
+          <Text style={styles.editingText}>Editing message</Text>
+          <TouchableOpacity onPress={handleCancelEdit}>
+            <Text style={{ ...Typography.caption, color: colors.primary, fontWeight: '600' }}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       <View style={styles.inputContainer}>
-        <TouchableOpacity style={styles.iconButton} onPress={() => setToolsVisible(true)}>
-          <Ionicons name="add-circle-outline" size={24} color={colors.text} />
+        <TouchableOpacity style={styles.iconButton} onPress={() => setToolsVisible(true)} disabled={editingMessageId !== null}>
+          <Ionicons name="add-circle-outline" size={24} color={editingMessageId ? colors.textSecondary : colors.text} />
         </TouchableOpacity>
 
         <TextInput
           style={styles.input}
-          placeholder="Message..."
+          placeholder={editingMessageId ? "Edit message..." : "Message..."}
           placeholderTextColor={colors.textSecondary}
           value={inputText}
           onChangeText={setInputText}
@@ -430,9 +471,19 @@ export default function HomeScreen() {
         <TouchableOpacity 
           style={styles.iconButton} 
           onPress={() => router.push('/voice-control')}
+          disabled={editingMessageId !== null}
         >
-          <Ionicons name="mic-outline" size={24} color={colors.text} />
+          <Ionicons name="mic-outline" size={24} color={editingMessageId ? colors.textSecondary : colors.text} />
         </TouchableOpacity>
+
+        {editingMessageId && (
+          <TouchableOpacity 
+            style={styles.iconButton} 
+            onPress={handleCancelEdit}
+          >
+            <Ionicons name="close-circle-outline" size={24} color="#FF3B30" />
+          </TouchableOpacity>
+        )}
 
         {inputText.trim() || selectedMedia.length > 0 ? (
           <TouchableOpacity 
@@ -450,6 +501,7 @@ export default function HomeScreen() {
           <TouchableOpacity 
             style={[styles.sendButton, isRecording && styles.recordingButton]} 
             onPress={isRecording ? handleStopRecording : handleStartRecording}
+            disabled={editingMessageId !== null}
           >
             <Ionicons 
               name={isRecording ? "stop" : "mic"} 

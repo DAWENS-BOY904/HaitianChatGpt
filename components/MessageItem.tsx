@@ -16,9 +16,11 @@ interface MessageItemProps {
     content: string;
     image_url?: string;
     created_at: string;
+    edited?: boolean;
+    edited_at?: string;
   };
   onCancel?: () => void;
-  onEdit?: (content: string) => void;
+  onEdit?: (messageId: string, content: string) => void;
   isGenerating?: boolean;
 }
 
@@ -45,7 +47,7 @@ export function MessageItem({ message, onCancel, onEdit, isGenerating }: Message
 
   const handleEdit = () => {
     if (onEdit) {
-      onEdit(message.content);
+      onEdit(message.id, message.content);
     }
     setShowContextMenu(false);
   };
@@ -154,6 +156,18 @@ export function MessageItem({ message, onCancel, onEdit, isGenerating }: Message
     assistantMessageText: {
       color: colors.text,
       lineHeight: 22,
+    },
+    editedLabel: {
+      ...Typography.caption,
+      fontSize: 10,
+      marginTop: Spacing.xs,
+      fontStyle: 'italic',
+    },
+    editedLabelUser: {
+      color: 'rgba(255, 255, 255, 0.7)',
+    },
+    editedLabelAssistant: {
+      color: colors.textSecondary,
     },
     actionsContainer: {
       flexDirection: 'row',
@@ -277,6 +291,17 @@ export function MessageItem({ message, onCancel, onEdit, isGenerating }: Message
             </Text>
           );
         })}
+
+        {message.edited && (
+          <Text 
+            style={[
+              styles.editedLabel,
+              message.role === 'user' ? styles.editedLabelUser : styles.editedLabelAssistant,
+            ]}
+          >
+            (edited)
+          </Text>
+        )}
 
         {message.role === 'assistant' && isGenerating && (
           <View style={styles.generatingIndicator}>

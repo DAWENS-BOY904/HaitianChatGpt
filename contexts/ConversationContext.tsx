@@ -8,6 +8,8 @@ interface Message {
   content: string;
   image_url?: string;
   created_at: string;
+  edited?: boolean;
+  edited_at?: string;
 }
 
 interface Conversation {
@@ -25,6 +27,7 @@ interface ConversationContextType {
   createConversation: () => Promise<string | null>;
   selectConversation: (id: string) => Promise<void>;
   sendMessage: (content: string, imageUrl?: string, aiModel?: string) => Promise<void>;
+  updateMessage: (messageId: string, newContent: string) => Promise<void>;
   deleteConversation: (id: string) => Promise<void>;
   updateConversationTitle: (id: string, title: string) => Promise<void>;
   searchConversations: (query: string) => Conversation[];
@@ -191,6 +194,43 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
     );
   };
 
+  const updateMessage = async (messageId: string, newContent: string) => {
+    if (!currentConversation || !user) return;
+
+    // Update in database
+    const { error } = await supabase
+      .from('messages')
+      .update({ 
+        content: newContent, 
+        edited: true, 
+        edited_at: new Date().toISOString() 
+      })
+      .eq('id', messageId);
+
+    if (error) {
+      console.error('Update message error:', error);
+      return;
+    }
+
+    // Update in local state - keep message in same position
+    setMessages(prev => prev.map(msg => 
+      msg.id === messageId 
+        ? { 
+            ...msg, 
+            content: newContent, 
+            edited: true, 
+            edited_at: new Date().toISOString() 
+          }
+        : msg
+    ));
+
+    // Update conversation timestamp
+    await supabase
+      .from('conversations')
+      .update({ updated_at: new Date().toISOString() })
+      .eq('id', currentConversation.id);
+  };
+
   const refreshConversations = async () => {
     await loadConversations();
   };
@@ -204,6 +244,7 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
       createConversation,
       selectConversation,
       sendMessage,
+      updateMessage,
       deleteConversation,
       updateConversationTitle,
       searchConversations,
