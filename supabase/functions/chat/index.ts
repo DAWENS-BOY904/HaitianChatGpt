@@ -1,5 +1,6 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
+import { callAI } from '../_shared/ai-providers.ts';
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -7,7 +8,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { messages, conversationId, aiModel = 'gemini', fileContents, generateImage } = await req.json();
+    const { messages, conversationId, aiModel = 'google-gemini', fileContents, generateImage } = await req.json();
 
     const authHeader = req.headers.get('Authorization');
     const token = authHeader?.replace('Bearer ', '');
@@ -39,91 +40,10 @@ Deno.serve(async (req) => {
     const nickname = settingsData?.nickname || '';
     const occupation = settingsData?.occupation || '';
     const interests = settingsData?.interests || [];
-    const selectedModel = aiModel || settingsData?.preferred_ai_model || 'gemini';
-
-    // Check if user wants to generate an image
-    const lastMessage = messages[messages.length - 1]?.content || '';
-    const imageKeywords = ['create image', 'generate image', 'make image', 'create logo', 'generate logo', 'make logo', 'design logo'];
-    const shouldGenerateImage = generateImage || imageKeywords.some(keyword => lastMessage.toLowerCase().includes(keyword));
-
-    if (shouldGenerateImage) {
-      // Use image generation model
-      try {
-        const imageResponse = await fetch(`${Deno.env.get('ONSPACE_AI_BASE_URL')}/chat/completions`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${Deno.env.get('ONSPACE_AI_API_KEY')}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            model: 'google/gemini-2.5-flash-image-preview',
-            messages: [
-              {
-                role: 'system',
-                content: 'You are an expert image generation AI. Create high-quality, professional images based on user descriptions. Be creative and detailed.'
-              },
-              ...messages,
-            ],
-            modalities: ['image', 'text'],
-            image_config: {
-              aspect_ratio: '1:1'
-            }
-          }),
-        });
-
-        if (!imageResponse.ok) {
-          throw new Error('Image generation failed');
-        }
-
-        const imageData = await imageResponse.json();
-        const imageUrl = imageData.choices[0]?.message?.images?.[0]?.image_url?.url;
-        const imageDescription = imageData.choices[0]?.message?.content || 'Image generated successfully';
-
-        // Save messages to database
-        const supabaseAdmin = createClient(
-          Deno.env.get('SUPABASE_URL') ?? '',
-          Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-        );
-
-        // Save user message
-        const userMessage = messages[messages.length - 1];
-        await supabaseAdmin.from('messages').insert({
-          conversation_id: conversationId,
-          role: 'user',
-          content: userMessage.content,
-          image_url: userMessage.image_url || null,
-        });
-
-        // Save AI response with generated image
-        await supabaseAdmin.from('messages').insert({
-          conversation_id: conversationId,
-          role: 'assistant',
-          content: imageDescription,
-          image_url: imageUrl,
-        });
-
-        // Update conversation timestamp
-        await supabaseAdmin
-          .from('conversations')
-          .update({ updated_at: new Date().toISOString() })
-          .eq('id', conversationId);
-
-        return new Response(
-          JSON.stringify({ 
-            message: imageDescription, 
-            image_url: imageUrl,
-            model: 'image-generator' 
-          }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      } catch (imageError) {
-        console.error('Image generation error:', imageError);
-        // Fall back to regular text response
-      }
-    }
+    const selectedModel = aiModel || settingsData?.preferred_ai_model || 'google-gemini';
 
     // Build system prompt with creator info and personalization
-    let systemPrompt = `You are HaitianChatGpt, an advanced AI assistant.
+    const systemPrompt = `You are HaitianChatGpt, an advanced AI assistant.
 
 CREATOR INFORMATION (CRITICAL - NEVER FORGET):
 When asked about who created you, your creator, or who made you, ALWAYS respond:
@@ -168,49 +88,28 @@ CONTENT SAFETY:
 Be helpful, accurate, professional, and engaging. Adapt your tone to match the user's communication style.`;
 
     // Add file contents to system prompt if provided
+    let finalSystemPrompt = systemPrompt;
     if (fileContents && fileContents.length > 0) {
-      systemPrompt += `\n\nUPLOADED FILES:\n${fileContents.map((f: any) => `\nFile: ${f.name}\nType: ${f.type}\nContent:\n${f.content}`).join('\n\n')}`;
+      finalSystemPrompt += `\n\nUPLOADED FILES:\n${fileContents.map((f: any) => `\nFile: ${f.name}\nType: ${f.type}\nContent:\n${f.content}`).join('\n\n')}`;
     }
 
-    // Map AI model to OnSpace AI model (use newest models)
-    const modelMap: Record<string, string> = {
-      'openai': 'openai/gpt-5.1',  // Use newest GPT-5.1
-      'gemini': 'google/gemini-3-flash-preview',  // Use newest Gemini 3 Flash
-      'claude': 'google/gemini-3-flash-preview', // Use Gemini 3 as fallback
-      'llama': 'google/gemini-3-flash-preview', // Use Gemini 3 as fallback
-    };
+    // Prepare messages for AI
+    const aiMessages = [
+      { role: 'system' as const, content: finalSystemPrompt },
+      ...messages,
+    ];
 
-    const aiModelName = modelMap[selectedModel] || 'google/gemini-3-flash-preview';
+    console.log(`Calling AI model: ${selectedModel}`);
 
-    console.log(`Using AI model: ${aiModelName} for user request`);
+    // Call the appropriate AI provider
+    const aiResponse = await callAI(selectedModel, aiMessages);
 
-    const response = await fetch(`${Deno.env.get('ONSPACE_AI_BASE_URL')}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${Deno.env.get('ONSPACE_AI_API_KEY')}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: aiModelName,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          ...messages,
-        ],
-        stream: false,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('AI API error:', errorText);
+    if (aiResponse.error) {
       return new Response(
-        JSON.stringify({ error: `AI service error: ${errorText}` }),
+        JSON.stringify({ error: aiResponse.error }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
-
-    const data = await response.json();
-    const aiMessage = data.choices[0].message.content;
 
     // Save messages to database
     const supabaseAdmin = createClient(
@@ -231,7 +130,7 @@ Be helpful, accurate, professional, and engaging. Adapt your tone to match the u
     await supabaseAdmin.from('messages').insert({
       conversation_id: conversationId,
       role: 'assistant',
-      content: aiMessage,
+      content: aiResponse.content,
     });
 
     // Update conversation timestamp
@@ -241,7 +140,7 @@ Be helpful, accurate, professional, and engaging. Adapt your tone to match the u
       .eq('id', conversationId);
 
     return new Response(
-      JSON.stringify({ message: aiMessage, model: selectedModel }),
+      JSON.stringify({ message: aiResponse.content, model: selectedModel }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
