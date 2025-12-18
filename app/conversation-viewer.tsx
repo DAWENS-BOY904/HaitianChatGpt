@@ -12,7 +12,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
 import { useConversation } from '../hooks/useConversation';
-import { useRouter } from 'expo-router';
+import { router } from 'expo-router';
 import { Spacing, Typography, BorderRadius } from '../constants/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Clipboard from 'expo-clipboard';
@@ -22,7 +22,6 @@ export default function ConversationViewerScreen() {
   const { colors } = useTheme();
   const { messages, currentConversation } = useConversation();
   const { showAlert } = useAlert();
-  const router = useRouter();
   const insets = useSafeAreaInsets();
 
   const aiMessages = messages.filter(m => m.role === 'assistant');

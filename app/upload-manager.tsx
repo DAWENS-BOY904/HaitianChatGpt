@@ -13,7 +13,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
 import { useAuth, useAlert } from '@/template';
-import { useRouter } from 'expo-router';
+import { router } from 'expo-router';
 import { Spacing, Typography, BorderRadius } from '../constants/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getSupabaseClient } from '@/template';
@@ -34,7 +34,6 @@ export default function UploadManagerScreen() {
   const { colors } = useTheme();
   const { user } = useAuth();
   const { showAlert } = useAlert();
-  const router = useRouter();
   const insets = useSafeAreaInsets();
   const supabase = getSupabaseClient();
 

@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { useTheme } from '../hooks/useTheme';
 import { useAuth, useAlert } from '@/template';
-import { useRouter } from 'expo-router';
+import { router } from 'expo-router';
 import { Spacing, Typography, BorderRadius } from '../constants/theme';
 import { CodeBlock } from './CodeBlock';
 import { getSupabaseClient } from '@/template';
@@ -25,7 +25,6 @@ export function MessageItem({ message, onCancel, isGenerating }: MessageItemProp
   const { colors } = useTheme();
   const { user } = useAuth();
   const { showAlert } = useAlert();
-  const router = useRouter();
   const [showActions, setShowActions] = useState(false);
   const [liked, setLiked] = useState<'like' | 'dislike' | null>(null);
   const supabase = getSupabaseClient();

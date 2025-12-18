@@ -11,14 +11,13 @@ import { Camera, CameraType } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
 import { useAlert } from '@/template';
-import { useRouter } from 'expo-router';
+import { router } from 'expo-router';
 import { Spacing, Typography, BorderRadius } from '../constants/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function CameraScreen() {
   const { colors } = useTheme();
   const { showAlert } = useAlert();
-  const router = useRouter();
   const insets = useSafeAreaInsets();
   const cameraRef = useRef<Camera>(null);
 

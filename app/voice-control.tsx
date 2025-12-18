@@ -12,7 +12,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
 import { useSettings } from '../hooks/useSettings';
-import { useRouter } from 'expo-router';
+import { router } from 'expo-router';
 import { Spacing, Typography, BorderRadius } from '../constants/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Audio } from 'expo-av';
@@ -30,7 +30,6 @@ const VOICE_MODELS = [
 export default function VoiceControlScreen() {
   const { colors } = useTheme();
   const { settings, updateSetting } = useSettings();
-  const router = useRouter();
   const insets = useSafeAreaInsets();
 
   const [isListening, setIsListening] = useState(false);
