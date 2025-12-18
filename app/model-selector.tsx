@@ -1,82 +1,78 @@
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  ScrollView,
-  Platform,
-  ActivityIndicator,
-} from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import { useTheme } from '../hooks/useTheme';
-import { useSubscription } from '../hooks/useSubscription';
 import { useSettings } from '../hooks/useSettings';
-import { useRouter } from 'expo-router';
 import { Spacing, Typography, BorderRadius } from '../constants/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { getSupabaseClient } from '@/template';
 
-interface AIModel {
-  id: string;
-  name: string;
-  display_name: string;
-  description: string;
-  is_pro: boolean;
-  is_enabled: boolean;
-}
+const AI_MODELS = [
+  { 
+    id: 'gemini', 
+    name: 'Gemini 2.0 Flash', 
+    provider: 'Google', 
+    icon: 'planet-outline', 
+    free: true, 
+    description: 'Fast and intelligent responses with excellent reasoning' 
+  },
+  { 
+    id: 'openai', 
+    name: 'GPT-4o', 
+    provider: 'OpenAI', 
+    icon: 'flash-outline', 
+    free: true, 
+    description: 'Advanced reasoning, creativity, and problem-solving' 
+  },
+  { 
+    id: 'claude', 
+    name: 'Claude 3.5 Sonnet', 
+    provider: 'Anthropic', 
+    icon: 'sparkles-outline', 
+    free: true, 
+    description: 'Thoughtful and nuanced responses with strong analysis' 
+  },
+  { 
+    id: 'groq', 
+    name: 'Llama 3.3 70B', 
+    provider: 'Groq', 
+    icon: 'rocket-outline', 
+    free: true, 
+    description: 'Ultra-fast processing with competitive performance' 
+  },
+  { 
+    id: 'custom', 
+    name: 'Custom AI', 
+    provider: 'Local', 
+    icon: 'terminal-outline', 
+    free: true, 
+    description: 'Use your own AI endpoint (coming soon)' 
+  },
+];
 
 export default function ModelSelectorScreen() {
   const { colors } = useTheme();
-  const { tier } = useSubscription();
   const { settings, updateSetting } = useSettings();
-  const router = useRouter();
   const insets = useSafeAreaInsets();
-  const supabase = getSupabaseClient();
 
-  const [models, setModels] = useState<AIModel[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedModel, setSelectedModel] = useState(
-    settings.preferredAiModel || 'gemini'
-  );
+  const [selectedModel, setSelectedModel] = useState(settings.preferredAiModel || 'gemini');
 
-  useEffect(() => {
-    loadModels();
-  }, []);
-
-  const loadModels = async () => {
-    setLoading(true);
-    const { data, error } = await supabase
-      .from('ai_models')
-      .select('*')
-      .eq('is_enabled', true)
-      .order('is_pro', { ascending: true });
-
-    if (!error && data) {
-      setModels(data);
-    }
-    setLoading(false);
-  };
-
-  const handleSelectModel = async (modelName: string, isPro: boolean) => {
-    if (isPro && tier === 'free') {
-      router.push('/subscription');
+  const handleSelectModel = async (modelId: string) => {
+    if (modelId === 'custom') {
+      // Coming soon
       return;
     }
-
-    setSelectedModel(modelName);
-    await updateSetting('preferredAiModel', modelName);
-    setTimeout(() => router.back(), 500);
+    
+    setSelectedModel(modelId);
+    await updateSetting('preferredAiModel', modelId);
+    setTimeout(() => router.back(), 300);
   };
 
   const styles = StyleSheet.create({
     container: {
       flex: 1,
       backgroundColor: colors.background,
-      paddingTop: Platform.select({
-        ios: insets.top,
-        android: insets.top,
-      }),
+      paddingTop: Platform.select({ ios: insets.top, android: insets.top, default: 0 }),
     },
     header: {
       flexDirection: 'row',
@@ -97,6 +93,8 @@ export default function ModelSelectorScreen() {
       padding: Spacing.md,
     },
     modelCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
       backgroundColor: colors.card,
       borderRadius: BorderRadius.md,
       padding: Spacing.lg,
@@ -108,128 +106,98 @@ export default function ModelSelectorScreen() {
       borderColor: colors.primary,
       backgroundColor: colors.primaryLight,
     },
-    lockedCard: {
-      opacity: 0.6,
+    disabledCard: {
+      opacity: 0.5,
+    },
+    modelIcon: {
+      marginRight: Spacing.md,
+    },
+    modelInfo: {
+      flex: 1,
     },
     modelHeader: {
       flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'flex-start',
-      marginBottom: Spacing.sm,
+      alignItems: 'center',
+      marginBottom: 4,
     },
     modelName: {
       ...Typography.heading,
+      fontSize: 16,
       color: colors.text,
-      fontSize: 18,
-      flex: 1,
+      marginRight: Spacing.sm,
     },
-    proBadge: {
-      backgroundColor: '#FFD700',
-      paddingHorizontal: Spacing.sm,
-      paddingVertical: 4,
+    freeBadge: {
+      backgroundColor: '#34C759',
+      paddingHorizontal: Spacing.xs,
+      paddingVertical: 2,
       borderRadius: BorderRadius.sm,
-      marginLeft: Spacing.sm,
     },
-    proBadgeText: {
+    freeText: {
       ...Typography.caption,
-      color: '#000000',
-      fontWeight: '600',
+      color: '#FFFFFF',
       fontSize: 10,
+      fontWeight: '600',
     },
-    lockIcon: {
-      marginLeft: Spacing.sm,
+    modelProvider: {
+      ...Typography.caption,
+      color: colors.textSecondary,
+      marginBottom: 4,
     },
     modelDescription: {
-      ...Typography.body,
-      color: colors.textSecondary,
-      marginBottom: Spacing.sm,
-    },
-    selectedIndicator: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: Spacing.xs,
-      marginTop: Spacing.xs,
-    },
-    selectedText: {
       ...Typography.caption,
-      color: colors.primary,
-      fontWeight: '600',
-    },
-    loadingContainer: {
-      flex: 1,
-      alignItems: 'center',
-      justifyContent: 'center',
+      color: colors.textSecondary,
+      fontSize: 12,
     },
   });
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => router.back()}
-        >
+        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Select AI Model</Text>
       </View>
 
-      {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
-        </View>
-      ) : (
-        <ScrollView style={styles.content}>
-          {models.map((model) => {
-            const isLocked = model.is_pro && tier === 'free';
-            const isSelected = selectedModel === model.name;
-
-            return (
-              <TouchableOpacity
-                key={model.id}
-                style={[
-                  styles.modelCard,
-                  isSelected && styles.selectedCard,
-                  isLocked && styles.lockedCard,
-                ]}
-                onPress={() => handleSelectModel(model.name, model.is_pro)}
-              >
-                <View style={styles.modelHeader}>
-                  <Text style={styles.modelName}>{model.display_name}</Text>
-                  {model.is_pro && (
-                    <View style={styles.proBadge}>
-                      <Text style={styles.proBadgeText}>PRO</Text>
-                    </View>
-                  )}
-                  {isLocked && (
-                    <Ionicons
-                      name="lock-closed"
-                      size={20}
-                      color={colors.textSecondary}
-                      style={styles.lockIcon}
-                    />
-                  )}
-                </View>
-
-                <Text style={styles.modelDescription}>
-                  {model.description}
-                </Text>
-
-                {isSelected && (
-                  <View style={styles.selectedIndicator}>
-                    <Ionicons
-                      name="checkmark-circle"
-                      size={16}
-                      color={colors.primary}
-                    />
-                    <Text style={styles.selectedText}>Currently selected</Text>
+      <ScrollView style={styles.content}>
+        {AI_MODELS.map(model => (
+          <TouchableOpacity
+            key={model.id}
+            style={[
+              styles.modelCard,
+              selectedModel === model.id && styles.selectedCard,
+              model.id === 'custom' && styles.disabledCard,
+            ]}
+            onPress={() => handleSelectModel(model.id)}
+            disabled={model.id === 'custom'}
+          >
+            <View style={styles.modelIcon}>
+              <Ionicons 
+                name={model.icon as any} 
+                size={32} 
+                color={selectedModel === model.id ? colors.primary : colors.text} 
+              />
+            </View>
+            
+            <View style={styles.modelInfo}>
+              <View style={styles.modelHeader}>
+                <Text style={styles.modelName}>{model.name}</Text>
+                {model.free && (
+                  <View style={styles.freeBadge}>
+                    <Text style={styles.freeText}>FREE</Text>
                   </View>
                 )}
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-      )}
+              </View>
+              <Text style={styles.modelProvider}>{model.provider}</Text>
+              <Text style={styles.modelDescription}>{model.description}</Text>
+            </View>
+
+            {selectedModel === model.id && (
+              <Ionicons name="checkmark-circle" size={24} color={colors.primary} />
+            )}
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
     </View>
   );
 }

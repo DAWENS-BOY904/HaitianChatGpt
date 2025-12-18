@@ -170,6 +170,8 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
       }
 
       // The Edge Function already saved messages to the database, so reload them
+      // Wait a bit to ensure DB write is complete
+      await new Promise(resolve => setTimeout(resolve, 300));
       await selectConversation(currentConversation.id);
 
       // Update conversation title if first message
