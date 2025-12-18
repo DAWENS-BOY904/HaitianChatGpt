@@ -10,6 +10,7 @@ import { Spacing, Typography, BorderRadius } from '../constants/theme';
 import { MenuModal } from '../components/MenuModal';
 import { ToolsModal } from '../components/ToolsModal';
 import { ConversationMenuModal } from '../components/ConversationMenuModal';
+import { MessageItem } from '../components/MessageItem';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
@@ -31,6 +32,7 @@ export default function HomeScreen() {
   const [toolsVisible, setToolsVisible] = useState(false);
   const [conversationMenuVisible, setConversationMenuVisible] = useState(false);
   const [sending, setSending] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const flatListRef = useRef<FlatList>(null);
 
   useEffect(() => {
@@ -75,6 +77,7 @@ export default function HomeScreen() {
     }
 
     setSending(true);
+    setGenerating(true);
     const text = inputText;
     setInputText('');
 
@@ -86,7 +89,13 @@ export default function HomeScreen() {
       showAlert('Error', 'Failed to send message');
     } finally {
       setSending(false);
+      setGenerating(false);
     }
+  };
+
+  const handleCancelGeneration = () => {
+    setGenerating(false);
+    showAlert('Cancelled', 'AI response generation cancelled');
   };
 
   const handleImagePicker = async () => {
@@ -151,7 +160,7 @@ export default function HomeScreen() {
     }
 
     const result = await DocumentPicker.getDocumentAsync({
-      type: ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+      type: ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/zip'],
     });
 
     if (!result.canceled && result.assets[0]) {
@@ -243,35 +252,23 @@ export default function HomeScreen() {
       flex: 1,
       marginLeft: Spacing.sm,
     },
+    modelButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.surface,
+      paddingHorizontal: Spacing.sm,
+      paddingVertical: 4,
+      borderRadius: BorderRadius.sm,
+      marginRight: Spacing.sm,
+    },
+    modelText: {
+      ...Typography.caption,
+      color: colors.text,
+      fontSize: 11,
+      marginRight: 4,
+    },
     messagesContainer: {
       flex: 1,
-    },
-    messageItem: {
-      padding: Spacing.md,
-      marginVertical: Spacing.xs,
-    },
-    userMessage: {
-      alignSelf: 'flex-end',
-      backgroundColor: colors.primary,
-      borderRadius: BorderRadius.md,
-      maxWidth: '80%',
-      marginRight: Spacing.md,
-    },
-    assistantMessage: {
-      alignSelf: 'flex-start',
-      backgroundColor: colors.surface,
-      borderRadius: BorderRadius.md,
-      maxWidth: '80%',
-      marginLeft: Spacing.md,
-    },
-    messageText: {
-      ...Typography.body,
-    },
-    userMessageText: {
-      color: '#FFFFFF',
-    },
-    assistantMessageText: {
-      color: colors.text,
     },
     inputContainer: {
       flexDirection: 'row',
@@ -329,19 +326,17 @@ export default function HomeScreen() {
     },
   });
 
-  const renderMessage = ({ item }: { item: any }) => (
-    <View style={[
-      styles.messageItem,
-      item.role === 'user' ? styles.userMessage : styles.assistantMessage
-    ]}>
-      <Text style={[
-        styles.messageText,
-        item.role === 'user' ? styles.userMessageText : styles.assistantMessageText
-      ]}>
-        {item.content}
-      </Text>
-    </View>
+  const renderMessage = ({ item, index }: { item: any; index: number }) => (
+    <MessageItem
+      message={item}
+      onCancel={handleCancelGeneration}
+      isGenerating={generating && index === messages.length - 1}
+    />
   );
+
+  const modelName = settings.preferredAiModel === 'gemini' ? 'GPT-4o mini' 
+    : settings.preferredAiModel === 'openai' ? 'GPT-5' 
+    : 'GPT-4o';
 
   return (
     <KeyboardAvoidingView 
@@ -360,9 +355,19 @@ export default function HomeScreen() {
             {currentConversation?.title || 'HaitianChatGpt'}
           </Text>
         </View>
+        
+        <TouchableOpacity 
+          style={styles.modelButton} 
+          onPress={() => router.push('/model-selector')}
+        >
+          <Text style={styles.modelText}>{modelName}</Text>
+          <Ionicons name="chevron-down" size={12} color={colors.text} />
+        </TouchableOpacity>
+
         <TouchableOpacity style={styles.headerButton} onPress={() => router.push('/social')}>
           <Ionicons name="people" size={24} color={colors.text} />
         </TouchableOpacity>
+        
         <TouchableOpacity style={styles.headerButton} onPress={() => setConversationMenuVisible(true)}>
           <Ionicons name="ellipsis-horizontal" size={24} color={colors.text} />
         </TouchableOpacity>
@@ -377,7 +382,7 @@ export default function HomeScreen() {
           <Ionicons name="chatbubbles-outline" size={64} color={colors.textSecondary} style={styles.emptyIcon} />
           <Text style={styles.emptyTitle}>Start a conversation</Text>
           <Text style={styles.emptyText}>
-            Ask me anything! I can help with questions, creative writing, analysis, and more.
+            Ask me anything! I can help with questions, creative writing, coding, analysis, and more.
           </Text>
         </View>
       ) : (
@@ -392,8 +397,8 @@ export default function HomeScreen() {
       )}
 
       <View style={styles.inputContainer}>
-        <TouchableOpacity style={styles.headerButton} onPress={() => setMenuVisible(true)}>
-          <Ionicons name="menu" size={24} color={colors.text} />
+        <TouchableOpacity style={styles.iconButton} onPress={() => setToolsVisible(true)}>
+          <Ionicons name="add-circle-outline" size={24} color={colors.text} />
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.iconButton} onPress={handleImagePicker}>
@@ -414,8 +419,8 @@ export default function HomeScreen() {
           editable={!sending}
         />
 
-        <TouchableOpacity style={styles.iconButton} onPress={() => setToolsVisible(true)}>
-          <Ionicons name="add-circle-outline" size={24} color={colors.text} />
+        <TouchableOpacity style={styles.iconButton}>
+          <Ionicons name="mic-outline" size={24} color={colors.text} />
         </TouchableOpacity>
 
         <TouchableOpacity 

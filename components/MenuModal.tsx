@@ -210,7 +210,14 @@ export function MenuModal({ visible, onClose }: MenuModalProps) {
                 <TouchableOpacity
                   key={tab}
                   style={[styles.tab, activeTab === tab && styles.tabActive]}
-                  onPress={() => setActiveTab(tab)}
+                  onPress={() => {
+                    if (tab === 'GPTs') {
+                      onClose();
+                      router.push('/gpts');
+                    } else {
+                      setActiveTab(tab);
+                    }
+                  }}
                 >
                   <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
                     {tab}
@@ -223,6 +230,17 @@ export function MenuModal({ visible, onClose }: MenuModalProps) {
           <ScrollView style={styles.content}>
             <TouchableOpacity style={styles.newChatButton} onPress={handleNewChat}>
               <Ionicons name="add-circle-outline" size={24} color={colors.primary} />
+              <Text style={styles.newChatText}>New Chat</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.newChatButton} 
+              onPress={() => {
+                onClose();
+                router.push('/new-project');
+              }}
+            >
+              <Ionicons name="folder-outline" size={24} color={colors.primary} />
               <Text style={styles.newChatText}>New Project</Text>
             </TouchableOpacity>
 

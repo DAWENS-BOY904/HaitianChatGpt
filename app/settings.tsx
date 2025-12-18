@@ -402,7 +402,7 @@ export default function SettingsScreen() {
           <SettingRow 
             icon="lock-closed-outline" 
             title="Security" 
-            onPress={() => {}}
+            onPress={() => router.push('/security')}
           />
         </View>
 
@@ -565,6 +565,12 @@ export default function SettingsScreen() {
               title="Admin Dashboard" 
               subtitle="Full system control"
               onPress={() => router.push('/admin')}
+            />
+            <SettingRow 
+              icon="mail-outline" 
+              title="Send Email to Users" 
+              subtitle="Broadcast messages to users"
+              onPress={() => router.push('/admin-email')}
             />
           </View>
         )}
