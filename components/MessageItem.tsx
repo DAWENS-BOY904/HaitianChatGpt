@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Pressable, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Pressable, Image, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { useTheme } from '../hooks/useTheme';
@@ -18,21 +18,36 @@ interface MessageItemProps {
     created_at: string;
   };
   onCancel?: () => void;
+  onEdit?: (content: string) => void;
   isGenerating?: boolean;
 }
 
-export function MessageItem({ message, onCancel, isGenerating }: MessageItemProps) {
+export function MessageItem({ message, onCancel, onEdit, isGenerating }: MessageItemProps) {
   const { colors } = useTheme();
   const { user } = useAuth();
   const { showAlert } = useAlert();
-  const [showActions, setShowActions] = useState(false);
+  const [showContextMenu, setShowContextMenu] = useState(false);
   const [liked, setLiked] = useState<'like' | 'dislike' | null>(null);
+  const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
   const supabase = getSupabaseClient();
+
+  const handleLongPress = (event: any) => {
+    const { pageX, pageY } = event.nativeEvent;
+    setMenuPosition({ x: pageX, y: pageY });
+    setShowContextMenu(true);
+  };
 
   const handleCopy = async () => {
     await Clipboard.setStringAsync(message.content);
     showAlert('Copied!', 'Message copied to clipboard');
-    setShowActions(false);
+    setShowContextMenu(false);
+  };
+
+  const handleEdit = () => {
+    if (onEdit) {
+      onEdit(message.content);
+    }
+    setShowContextMenu(false);
   };
 
   const handleLike = async (type: 'like' | 'dislike') => {
@@ -64,7 +79,6 @@ export function MessageItem({ message, onCancel, isGenerating }: MessageItemProp
     } catch (error) {
       console.error('Like error:', error);
     }
-    setShowActions(false);
   };
 
   // Parse code blocks from content
@@ -195,106 +209,151 @@ export function MessageItem({ message, onCancel, isGenerating }: MessageItemProp
       fontSize: 11,
       fontWeight: '600',
     },
+    contextMenuOverlay: {
+      flex: 1,
+      backgroundColor: 'transparent',
+    },
+    contextMenu: {
+      position: 'absolute',
+      backgroundColor: colors.card,
+      borderRadius: BorderRadius.md,
+      padding: Spacing.xs,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.3,
+      shadowRadius: 8,
+      elevation: 8,
+      minWidth: 120,
+    },
+    contextMenuItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: Spacing.sm,
+      paddingVertical: Spacing.sm,
+      paddingHorizontal: Spacing.md,
+      borderRadius: BorderRadius.sm,
+    },
+    contextMenuText: {
+      ...Typography.body,
+      color: colors.text,
+      fontSize: 14,
+    },
   });
 
   return (
-    <Pressable
-      onLongPress={() => message.role === 'assistant' && setShowActions(!showActions)}
-      style={[
-        styles.container,
-        message.role === 'user' ? styles.userMessage : styles.assistantMessage,
-      ]}
-    >
-      {message.image_url && (
-        <Image source={{ uri: message.image_url }} style={styles.messageImage} />
-      )}
-      
-      {contentParts.map((part, index) => {
-        if (part.type === 'code') {
+    <>
+      <Pressable
+        onLongPress={handleLongPress}
+        style={[
+          styles.container,
+          message.role === 'user' ? styles.userMessage : styles.assistantMessage,
+        ]}
+      >
+        {message.image_url && (
+          <Image source={{ uri: message.image_url }} style={styles.messageImage} />
+        )}
+        
+        {contentParts.map((part, index) => {
+          if (part.type === 'code') {
+            return (
+              <CodeBlock
+                key={index}
+                code={part.content}
+                language={part.language}
+              />
+            );
+          }
           return (
-            <CodeBlock
+            <Text
               key={index}
-              code={part.content}
-              language={part.language}
-            />
+              style={[
+                styles.messageText,
+                message.role === 'user'
+                  ? styles.userMessageText
+                  : styles.assistantMessageText,
+              ]}
+            >
+              {part.content}
+            </Text>
           );
-        }
-        return (
-          <Text
-            key={index}
-            style={[
-              styles.messageText,
-              message.role === 'user'
-                ? styles.userMessageText
-                : styles.assistantMessageText,
-            ]}
-          >
-            {part.content}
-          </Text>
-        );
-      })}
+        })}
 
-      {message.role === 'assistant' && isGenerating && (
-        <View style={styles.generatingIndicator}>
-          <Text style={styles.generatingText}>Generating...</Text>
-          <TouchableOpacity style={styles.cancelButton} onPress={onCancel}>
-            <Text style={styles.cancelButtonText}>Cancel</Text>
-          </TouchableOpacity>
-        </View>
-      )}
+        {message.role === 'assistant' && isGenerating && (
+          <View style={styles.generatingIndicator}>
+            <Text style={styles.generatingText}>Generating...</Text>
+            <TouchableOpacity style={styles.cancelButton} onPress={onCancel}>
+              <Text style={styles.cancelButtonText}>Stop</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
-      {message.role === 'assistant' && showActions && !isGenerating && (
-        <View style={styles.actionsContainer}>
-          <TouchableOpacity style={styles.actionButton} onPress={handleCopy}>
-            <Ionicons name="copy-outline" size={14} color={colors.text} />
-            <Text style={styles.actionButtonText}>Copy</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.actionButton,
-              liked === 'like' && styles.actionButtonActive,
-            ]}
-            onPress={() => handleLike('like')}
-          >
-            <Ionicons
-              name={liked === 'like' ? 'thumbs-up' : 'thumbs-up-outline'}
-              size={14}
-              color={liked === 'like' ? '#FFFFFF' : colors.text}
-            />
-            <Text
+        {message.role === 'assistant' && !isGenerating && (
+          <View style={styles.actionsContainer}>
+            <TouchableOpacity
               style={[
-                styles.actionButtonText,
-                liked === 'like' && styles.actionButtonTextActive,
+                styles.actionButton,
+                liked === 'like' && styles.actionButtonActive,
               ]}
+              onPress={() => handleLike('like')}
             >
-              Like
-            </Text>
-          </TouchableOpacity>
+              <Ionicons
+                name={liked === 'like' ? 'thumbs-up' : 'thumbs-up-outline'}
+                size={14}
+                color={liked === 'like' ? '#FFFFFF' : colors.text}
+              />
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[
-              styles.actionButton,
-              liked === 'dislike' && styles.actionButtonActive,
-            ]}
-            onPress={() => handleLike('dislike')}
-          >
-            <Ionicons
-              name={liked === 'dislike' ? 'thumbs-down' : 'thumbs-down-outline'}
-              size={14}
-              color={liked === 'dislike' ? '#FFFFFF' : colors.text}
-            />
-            <Text
+            <TouchableOpacity
               style={[
-                styles.actionButtonText,
-                liked === 'dislike' && styles.actionButtonTextActive,
+                styles.actionButton,
+                liked === 'dislike' && styles.actionButtonActive,
               ]}
+              onPress={() => handleLike('dislike')}
             >
-              Dislike
-            </Text>
-          </TouchableOpacity>
-        </View>
-      )}
-    </Pressable>
+              <Ionicons
+                name={liked === 'dislike' ? 'thumbs-down' : 'thumbs-down-outline'}
+                size={14}
+                color={liked === 'dislike' ? '#FFFFFF' : colors.text}
+              />
+            </TouchableOpacity>
+          </View>
+        )}
+      </Pressable>
+
+      {/* Context Menu Modal */}
+      <Modal
+        visible={showContextMenu}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowContextMenu(false)}
+      >
+        <Pressable 
+          style={styles.contextMenuOverlay}
+          onPress={() => setShowContextMenu(false)}
+        >
+          <View 
+            style={[
+              styles.contextMenu,
+              { 
+                top: menuPosition.y - 100,
+                left: Math.min(menuPosition.x, 300),
+              }
+            ]}
+          >
+            <TouchableOpacity style={styles.contextMenuItem} onPress={handleCopy}>
+              <Ionicons name="copy-outline" size={18} color={colors.text} />
+              <Text style={styles.contextMenuText}>Copy</Text>
+            </TouchableOpacity>
+
+            {message.role === 'user' && onEdit && (
+              <TouchableOpacity style={styles.contextMenuItem} onPress={handleEdit}>
+                <Ionicons name="pencil-outline" size={18} color={colors.text} />
+                <Text style={styles.contextMenuText}>Edit</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </Pressable>
+      </Modal>
+    </>
   );
 }

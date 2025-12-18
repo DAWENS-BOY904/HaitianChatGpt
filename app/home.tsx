@@ -37,6 +37,7 @@ export default function HomeScreen() {
   const [currentAIModel, setCurrentAIModel] = useState(settings.preferredAiModel || 'gemini');
   const [isRecording, setIsRecording] = useState(false);
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
+  const [lastShake, setLastShake] = useState(0);
   const flatListRef = useRef<FlatList>(null);
   const supabase = getSupabaseClient();
 
@@ -54,13 +55,16 @@ export default function HomeScreen() {
     }
   }, [messages]);
 
-  // Shake detection for bug report
+  // Shake detection for bug report (less sensitive)
   useEffect(() => {
     const subscription = Accelerometer.addListener(accelerometerData => {
       const { x, y, z } = accelerometerData;
       const acceleration = Math.sqrt(x * x + y * y + z * z);
+      const now = Date.now();
       
-      if (acceleration > 2.5) {
+      // Increased threshold to 3.0 and added 2-second cooldown to prevent accidental triggers
+      if (acceleration > 3.0 && now - lastShake > 2000) {
+        setLastShake(now);
         router.push('/bugreport');
       }
     });
@@ -68,7 +72,7 @@ export default function HomeScreen() {
     Accelerometer.setUpdateInterval(100);
 
     return () => subscription.remove();
-  }, []);
+  }, [lastShake]);
 
   const handleSend = async () => {
     if ((!inputText.trim() && selectedMedia.length === 0) || sending) return;
@@ -127,7 +131,11 @@ export default function HomeScreen() {
 
   const handleCancelGeneration = () => {
     setGenerating(false);
-    showAlert('Cancelled', 'AI response generation cancelled');
+    showAlert('Cancelled', 'AI response generation stopped');
+  };
+
+  const handleEditMessage = (content: string) => {
+    setInputText(content);
   };
 
   const handleMediaPicked = (media: any[]) => {
@@ -311,6 +319,7 @@ export default function HomeScreen() {
     <MessageItem
       message={item}
       onCancel={handleCancelGeneration}
+      onEdit={handleEditMessage}
       isGenerating={generating && index === messages.length - 1}
     />
   );
