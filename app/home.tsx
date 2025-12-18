@@ -120,9 +120,9 @@ export default function HomeScreen() {
 
       await sendMessage(text || '[Image]', imageUrl, currentAIModel);
       await incrementMessageCount();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Send error:', error);
-      showAlert('Error', 'Failed to send message');
+      showAlert('Error', error?.message || 'Failed to send message');
     } finally {
       setSending(false);
       setGenerating(false);

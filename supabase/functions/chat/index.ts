@@ -14,24 +14,45 @@ Deno.serve(async (req) => {
     const { messages, conversationId, aiModel = 'gemini', fileContents, generateImage } = await req.json();
 
     const authHeader = req.headers.get('Authorization');
-    const token = authHeader?.replace('Bearer ', '');
-
-    // Create Supabase client
-    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
-    const supabaseKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
-    
-    const userResponse = await fetch(`${supabaseUrl}/auth/v1/user`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-    
-    if (!userResponse.ok) {
+    if (!authHeader) {
       return new Response(
-        JSON.stringify({ error: 'Unauthorized' }),
+        JSON.stringify({ error: 'Missing authorization header' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    const { id: userId } = await userResponse.json();
+    const token = authHeader.replace('Bearer ', '');
+
+    // Create Supabase URL
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+    const supabaseKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
+    
+    // Get user from token
+    const userResponse = await fetch(`${supabaseUrl}/auth/v1/user`, {
+      headers: { 
+        'Authorization': `Bearer ${token}`,
+        'apikey': supabaseKey
+      }
+    });
+    
+    if (!userResponse.ok) {
+      const errorText = await userResponse.text();
+      console.error('Auth error:', errorText);
+      return new Response(
+        JSON.stringify({ error: 'Authentication failed' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const userData = await userResponse.json();
+    const userId = userData.id;
+
+    if (!userId) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid user' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     // Get user settings
     const settingsResponse = await fetch(
@@ -117,6 +138,8 @@ ${fileContents && fileContents.length > 0 ? `\n\nUPLOADED FILES:\n${fileContents
 
     let aiResponse: string;
     let selectedModelName = aiModel;
+
+    console.log('Processing message with AI model:', aiModel);
 
     // Route to correct AI provider
     switch (aiModel) {
@@ -241,12 +264,14 @@ ${fileContents && fileContents.length > 0 ? `\n\nUPLOADED FILES:\n${fileContents
       }
     }
 
+    console.log('AI response received, saving to database...');
+
     // Save messages to database using service role
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
     
     // Save user message
     const userMessage = messages[messages.length - 1];
-    await fetch(`${supabaseUrl}/rest/v1/messages`, {
+    const userMessageResponse = await fetch(`${supabaseUrl}/rest/v1/messages`, {
       method: 'POST',
       headers: {
         'apikey': serviceKey,
@@ -262,8 +287,13 @@ ${fileContents && fileContents.length > 0 ? `\n\nUPLOADED FILES:\n${fileContents
       })
     });
 
+    if (!userMessageResponse.ok) {
+      const errorText = await userMessageResponse.text();
+      console.error('Failed to save user message:', errorText);
+    }
+
     // Save AI response
-    await fetch(`${supabaseUrl}/rest/v1/messages`, {
+    const aiMessageResponse = await fetch(`${supabaseUrl}/rest/v1/messages`, {
       method: 'POST',
       headers: {
         'apikey': serviceKey,
@@ -278,6 +308,11 @@ ${fileContents && fileContents.length > 0 ? `\n\nUPLOADED FILES:\n${fileContents
       })
     });
 
+    if (!aiMessageResponse.ok) {
+      const errorText = await aiMessageResponse.text();
+      console.error('Failed to save AI message:', errorText);
+    }
+
     // Update conversation timestamp
     await fetch(`${supabaseUrl}/rest/v1/conversations?id=eq.${conversationId}`, {
       method: 'PATCH',
@@ -290,6 +325,8 @@ ${fileContents && fileContents.length > 0 ? `\n\nUPLOADED FILES:\n${fileContents
         updated_at: new Date().toISOString()
       })
     });
+
+    console.log('Messages saved successfully');
 
     return new Response(
       JSON.stringify({ 
