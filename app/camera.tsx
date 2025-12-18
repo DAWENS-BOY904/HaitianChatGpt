@@ -11,13 +11,14 @@ import { Camera, CameraType } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
 import { useAlert } from '@/template';
-import { router } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { Spacing, Typography, BorderRadius } from '../constants/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function CameraScreen() {
   const { colors } = useTheme();
   const { showAlert } = useAlert();
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const cameraRef = useRef<Camera>(null);
 
@@ -46,7 +47,9 @@ export default function CameraScreen() {
 
       // Pass photo back to chat
       // In a real implementation, you would navigate with the photo data
-      router.back();
+      if (router && router.back) {
+        router.back();
+      }
       showAlert('Photo Captured', 'Photo added to conversation');
     } catch (error) {
       console.error('Camera error:', error);
@@ -175,7 +178,14 @@ export default function CameraScreen() {
         flashMode={flash ? 'on' : 'off'}
       >
         <View style={styles.topControls}>
-          <TouchableOpacity style={styles.controlButton} onPress={() => router.back()}>
+          <TouchableOpacity 
+            style={styles.controlButton} 
+            onPress={() => {
+              if (router && router.back) {
+                router.back();
+              }
+            }}
+          >
             <Ionicons name="close" size={28} color="#FFFFFF" />
           </TouchableOpacity>
 
