@@ -23,7 +23,7 @@ export default function HomeScreen() {
   const { colors } = useTheme();
   const { settings, updateSetting } = useSettings();
   const { canSendMessage, incrementMessageCount, limits } = useSubscription();
-  const { messages, currentConversation, sendMessage, updateMessage, createConversation, loading, updateConversationTitle, deleteConversation } = useConversation();
+  const { messages, currentConversation, sendMessage, updateMessage, updateMessageAndRegenerate, createConversation, loading, updateConversationTitle, deleteConversation } = useConversation();
   const { showAlert } = useAlert();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -98,8 +98,7 @@ export default function HomeScreen() {
     try {
       // If editing an existing message
       if (editingId) {
-        await updateMessage(editingId, text);
-        showAlert('Success', 'Message updated successfully');
+        await updateMessageAndRegenerate(editingId, text, currentAIModel);
       } else {
         // Creating a new message
         let imageUrl: string | undefined;

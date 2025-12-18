@@ -28,6 +28,7 @@ interface ConversationContextType {
   selectConversation: (id: string) => Promise<void>;
   sendMessage: (content: string, imageUrl?: string, aiModel?: string) => Promise<void>;
   updateMessage: (messageId: string, newContent: string) => Promise<void>;
+  updateMessageAndRegenerate: (messageId: string, newContent: string, aiModel?: string) => Promise<void>;
   deleteConversation: (id: string) => Promise<void>;
   updateConversationTitle: (id: string, title: string) => Promise<void>;
   searchConversations: (query: string) => Conversation[];
@@ -231,6 +232,92 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
       .eq('id', currentConversation.id);
   };
 
+  const updateMessageAndRegenerate = async (messageId: string, newContent: string, aiModel?: string) => {
+    if (!currentConversation || !user) return;
+
+    // Find the index of the edited message
+    const editedMessageIndex = messages.findIndex(m => m.id === messageId);
+    if (editedMessageIndex === -1) return;
+
+    // Update the user message in database
+    const { error: updateError } = await supabase
+      .from('messages')
+      .update({ 
+        content: newContent, 
+        edited: true, 
+        edited_at: new Date().toISOString() 
+      })
+      .eq('id', messageId);
+
+    if (updateError) {
+      console.error('Update message error:', updateError);
+      return;
+    }
+
+    // Update local state immediately
+    const updatedMessages = messages.map((msg, idx) => 
+      idx === editedMessageIndex
+        ? { 
+            ...msg, 
+            content: newContent, 
+            edited: true, 
+            edited_at: new Date().toISOString() 
+          }
+        : msg
+    );
+
+    // Find and delete the AI response that came after this message (if any)
+    if (editedMessageIndex + 1 < messages.length && messages[editedMessageIndex + 1].role === 'assistant') {
+      const aiMessageToDelete = messages[editedMessageIndex + 1];
+      
+      // Delete from database
+      await supabase
+        .from('messages')
+        .delete()
+        .eq('id', aiMessageToDelete.id);
+      
+      // Remove from local state
+      updatedMessages.splice(editedMessageIndex + 1, 1);
+    }
+
+    // Set updated messages (without old AI response)
+    setMessages(updatedMessages);
+
+    // Build context up to the edited message for AI
+    const contextMessages = updatedMessages.slice(0, editedMessageIndex + 1).map(m => ({
+      role: m.role,
+      content: m.image_url 
+        ? [
+            { type: 'text', text: m.content },
+            { type: 'image_url', image_url: { url: m.image_url } }
+          ]
+        : m.content,
+    }));
+
+    // Call AI to generate new response
+    const { data: aiResponse, error: aiError } = await supabase.functions.invoke('chat', {
+      body: {
+        messages: contextMessages,
+        conversationId: currentConversation.id,
+        aiModel: aiModel || 'gemini',
+      },
+    });
+
+    if (aiError) {
+      console.error('AI regeneration error:', aiError);
+      return;
+    }
+
+    // Reload all messages to get the new AI response
+    await selectConversation(currentConversation.id);
+
+    // Update conversation timestamp
+    await supabase
+      .from('conversations')
+      .update({ updated_at: new Date().toISOString() })
+      .eq('id', currentConversation.id);
+  };
+
   const refreshConversations = async () => {
     await loadConversations();
   };
@@ -245,6 +332,7 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
       selectConversation,
       sendMessage,
       updateMessage,
+      updateMessageAndRegenerate,
       deleteConversation,
       updateConversationTitle,
       searchConversations,
