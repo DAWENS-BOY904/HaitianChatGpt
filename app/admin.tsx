@@ -322,6 +322,40 @@ export default function AdminDashboard() {
 
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Quick Actions</Text>
+              <TouchableOpacity 
+                style={styles.actionButton}
+                onPress={() => router.push('/admin-revenue')}
+              >
+                <Ionicons
+                  name="cash"
+                  size={24}
+                  color={colors.text}
+                  style={styles.actionIcon}
+                />
+                <Text style={styles.actionText}>Revenue & Analytics</Text>
+                <Ionicons
+                  name="chevron-forward"
+                  size={20}
+                  color={colors.textSecondary}
+                />
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.actionButton}
+                onPress={() => router.push('/admin-payout')}
+              >
+                <Ionicons
+                  name="wallet"
+                  size={24}
+                  color={colors.text}
+                  style={styles.actionIcon}
+                />
+                <Text style={styles.actionText}>Cash Out / Payouts</Text>
+                <Ionicons
+                  name="chevron-forward"
+                  size={20}
+                  color={colors.textSecondary}
+                />
+              </TouchableOpacity>
               <TouchableOpacity style={styles.actionButton}>
                 <Ionicons
                   name="people"
@@ -390,6 +424,23 @@ export default function AdminDashboard() {
         {activeTab === 'settings' && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>App Settings</Text>
+            <TouchableOpacity 
+              style={styles.actionButton}
+              onPress={() => router.push('/admin-content')}
+            >
+              <Ionicons
+                name="create"
+                size={24}
+                color={colors.text}
+                style={styles.actionIcon}
+              />
+              <Text style={styles.actionText}>Content Management</Text>
+              <Ionicons
+                name="chevron-forward"
+                size={20}
+                color={colors.textSecondary}
+              />
+            </TouchableOpacity>
             <TouchableOpacity style={styles.actionButton}>
               <Ionicons
                 name="settings"
@@ -412,34 +463,6 @@ export default function AdminDashboard() {
                 style={styles.actionIcon}
               />
               <Text style={styles.actionText}>UI Customization</Text>
-              <Ionicons
-                name="chevron-forward"
-                size={20}
-                color={colors.textSecondary}
-              />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.actionButton}>
-              <Ionicons
-                name="document-text"
-                size={24}
-                color={colors.text}
-                style={styles.actionIcon}
-              />
-              <Text style={styles.actionText}>Edit Terms of Use</Text>
-              <Ionicons
-                name="chevron-forward"
-                size={20}
-                color={colors.textSecondary}
-              />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.actionButton}>
-              <Ionicons
-                name="shield-checkmark"
-                size={24}
-                color={colors.text}
-                style={styles.actionIcon}
-              />
-              <Text style={styles.actionText}>Edit Privacy Policy</Text>
               <Ionicons
                 name="chevron-forward"
                 size={20}

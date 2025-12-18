@@ -591,12 +591,17 @@ export default function SettingsScreen() {
           <SettingRow 
             icon="document-text-outline" 
             title="Terms of Use" 
-            onPress={() => {}}
+            onPress={() => router.push('/content-viewer?type=terms_of_use')}
           />
           <SettingRow 
             icon="shield-checkmark-outline" 
             title="Privacy Policy" 
-            onPress={() => {}}
+            onPress={() => router.push('/content-viewer?type=privacy_policy')}
+          />
+          <SettingRow 
+            icon="help-circle-outline" 
+            title="FAQ" 
+            onPress={() => router.push('/content-viewer?type=faq')}
           />
         </View>
 
