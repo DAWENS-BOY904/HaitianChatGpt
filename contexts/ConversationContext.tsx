@@ -121,43 +121,71 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
     };
     setMessages(prev => [...prev, tempUserMessage]);
 
-    // Build context messages for AI
-    const contextMessages = [...messages, tempUserMessage].map(m => ({
-      role: m.role,
-      content: m.image_url 
-        ? [
-            { type: 'text', text: m.content },
-            { type: 'image_url', image_url: { url: m.image_url } }
-          ]
-        : m.content,
-    }));
+    try {
+      // Build context messages for AI
+      const contextMessages = [...messages, tempUserMessage].map(m => ({
+        role: m.role,
+        content: m.image_url 
+          ? [
+              { type: 'text', text: m.content },
+              { type: 'image_url', image_url: { url: m.image_url } }
+            ]
+          : m.content,
+      }));
 
-    // Call AI Edge Function
-    const { data: aiResponse, error: aiError } = await supabase.functions.invoke('chat', {
-      body: {
-        messages: contextMessages,
-        conversationId: currentConversation.id,
-        aiModel: aiModel || 'gemini',
-      },
-    });
+      // Call AI Edge Function
+      const { data: aiResponse, error: aiError } = await supabase.functions.invoke('chat', {
+        body: {
+          messages: contextMessages,
+          conversationId: currentConversation.id,
+          aiModel: aiModel || 'gemini',
+        },
+      });
 
-    if (aiError) {
-      console.error('AI error:', aiError);
-      return;
-    }
+      // Handle FunctionsHttpError
+      if (aiError) {
+        console.error('AI error:', aiError);
+        let errorMessage = 'Failed to send message';
+        
+        // Check if it's a FunctionsHttpError with response body
+        if (aiError.context) {
+          try {
+            const errorText = await aiError.context.text();
+            errorMessage = errorText || errorMessage;
+          } catch (e) {
+            console.error('Error reading error context:', e);
+          }
+        }
+        
+        // Remove temp message and show error
+        setMessages(prev => prev.filter(m => m.id !== tempUserMessage.id));
+        console.error('Message send failed:', errorMessage);
+        return;
+      }
 
-    // The Edge Function already saved messages to the database, so reload them
-    await selectConversation(currentConversation.id);
+      if (!aiResponse) {
+        console.error('No response from AI');
+        setMessages(prev => prev.filter(m => m.id !== tempUserMessage.id));
+        return;
+      }
 
-    // Update conversation title if first message
-    if (messages.length === 0) {
-      const title = content.slice(0, 50);
-      await updateConversationTitle(currentConversation.id, title);
-    } else {
-      await supabase
-        .from('conversations')
-        .update({ updated_at: new Date().toISOString() })
-        .eq('id', currentConversation.id);
+      // The Edge Function already saved messages to the database, so reload them
+      await selectConversation(currentConversation.id);
+
+      // Update conversation title if first message
+      if (messages.length === 0) {
+        const title = content.slice(0, 50);
+        await updateConversationTitle(currentConversation.id, title);
+      } else {
+        await supabase
+          .from('conversations')
+          .update({ updated_at: new Date().toISOString() })
+          .eq('id', currentConversation.id);
+      }
+    } catch (error) {
+      console.error('Send message error:', error);
+      // Remove temp message on error
+      setMessages(prev => prev.filter(m => m.id !== tempUserMessage.id));
     }
   };
 
