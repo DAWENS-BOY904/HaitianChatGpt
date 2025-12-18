@@ -1,8 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Platform, TextInput } from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  ScrollView,
+  Platform,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
-import { useAuth } from '@/template';
+import { useAuth, useAlert } from '@/template';
 import { useRouter } from 'expo-router';
 import { Spacing, Typography, BorderRadius } from '../constants/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -11,10 +18,11 @@ import { getSupabaseClient } from '@/template';
 export default function AdminDashboard() {
   const { colors } = useTheme();
   const { user } = useAuth();
+  const { showAlert } = useAlert();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const supabase = getSupabaseClient();
-  
+
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
@@ -24,7 +32,9 @@ export default function AdminDashboard() {
     bugReports: 0,
     revenue: 0,
   });
-  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'bugs' | 'settings'>('overview');
+  const [activeTab, setActiveTab] = useState<
+    'overview' | 'users' | 'bugs' | 'settings'
+  >('overview');
 
   useEffect(() => {
     checkAdminAccess();
@@ -36,13 +46,10 @@ export default function AdminDashboard() {
       return;
     }
 
-    const { data, error } = await supabase
-      .from('user_profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single();
-
-    if (error || !data || data.role !== 'admin') {
+    // Check if email is in admin list
+    const adminEmails = ['berryxoe@gmail.com', 'newdawens@gmail.com'];
+    if (!adminEmails.includes(user.email || '')) {
+      showAlert('Access Denied', 'You do not have admin privileges');
       router.replace('/home');
       return;
     }
@@ -53,14 +60,26 @@ export default function AdminDashboard() {
   };
 
   const loadStats = async () => {
-    const [usersResult, messagesResult, bugsResult, revenueResult] = await Promise.all([
-      supabase.from('user_profiles').select('id', { count: 'exact', head: true }),
-      supabase.from('chat_messages').select('id', { count: 'exact', head: true }),
-      supabase.from('bug_reports').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
-      supabase.from('subscription_transactions').select('amount').eq('status', 'completed'),
-    ]);
+    const [usersResult, messagesResult, bugsResult, revenueResult] =
+      await Promise.all([
+        supabase
+          .from('user_profiles')
+          .select('id', { count: 'exact', head: true }),
+        supabase
+          .from('chat_messages')
+          .select('id', { count: 'exact', head: true }),
+        supabase
+          .from('bug_reports')
+          .select('id', { count: 'exact', head: true })
+          .eq('status', 'pending'),
+        supabase
+          .from('subscription_transactions')
+          .select('amount')
+          .eq('status', 'completed'),
+      ]);
 
-    const revenue = revenueResult.data?.reduce((sum, t) => sum + Number(t.amount), 0) || 0;
+    const revenue =
+      revenueResult.data?.reduce((sum, t) => sum + Number(t.amount), 0) || 0;
 
     setStats({
       totalUsers: usersResult.count || 0,
@@ -75,7 +94,11 @@ export default function AdminDashboard() {
     container: {
       flex: 1,
       backgroundColor: colors.background,
-      paddingTop: Platform.select({ ios: insets.top, android: insets.top, default: 0 }),
+      paddingTop: Platform.select({
+        ios: insets.top,
+        android: insets.top,
+        default: 0,
+      }),
     },
     header: {
       flexDirection: 'row',
@@ -104,6 +127,7 @@ export default function AdminDashboard() {
       ...Typography.caption,
       color: '#FF3B30',
       fontWeight: '600',
+      fontSize: 11,
     },
     tabs: {
       flexDirection: 'row',
@@ -123,6 +147,7 @@ export default function AdminDashboard() {
     tabText: {
       ...Typography.caption,
       color: colors.textSecondary,
+      fontSize: 12,
     },
     activeTabText: {
       color: '#FF3B30',
@@ -166,7 +191,7 @@ export default function AdminDashboard() {
     },
     actionButton: {
       backgroundColor: colors.card,
-      borderRadius: BorderRadius.sm,
+      borderRadius: BorderRadius.md,
       padding: Spacing.md,
       flexDirection: 'row',
       alignItems: 'center',
@@ -206,7 +231,10 @@ export default function AdminDashboard() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => router.back()}
+        >
           <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Admin Dashboard</Text>
@@ -220,7 +248,12 @@ export default function AdminDashboard() {
           style={[styles.tab, activeTab === 'overview' && styles.activeTab]}
           onPress={() => setActiveTab('overview')}
         >
-          <Text style={[styles.tabText, activeTab === 'overview' && styles.activeTabText]}>
+          <Text
+            style={[
+              styles.tabText,
+              activeTab === 'overview' && styles.activeTabText,
+            ]}
+          >
             Overview
           </Text>
         </TouchableOpacity>
@@ -228,7 +261,12 @@ export default function AdminDashboard() {
           style={[styles.tab, activeTab === 'users' && styles.activeTab]}
           onPress={() => setActiveTab('users')}
         >
-          <Text style={[styles.tabText, activeTab === 'users' && styles.activeTabText]}>
+          <Text
+            style={[
+              styles.tabText,
+              activeTab === 'users' && styles.activeTabText,
+            ]}
+          >
             Users
           </Text>
         </TouchableOpacity>
@@ -236,7 +274,12 @@ export default function AdminDashboard() {
           style={[styles.tab, activeTab === 'bugs' && styles.activeTab]}
           onPress={() => setActiveTab('bugs')}
         >
-          <Text style={[styles.tabText, activeTab === 'bugs' && styles.activeTabText]}>
+          <Text
+            style={[
+              styles.tabText,
+              activeTab === 'bugs' && styles.activeTabText,
+            ]}
+          >
             Bugs ({stats.bugReports})
           </Text>
         </TouchableOpacity>
@@ -244,7 +287,12 @@ export default function AdminDashboard() {
           style={[styles.tab, activeTab === 'settings' && styles.activeTab]}
           onPress={() => setActiveTab('settings')}
         >
-          <Text style={[styles.tabText, activeTab === 'settings' && styles.activeTabText]}>
+          <Text
+            style={[
+              styles.tabText,
+              activeTab === 'settings' && styles.activeTabText,
+            ]}
+          >
             Settings
           </Text>
         </TouchableOpacity>
@@ -275,19 +323,65 @@ export default function AdminDashboard() {
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Quick Actions</Text>
               <TouchableOpacity style={styles.actionButton}>
-                <Ionicons name="people" size={24} color={colors.text} style={styles.actionIcon} />
+                <Ionicons
+                  name="people"
+                  size={24}
+                  color={colors.text}
+                  style={styles.actionIcon}
+                />
                 <Text style={styles.actionText}>Manage Users</Text>
-                <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+                <Ionicons
+                  name="chevron-forward"
+                  size={20}
+                  color={colors.textSecondary}
+                />
               </TouchableOpacity>
               <TouchableOpacity style={styles.actionButton}>
-                <Ionicons name="chatbubbles" size={24} color={colors.text} style={styles.actionIcon} />
+                <Ionicons
+                  name="chatbubbles"
+                  size={24}
+                  color={colors.text}
+                  style={styles.actionIcon}
+                />
                 <Text style={styles.actionText}>View All Chats</Text>
-                <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+                <Ionicons
+                  name="chevron-forward"
+                  size={20}
+                  color={colors.textSecondary}
+                />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={() => router.push('/orders')}
+              >
+                <Ionicons
+                  name="receipt"
+                  size={24}
+                  color={colors.text}
+                  style={styles.actionIcon}
+                />
+                <Text style={styles.actionText}>View All Orders</Text>
+                <Ionicons
+                  name="chevron-forward"
+                  size={20}
+                  color={colors.textSecondary}
+                />
               </TouchableOpacity>
               <TouchableOpacity style={styles.actionButton}>
-                <Ionicons name="bug" size={24} color={colors.text} style={styles.actionIcon} />
-                <Text style={styles.actionText}>Bug Reports ({stats.bugReports})</Text>
-                <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+                <Ionicons
+                  name="bug"
+                  size={24}
+                  color={colors.text}
+                  style={styles.actionIcon}
+                />
+                <Text style={styles.actionText}>
+                  Bug Reports ({stats.bugReports})
+                </Text>
+                <Ionicons
+                  name="chevron-forward"
+                  size={20}
+                  color={colors.textSecondary}
+                />
               </TouchableOpacity>
             </View>
           </>
@@ -297,19 +391,78 @@ export default function AdminDashboard() {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>App Settings</Text>
             <TouchableOpacity style={styles.actionButton}>
-              <Ionicons name="settings" size={24} color={colors.text} style={styles.actionIcon} />
+              <Ionicons
+                name="settings"
+                size={24}
+                color={colors.text}
+                style={styles.actionIcon}
+              />
               <Text style={styles.actionText}>Feature Toggles</Text>
-              <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+              <Ionicons
+                name="chevron-forward"
+                size={20}
+                color={colors.textSecondary}
+              />
             </TouchableOpacity>
             <TouchableOpacity style={styles.actionButton}>
-              <Ionicons name="color-palette" size={24} color={colors.text} style={styles.actionIcon} />
+              <Ionicons
+                name="color-palette"
+                size={24}
+                color={colors.text}
+                style={styles.actionIcon}
+              />
               <Text style={styles.actionText}>UI Customization</Text>
-              <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+              <Ionicons
+                name="chevron-forward"
+                size={20}
+                color={colors.textSecondary}
+              />
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.actionButton, styles.dangerButton]}>
-              <Ionicons name="warning" size={24} color="#FF3B30" style={styles.actionIcon} />
-              <Text style={[styles.actionText, styles.dangerText]}>Reset All Data</Text>
-              <Ionicons name="chevron-forward" size={20} color="#FF3B30" />
+            <TouchableOpacity style={styles.actionButton}>
+              <Ionicons
+                name="document-text"
+                size={24}
+                color={colors.text}
+                style={styles.actionIcon}
+              />
+              <Text style={styles.actionText}>Edit Terms of Use</Text>
+              <Ionicons
+                name="chevron-forward"
+                size={20}
+                color={colors.textSecondary}
+              />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.actionButton}>
+              <Ionicons
+                name="shield-checkmark"
+                size={24}
+                color={colors.text}
+                style={styles.actionIcon}
+              />
+              <Text style={styles.actionText}>Edit Privacy Policy</Text>
+              <Ionicons
+                name="chevron-forward"
+                size={20}
+                color={colors.textSecondary}
+              />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionButton, styles.dangerButton]}
+            >
+              <Ionicons
+                name="warning"
+                size={24}
+                color="#FF3B30"
+                style={styles.actionIcon}
+              />
+              <Text style={[styles.actionText, styles.dangerText]}>
+                Reset All Data
+              </Text>
+              <Ionicons
+                name="chevron-forward"
+                size={20}
+                color="#FF3B30"
+              />
             </TouchableOpacity>
           </View>
         )}

@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Switch, Platform } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Switch, Platform, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
 import { useSettings } from '../hooks/useSettings';
@@ -20,6 +20,38 @@ export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const supabase = getSupabaseClient();
 
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [profilePhoto, setProfilePhoto] = useState('');
+  const [username, setUsername] = useState('');
+
+  useEffect(() => {
+    checkAdminAccess();
+    loadProfile();
+  }, [user]);
+
+  const checkAdminAccess = async () => {
+    if (!user) return;
+    
+    // Check if email is admin
+    const adminEmails = ['berryxoe@gmail.com', 'newdawens@gmail.com'];
+    setIsAdmin(adminEmails.includes(user.email || ''));
+  };
+
+  const loadProfile = async () => {
+    if (!user) return;
+
+    const { data } = await supabase
+      .from('user_profiles')
+      .select('username, profile_photo_url')
+      .eq('id', user.id)
+      .single();
+
+    if (data) {
+      setUsername(data.username || '');
+      setProfilePhoto(data.profile_photo_url || '');
+    }
+  };
+
   const handleLogout = async () => {
     showAlert('Confirm', 'Are you sure you want to log out?', [
       { text: 'Cancel', style: 'cancel' },
@@ -32,20 +64,6 @@ export default function SettingsScreen() {
         },
       },
     ]);
-  };
-
-  const checkAdminAccess = async () => {
-    if (!user) return;
-
-    const { data } = await supabase
-      .from('user_profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single();
-
-    if (data?.role === 'admin') {
-      router.push('/admin');
-    }
   };
 
   const styles = StyleSheet.create({
@@ -70,7 +88,7 @@ export default function SettingsScreen() {
       color: colors.text,
     },
     profileSection: {
-      padding: Spacing.md,
+      padding: Spacing.lg,
       backgroundColor: colors.card,
       borderBottomWidth: 1,
       borderBottomColor: colors.divider,
@@ -79,19 +97,24 @@ export default function SettingsScreen() {
       flexDirection: 'row',
       alignItems: 'center',
       gap: Spacing.md,
-      marginBottom: Spacing.md,
     },
     avatar: {
-      width: 60,
-      height: 60,
+      width: 70,
+      height: 70,
       borderRadius: BorderRadius.full,
       backgroundColor: colors.primary,
       alignItems: 'center',
       justifyContent: 'center',
+      overflow: 'hidden',
+    },
+    avatarImage: {
+      width: '100%',
+      height: '100%',
     },
     avatarText: {
-      ...Typography.heading,
+      ...Typography.title,
       color: '#FFFFFF',
+      fontSize: 28,
     },
     profileInfo: {
       flex: 1,
@@ -99,11 +122,12 @@ export default function SettingsScreen() {
     profileName: {
       ...Typography.heading,
       color: colors.text,
+      fontSize: 20,
     },
     profileEmail: {
       ...Typography.body,
       color: colors.textSecondary,
-      marginTop: 2,
+      marginTop: 4,
     },
     badge: {
       backgroundColor: colors.primaryLight,
@@ -118,9 +142,10 @@ export default function SettingsScreen() {
       color: colors.primary,
       fontWeight: '600',
       textTransform: 'uppercase',
+      fontSize: 10,
     },
     section: {
-      marginTop: Spacing.lg,
+      marginTop: Spacing.md,
     },
     sectionTitle: {
       ...Typography.caption,
@@ -128,6 +153,8 @@ export default function SettingsScreen() {
       textTransform: 'uppercase',
       paddingHorizontal: Spacing.md,
       paddingVertical: Spacing.sm,
+      fontSize: 12,
+      fontWeight: '600',
     },
     settingItem: {
       flexDirection: 'row',
@@ -145,8 +172,8 @@ export default function SettingsScreen() {
       gap: Spacing.md,
     },
     settingIcon: {
-      width: 32,
-      height: 32,
+      width: 28,
+      height: 28,
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -156,24 +183,28 @@ export default function SettingsScreen() {
     settingTitle: {
       ...Typography.body,
       color: colors.text,
+      fontSize: 16,
     },
     settingSubtitle: {
       ...Typography.caption,
       color: colors.textSecondary,
       marginTop: 2,
+      fontSize: 13,
     },
     settingValue: {
       ...Typography.body,
       color: colors.textSecondary,
       marginRight: Spacing.sm,
+      fontSize: 15,
     },
     colorOptions: {
       flexDirection: 'row',
       gap: Spacing.sm,
+      marginTop: Spacing.xs,
     },
     colorOption: {
-      width: 32,
-      height: 32,
+      width: 28,
+      height: 28,
       borderRadius: BorderRadius.full,
       borderWidth: 2,
       borderColor: 'transparent',
@@ -181,11 +212,36 @@ export default function SettingsScreen() {
     colorOptionSelected: {
       borderColor: colors.text,
     },
+    appearanceOptions: {
+      flexDirection: 'row',
+      gap: Spacing.sm,
+      marginTop: Spacing.xs,
+    },
+    appearanceOption: {
+      paddingHorizontal: Spacing.md,
+      paddingVertical: 6,
+      borderRadius: BorderRadius.sm,
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    appearanceOptionSelected: {
+      backgroundColor: colors.primary,
+      borderColor: colors.primary,
+    },
+    appearanceText: {
+      ...Typography.caption,
+      color: colors.text,
+      fontSize: 13,
+    },
+    appearanceTextSelected: {
+      color: '#FFFFFF',
+    },
     logoutButton: {
       backgroundColor: '#FF3B30',
       margin: Spacing.md,
       marginTop: Spacing.xl,
-      borderRadius: BorderRadius.sm,
+      borderRadius: BorderRadius.md,
       padding: Spacing.md,
       alignItems: 'center',
     },
@@ -193,12 +249,14 @@ export default function SettingsScreen() {
       ...Typography.body,
       color: '#FFFFFF',
       fontWeight: '600',
+      fontSize: 16,
     },
     versionText: {
       ...Typography.caption,
       color: colors.textSecondary,
       textAlign: 'center',
       marginVertical: Spacing.lg,
+      fontSize: 12,
     },
   });
 
@@ -263,47 +321,100 @@ export default function SettingsScreen() {
         <TouchableOpacity style={styles.profileSection} onPress={() => router.push('/profile')}>
           <View style={styles.profileHeader}>
             <View style={styles.avatar}>
-              <Text style={styles.avatarText}>
-                {user?.email?.[0].toUpperCase() || 'U'}
-              </Text>
+              {profilePhoto ? (
+                <Image source={{ uri: profilePhoto }} style={styles.avatarImage} />
+              ) : (
+                <Text style={styles.avatarText}>
+                  {username?.[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase() || 'U'}
+                </Text>
+              )}
             </View>
             <View style={styles.profileInfo}>
-              <Text style={styles.profileName}>{user?.username || 'User'}</Text>
+              <Text style={styles.profileName}>{username || 'User'}</Text>
               <Text style={styles.profileEmail}>{user?.email}</Text>
               <View style={styles.badge}>
                 <Text style={styles.badgeText}>{tierNames[tier]}</Text>
               </View>
             </View>
+            <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
           </View>
         </TouchableOpacity>
 
+        {/* ACCOUNT SECTION */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Account</Text>
+          <Text style={styles.sectionTitle}>ACCOUNT</Text>
+          <SettingRow 
+            icon="mail-outline" 
+            title="Email" 
+            value={user?.email || ''}
+          />
           <SettingRow 
             icon="card-outline" 
             title="Subscription" 
             value={tierNames[tier]}
             onPress={() => router.push('/subscription')}
           />
-          <SettingRow icon="card-outline" title="Payment methods" onPress={() => router.push('/payment')} />
-          <SettingRow icon="refresh-outline" title="Restore purchases" onPress={() => router.push('/subscription')} />
-          <SettingRow icon="receipt-outline" title="Orders" onPress={() => {}} />
-          <SettingRow icon="information-circle-outline" title="About" onPress={() => router.push('/about')} />
+          <SettingRow 
+            icon="arrow-up-circle-outline" 
+            title="Upgrade plan" 
+            onPress={() => router.push('/subscription')}
+          />
+          <SettingRow 
+            icon="refresh-outline" 
+            title="Restore purchases" 
+            onPress={() => router.push('/subscription')}
+          />
+          <SettingRow 
+            icon="receipt-outline" 
+            title="Orders" 
+            onPress={() => router.push('/orders')}
+          />
+          <SettingRow 
+            icon="person-circle-outline" 
+            title="Personalization" 
+            onPress={() => router.push('/personalization')}
+          />
+          <SettingRow 
+            icon="notifications-outline" 
+            title="Notifications" 
+            onPress={() => router.push('/notifications')}
+          />
+          <SettingRow 
+            icon="grid-outline" 
+            title="Apps & connectors" 
+            onPress={() => {}}
+          />
+          <SettingRow 
+            icon="shield-checkmark-outline" 
+            title="Parental controls" 
+            onPress={() => router.push('/parental-controls')}
+          />
+          <SettingRow 
+            icon="document-lock-outline" 
+            title="Data controls" 
+            onPress={() => router.push('/data-controls')}
+          />
+          <SettingRow 
+            icon="archive-outline" 
+            title="Archived chats" 
+            onPress={() => router.push('/archived-chats')}
+          />
+          <SettingRow 
+            icon="lock-closed-outline" 
+            title="Security" 
+            onPress={() => {}}
+          />
         </View>
 
+        {/* APP SETTINGS */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Preferences</Text>
-          <SettingRow icon="person-outline" title="Personalization" onPress={() => router.push('/personalization')} />
-          <SettingRow icon="notifications-outline" title="Notifications" onPress={() => router.push('/notifications')} />
-          <SettingRow icon="grid-outline" title="Apps & connectors" onPress={() => {}} />
-          <SettingRow icon="shield-outline" title="Parental controls" onPress={() => router.push('/parental-controls')} />
-          <SettingRow icon="document-text-outline" title="Data controls" onPress={() => router.push('/data-controls')} />
-          <SettingRow icon="archive-outline" title="Archived chats" onPress={() => {}} />
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>App Settings</Text>
-          <SettingRow icon="globe-outline" title="App language" value={settings.appLanguage} onPress={() => router.push('/languages')} />
+          <Text style={styles.sectionTitle}>APP SETTINGS</Text>
+          <SettingRow 
+            icon="globe-outline" 
+            title="App language" 
+            value={settings.appLanguage}
+            onPress={() => router.push('/languages')}
+          />
           
           <View style={styles.settingItem}>
             <View style={styles.settingLeft}>
@@ -312,22 +423,20 @@ export default function SettingsScreen() {
               </View>
               <View style={styles.settingTextContainer}>
                 <Text style={styles.settingTitle}>Appearance</Text>
-                <View style={{ flexDirection: 'row', gap: Spacing.sm, marginTop: Spacing.xs }}>
+                <View style={styles.appearanceOptions}>
                   {appearanceOptions.map(option => (
                     <TouchableOpacity
                       key={option}
                       onPress={() => updateSetting('appearance', option)}
-                      style={{
-                        paddingHorizontal: Spacing.sm,
-                        paddingVertical: 4,
-                        borderRadius: BorderRadius.sm,
-                        backgroundColor: settings.appearance === option ? colors.primary : colors.surface,
-                      }}
+                      style={[
+                        styles.appearanceOption,
+                        settings.appearance === option && styles.appearanceOptionSelected,
+                      ]}
                     >
-                      <Text style={{
-                        ...Typography.caption,
-                        color: settings.appearance === option ? '#FFFFFF' : colors.text,
-                      }}>
+                      <Text style={[
+                        styles.appearanceText,
+                        settings.appearance === option && styles.appearanceTextSelected,
+                      ]}>
                         {option}
                       </Text>
                     </TouchableOpacity>
@@ -385,8 +494,18 @@ export default function SettingsScreen() {
             }
           />
 
-          <SettingRow icon="language-outline" title="Main language for speech" value={settings.mainLanguage} />
-          <SettingRow icon="mic-outline" title="Voice selection" value={settings.voiceSelection} />
+          <SettingRow 
+            icon="language-outline" 
+            title="Main language for speech" 
+            value={settings.mainLanguage}
+            onPress={() => router.push('/languages')}
+          />
+          
+          <SettingRow 
+            icon="mic-outline" 
+            title="Voice selection" 
+            value={settings.voiceSelection}
+          />
 
           <SettingRow 
             icon="chatbubbles-outline" 
@@ -437,12 +556,42 @@ export default function SettingsScreen() {
           />
         </View>
 
+        {/* ADMIN DASHBOARD (HIDDEN FOR NON-ADMINS) */}
+        {isAdmin && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>ADMIN</Text>
+            <SettingRow 
+              icon="shield-outline" 
+              title="Admin Dashboard" 
+              subtitle="Full system control"
+              onPress={() => router.push('/admin')}
+            />
+          </View>
+        )}
+
+        {/* ABOUT SECTION */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Support</Text>
-          <SettingRow icon="bug-outline" title="Report bug" onPress={() => router.push('/bugreport')} />
-          <SettingRow icon="help-circle-outline" title="Help Center" onPress={() => {}} />
-          <SettingRow icon="document-text-outline" title="Terms of Use" onPress={() => {}} />
-          <SettingRow icon="shield-checkmark-outline" title="Privacy Policy" onPress={() => {}} />
+          <Text style={styles.sectionTitle}>ABOUT</Text>
+          <SettingRow 
+            icon="bug-outline" 
+            title="Report bug" 
+            onPress={() => router.push('/bugreport')}
+          />
+          <SettingRow 
+            icon="help-circle-outline" 
+            title="Help Center" 
+            onPress={() => {}}
+          />
+          <SettingRow 
+            icon="document-text-outline" 
+            title="Terms of Use" 
+            onPress={() => {}}
+          />
+          <SettingRow 
+            icon="shield-checkmark-outline" 
+            title="Privacy Policy" 
+            onPress={() => {}}
+          />
         </View>
 
         <Text style={styles.versionText}>HaitianChatGpt for iOS – v1.0.0</Text>

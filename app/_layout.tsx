@@ -36,6 +36,9 @@ export default function RootLayout() {
                     <Stack.Screen name="notification-detail" />
                     <Stack.Screen name="parental-controls" />
                     <Stack.Screen name="family-member" />
+                    <Stack.Screen name="orders" />
+                    <Stack.Screen name="archived-chats" />
+                    <Stack.Screen name="new-project" />
                   </Stack>
                 </ConversationProvider>
               </SocialProvider>
