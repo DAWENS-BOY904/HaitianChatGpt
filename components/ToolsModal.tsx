@@ -12,6 +12,7 @@ interface ToolsModalProps {
   onSelectTool: (tool: string) => void;
   onPickMedia: (media: any[]) => void;
   onSelectAIModel?: (model: string) => void;
+  onOpenCamera?: () => void;
   currentModel?: string;
 }
 
@@ -21,6 +22,7 @@ export function ToolsModal({
   onSelectTool, 
   onPickMedia,
   onSelectAIModel,
+  onOpenCamera,
   currentModel = 'gemini'
 }: ToolsModalProps) {
   const { colors } = useTheme();
@@ -90,6 +92,7 @@ export function ToolsModal({
   ];
 
   const tools = [
+    { id: 'camera', label: 'Camera', icon: 'camera', action: () => { onOpenCamera?.(); onClose(); } },
     { id: 'images', label: 'Add images', icon: 'images', subtitle: 'Upload up to 10+', action: handlePickImages },
     { id: 'video', label: 'Add video', icon: 'videocam', action: handlePickVideo },
     { id: 'file', label: 'Add file', icon: 'document', subtitle: 'PDF, ZIP, etc.', action: handlePickFile },

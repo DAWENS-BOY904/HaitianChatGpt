@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Pressable } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Pressable, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { useTheme } from '../hooks/useTheme';
 import { useAuth, useAlert } from '@/template';
+import { useRouter } from 'expo-router';
 import { Spacing, Typography, BorderRadius } from '../constants/theme';
 import { CodeBlock } from './CodeBlock';
 import { getSupabaseClient } from '@/template';
@@ -13,8 +14,8 @@ interface MessageItemProps {
     id: string;
     role: 'user' | 'assistant';
     content: string;
-    imageUrl?: string;
-    createdAt: string;
+    image_url?: string;
+    created_at: string;
   };
   onCancel?: () => void;
   isGenerating?: boolean;
@@ -24,6 +25,7 @@ export function MessageItem({ message, onCancel, isGenerating }: MessageItemProp
   const { colors } = useTheme();
   const { user } = useAuth();
   const { showAlert } = useAlert();
+  const router = useRouter();
   const [showActions, setShowActions] = useState(false);
   const [liked, setLiked] = useState<'like' | 'dislike' | null>(null);
   const supabase = getSupabaseClient();
@@ -36,6 +38,9 @@ export function MessageItem({ message, onCancel, isGenerating }: MessageItemProp
 
   const handleLike = async (type: 'like' | 'dislike') => {
     if (!user) return;
+
+    // Navigate to detail page
+    router.push(`/message-detail?messageId=${message.id}`);
 
     try {
       if (liked === type) {
@@ -121,6 +126,12 @@ export function MessageItem({ message, onCancel, isGenerating }: MessageItemProp
       maxWidth: '90%',
       marginLeft: Spacing.md,
     },
+    messageImage: {
+      width: '100%',
+      height: 200,
+      borderRadius: BorderRadius.sm,
+      marginBottom: Spacing.sm,
+    },
     messageText: {
       ...Typography.body,
     },
@@ -195,6 +206,10 @@ export function MessageItem({ message, onCancel, isGenerating }: MessageItemProp
         message.role === 'user' ? styles.userMessage : styles.assistantMessage,
       ]}
     >
+      {message.image_url && (
+        <Image source={{ uri: message.image_url }} style={styles.messageImage} />
+      )}
+      
       {contentParts.map((part, index) => {
         if (part.type === 'code') {
           return (

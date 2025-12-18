@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, FlatList, KeyboardAvoidingView, Platform, StatusBar, ActivityIndicator, Share } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, FlatList, KeyboardAvoidingView, Platform, StatusBar, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
 import { useConversation } from '../hooks/useConversation';
@@ -11,17 +11,17 @@ import { MenuModal } from '../components/MenuModal';
 import { ToolsModal } from '../components/ToolsModal';
 import { ConversationMenuModal } from '../components/ConversationMenuModal';
 import { MessageItem } from '../components/MessageItem';
+import { ThinkingIndicator } from '../components/ThinkingIndicator';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as ImagePicker from 'expo-image-picker';
-import * as DocumentPicker from 'expo-document-picker';
 import { getSupabaseClient } from '@/template';
 import { decode } from 'base64-arraybuffer';
 import { useRouter } from 'expo-router';
 import { Accelerometer } from 'expo-sensors';
+import { Audio } from 'expo-av';
 
 export default function HomeScreen() {
   const { colors } = useTheme();
-  const { settings } = useSettings();
+  const { settings, updateSetting } = useSettings();
   const { canSendMessage, incrementMessageCount, limits } = useSubscription();
   const { messages, currentConversation, sendMessage, createConversation, loading, updateConversationTitle, deleteConversation } = useConversation();
   const { showAlert } = useAlert();
@@ -33,7 +33,12 @@ export default function HomeScreen() {
   const [conversationMenuVisible, setConversationMenuVisible] = useState(false);
   const [sending, setSending] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [selectedMedia, setSelectedMedia] = useState<any[]>([]);
+  const [currentAIModel, setCurrentAIModel] = useState(settings.preferredAiModel || 'gemini');
+  const [isRecording, setIsRecording] = useState(false);
+  const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const flatListRef = useRef<FlatList>(null);
+  const supabase = getSupabaseClient();
 
   useEffect(() => {
     if (!currentConversation) {
@@ -66,7 +71,7 @@ export default function HomeScreen() {
   }, []);
 
   const handleSend = async () => {
-    if (!inputText.trim() || sending) return;
+    if ((!inputText.trim() && selectedMedia.length === 0) || sending) return;
 
     if (!canSendMessage()) {
       showAlert('Limit Reached', `You have reached your daily limit of ${limits.messagesPerDay} messages. Upgrade to Premium for unlimited messages.`, [
@@ -79,10 +84,37 @@ export default function HomeScreen() {
     setSending(true);
     setGenerating(true);
     const text = inputText;
+    const media = selectedMedia;
     setInputText('');
+    setSelectedMedia([]);
 
     try {
-      await sendMessage(text);
+      let imageUrl: string | undefined;
+      
+      // Upload media if any
+      if (media.length > 0) {
+        const firstMedia = media[0];
+        
+        if (firstMedia.type === 'image' && firstMedia.base64) {
+          const fileName = `${Date.now()}.jpg`;
+          const filePath = `${currentConversation?.id}/${fileName}`;
+          
+          const { error: uploadError } = await supabase.storage
+            .from('chat-images')
+            .upload(filePath, decode(firstMedia.base64), {
+              contentType: 'image/jpeg',
+            });
+
+          if (!uploadError) {
+            const { data: urlData } = supabase.storage
+              .from('chat-images')
+              .getPublicUrl(filePath);
+            imageUrl = urlData.publicUrl;
+          }
+        }
+      }
+
+      await sendMessage(text || '[Image]', imageUrl, currentAIModel);
       await incrementMessageCount();
     } catch (error) {
       console.error('Send error:', error);
@@ -98,130 +130,52 @@ export default function HomeScreen() {
     showAlert('Cancelled', 'AI response generation cancelled');
   };
 
-  const handleImagePicker = async () => {
-    if (!limits.canUploadMedia) {
-      showAlert('Premium Feature', 'Media uploads are only available for Premium members.', [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Upgrade', onPress: () => router.push('/subscription') },
-      ]);
-      return;
-    }
-
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') return;
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.All,
-      quality: 0.8,
-      base64: true,
-      allowsEditing: true,
-    });
-
-    if (!result.canceled && result.assets[0]) {
-      const asset = result.assets[0];
-      const supabase = getSupabaseClient();
-      
-      try {
-        const fileName = `${Date.now()}.${asset.type === 'video' ? 'mp4' : 'jpg'}`;
-        const filePath = `${currentConversation?.id || 'temp'}/${fileName}`;
-        const bucket = asset.type === 'video' ? 'media-files' : 'chat-images';
-        
-        const { data, error } = await supabase.storage
-          .from(bucket)
-          .upload(filePath, decode(asset.base64!), {
-            contentType: asset.type === 'video' ? 'video/mp4' : 'image/jpeg',
-          });
-
-        if (error) throw error;
-
-        const { data: urlData } = supabase.storage
-          .from(bucket)
-          .getPublicUrl(filePath);
-
-        if (inputText.trim() || asset.type === 'image') {
-          await sendMessage(inputText || '[Image]', urlData.publicUrl);
-          setInputText('');
-          await incrementMessageCount();
-        }
-      } catch (error) {
-        console.error('Upload error:', error);
-        showAlert('Error', 'Failed to upload media');
-      }
-    }
+  const handleMediaPicked = (media: any[]) => {
+    setSelectedMedia(media);
   };
 
-  const handleDocumentPicker = async () => {
-    if (!limits.canUploadMedia) {
-      showAlert('Premium Feature', 'File uploads are only available for Premium members.', [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Upgrade', onPress: () => router.push('/subscription') },
-      ]);
-      return;
-    }
-
-    const result = await DocumentPicker.getDocumentAsync({
-      type: ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/zip'],
-    });
-
-    if (!result.canceled && result.assets[0]) {
-      showAlert('Info', `File selected: ${result.assets[0].name}`);
-    }
+  const handleAIModelSelect = async (model: string) => {
+    setCurrentAIModel(model);
+    await updateSetting('preferredAiModel', model);
   };
 
-  const handleShare = async () => {
-    if (!currentConversation) return;
-
-    const messagesText = messages
-      .map(m => `${m.role === 'user' ? 'You' : 'AI'}: ${m.content}`)
-      .join('\n\n');
-
+  const handleStartRecording = async () => {
     try {
-      await Share.share({
-        message: messagesText,
-        title: currentConversation.title,
+      const { status } = await Audio.requestPermissionsAsync();
+      if (status !== 'granted') return;
+
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
       });
+
+      const { recording } = await Audio.Recording.createAsync(
+        Audio.RecordingOptionsPresets.HIGH_QUALITY
+      );
+
+      setRecording(recording);
+      setIsRecording(true);
     } catch (error) {
-      console.error('Share error:', error);
+      console.error('Recording error:', error);
     }
   };
 
-  const handleRename = () => {
-    if (!currentConversation) return;
+  const handleStopRecording = async () => {
+    if (!recording) return;
 
-    showAlert('Rename Conversation', 'Enter a new title:', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Rename',
-        onPress: async () => {
-          // In a real implementation, you would show a text input dialog
-          await updateConversationTitle(currentConversation.id, 'New Title');
-        },
-      },
-    ]);
-  };
-
-  const handleReport = () => {
-    router.push('/bugreport');
-  };
-
-  const handleArchive = () => {
-    showAlert('Success', 'Conversation archived');
-  };
-
-  const handleDelete = async () => {
-    if (!currentConversation) return;
-
-    showAlert('Delete Conversation', 'Are you sure? This cannot be undone.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          await deleteConversation(currentConversation.id);
-          await createConversation();
-        },
-      },
-    ]);
+    setIsRecording(false);
+    
+    try {
+      await recording.stopAndUnloadAsync();
+      const uri = recording.getURI();
+      
+      // In a real app, you would send this audio to a speech-to-text service
+      showAlert('Voice Input', 'Voice recording feature coming soon');
+    } catch (error) {
+      console.error('Stop recording error:', error);
+    }
+    
+    setRecording(null);
   };
 
   const styles = StyleSheet.create({
@@ -301,6 +255,9 @@ export default function HomeScreen() {
       alignItems: 'center',
       justifyContent: 'center',
     },
+    recordingButton: {
+      backgroundColor: '#FF3B30',
+    },
     emptyState: {
       flex: 1,
       alignItems: 'center',
@@ -324,6 +281,30 @@ export default function HomeScreen() {
       padding: Spacing.md,
       alignItems: 'center',
     },
+    selectedMediaPreview: {
+      flexDirection: 'row',
+      gap: Spacing.xs,
+      paddingHorizontal: Spacing.md,
+      paddingBottom: Spacing.sm,
+    },
+    mediaPreviewItem: {
+      width: 60,
+      height: 60,
+      borderRadius: BorderRadius.sm,
+      backgroundColor: colors.surface,
+      position: 'relative',
+    },
+    removeMediaButton: {
+      position: 'absolute',
+      top: -6,
+      right: -6,
+      backgroundColor: '#FF3B30',
+      borderRadius: BorderRadius.full,
+      width: 20,
+      height: 20,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
   });
 
   const renderMessage = ({ item, index }: { item: any; index: number }) => (
@@ -334,9 +315,10 @@ export default function HomeScreen() {
     />
   );
 
-  const modelName = settings.preferredAiModel === 'gemini' ? 'GPT-4o mini' 
-    : settings.preferredAiModel === 'openai' ? 'GPT-5' 
-    : 'GPT-4o';
+  const modelName = currentAIModel === 'gemini' ? 'Gemini' 
+    : currentAIModel === 'openai' ? 'OpenAI' 
+    : currentAIModel === 'claude' ? 'Claude'
+    : 'Llama';
 
   return (
     <KeyboardAvoidingView 
@@ -362,6 +344,14 @@ export default function HomeScreen() {
         >
           <Text style={styles.modelText}>{modelName}</Text>
           <Ionicons name="chevron-down" size={12} color={colors.text} />
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.headerButton} onPress={() => router.push('/upload-manager')}>
+          <Ionicons name="cloud-upload-outline" size={22} color={colors.text} />
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.headerButton} onPress={() => router.push('/conversation-viewer')}>
+          <Ionicons name="document-text-outline" size={22} color={colors.text} />
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.headerButton} onPress={() => router.push('/social')}>
@@ -392,21 +382,30 @@ export default function HomeScreen() {
           renderItem={renderMessage}
           keyExtractor={item => item.id}
           contentContainerStyle={{ paddingVertical: Spacing.md }}
+          ListFooterComponent={generating ? <ThinkingIndicator model={modelName} /> : null}
           onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
         />
+      )}
+
+      {selectedMedia.length > 0 && (
+        <View style={styles.selectedMediaPreview}>
+          {selectedMedia.map((media, index) => (
+            <View key={index} style={styles.mediaPreviewItem}>
+              <Ionicons name="image" size={32} color={colors.textSecondary} />
+              <TouchableOpacity
+                style={styles.removeMediaButton}
+                onPress={() => setSelectedMedia(prev => prev.filter((_, i) => i !== index))}
+              >
+                <Ionicons name="close" size={12} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+          ))}
+        </View>
       )}
 
       <View style={styles.inputContainer}>
         <TouchableOpacity style={styles.iconButton} onPress={() => setToolsVisible(true)}>
           <Ionicons name="add-circle-outline" size={24} color={colors.text} />
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.iconButton} onPress={handleImagePicker}>
-          <Ionicons name="image-outline" size={24} color={colors.text} />
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.iconButton} onPress={handleDocumentPicker}>
-          <Ionicons name="attach-outline" size={24} color={colors.text} />
         </TouchableOpacity>
 
         <TextInput
@@ -419,39 +418,62 @@ export default function HomeScreen() {
           editable={!sending}
         />
 
-        <TouchableOpacity style={styles.iconButton}>
+        <TouchableOpacity 
+          style={styles.iconButton} 
+          onPress={() => router.push('/voice-control')}
+        >
           <Ionicons name="mic-outline" size={24} color={colors.text} />
         </TouchableOpacity>
 
-        <TouchableOpacity 
-          style={styles.sendButton} 
-          onPress={handleSend}
-          disabled={!inputText.trim() || sending}
-        >
-          {sending ? (
-            <ActivityIndicator size="small" color="#FFFFFF" />
-          ) : (
-            <Ionicons name="arrow-up" size={20} color="#FFFFFF" />
-          )}
-        </TouchableOpacity>
+        {inputText.trim() || selectedMedia.length > 0 ? (
+          <TouchableOpacity 
+            style={styles.sendButton} 
+            onPress={handleSend}
+            disabled={sending}
+          >
+            {sending ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Ionicons name="arrow-up" size={20} color="#FFFFFF" />
+            )}
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity 
+            style={[styles.sendButton, isRecording && styles.recordingButton]} 
+            onPress={isRecording ? handleStopRecording : handleStartRecording}
+          >
+            <Ionicons 
+              name={isRecording ? "stop" : "mic"} 
+              size={20} 
+              color="#FFFFFF" 
+            />
+          </TouchableOpacity>
+        )}
       </View>
 
       <MenuModal visible={menuVisible} onClose={() => setMenuVisible(false)} />
       <ToolsModal 
         visible={toolsVisible} 
         onClose={() => setToolsVisible(false)}
-        onSelectTool={(tool) => {
-          setInputText(`[${tool}] `);
-        }}
+        onSelectTool={(tool) => setInputText(`[${tool}] `)}
+        onPickMedia={handleMediaPicked}
+        onSelectAIModel={handleAIModelSelect}
+        onOpenCamera={() => router.push('/camera')}
+        currentModel={currentAIModel}
       />
       <ConversationMenuModal
         visible={conversationMenuVisible}
         onClose={() => setConversationMenuVisible(false)}
-        onShare={handleShare}
-        onRename={handleRename}
-        onReport={handleReport}
-        onArchive={handleArchive}
-        onDelete={handleDelete}
+        onShare={() => {}}
+        onRename={() => {}}
+        onReport={() => router.push('/bugreport')}
+        onArchive={() => {}}
+        onDelete={async () => {
+          if (currentConversation) {
+            await deleteConversation(currentConversation.id);
+            await createConversation();
+          }
+        }}
       />
     </KeyboardAvoidingView>
   );

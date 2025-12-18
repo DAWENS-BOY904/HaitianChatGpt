@@ -43,6 +43,11 @@ export default function RootLayout() {
                     <Stack.Screen name="gpts" />
                     <Stack.Screen name="security" />
                     <Stack.Screen name="admin-email" />
+                    <Stack.Screen name="message-detail" />
+                    <Stack.Screen name="conversation-viewer" />
+                    <Stack.Screen name="voice-control" />
+                    <Stack.Screen name="upload-manager" />
+                    <Stack.Screen name="camera" />
                   </Stack>
                 </ConversationProvider>
               </SocialProvider>

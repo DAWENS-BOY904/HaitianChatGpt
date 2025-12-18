@@ -6,8 +6,8 @@ interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
-  imageUrl?: string;
-  createdAt: string;
+  image_url?: string;
+  created_at: string;
 }
 
 interface Conversation {
@@ -24,8 +24,9 @@ interface ConversationContextType {
   loading: boolean;
   createConversation: () => Promise<string | null>;
   selectConversation: (id: string) => Promise<void>;
-  sendMessage: (content: string, imageUrl?: string) => Promise<void>;
+  sendMessage: (content: string, imageUrl?: string, aiModel?: string) => Promise<void>;
   deleteConversation: (id: string) => Promise<void>;
+  updateConversationTitle: (id: string, title: string) => Promise<void>;
   searchConversations: (query: string) => Conversation[];
   refreshConversations: () => Promise<void>;
 }
@@ -102,58 +103,42 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
       .order('created_at', { ascending: true });
 
     if (!error && data) {
-      setMessages(data.map(m => ({
-        id: m.id,
-        role: m.role,
-        content: m.content,
-        imageUrl: m.image_url,
-        createdAt: m.created_at,
-      })));
+      setMessages(data);
     }
     setLoading(false);
   };
 
-  const sendMessage = async (content: string, imageUrl?: string) => {
+  const sendMessage = async (content: string, imageUrl?: string, aiModel?: string) => {
     if (!currentConversation || !user) return;
 
-    // Add user message
-    const { data: userMsg, error: userError } = await supabase
-      .from('messages')
-      .insert([{
-        conversation_id: currentConversation.id,
-        role: 'user',
-        content,
-        image_url: imageUrl,
-      }])
-      .select()
-      .single();
-
-    if (userError || !userMsg) return;
-
-    const newUserMessage: Message = {
-      id: userMsg.id,
+    // Add user message to state immediately
+    const tempUserMessage: Message = {
+      id: `temp-${Date.now()}`,
       role: 'user',
-      content: userMsg.content,
-      imageUrl: userMsg.image_url,
-      createdAt: userMsg.created_at,
+      content,
+      image_url: imageUrl,
+      created_at: new Date().toISOString(),
     };
-
-    setMessages(prev => [...prev, newUserMessage]);
+    setMessages(prev => [...prev, tempUserMessage]);
 
     // Build context messages for AI
-    const contextMessages = [...messages, newUserMessage].map(m => ({
+    const contextMessages = [...messages, tempUserMessage].map(m => ({
       role: m.role,
-      content: m.imageUrl 
+      content: m.image_url 
         ? [
             { type: 'text', text: m.content },
-            { type: 'image_url', image_url: { url: m.imageUrl } }
+            { type: 'image_url', image_url: { url: m.image_url } }
           ]
         : m.content,
     }));
 
-    // Call AI
+    // Call AI Edge Function
     const { data: aiResponse, error: aiError } = await supabase.functions.invoke('chat', {
-      body: { messages: contextMessages, conversationId: currentConversation.id },
+      body: {
+        messages: contextMessages,
+        conversationId: currentConversation.id,
+        aiModel: aiModel || 'gemini',
+      },
     });
 
     if (aiError) {
@@ -161,44 +146,32 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    // Add assistant message
-    const assistantContent = aiResponse?.message || 'Sorry, I could not generate a response.';
-    const { data: assistantMsg, error: assistantError } = await supabase
-      .from('messages')
-      .insert([{
-        conversation_id: currentConversation.id,
-        role: 'assistant',
-        content: assistantContent,
-      }])
-      .select()
-      .single();
-
-    if (assistantError || !assistantMsg) return;
-
-    setMessages(prev => [...prev, {
-      id: assistantMsg.id,
-      role: 'assistant',
-      content: assistantMsg.content,
-      createdAt: assistantMsg.created_at,
-    }]);
+    // The Edge Function already saved messages to the database, so reload them
+    await selectConversation(currentConversation.id);
 
     // Update conversation title if first message
     if (messages.length === 0) {
       const title = content.slice(0, 50);
-      await supabase
-        .from('conversations')
-        .update({ title, updated_at: new Date().toISOString() })
-        .eq('id', currentConversation.id);
-      
-      setConversations(prev => prev.map(c => 
-        c.id === currentConversation.id ? { ...c, title } : c
-      ));
-      setCurrentConversation(prev => prev ? { ...prev, title } : null);
+      await updateConversationTitle(currentConversation.id, title);
     } else {
       await supabase
         .from('conversations')
         .update({ updated_at: new Date().toISOString() })
         .eq('id', currentConversation.id);
+    }
+  };
+
+  const updateConversationTitle = async (id: string, title: string) => {
+    await supabase
+      .from('conversations')
+      .update({ title, updated_at: new Date().toISOString() })
+      .eq('id', id);
+    
+    setConversations(prev => prev.map(c => 
+      c.id === id ? { ...c, title } : c
+    ));
+    if (currentConversation?.id === id) {
+      setCurrentConversation(prev => prev ? { ...prev, title } : null);
     }
   };
 
@@ -232,6 +205,7 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
       selectConversation,
       sendMessage,
       deleteConversation,
+      updateConversationTitle,
       searchConversations,
       refreshConversations,
     }}>
