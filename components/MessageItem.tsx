@@ -7,6 +7,8 @@ import { useAuth, useAlert } from '@/template';
 import { router } from 'expo-router';
 import { Spacing, Typography, BorderRadius } from '../constants/theme';
 import { CodeBlock } from './CodeBlock';
+import { LinkSafetyModal } from './LinkSafetyModal';
+import { WebViewModal } from './WebViewModal';
 import { getSupabaseClient } from '@/template';
 
 interface MessageItemProps {
@@ -31,6 +33,9 @@ export function MessageItem({ message, onCancel, onEdit, isGenerating }: Message
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [liked, setLiked] = useState<'like' | 'dislike' | null>(null);
   const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
+  const [linkModalVisible, setLinkModalVisible] = useState(false);
+  const [selectedLink, setSelectedLink] = useState('');
+  const [webViewVisible, setWebViewVisible] = useState(false);
   const supabase = getSupabaseClient();
 
   const handleLongPress = (event: any) => {
@@ -81,6 +86,54 @@ export function MessageItem({ message, onCancel, onEdit, isGenerating }: Message
     } catch (error) {
       console.error('Like error:', error);
     }
+  };
+
+  const handleLinkPress = (url: string) => {
+    setSelectedLink(url);
+    setLinkModalVisible(true);
+  };
+
+  const handleOpenLink = (url: string) => {
+    setWebViewVisible(true);
+  };
+
+  // Detect URLs in text
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+
+  // Parse text with clickable links
+  const parseTextWithLinks = (text: string) => {
+    const parts = [];
+    let lastIndex = 0;
+    let match;
+
+    while ((match = urlRegex.exec(text)) !== null) {
+      // Add text before link
+      if (match.index > lastIndex) {
+        parts.push({
+          type: 'text',
+          content: text.substring(lastIndex, match.index),
+        });
+      }
+
+      // Add link
+      parts.push({
+        type: 'link',
+        content: match[0],
+        url: match[0],
+      });
+
+      lastIndex = match.index + match[0].length;
+    }
+
+    // Add remaining text
+    if (lastIndex < text.length) {
+      parts.push({
+        type: 'text',
+        content: text.substring(lastIndex),
+      });
+    }
+
+    return parts.length > 0 ? parts : [{ type: 'text', content: text }];
   };
 
   // Parse code blocks from content
@@ -252,6 +305,10 @@ export function MessageItem({ message, onCancel, onEdit, isGenerating }: Message
       color: colors.text,
       fontSize: 14,
     },
+    linkText: {
+      color: message.role === 'user' ? '#FFFFFF' : colors.primary,
+      textDecorationLine: 'underline',
+    },
   });
 
   return (
@@ -277,6 +334,10 @@ export function MessageItem({ message, onCancel, onEdit, isGenerating }: Message
               />
             );
           }
+          
+          // Parse text for links
+          const textParts = parseTextWithLinks(part.content);
+          
           return (
             <Text
               key={index}
@@ -287,7 +348,22 @@ export function MessageItem({ message, onCancel, onEdit, isGenerating }: Message
                   : styles.assistantMessageText,
               ]}
             >
-              {part.content}
+              {textParts.map((textPart, textIndex) => {
+                if (textPart.type === 'link') {
+                  return (
+                    <Text
+                      key={textIndex}
+                      style={styles.linkText}
+                      onPress={() => handleLinkPress(textPart.url)}
+                    >
+                      {textPart.content}
+                    </Text>
+                  );
+                }
+                return (
+                  <Text key={textIndex}>{textPart.content}</Text>
+                );
+              })}
             </Text>
           );
         })}
@@ -379,6 +455,21 @@ export function MessageItem({ message, onCancel, onEdit, isGenerating }: Message
           </View>
         </Pressable>
       </Modal>
+
+      {/* Link Safety Modal */}
+      <LinkSafetyModal
+        visible={linkModalVisible}
+        url={selectedLink}
+        onClose={() => setLinkModalVisible(false)}
+        onOpenLink={handleOpenLink}
+      />
+
+      {/* WebView Modal */}
+      <WebViewModal
+        visible={webViewVisible}
+        url={selectedLink}
+        onClose={() => setWebViewVisible(false)}
+      />
     </>
   );
 }
