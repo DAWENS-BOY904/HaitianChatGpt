@@ -21,12 +21,42 @@ export function MenuModal({ visible, onClose }: MenuModalProps) {
   const insets = useSafeAreaInsets();
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'ChatGPT' | 'Library' | 'GPTs'>('ChatGPT');
+  const [contextMenuVisible, setContextMenuVisible] = useState(false);
+  const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
 
   const filteredConversations = searchConversations(searchQuery);
 
   const handleSelectConversation = async (id: string) => {
     await selectConversation(id);
     onClose();
+  };
+
+  const handleLongPress = (id: string) => {
+    setSelectedConversationId(id);
+    setContextMenuVisible(true);
+  };
+
+  const handleRename = () => {
+    setContextMenuVisible(false);
+    // Will implement rename functionality
+  };
+
+  const handleShare = () => {
+    setContextMenuVisible(false);
+    // Will implement share functionality
+  };
+
+  const handleArchive = () => {
+    setContextMenuVisible(false);
+    // Will implement archive functionality
+  };
+
+  const handleDelete = async () => {
+    if (selectedConversationId) {
+      await deleteConversation(selectedConversationId);
+      setContextMenuVisible(false);
+      setSelectedConversationId(null);
+    }
   };
 
   const handleNewChat = async () => {
@@ -182,6 +212,30 @@ export function MenuModal({ visible, onClose }: MenuModalProps) {
       color: colors.textSecondary,
       textAlign: 'center',
     },
+    contextMenuContainer: {
+      backgroundColor: colors.background,
+      borderRadius: BorderRadius.lg,
+      padding: Spacing.sm,
+      minWidth: 200,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.3,
+      shadowRadius: 8,
+      elevation: 8,
+    },
+    contextMenuItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: Spacing.md,
+      paddingVertical: Spacing.md,
+      paddingHorizontal: Spacing.lg,
+      borderRadius: BorderRadius.sm,
+    },
+    contextMenuText: {
+      ...Typography.body,
+      color: colors.text,
+      fontSize: 16,
+    },
   });
 
   return (
@@ -256,16 +310,11 @@ export function MenuModal({ visible, onClose }: MenuModalProps) {
                   key={conv.id}
                   style={styles.conversationItem}
                   onPress={() => handleSelectConversation(conv.id)}
+                  onLongPress={() => handleLongPress(conv.id)}
                 >
                   <Text style={styles.conversationText} numberOfLines={1}>
                     {conv.title}
                   </Text>
-                  <TouchableOpacity
-                    style={styles.deleteButton}
-                    onPress={() => deleteConversation(conv.id)}
-                  >
-                    <Ionicons name="trash-outline" size={20} color={colors.danger} />
-                  </TouchableOpacity>
                 </TouchableOpacity>
               ))
             )}
@@ -292,6 +341,42 @@ export function MenuModal({ visible, onClose }: MenuModalProps) {
           </View>
         </View>
       </TouchableOpacity>
+
+      {/* Context Menu Modal */}
+      <Modal
+        visible={contextMenuVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setContextMenuVisible(false)}
+      >
+        <TouchableOpacity 
+          style={{ flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'center', alignItems: 'center' }}
+          activeOpacity={1}
+          onPress={() => setContextMenuVisible(false)}
+        >
+          <View style={styles.contextMenuContainer} onStartShouldSetResponder={() => true}>
+            <TouchableOpacity style={styles.contextMenuItem} onPress={handleShare}>
+              <Ionicons name="share-outline" size={20} color={colors.text} />
+              <Text style={styles.contextMenuText}>Share chat</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.contextMenuItem} onPress={handleRename}>
+              <Ionicons name="pencil-outline" size={20} color={colors.text} />
+              <Text style={styles.contextMenuText}>Rename</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.contextMenuItem} onPress={handleArchive}>
+              <Ionicons name="archive-outline" size={20} color={colors.text} />
+              <Text style={styles.contextMenuText}>Archive</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.contextMenuItem} onPress={handleDelete}>
+              <Ionicons name="trash-outline" size={20} color={colors.danger} />
+              <Text style={[styles.contextMenuText, { color: colors.danger }]}>Delete</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </Modal>
   );
 }
