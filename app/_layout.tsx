@@ -48,6 +48,7 @@ export default function RootLayout() {
                     <Stack.Screen name="voice-control" />
                     <Stack.Screen name="upload-manager" />
                     <Stack.Screen name="camera" />
+                    <Stack.Screen name="preview" />
                     <Stack.Screen name="admin-revenue" />
                     <Stack.Screen name="admin-payout" />
                     <Stack.Screen name="admin-content" />
