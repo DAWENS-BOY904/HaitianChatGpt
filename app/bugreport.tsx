@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -8,8 +8,7 @@ import {
   ScrollView,
   Platform,
   Image,
-  Switch,
-} from 'react-native';
+} from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
 import { useAuth, useAlert } from '@/template';
@@ -19,6 +18,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getSupabaseClient } from '@/template';
 import * as Device from 'expo-device';
 import { decode } from 'base64-arraybuffer';
+import * as ImagePicker from 'expo-image-picker';
+
+type BugType = 'ui-issue' | 'performance' | 'crash' | 'other' | null;
 
 export default function BugReportScreen() {
   const { colors } = useTheme();
@@ -29,13 +31,45 @@ export default function BugReportScreen() {
   const supabase = getSupabaseClient();
   const { screenshot: initialScreenshot } = useLocalSearchParams<{ screenshot?: string }>();
 
+  const [bugType, setBugType] = useState<BugType>(null);
   const [description, setDescription] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [screenshot, setScreenshot] = useState<string | null>(initialScreenshot || null);
-  const [includeScreenshot, setIncludeScreenshot] = useState(true);
-  const [shakeEnabled, setShakeEnabled] = useState(true);
+  const [screenshots, setScreenshots] = useState<string[]>(initialScreenshot ? [initialScreenshot] : []);
 
-  const canSubmit = description.trim().length > 0;
+  const canSubmit = bugType !== null && description.trim().length > 0;
+
+  const handleAddScreenshot = async () => {
+    // Check if user is logged in
+    if (!user) {
+      showAlert(
+        'Login Required',
+        'Please log in to upload screenshots',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Log In', onPress: () => router.push('/login') }
+        ]
+      );
+      return;
+    }
+
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsMultipleSelection: false,
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        setScreenshots(prev => [...prev, result.assets[0].uri]);
+      }
+    } catch (error) {
+      console.error('Image picker error:', error);
+    }
+  };
+
+  const handleRemoveScreenshot = (index: number) => {
+    setScreenshots(prev => prev.filter((_, i) => i !== index));
+  };
 
   const handleSubmit = async () => {
     if (!canSubmit) {
@@ -45,36 +79,36 @@ export default function BugReportScreen() {
     setSubmitting(true);
 
     try {
-      let uploadedScreenshotUrl = '';
+      let uploadedScreenshots: string[] = [];
 
-      // Upload screenshot if enabled and available
-      if (includeScreenshot && screenshot) {
-        const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
-        const filePath = `bug-reports/${user?.id}/${fileName}`;
+      // Upload screenshots if available
+      if (screenshots.length > 0) {
+        for (const screenshot of screenshots) {
+          const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
+          const filePath = `bug-reports/${user?.id || 'anonymous'}/${fileName}`;
 
-        // Convert base64 to blob if needed
-        let uploadData: any;
-        if (screenshot.startsWith('data:')) {
-          const base64Data = screenshot.split(',')[1];
-          uploadData = decode(base64Data);
-        } else {
-          // Fetch the file if it's a file URI
-          const response = await fetch(screenshot);
-          const blob = await response.blob();
-          uploadData = blob;
-        }
+          let uploadData: any;
+          if (screenshot.startsWith('data:')) {
+            const base64Data = screenshot.split(',')[1];
+            uploadData = decode(base64Data);
+          } else {
+            const response = await fetch(screenshot);
+            const blob = await response.blob();
+            uploadData = blob;
+          }
 
-        const { error: uploadError } = await supabase.storage
-          .from('chat-images')
-          .upload(filePath, uploadData, {
-            contentType: 'image/jpeg',
-          });
-
-        if (!uploadError) {
-          const { data: urlData } = supabase.storage
+          const { error: uploadError } = await supabase.storage
             .from('chat-images')
-            .getPublicUrl(filePath);
-          uploadedScreenshotUrl = urlData.publicUrl;
+            .upload(filePath, uploadData, {
+              contentType: 'image/jpeg',
+            });
+
+          if (!uploadError) {
+            const { data: urlData } = supabase.storage
+              .from('chat-images')
+              .getPublicUrl(filePath);
+            uploadedScreenshots.push(urlData.publicUrl);
+          }
         }
       }
 
@@ -84,11 +118,12 @@ export default function BugReportScreen() {
         osName: Device.osName,
         osVersion: Device.osVersion,
         platform: Platform.OS,
-        screenshot: uploadedScreenshotUrl || null,
+        bugType: bugType,
+        screenshots: uploadedScreenshots,
       };
 
       const { error } = await supabase.from('bug_reports').insert({
-        user_id: user?.id,
+        user_id: user?.id || null,
         description: description,
         device_info: deviceInfo,
         status: 'pending',
@@ -122,16 +157,16 @@ export default function BugReportScreen() {
       paddingHorizontal: Spacing.lg,
       paddingBottom: Spacing.md,
       flexDirection: 'row',
-      justifyContent: 'space-between',
       alignItems: 'center',
+    },
+    backButton: {
+      marginRight: Spacing.md,
     },
     headerTitle: {
       ...Typography.heading,
       color: colors.text,
       fontSize: 20,
-    },
-    closeButton: {
-      padding: Spacing.xs,
+      fontWeight: '600',
     },
     content: {
       flex: 1,
@@ -139,108 +174,141 @@ export default function BugReportScreen() {
     scrollContent: {
       padding: Spacing.lg,
     },
+    section: {
+      marginBottom: Spacing.xl,
+    },
     sectionTitle: {
       ...Typography.heading,
       color: colors.text,
-      fontSize: 18,
+      fontSize: 22,
+      fontWeight: '700',
       marginBottom: Spacing.xs,
     },
-    sectionSubtitle: {
+    sectionDescription: {
       ...Typography.body,
       color: colors.textSecondary,
       marginBottom: Spacing.lg,
+      lineHeight: 20,
     },
-    screenshotContainer: {
+    subtitle: {
+      ...Typography.body,
+      color: colors.text,
+      fontSize: 16,
+      fontWeight: '600',
+      marginBottom: Spacing.md,
+    },
+    bugTypeGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: Spacing.md,
+    },
+    bugTypeButton: {
+      flex: 1,
+      minWidth: '45%',
       backgroundColor: colors.surface,
       borderRadius: BorderRadius.lg,
       padding: Spacing.md,
-      marginBottom: Spacing.lg,
+      flexDirection: 'row',
       alignItems: 'center',
+      gap: Spacing.sm,
+      borderWidth: 2,
+      borderColor: 'transparent',
     },
-    screenshot: {
-      width: '100%',
-      height: 200,
-      borderRadius: BorderRadius.md,
-      marginBottom: Spacing.md,
+    bugTypeButtonActive: {
+      borderColor: colors.primary,
+      backgroundColor: `${colors.primary}10`,
     },
-    screenshotLabel: {
-      ...Typography.caption,
-      color: colors.textSecondary,
+    bugTypeText: {
+      ...Typography.body,
+      color: colors.text,
+      fontSize: 15,
+      fontWeight: '500',
     },
     inputCard: {
       backgroundColor: colors.surface,
       borderRadius: BorderRadius.lg,
       padding: Spacing.md,
-      marginBottom: Spacing.lg,
+      marginBottom: Spacing.md,
     },
     input: {
       ...Typography.body,
       color: colors.text,
-      minHeight: 150,
+      minHeight: 120,
       textAlignVertical: 'top',
       padding: 0,
     },
-    charCount: {
-      ...Typography.caption,
-      color: colors.textSecondary,
-      textAlign: 'right',
-      marginTop: Spacing.sm,
+    screenshotSection: {
+      marginBottom: Spacing.lg,
+    },
+    screenshotsPreview: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: Spacing.sm,
+      marginBottom: Spacing.md,
+    },
+    screenshotItem: {
+      width: 80,
+      height: 80,
+      borderRadius: BorderRadius.md,
+      position: 'relative',
+    },
+    screenshot: {
+      width: '100%',
+      height: '100%',
+      borderRadius: BorderRadius.md,
+    },
+    removeButton: {
+      position: 'absolute',
+      top: -8,
+      right: -8,
+      backgroundColor: '#FF3B30',
+      borderRadius: BorderRadius.full,
+      width: 24,
+      height: 24,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    addButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.surface,
+      borderRadius: BorderRadius.lg,
+      padding: Spacing.md,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderStyle: 'dashed',
+      gap: Spacing.sm,
+    },
+    addButtonText: {
+      ...Typography.body,
+      color: colors.text,
+      fontSize: 15,
+      fontWeight: '500',
     },
     disclaimer: {
       ...Typography.caption,
       color: colors.textSecondary,
       lineHeight: 18,
-      marginBottom: Spacing.sm,
+      marginBottom: Spacing.xl,
     },
-    link: {
-      color: colors.primary,
-      textDecorationLine: 'underline',
-    },
-    settingRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      backgroundColor: colors.surface,
-      borderRadius: BorderRadius.lg,
-      padding: Spacing.md,
-      marginBottom: Spacing.sm,
-    },
-    settingLeft: {
-      flex: 1,
-      marginRight: Spacing.md,
-    },
-    settingTitle: {
-      ...Typography.body,
-      color: colors.text,
-      fontWeight: '600',
-      marginBottom: 4,
-    },
-    settingDescription: {
-      ...Typography.caption,
-      color: colors.textSecondary,
-    },
-    bottomBar: {
-      padding: Spacing.lg,
-      paddingBottom: Platform.select({
-        ios: insets.bottom + Spacing.lg,
-        android: Spacing.lg,
-      }),
-      borderTopWidth: 1,
-      borderTopColor: colors.border,
-    },
-    sendButton: {
-      backgroundColor: colors.text,
+    submitButton: {
+      backgroundColor: '#00A67E',
       borderRadius: BorderRadius.full,
       padding: Spacing.md,
       alignItems: 'center',
       justifyContent: 'center',
+      marginBottom: Platform.select({
+        ios: insets.bottom + Spacing.md,
+        android: Spacing.md,
+      }),
     },
-    sendButtonDisabled: {
+    submitButtonDisabled: {
       opacity: 0.3,
     },
-    sendButtonText: {
+    submitButtonText: {
       ...Typography.body,
-      color: colors.background,
+      color: '#FFFFFF',
       fontWeight: '600',
       fontSize: 16,
     },
@@ -250,81 +318,117 @@ export default function BugReportScreen() {
     <View style={styles.container}>
       {/* HEADER */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Report bug</Text>
-        <TouchableOpacity style={styles.closeButton} onPress={() => router.back()}>
-          <Ionicons name="close" size={28} color={colors.text} />
+        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+          <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
+        <Text style={styles.headerTitle}>Report a Bug</Text>
       </View>
 
       {/* CONTENT */}
       <ScrollView style={styles.content} contentContainerStyle={styles.scrollContent}>
-        <Text style={styles.sectionTitle}>What happened?</Text>
+        {/* TITLE SECTION */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Help us improve</Text>
+          <Text style={styles.sectionDescription}>
+            Found a bug? Let us know what went wrong and we will fix it as soon as possible.
+          </Text>
+        </View>
 
-        {/* SCREENSHOT PREVIEW */}
-        {screenshot && includeScreenshot && (
-          <View style={styles.screenshotContainer}>
-            <Image source={{ uri: screenshot }} style={styles.screenshot} resizeMode="contain" />
-            <Text style={styles.screenshotLabel}>Attached screenshot</Text>
+        {/* BUG TYPE */}
+        <View style={styles.section}>
+          <Text style={styles.subtitle}>Bug Type</Text>
+          <View style={styles.bugTypeGrid}>
+            <TouchableOpacity
+              style={[styles.bugTypeButton, bugType === 'ui-issue' && styles.bugTypeButtonActive]}
+              onPress={() => setBugType('ui-issue')}
+            >
+              <Ionicons name="color-palette" size={20} color={colors.text} />
+              <Text style={styles.bugTypeText}>UI Issue</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.bugTypeButton, bugType === 'performance' && styles.bugTypeButtonActive]}
+              onPress={() => setBugType('performance')}
+            >
+              <Ionicons name="speedometer" size={20} color={colors.text} />
+              <Text style={styles.bugTypeText}>Performance</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.bugTypeButton, bugType === 'crash' && styles.bugTypeButtonActive]}
+              onPress={() => setBugType('crash')}
+            >
+              <Ionicons name="warning" size={20} color={colors.text} />
+              <Text style={styles.bugTypeText}>Crash</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.bugTypeButton, bugType === 'other' && styles.bugTypeButtonActive]}
+              onPress={() => setBugType('other')}
+            >
+              <Ionicons name="help-circle" size={20} color={colors.text} />
+              <Text style={styles.bugTypeText}>Other</Text>
+            </TouchableOpacity>
           </View>
-        )}
+        </View>
 
-        {/* DESCRIPTION INPUT */}
-        <View style={styles.inputCard}>
-          <TextInput
-            style={styles.input}
-            placeholder="Tell us about the issue you encountered"
-            placeholderTextColor={colors.textSecondary}
-            value={description}
-            onChangeText={setDescription}
-            multiline
-            maxLength={2000}
-          />
-          <Text style={styles.charCount}>{description.length} / 2000</Text>
+        {/* DESCRIPTION */}
+        <View style={styles.section}>
+          <Text style={styles.subtitle}>Description (Optional)</Text>
+          <View style={styles.inputCard}>
+            <TextInput
+              style={styles.input}
+              placeholder="Describe the issue in detail..."
+              placeholderTextColor={colors.textSecondary}
+              value={description}
+              onChangeText={setDescription}
+              multiline
+            />
+          </View>
+        </View>
+
+        {/* SCREENSHOTS */}
+        <View style={styles.screenshotSection}>
+          <Text style={styles.subtitle}>Screenshots (Optional)</Text>
+
+          {screenshots.length > 0 && (
+            <View style={styles.screenshotsPreview}>
+              {screenshots.map((uri, index) => (
+                <View key={index} style={styles.screenshotItem}>
+                  <Image source={{ uri }} style={styles.screenshot} resizeMode="cover" />
+                  <TouchableOpacity
+                    style={styles.removeButton}
+                    onPress={() => handleRemoveScreenshot(index)}
+                  >
+                    <Ionicons name="close" size={14} color="#FFFFFF" />
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          )}
+
+          <TouchableOpacity style={styles.addButton} onPress={handleAddScreenshot}>
+            <Ionicons name="camera" size={20} color={colors.text} />
+            <Text style={styles.addButtonText}>Add Screenshot</Text>
+          </TouchableOpacity>
         </View>
 
         {/* DISCLAIMER */}
         <Text style={styles.disclaimer}>
-          Any information you share may be reviewed to help improve ChatGPT. If you have additional
-          questions, <Text style={styles.link}>contact support</Text>.
+          Your report will include basic device information to help us debug the issue. We take your privacy seriously and only collect technical data.
         </Text>
 
-        {/* SETTINGS */}
-        <View style={styles.settingRow}>
-          <View style={styles.settingLeft}>
-            <Text style={styles.settingTitle}>Include screenshot in report</Text>
-          </View>
-          <Switch
-            value={includeScreenshot}
-            onValueChange={setIncludeScreenshot}
-            trackColor={{ true: colors.primary, false: colors.border }}
-            ios_backgroundColor={colors.border}
-          />
-        </View>
-
-        <View style={styles.settingRow}>
-          <View style={styles.settingLeft}>
-            <Text style={styles.settingTitle}>Shake iPhone to report a bug</Text>
-            <Text style={styles.settingDescription}>Toggle off to disable</Text>
-          </View>
-          <Switch
-            value={shakeEnabled}
-            onValueChange={setShakeEnabled}
-            trackColor={{ true: colors.primary, false: colors.border }}
-            ios_backgroundColor={colors.border}
-          />
-        </View>
-      </ScrollView>
-
-      {/* SEND BUTTON */}
-      <View style={styles.bottomBar}>
+        {/* SUBMIT BUTTON */}
         <TouchableOpacity
-          style={[styles.sendButton, !canSubmit && styles.sendButtonDisabled]}
+          style={[styles.submitButton, !canSubmit && styles.submitButtonDisabled]}
           onPress={handleSubmit}
           disabled={!canSubmit || submitting}
         >
-          <Text style={styles.sendButtonText}>{submitting ? 'Sending...' : 'Send'}</Text>
+          <Text style={styles.submitButtonText}>
+            {submitting ? 'Sending...' : 'Submit Report'}
+          </Text>
         </TouchableOpacity>
-      </View>
+      </ScrollView>
     </View>
   );
 }

@@ -1,75 +1,54 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, StatusBar, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  StatusBar,
+  Platform,
+} from 'react-native';
 import { useAuth, useAlert } from '@/template';
 import { useTheme } from '../hooks/useTheme';
 import { Spacing, Typography, BorderRadius } from '../constants/theme';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function LoginScreen() {
   const { colors } = useTheme();
-  const { sendOTP, verifyOTPAndLogin, signInWithPassword, operationLoading } = useAuth();
+  const { signInWithPassword, signInWithGoogle, operationLoading } = useAuth();
   const { showAlert } = useAlert();
-  
-  const [isSignUp, setIsSignUp] = useState(false);
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [otp, setOtp] = useState('');
-  const [otpSent, setOtpSent] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
-  const handleSendOTP = async () => {
-    if (!email) {
-      showAlert('Error', 'Please enter your email');
+  const handleEmailContinue = async () => {
+    if (!email.trim()) {
+      showAlert('Error', 'Please enter your email address');
       return;
     }
 
-    const { error } = await sendOTP(email);
-    if (error) {
-      showAlert('Error', error);
-      return;
-    }
-
-    setOtpSent(true);
-    showAlert('Success', 'Verification code sent to your email');
+    // Navigate to password screen
+    router.push({
+      pathname: '/login-password',
+      params: { email },
+    });
   };
 
-  const handleSignUp = async () => {
-    if (!email || !password || !confirmPassword) {
-      showAlert('Error', 'Please fill in all fields');
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      showAlert('Error', 'Passwords do not match');
-      return;
-    }
-
-    if (!otpSent) {
-      await handleSendOTP();
-      return;
-    }
-
-    if (!otp) {
-      showAlert('Error', 'Please enter the verification code');
-      return;
-    }
-
-    const { error } = await verifyOTPAndLogin(email, otp, { password });
+  const handleGoogleSignIn = async () => {
+    const { error } = await signInWithGoogle();
     if (error) {
       showAlert('Error', error);
     }
   };
 
-  const handleSignIn = async () => {
-    if (!email || !password) {
-      showAlert('Error', 'Please enter email and password');
-      return;
-    }
-
-    const { error } = await signInWithPassword(email, password);
-    if (error) {
-      showAlert('Error', error);
-    }
+  const handleAppleSignIn = async () => {
+    // Apple Sign In will be implemented when keys are provided
+    showAlert('Coming Soon', 'Apple Sign In will be available soon');
   };
 
   const styles = StyleSheet.create({
@@ -77,106 +56,136 @@ export default function LoginScreen() {
       flex: 1,
       backgroundColor: colors.background,
     },
-    scrollContent: {
-      flexGrow: 1,
-      justifyContent: 'center',
-      padding: Spacing.xl,
-    },
-    header: {
-      alignItems: 'center',
-      marginBottom: Spacing.xxl,
-    },
-    logo: {
-      width: 64,
-      height: 64,
-      borderRadius: BorderRadius.md,
-      backgroundColor: colors.primary,
+    closeButton: {
+      position: 'absolute',
+      top: Platform.select({
+        ios: insets.top + 16,
+        android: insets.top + 16,
+        default: 16,
+      }),
+      right: 20,
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      backgroundColor: colors.surface,
       alignItems: 'center',
       justifyContent: 'center',
-      marginBottom: Spacing.md,
+      zIndex: 10,
+    },
+    content: {
+      flex: 1,
+      paddingHorizontal: Spacing.xl,
+      paddingTop: Platform.select({
+        ios: insets.top + 80,
+        android: insets.top + 80,
+        default: 80,
+      }),
     },
     title: {
-      ...Typography.title,
+      fontSize: 34,
+      fontWeight: '700',
       color: colors.text,
-      marginBottom: Spacing.xs,
+      marginBottom: Spacing.xl,
+      textAlign: 'center',
     },
-    subtitle: {
+    description: {
       ...Typography.body,
       color: colors.textSecondary,
       textAlign: 'center',
+      marginBottom: Spacing.xxl,
+      lineHeight: 22,
     },
-    form: {
-      gap: Spacing.md,
-    },
-    input: {
-      backgroundColor: colors.inputBackground,
-      borderRadius: BorderRadius.sm,
-      padding: Spacing.md,
-      ...Typography.body,
-      color: colors.text,
+    inputContainer: {
+      backgroundColor: colors.surface,
+      borderRadius: BorderRadius.lg,
+      paddingHorizontal: Spacing.md,
+      paddingVertical: Spacing.sm,
+      marginBottom: Spacing.md,
       borderWidth: 1,
       borderColor: colors.border,
     },
-    button: {
-      backgroundColor: colors.primary,
-      borderRadius: BorderRadius.sm,
-      padding: Spacing.md,
-      alignItems: 'center',
-      marginTop: Spacing.sm,
-    },
-    buttonDisabled: {
-      opacity: 0.5,
-    },
-    buttonText: {
-      ...Typography.body,
-      fontWeight: '600',
-      color: '#FFFFFF',
-    },
-    switchContainer: {
-      flexDirection: 'row',
-      justifyContent: 'center',
-      alignItems: 'center',
-      marginTop: Spacing.lg,
-      gap: Spacing.xs,
-    },
-    switchText: {
-      ...Typography.body,
-      color: colors.textSecondary,
-    },
-    switchButton: {
-      ...Typography.body,
-      color: colors.primary,
-      fontWeight: '600',
-    },
-    otpInfo: {
+    inputLabel: {
       ...Typography.caption,
       color: colors.textSecondary,
-      textAlign: 'center',
-      marginTop: Spacing.sm,
+      fontSize: 12,
+      marginBottom: 4,
+    },
+    input: {
+      ...Typography.body,
+      color: colors.text,
+      fontSize: 16,
+      padding: 0,
+    },
+    continueButton: {
+      backgroundColor: colors.text,
+      borderRadius: BorderRadius.full,
+      padding: Spacing.md,
+      alignItems: 'center',
+      marginBottom: Spacing.xl,
+    },
+    continueButtonDisabled: {
+      opacity: 0.3,
+    },
+    continueButtonText: {
+      ...Typography.body,
+      color: colors.background,
+      fontWeight: '600',
+      fontSize: 16,
+    },
+    divider: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: Spacing.xl,
+    },
+    dividerLine: {
+      flex: 1,
+      height: 1,
+      backgroundColor: colors.border,
+    },
+    dividerText: {
+      ...Typography.body,
+      color: colors.textSecondary,
+      paddingHorizontal: Spacing.md,
+    },
+    oauthButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.surface,
+      borderRadius: BorderRadius.full,
+      padding: Spacing.md,
+      marginBottom: Spacing.md,
+      borderWidth: 1,
+      borderColor: colors.border,
+      gap: Spacing.sm,
+    },
+    oauthButtonText: {
+      ...Typography.body,
+      color: colors.text,
+      fontSize: 16,
+      fontWeight: '500',
     },
   });
 
   return (
-    <KeyboardAvoidingView 
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
+    <View style={styles.container}>
       <StatusBar barStyle={colors.text === '#FFFFFF' ? 'light-content' : 'dark-content'} />
-      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-        <View style={styles.header}>
-          <View style={styles.logo}>
-            <Ionicons name="chatbubbles" size={32} color="#FFFFFF" />
-          </View>
-          <Text style={styles.title}>HaitianChatGpt</Text>
-          <Text style={styles.subtitle}>
-            {isSignUp ? 'Create your account' : 'Welcome back'}
-          </Text>
-        </View>
 
-        <View style={styles.form}>
+      <TouchableOpacity style={styles.closeButton} onPress={() => router.back()}>
+        <Ionicons name="close" size={24} color={colors.text} />
+      </TouchableOpacity>
+
+      <View style={styles.content}>
+        <Text style={styles.title}>Log in or sign up</Text>
+        <Text style={styles.description}>
+          You'll get smarter responses and can upload files, images and more.
+        </Text>
+
+        <View style={styles.inputContainer}>
+          <Text style={styles.inputLabel}>Email</Text>
           <TextInput
             style={styles.input}
-            placeholder="Email"
+            placeholder=""
             placeholderTextColor={colors.textSecondary}
             value={email}
             onChangeText={setEmail}
@@ -184,74 +193,42 @@ export default function LoginScreen() {
             keyboardType="email-address"
             editable={!operationLoading}
           />
-
-          <TextInput
-            style={styles.input}
-            placeholder="Password"
-            placeholderTextColor={colors.textSecondary}
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            editable={!operationLoading}
-          />
-
-          {isSignUp && (
-            <>
-              <TextInput
-                style={styles.input}
-                placeholder="Confirm Password"
-                placeholderTextColor={colors.textSecondary}
-                value={confirmPassword}
-                onChangeText={setConfirmPassword}
-                secureTextEntry
-                editable={!operationLoading}
-              />
-
-              {otpSent && (
-                <>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Verification Code"
-                    placeholderTextColor={colors.textSecondary}
-                    value={otp}
-                    onChangeText={setOtp}
-                    keyboardType="number-pad"
-                    editable={!operationLoading}
-                  />
-                  <Text style={styles.otpInfo}>
-                    Enter the 4-digit code sent to your email
-                  </Text>
-                </>
-              )}
-            </>
-          )}
-
-          <TouchableOpacity
-            style={[styles.button, operationLoading && styles.buttonDisabled]}
-            onPress={isSignUp ? handleSignUp : handleSignIn}
-            disabled={operationLoading}
-          >
-            <Text style={styles.buttonText}>
-              {operationLoading ? 'Processing...' : (isSignUp ? (otpSent ? 'Create Account' : 'Continue') : 'Sign In')}
-            </Text>
-          </TouchableOpacity>
-
-          <View style={styles.switchContainer}>
-            <Text style={styles.switchText}>
-              {isSignUp ? 'Already have an account?' : "Don't have an account?"}
-            </Text>
-            <TouchableOpacity onPress={() => {
-              setIsSignUp(!isSignUp);
-              setOtpSent(false);
-              setOtp('');
-            }}>
-              <Text style={styles.switchButton}>
-                {isSignUp ? 'Sign In' : 'Sign Up'}
-              </Text>
-            </TouchableOpacity>
-          </View>
         </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+
+        <TouchableOpacity
+          style={[styles.continueButton, !email.trim() && styles.continueButtonDisabled]}
+          onPress={handleEmailContinue}
+          disabled={!email.trim() || operationLoading}
+        >
+          <Text style={styles.continueButtonText}>
+            {operationLoading ? 'Processing...' : 'Continue'}
+          </Text>
+        </TouchableOpacity>
+
+        <View style={styles.divider}>
+          <View style={styles.dividerLine} />
+          <Text style={styles.dividerText}>OR</Text>
+          <View style={styles.dividerLine} />
+        </View>
+
+        <TouchableOpacity style={styles.oauthButton} onPress={handleGoogleSignIn}>
+          <Ionicons name="logo-google" size={20} color={colors.text} />
+          <Text style={styles.oauthButtonText}>Continue with Google</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.oauthButton} onPress={handleAppleSignIn}>
+          <Ionicons name="logo-apple" size={20} color={colors.text} />
+          <Text style={styles.oauthButtonText}>Continue with Apple</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={styles.oauthButton} 
+          onPress={() => showAlert('Coming Soon', 'Phone authentication will be available soon')}
+        >
+          <Ionicons name="call" size={20} color={colors.text} />
+          <Text style={styles.oauthButtonText}>Continue with phone</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
   );
 }

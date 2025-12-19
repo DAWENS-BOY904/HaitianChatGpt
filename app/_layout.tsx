@@ -5,6 +5,7 @@ import { ConversationProvider } from '../contexts/ConversationContext';
 import { SettingsProvider } from '../contexts/SettingsContext';
 import { SocialProvider } from '../contexts/SocialContext';
 import { SubscriptionProvider } from '../contexts/SubscriptionContext';
+import { GuestLimitsProvider } from '../contexts/GuestLimitsContext';
 
 export default function RootLayout() {
   return (
@@ -13,11 +14,15 @@ export default function RootLayout() {
         <ThemeProvider>
           <SettingsProvider>
             <SubscriptionProvider>
-              <SocialProvider>
-                <ConversationProvider>
+              <GuestLimitsProvider>
+                <SocialProvider>
+                  <ConversationProvider>
                   <Stack screenOptions={{ headerShown: false }}>
                     <Stack.Screen name="index" />
                     <Stack.Screen name="login" />
+                    <Stack.Screen name="login-password" />
+                    <Stack.Screen name="signup" />
+                    <Stack.Screen name="verify-code" />
                     <Stack.Screen name="home" />
                     <Stack.Screen name="settings" />
                     <Stack.Screen name="social" />
@@ -57,8 +62,9 @@ export default function RootLayout() {
                     <Stack.Screen name="image-prompt" />
                     <Stack.Screen name="image-viewer" />
                   </Stack>
-                </ConversationProvider>
-              </SocialProvider>
+                  </ConversationProvider>
+                </SocialProvider>
+              </GuestLimitsProvider>
             </SubscriptionProvider>
           </SettingsProvider>
         </ThemeProvider>

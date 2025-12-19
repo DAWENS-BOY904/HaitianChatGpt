@@ -3,9 +3,9 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, FlatList, Keyboard
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
 import { useConversation } from '../hooks/useConversation';
-import { useSubscription } from '../hooks/useSubscription';
 import { useSettings } from '../hooks/useSettings';
-import { useAlert } from '@/template';
+import { useGuestLimits } from '../hooks/useGuestLimits';
+import { useAlert, useAuth } from '@/template';
 import { Spacing, Typography, BorderRadius } from '../constants/theme';
 import { MenuModal } from '../components/MenuModal';
 import { ToolsModal } from '../components/ToolsModal';
@@ -22,7 +22,8 @@ import { Audio } from 'expo-av';
 export default function HomeScreen() {
   const { colors } = useTheme();
   const { settings, updateSetting } = useSettings();
-  const { canSendMessage, incrementMessageCount, limits } = useSubscription();
+  const { user } = useAuth();
+  const { canSendMessage, incrementMessageCount, remainingMessages } = useGuestLimits();
   const { messages, currentConversation, sendMessage, updateMessage, updateMessageAndRegenerate, createConversation, loading, updateConversationTitle, deleteConversation } = useConversation();
   const { showAlert } = useAlert();
   const router = useRouter();
@@ -79,10 +80,14 @@ export default function HomeScreen() {
     if ((!inputText.trim() && selectedMedia.length === 0) || sending) return;
 
     if (!canSendMessage() && !editingMessageId) {
-      showAlert('Limit Reached', `You have reached your daily limit of ${limits.messagesPerDay} messages. Upgrade to Premium for unlimited messages.`, [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Upgrade', onPress: () => router.push('/subscription') },
-      ]);
+      showAlert(
+        'Login Required',
+        `You have reached your limit of 2 messages. Please log in to continue chatting.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Log In', onPress: () => router.push('/login') },
+        ]
+      );
       return;
     }
 
