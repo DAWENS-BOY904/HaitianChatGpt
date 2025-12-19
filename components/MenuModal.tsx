@@ -21,6 +21,7 @@ export function MenuModal({ visible, onClose }: MenuModalProps) {
   const insets = useSafeAreaInsets();
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'ChatGPT' | 'Library' | 'GPTs'>('ChatGPT');
+  const [showLibraryOptions, setShowLibraryOptions] = useState(false);
   const [contextMenuVisible, setContextMenuVisible] = useState(false);
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
 
@@ -268,6 +269,9 @@ export function MenuModal({ visible, onClose }: MenuModalProps) {
                     if (tab === 'GPTs') {
                       onClose();
                       router.push('/gpts');
+                    } else if (tab === 'Library') {
+                      onClose();
+                      router.push('/images');
                     } else {
                       setActiveTab(tab);
                     }

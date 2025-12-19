@@ -53,6 +53,9 @@ export default function RootLayout() {
                     <Stack.Screen name="admin-payout" />
                     <Stack.Screen name="admin-content" />
                     <Stack.Screen name="content-viewer" />
+                    <Stack.Screen name="images" />
+                    <Stack.Screen name="image-prompt" />
+                    <Stack.Screen name="image-viewer" />
                   </Stack>
                 </ConversationProvider>
               </SocialProvider>
