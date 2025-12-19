@@ -7,7 +7,7 @@ import {
   ActivityIndicator,
   Dimensions,
 } from 'react-native';
-import { Camera, CameraType, FlashMode } from 'expo-camera';
+import { CameraView, CameraType, FlashMode } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,20 +17,20 @@ import Slider from '@react-native-community/slider';
 const { height } = Dimensions.get('window');
 
 export default function CameraScreen() {
-  const cameraRef = useRef<Camera | null>(null);
+  const cameraRef = useRef<CameraView | null>(null);
   const router = useRouter();
 
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
-  const [facing, setFacing] = useState<CameraType>(CameraType.back);
-  const [flash, setFlash] = useState<FlashMode>(FlashMode.off);
+  const [facing, setFacing] = useState<CameraType>('back');
+  const [flash, setFlash] = useState<FlashMode>('off');
   const [zoom, setZoom] = useState(0);
   const [recording, setRecording] = useState(false);
   const [capturing, setCapturing] = useState(false);
 
-  /* ---------------- PERMISSIONS ---------------- */
+  /* -------- PERMISSIONS -------- */
   useEffect(() => {
     (async () => {
-      const cam = await Camera.requestCameraPermissionsAsync();
+      const cam = await CameraView.requestCameraPermissionsAsync();
       const gal = await ImagePicker.requestMediaLibraryPermissionsAsync();
       setHasPermission(
         cam.status === 'granted' && gal.status === 'granted'
@@ -38,53 +38,42 @@ export default function CameraScreen() {
     })();
   }, []);
 
-  /* ---------------- PHOTO ---------------- */
+  /* -------- PHOTO -------- */
   const takePhoto = async () => {
     if (!cameraRef.current || recording) return;
 
     try {
       setCapturing(true);
 
-      const photo = await cameraRef.current.takePictureAsync({
-        quality: 1,
-        skipProcessing: false,
-      });
+      const photo = await cameraRef.current.takePictureAsync();
 
-      const filtered = await ImageManipulator.manipulateAsync(
+      const edited = await ImageManipulator.manipulateAsync(
         photo.uri,
-        [{ adjust: { contrast: 1.1, saturation: 1.2, brightness: 0.05 } }],
+        [{ adjust: { contrast: 1.1, saturation: 1.2 } }],
         { compress: 0.9, format: ImageManipulator.SaveFormat.JPEG }
       );
 
       router.push({
         pathname: '/preview',
-        params: { uri: filtered.uri, type: 'image' },
+        params: { uri: edited.uri, type: 'image' },
       });
-    } catch (err) {
-      console.log(err);
     } finally {
       setCapturing(false);
     }
   };
 
-  /* ---------------- VIDEO ---------------- */
+  /* -------- VIDEO -------- */
   const startVideo = async () => {
     if (!cameraRef.current || recording) return;
 
     try {
       setRecording(true);
-
-      const video = await cameraRef.current.recordAsync({
-        maxDuration: 60,
-        quality: Camera.Constants.VideoQuality['1080p'],
-      });
+      const video = await cameraRef.current.recordAsync({ maxDuration: 60 });
 
       router.push({
         pathname: '/preview',
         params: { uri: video.uri, type: 'video' },
       });
-    } catch (err) {
-      console.log(err);
     } finally {
       setRecording(false);
     }
@@ -96,11 +85,10 @@ export default function CameraScreen() {
     }
   };
 
-  /* ---------------- GALLERY ---------------- */
+  /* -------- GALLERY -------- */
   const openGallery = async () => {
     const res = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.All,
-      quality: 1,
     });
 
     if (!res.canceled) {
@@ -115,7 +103,7 @@ export default function CameraScreen() {
     }
   };
 
-  /* ---------------- STATES ---------------- */
+  /* -------- STATES -------- */
   if (hasPermission === null) {
     return (
       <View style={styles.center}>
@@ -127,37 +115,32 @@ export default function CameraScreen() {
   if (!hasPermission) {
     return (
       <View style={styles.center}>
-        <Text style={{ color: '#fff' }}>Camera permission denied</Text>
+        <Text style={{ color: '#fff' }}>Permission denied</Text>
       </View>
     );
   }
 
-  /* ---------------- UI ---------------- */
+  /* -------- UI -------- */
   return (
     <View style={styles.container}>
-      <Camera
+      <CameraView
         ref={cameraRef}
         style={styles.camera}
-        type={facing}
-        flashMode={flash}
+        facing={facing}
+        flash={flash}
         zoom={zoom}
-        ratio="16:9"
       >
-        {/* TOP BAR */}
+        {/* TOP */}
         <View style={styles.top}>
           <TouchableOpacity onPress={() => router.back()}>
             <Ionicons name="close" size={28} color="#fff" />
           </TouchableOpacity>
 
           <TouchableOpacity
-            onPress={() =>
-              setFlash(
-                flash === FlashMode.on ? FlashMode.off : FlashMode.on
-              )
-            }
+            onPress={() => setFlash(flash === 'on' ? 'off' : 'on')}
           >
             <Ionicons
-              name={flash === FlashMode.on ? 'flash' : 'flash-off'}
+              name={flash === 'on' ? 'flash' : 'flash-off'}
               size={26}
               color="#fff"
             />
@@ -184,10 +167,7 @@ export default function CameraScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[
-              styles.capture,
-              recording && { backgroundColor: 'red' },
-            ]}
+            style={[styles.capture, recording && { backgroundColor: 'red' }]}
             onPress={takePhoto}
             onLongPress={startVideo}
             onPressOut={stopVideo}
@@ -196,22 +176,18 @@ export default function CameraScreen() {
 
           <TouchableOpacity
             onPress={() =>
-              setFacing(
-                facing === CameraType.back
-                  ? CameraType.front
-                  : CameraType.back
-              )
+              setFacing(facing === 'back' ? 'front' : 'back')
             }
           >
             <Ionicons name="camera-reverse" size={30} color="#fff" />
           </TouchableOpacity>
         </View>
-      </Camera>
+      </CameraView>
     </View>
   );
 }
 
-/* ---------------- STYLES ---------------- */
+/* -------- STYLES -------- */
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
   camera: { flex: 1 },
