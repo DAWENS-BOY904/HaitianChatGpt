@@ -7,6 +7,7 @@ import {
   ScrollView,
   Platform,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
@@ -25,11 +26,19 @@ interface AIModel {
   description: string;
   is_pro: boolean;
   is_enabled: boolean;
-  icon: string;
   color: string;
   speed: string;
   bestFor: string;
 }
+
+/* 🖼️ PHOTOS DES MODÈLES */
+const modelImages: Record<string, any> = {
+  'openai-gpt4': require('../assets/models/gpt4.png'),
+  'google-gemini': require('../assets/models/gemini.png'),
+  'claude-3': require('../assets/models/claude.png'),
+  'groq-llama': require('../assets/models/groq.png'),
+  'mistral-large': require('../assets/models/mistral.png'),
+};
 
 export default function ModelSelectorScreen() {
   const { colors } = useTheme();
@@ -42,39 +51,38 @@ export default function ModelSelectorScreen() {
 
   const [models, setModels] = useState<AIModel[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedModel, setSelectedModel] = useState(settings.preferredAiModel || 'google-gemini');
+  const [selectedModel, setSelectedModel] = useState(
+    settings.preferredAiModel || 'google-gemini'
+  );
 
-  // Enhanced model metadata
-  const modelMetadata: Record<string, { icon: string; color: string; speed: string; bestFor: string }> = {
+  const modelMetadata: Record<
+    string,
+    { color: string; speed: string; bestFor: string }
+  > = {
     'openai-gpt4': {
-      icon: 'sparkles',
       color: '#10A37F',
       speed: 'Moderate',
-      bestFor: 'Complex reasoning, detailed analysis, creative writing',
+      bestFor: 'Complex reasoning, creative writing',
     },
     'google-gemini': {
-      icon: 'flash',
       color: '#4285F4',
       speed: 'Fast',
-      bestFor: 'Quick responses, general queries, multimodal tasks',
+      bestFor: 'Quick responses, multimodal tasks',
     },
     'claude-3': {
-      icon: 'book',
       color: '#D97757',
       speed: 'Moderate',
-      bestFor: 'Safe content, creative writing, detailed explanations',
+      bestFor: 'Safe content, long explanations',
     },
     'groq-llama': {
-      icon: 'rocket',
       color: '#F55036',
       speed: 'Ultra Fast',
-      bestFor: 'Real-time chat, instant responses, quick queries',
+      bestFor: 'Instant chat, real-time answers',
     },
     'mistral-large': {
-      icon: 'code-slash',
       color: '#FF7000',
       speed: 'Fast',
-      bestFor: 'Technical tasks, code generation, balanced performance',
+      bestFor: 'Code & technical tasks',
     },
   };
 
@@ -84,6 +92,7 @@ export default function ModelSelectorScreen() {
 
   const loadModels = async () => {
     setLoading(true);
+
     const { data, error } = await supabase
       .from('ai_models')
       .select('*')
@@ -91,17 +100,17 @@ export default function ModelSelectorScreen() {
       .order('name');
 
     if (!error && data) {
-      const enhancedModels = data.map(model => ({
+      const enhanced = data.map((model) => ({
         ...model,
         ...(modelMetadata[model.name] || {
-          icon: 'cube',
           color: colors.primary,
           speed: 'Moderate',
           bestFor: 'General purpose',
         }),
       }));
-      setModels(enhancedModels);
+      setModels(enhanced);
     }
+
     setLoading(false);
   };
 
@@ -109,7 +118,7 @@ export default function ModelSelectorScreen() {
     if (isPro && !isPremium) {
       showAlert(
         'Premium Required',
-        'This AI model is only available for Premium users. Upgrade to unlock!',
+        'This model is for Premium users only.',
         [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Upgrade', onPress: () => router.push('/subscription') },
@@ -120,75 +129,38 @@ export default function ModelSelectorScreen() {
 
     setSelectedModel(modelName);
     await updateSetting('preferredAiModel', modelName);
-    showAlert('Success', `Switched to ${models.find(m => m.name === modelName)?.display_name}!`);
-    setTimeout(() => router.back(), 500);
+    showAlert('Success', 'Model selected successfully');
+    setTimeout(() => router.back(), 400);
   };
 
   const styles = StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: '#FFFFFF',
-      paddingTop: Platform.select({
-        ios: insets.top,
-        android: insets.top,
-      }),
+      backgroundColor: '#FFF',
+      paddingTop: Platform.select({ ios: insets.top, android: insets.top }),
     },
     header: {
       flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'space-between',
       padding: Spacing.md,
       borderBottomWidth: 1,
       borderBottomColor: '#E5E5E5',
     },
-    headerLeft: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      flex: 1,
-    },
-    backButton: {
-      padding: Spacing.xs,
-      marginRight: Spacing.sm,
-    },
     headerTitle: {
       ...Typography.heading,
-      color: '#000000',
       fontSize: 18,
+      marginLeft: Spacing.sm,
     },
     content: {
-      flex: 1,
       padding: Spacing.md,
     },
-    infoCard: {
-      backgroundColor: '#F7F7F7',
-      borderRadius: BorderRadius.md,
-      padding: Spacing.lg,
-      marginBottom: Spacing.lg,
-    },
-    infoTitle: {
-      ...Typography.heading,
-      color: '#000000',
-      fontSize: 16,
-      marginBottom: Spacing.xs,
-    },
-    infoText: {
-      ...Typography.body,
-      color: '#666666',
-      fontSize: 14,
-      lineHeight: 20,
-    },
     modelCard: {
-      backgroundColor: '#FFFFFF',
+      backgroundColor: '#FFF',
       borderRadius: BorderRadius.lg,
       padding: Spacing.lg,
       marginBottom: Spacing.md,
       borderWidth: 2,
       borderColor: '#E5E5E5',
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.1,
-      shadowRadius: 4,
-      elevation: 3,
     },
     modelCardSelected: {
       borderColor: '#10A37F',
@@ -199,111 +171,53 @@ export default function ModelSelectorScreen() {
       alignItems: 'center',
       marginBottom: Spacing.md,
     },
-    iconContainer: {
-      width: 48,
-      height: 48,
+    imageContainer: {
+      width: 52,
+      height: 52,
       borderRadius: BorderRadius.md,
+      backgroundColor: '#F5F5F5',
       alignItems: 'center',
       justifyContent: 'center',
       marginRight: Spacing.md,
     },
-    modelInfo: {
-      flex: 1,
+    modelImage: {
+      width: 36,
+      height: 36,
+      resizeMode: 'contain',
     },
     modelName: {
       ...Typography.heading,
-      color: '#000000',
-      fontSize: 17,
-      marginBottom: 2,
+      fontSize: 16,
     },
     modelSpeed: {
       ...Typography.caption,
-      color: '#666666',
       fontSize: 12,
+      color: '#666',
     },
-    proBadge: {
-      backgroundColor: '#10A37F',
-      paddingHorizontal: Spacing.sm,
-      paddingVertical: 4,
-      borderRadius: BorderRadius.sm,
-    },
-    proBadgeText: {
-      ...Typography.caption,
-      color: '#FFFFFF',
-      fontSize: 10,
-      fontWeight: '600',
-    },
-    modelDescription: {
+    description: {
       ...Typography.body,
-      color: '#666666',
-      fontSize: 14,
-      lineHeight: 20,
+      color: '#666',
       marginBottom: Spacing.sm,
     },
-    bestForContainer: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: '#F7F7F7',
-      padding: Spacing.sm,
-      borderRadius: BorderRadius.sm,
-      marginBottom: Spacing.md,
-    },
-    bestForLabel: {
-      ...Typography.caption,
-      color: '#000000',
-      fontSize: 12,
-      fontWeight: '600',
-      marginRight: Spacing.xs,
-    },
-    bestForText: {
-      ...Typography.caption,
-      color: '#666666',
-      fontSize: 12,
-      flex: 1,
-    },
-    selectButton: {
+    button: {
       backgroundColor: '#10A37F',
-      borderRadius: BorderRadius.md,
       paddingVertical: Spacing.sm,
+      borderRadius: BorderRadius.md,
       alignItems: 'center',
     },
-    selectButtonSelected: {
-      backgroundColor: '#0D8A6A',
-    },
-    selectButtonDisabled: {
+    buttonDisabled: {
       backgroundColor: '#E5E5E5',
     },
-    selectButtonText: {
-      ...Typography.body,
-      color: '#FFFFFF',
+    buttonText: {
+      color: '#FFF',
       fontWeight: '600',
-      fontSize: 14,
-    },
-    selectButtonTextDisabled: {
-      color: '#999999',
-    },
-    loadingContainer: {
-      flex: 1,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: '#FFFFFF',
     },
   });
 
   if (loading) {
     return (
       <View style={styles.container}>
-        <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-              <Ionicons name="arrow-back" size={24} color="#000000" />
-            </TouchableOpacity>
-            <Text style={styles.headerTitle}>Select AI Model</Text>
-          </View>
-        </View>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#10A37F" />
-        </View>
+        <ActivityIndicator size="large" color="#10A37F" />
       </View>
     );
   }
@@ -311,22 +225,13 @@ export default function ModelSelectorScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-            <Ionicons name="arrow-back" size={24} color="#000000" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Select AI Model</Text>
-        </View>
+        <TouchableOpacity onPress={() => router.back()}>
+          <Ionicons name="arrow-back" size={24} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Select AI Model</Text>
       </View>
 
       <ScrollView style={styles.content}>
-        <View style={styles.infoCard}>
-          <Text style={styles.infoTitle}>Choose Your AI Assistant</Text>
-          <Text style={styles.infoText}>
-            Each AI model has unique strengths. Select the one that best fits your needs. You can switch anytime without losing your conversation.
-          </Text>
-        </View>
-
         {models.map((model) => (
           <View
             key={model.id}
@@ -336,45 +241,37 @@ export default function ModelSelectorScreen() {
             ]}
           >
             <View style={styles.modelHeader}>
-              <View style={[styles.iconContainer, { backgroundColor: `${model.color}20` }]}>
-                <Ionicons name={model.icon as any} size={24} color={model.color} />
+              <View style={styles.imageContainer}>
+                <Image
+                  source={modelImages[model.name]}
+                  style={styles.modelImage}
+                />
               </View>
 
-              <View style={styles.modelInfo}>
+              <View>
                 <Text style={styles.modelName}>{model.display_name}</Text>
-                <Text style={styles.modelSpeed}>{model.speed} • {model.is_pro ? 'Premium' : 'Free'}</Text>
+                <Text style={styles.modelSpeed}>
+                  {model.speed} • {model.is_pro ? 'Premium' : 'Free'}
+                </Text>
               </View>
-
-              {model.is_pro && (
-                <View style={styles.proBadge}>
-                  <Text style={styles.proBadgeText}>PRO</Text>
-                </View>
-              )}
             </View>
 
-            <Text style={styles.modelDescription}>{model.description}</Text>
-
-            <View style={styles.bestForContainer}>
-              <Text style={styles.bestForLabel}>Best for:</Text>
-              <Text style={styles.bestForText}>{model.bestFor}</Text>
-            </View>
+            <Text style={styles.description}>{model.description}</Text>
 
             <TouchableOpacity
               style={[
-                styles.selectButton,
-                selectedModel === model.name && styles.selectButtonSelected,
-                model.is_pro && !isPremium && styles.selectButtonDisabled,
+                styles.button,
+                model.is_pro && !isPremium && styles.buttonDisabled,
               ]}
-              onPress={() => handleSelectModel(model.name, model.is_pro)}
               disabled={selectedModel === model.name}
+              onPress={() => handleSelectModel(model.name, model.is_pro)}
             >
-              <Text
-                style={[
-                  styles.selectButtonText,
-                  model.is_pro && !isPremium && styles.selectButtonTextDisabled,
-                ]}
-              >
-                {selectedModel === model.name ? 'Currently Selected' : model.is_pro && !isPremium ? 'Upgrade to Unlock' : 'Select This Model'}
+              <Text style={styles.buttonText}>
+                {selectedModel === model.name
+                  ? 'Selected'
+                  : model.is_pro && !isPremium
+                  ? 'Upgrade to unlock'
+                  : 'Select'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -382,4 +279,6 @@ export default function ModelSelectorScreen() {
       </ScrollView>
     </View>
   );
+}
+
 }
