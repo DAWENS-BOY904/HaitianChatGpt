@@ -1,5 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, TextInput, StyleSheet, ScrollView, Platform } from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  TextInput,
+  StyleSheet,
+  ScrollView,
+  Platform,
+  Modal,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
 import { useAuth, useAlert } from '@/template';
@@ -7,6 +16,8 @@ import { useRouter } from 'expo-router';
 import { Spacing, Typography, BorderRadius } from '../constants/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getSupabaseClient } from '@/template';
+
+type FamilyRole = 'parent' | 'child';
 
 export default function ParentalControlsScreen() {
   const { colors } = useTheme();
@@ -20,7 +31,8 @@ export default function ParentalControlsScreen() {
   const [invitations, setInvitations] = useState<any[]>([]);
   const [pendingInvites, setPendingInvites] = useState<any[]>([]);
   const [showAddMember, setShowAddMember] = useState(false);
-  const [childEmail, setChildEmail] = useState('');
+  const [email, setEmail] = useState('');
+  const [selectedRole, setSelectedRole] = useState<FamilyRole | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -71,12 +83,17 @@ export default function ParentalControlsScreen() {
   };
 
   const handleSendInvitation = async () => {
-    if (!childEmail.trim()) {
+    if (!email.trim()) {
       showAlert('Error', 'Please enter an email address');
       return;
     }
 
-    if (childEmail === user?.email) {
+    if (!selectedRole) {
+      showAlert('Error', 'Please select a relationship');
+      return;
+    }
+
+    if (email === user?.email) {
       showAlert('Error', 'You cannot add yourself');
       return;
     }
@@ -85,22 +102,21 @@ export default function ParentalControlsScreen() {
 
     const invitationCode = Math.random().toString(36).substring(2, 15);
 
-    const { error } = await supabase
-      .from('parental_invitations')
-      .insert({
-        parent_id: user?.id,
-        child_email: childEmail.trim().toLowerCase(),
-        invitation_code: invitationCode,
-        status: 'pending',
-      });
+    const { error } = await supabase.from('parental_invitations').insert({
+      parent_id: user?.id,
+      child_email: email.trim().toLowerCase(),
+      invitation_code: invitationCode,
+      status: 'pending',
+    });
 
     setLoading(false);
 
     if (error) {
       showAlert('Error', 'Failed to send invitation');
     } else {
-      showAlert('Success', `Invitation sent to ${childEmail}. They will receive an email to accept.`);
-      setChildEmail('');
+      showAlert('Success', `Invitation sent to ${email}.`);
+      setEmail('');
+      setSelectedRole(null);
       setShowAddMember(false);
       await loadData();
     }
@@ -114,31 +130,34 @@ export default function ParentalControlsScreen() {
     if (error || (data as any)?.error) {
       showAlert('Error', (data as any)?.error || 'Failed to accept invitation');
     } else {
-      showAlert('Success', 'Invitation accepted. Your parent can now manage your settings.');
+      showAlert('Success', 'Invitation accepted.');
       await loadData();
     }
   };
 
   const handleRejectInvitation = async (invitationId: string) => {
-    await supabase
-      .from('parental_invitations')
-      .update({ status: 'rejected' })
-      .eq('id', invitationId);
+    await supabase.from('parental_invitations').update({ status: 'rejected' }).eq('id', invitationId);
 
     showAlert('Info', 'Invitation rejected');
     await loadData();
   };
 
+  const canSend = email.trim().length > 0 && selectedRole !== null;
+
   const styles = StyleSheet.create({
     container: {
       flex: 1,
       backgroundColor: colors.background,
-      paddingTop: Platform.select({ ios: insets.top, android: insets.top, default: 0 }),
     },
     header: {
+      paddingTop: Platform.select({
+        ios: insets.top + 10,
+        android: insets.top + 10,
+      }),
+      paddingHorizontal: Spacing.md,
+      paddingBottom: Spacing.md,
       flexDirection: 'row',
       alignItems: 'center',
-      padding: Spacing.md,
       borderBottomWidth: 1,
       borderBottomColor: colors.border,
     },
@@ -149,6 +168,7 @@ export default function ParentalControlsScreen() {
     headerTitle: {
       ...Typography.heading,
       color: colors.text,
+      fontSize: 18,
     },
     section: {
       marginTop: Spacing.lg,
@@ -166,50 +186,12 @@ export default function ParentalControlsScreen() {
       backgroundColor: colors.primary,
       margin: Spacing.md,
       padding: Spacing.md,
-      borderRadius: BorderRadius.sm,
+      borderRadius: BorderRadius.md,
       gap: Spacing.sm,
     },
     addButtonText: {
       ...Typography.body,
       color: '#FFFFFF',
-      fontWeight: '600',
-    },
-    addForm: {
-      backgroundColor: colors.card,
-      padding: Spacing.md,
-      margin: Spacing.md,
-      borderRadius: BorderRadius.md,
-      gap: Spacing.md,
-    },
-    input: {
-      backgroundColor: colors.inputBackground,
-      borderRadius: BorderRadius.sm,
-      padding: Spacing.md,
-      ...Typography.body,
-      color: colors.text,
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    formButtons: {
-      flexDirection: 'row',
-      gap: Spacing.md,
-    },
-    button: {
-      flex: 1,
-      padding: Spacing.md,
-      borderRadius: BorderRadius.sm,
-      alignItems: 'center',
-    },
-    primaryButton: {
-      backgroundColor: colors.primary,
-    },
-    secondaryButton: {
-      backgroundColor: colors.surface,
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    buttonText: {
-      ...Typography.body,
       fontWeight: '600',
     },
     memberItem: {
@@ -226,6 +208,7 @@ export default function ParentalControlsScreen() {
     memberName: {
       ...Typography.body,
       color: colors.text,
+      fontWeight: '500',
     },
     memberEmail: {
       ...Typography.caption,
@@ -257,6 +240,116 @@ export default function ParentalControlsScreen() {
       color: colors.textSecondary,
       textAlign: 'center',
     },
+
+    // Modal styles
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      justifyContent: 'flex-end',
+    },
+    modalContent: {
+      backgroundColor: colors.background,
+      borderTopLeftRadius: BorderRadius.xl,
+      borderTopRightRadius: BorderRadius.xl,
+      paddingBottom: Platform.select({
+        ios: insets.bottom + Spacing.lg,
+        android: Spacing.lg,
+      }),
+    },
+    modalHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      padding: Spacing.lg,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    modalTitle: {
+      ...Typography.heading,
+      color: colors.text,
+      fontSize: 18,
+    },
+    cancelText: {
+      ...Typography.body,
+      color: colors.text,
+      fontSize: 16,
+    },
+    sendText: {
+      ...Typography.body,
+      color: colors.primary,
+      fontSize: 16,
+      fontWeight: '600',
+    },
+    sendTextDisabled: {
+      opacity: 0.3,
+    },
+    modalBody: {
+      padding: Spacing.lg,
+    },
+    inputLabel: {
+      ...Typography.caption,
+      color: colors.textSecondary,
+      marginBottom: Spacing.xs,
+    },
+    input: {
+      backgroundColor: colors.surface,
+      borderRadius: BorderRadius.md,
+      padding: Spacing.md,
+      ...Typography.body,
+      color: colors.text,
+      marginBottom: Spacing.lg,
+    },
+    helpText: {
+      ...Typography.caption,
+      color: colors.textSecondary,
+      backgroundColor: colors.surface,
+      padding: Spacing.md,
+      borderRadius: BorderRadius.md,
+      marginBottom: Spacing.lg,
+    },
+    roleLabel: {
+      ...Typography.body,
+      color: colors.text,
+      marginBottom: Spacing.sm,
+    },
+    roleCard: {
+      backgroundColor: colors.surface,
+      borderRadius: BorderRadius.lg,
+      marginBottom: Spacing.sm,
+    },
+    roleOption: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: Spacing.md,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.divider,
+    },
+    roleOptionLast: {
+      borderBottomWidth: 0,
+    },
+    radioOuter: {
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+      borderWidth: 2,
+      borderColor: colors.border,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: Spacing.md,
+    },
+    radioOuterSelected: {
+      borderColor: colors.primary,
+    },
+    radioInner: {
+      width: 12,
+      height: 12,
+      borderRadius: 6,
+      backgroundColor: colors.primary,
+    },
+    roleText: {
+      ...Typography.body,
+      color: colors.text,
+    },
   });
 
   return (
@@ -272,13 +365,11 @@ export default function ParentalControlsScreen() {
         {pendingInvites.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Pending Invitations</Text>
-            {pendingInvites.map(invite => (
+            {pendingInvites.map((invite) => (
               <View key={invite.id} style={styles.memberItem}>
                 <View style={styles.memberInfo}>
                   <Text style={styles.memberName}>Parent Invitation</Text>
-                  <Text style={styles.memberEmail}>
-                    You have been invited to link accounts
-                  </Text>
+                  <Text style={styles.memberEmail}>You have been invited to link accounts</Text>
                 </View>
                 <View style={styles.inviteActions}>
                   <TouchableOpacity
@@ -299,47 +390,10 @@ export default function ParentalControlsScreen() {
           </View>
         )}
 
-        <TouchableOpacity
-          style={styles.addButton}
-          onPress={() => setShowAddMember(!showAddMember)}
-        >
+        <TouchableOpacity style={styles.addButton} onPress={() => setShowAddMember(true)}>
           <Ionicons name="person-add" size={20} color="#FFFFFF" />
           <Text style={styles.addButtonText}>Add Family Member</Text>
         </TouchableOpacity>
-
-        {showAddMember && (
-          <View style={styles.addForm}>
-            <TextInput
-              style={styles.input}
-              placeholder="Child's email address"
-              placeholderTextColor={colors.textSecondary}
-              value={childEmail}
-              onChangeText={setChildEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-            />
-            <View style={styles.formButtons}>
-              <TouchableOpacity
-                style={[styles.button, styles.secondaryButton]}
-                onPress={() => {
-                  setShowAddMember(false);
-                  setChildEmail('');
-                }}
-              >
-                <Text style={[styles.buttonText, { color: colors.text }]}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.button, styles.primaryButton]}
-                onPress={handleSendInvitation}
-                disabled={loading}
-              >
-                <Text style={[styles.buttonText, { color: '#FFFFFF' }]}>
-                  {loading ? 'Sending...' : 'Send Invite'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Family Members</Text>
@@ -350,16 +404,14 @@ export default function ParentalControlsScreen() {
               </Text>
             </View>
           ) : (
-            familyMembers.map(member => (
+            familyMembers.map((member) => (
               <TouchableOpacity
                 key={member.id}
                 style={styles.memberItem}
                 onPress={() => router.push(`/family-member?id=${member.id}`)}
               >
                 <View style={styles.memberInfo}>
-                  <Text style={styles.memberName}>
-                    {member.user_profiles?.username || 'User'}
-                  </Text>
+                  <Text style={styles.memberName}>{member.user_profiles?.username || 'User'}</Text>
                   <Text style={styles.memberEmail}>{member.user_profiles?.email}</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
@@ -375,7 +427,7 @@ export default function ParentalControlsScreen() {
               <Text style={styles.emptyText}>No invitations sent</Text>
             </View>
           ) : (
-            invitations.map(invite => (
+            invitations.map((invite) => (
               <View key={invite.id} style={styles.memberItem}>
                 <View style={styles.memberInfo}>
                   <Text style={styles.memberName}>{invite.child_email}</Text>
@@ -388,9 +440,11 @@ export default function ParentalControlsScreen() {
                     styles.statusBadge,
                     {
                       backgroundColor:
-                        invite.status === 'accepted' ? '#10A37F20' :
-                        invite.status === 'rejected' ? '#FF3B3020' :
-                        '#FF950020',
+                        invite.status === 'accepted'
+                          ? '#10A37F20'
+                          : invite.status === 'rejected'
+                          ? '#FF3B3020'
+                          : '#FF950020',
                     },
                   ]}
                 >
@@ -399,9 +453,11 @@ export default function ParentalControlsScreen() {
                       styles.statusText,
                       {
                         color:
-                          invite.status === 'accepted' ? '#10A37F' :
-                          invite.status === 'rejected' ? '#FF3B30' :
-                          '#FF9500',
+                          invite.status === 'accepted'
+                            ? '#10A37F'
+                            : invite.status === 'rejected'
+                            ? '#FF3B30'
+                            : '#FF9500',
                       },
                     ]}
                   >
@@ -413,6 +469,81 @@ export default function ParentalControlsScreen() {
           )}
         </View>
       </ScrollView>
+
+      {/* ADD MEMBER MODAL */}
+      <Modal
+        visible={showAddMember}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowAddMember(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowAddMember(false)}
+        >
+          <View style={styles.modalContent} onStartShouldSetResponder={() => true}>
+            {/* HEADER */}
+            <View style={styles.modalHeader}>
+              <TouchableOpacity onPress={() => setShowAddMember(false)}>
+                <Text style={styles.cancelText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <Text style={styles.modalTitle}>Invite family member</Text>
+
+              <TouchableOpacity onPress={handleSendInvitation} disabled={!canSend || loading}>
+                <Text style={[styles.sendText, (!canSend || loading) && styles.sendTextDisabled]}>
+                  {loading ? 'Sending...' : 'Send'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* BODY */}
+            <View style={styles.modalBody}>
+              {/* EMAIL INPUT */}
+              <Text style={styles.inputLabel}>Email address</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="name@email.com"
+                placeholderTextColor={colors.textSecondary}
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+
+              <Text style={styles.helpText}>
+                If your family member is new to ChatGPT, they'll be asked to create an account.
+              </Text>
+
+              {/* ROLE SELECTOR */}
+              <Text style={styles.roleLabel}>This person is</Text>
+              <View style={styles.roleCard}>
+                <TouchableOpacity
+                  style={styles.roleOption}
+                  onPress={() => setSelectedRole('parent')}
+                >
+                  <View style={[styles.radioOuter, selectedRole === 'parent' && styles.radioOuterSelected]}>
+                    {selectedRole === 'parent' && <View style={styles.radioInner} />}
+                  </View>
+                  <Text style={styles.roleText}>My parent or guardian</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.roleOption, styles.roleOptionLast]}
+                  onPress={() => setSelectedRole('child')}
+                >
+                  <View style={[styles.radioOuter, selectedRole === 'child' && styles.radioOuterSelected]}>
+                    {selectedRole === 'child' && <View style={styles.radioInner} />}
+                  </View>
+                  <Text style={styles.roleText}>My child</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
