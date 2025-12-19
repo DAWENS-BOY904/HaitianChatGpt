@@ -8,7 +8,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { messages, conversationId, aiModel = 'google-gemini', fileContents, generateImage } = await req.json();
+    const { messages, conversationId, aiModel = 'google-gemini', fileContents, generateImage, audio, voice, responseType } = await req.json();
 
     const authHeader = req.headers.get('Authorization');
     const token = authHeader?.replace('Bearer ', '');
@@ -432,6 +432,52 @@ Adapt your tone to match the user's communication style.
       finalSystemPrompt += `\n\nUPLOADED FILES:\n${fileContents.map((f: any) => `\nFile: ${f.name}\nType: ${f.type}\nContent:\n${f.content}`).join('\n\n')}`;
     }
 
+    // Handle audio transcription if provided
+    let transcript = '';
+    if (audio) {
+      try {
+        const apiKey = Deno.env.get('OPENAI_API_KEY');
+        if (!apiKey) throw new Error('OpenAI API key not configured');
+
+        // Decode base64 audio
+        const audioData = Uint8Array.from(atob(audio), c => c.charCodeAt(0));
+        const audioBlob = new Blob([audioData], { type: 'audio/mpeg' });
+        
+        const formData = new FormData();
+        formData.append('file', audioBlob, 'audio.mp3');
+        formData.append('model', 'whisper-1');
+        
+        const transcriptionResponse = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+          },
+          body: formData,
+        });
+        
+        if (!transcriptionResponse.ok) {
+          const errorText = await transcriptionResponse.text();
+          console.error('Whisper API error:', errorText);
+          throw new Error(`Whisper API error: ${transcriptionResponse.statusText}`);
+        }
+        
+        const transcription = await transcriptionResponse.json();
+        transcript = transcription.text;
+        
+        // Add transcribed text to messages
+        messages.push({
+          role: 'user',
+          content: transcript,
+        });
+      } catch (error) {
+        console.error('Audio transcription error:', error);
+        return new Response(
+          JSON.stringify({ error: `Failed to transcribe audio: ${error.message}` }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
     // Prepare messages for AI
     const aiMessages = [
       { role: 'system' as const, content: finalSystemPrompt },
@@ -478,8 +524,68 @@ Adapt your tone to match the user's communication style.
       .update({ updated_at: new Date().toISOString() })
       .eq('id', conversationId);
 
+    // Generate audio response if requested
+    let audioUrl = '';
+    if (responseType === 'audio' && voice) {
+      try {
+        const apiKey = Deno.env.get('OPENAI_API_KEY');
+        if (!apiKey) throw new Error('OpenAI API key not configured');
+
+        const ttsResponse = await fetch('https://api.openai.com/v1/audio/speech', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: 'tts-1-hd',
+            voice: voice,
+            input: aiResponse.content,
+            speed: 1.0,
+          }),
+        });
+        
+        if (!ttsResponse.ok) {
+          const errorText = await ttsResponse.text();
+          console.error('TTS API error:', errorText);
+          throw new Error(`TTS API error: ${ttsResponse.statusText}`);
+        }
+        
+        // Get audio buffer
+        const audioBuffer = await ttsResponse.arrayBuffer();
+        const audioUint8 = new Uint8Array(audioBuffer);
+        
+        // Upload to Supabase Storage
+        const fileName = `voice_${Date.now()}.mp3`;
+        const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
+          .from('media-files')
+          .upload(`voice-clips/${fileName}`, audioUint8, {
+            contentType: 'audio/mpeg',
+            upsert: true,
+          });
+        
+        if (uploadError) {
+          console.error('Upload error:', uploadError);
+        } else {
+          const { data: urlData } = supabaseAdmin.storage
+            .from('media-files')
+            .getPublicUrl(`voice-clips/${fileName}`);
+          
+          audioUrl = urlData.publicUrl;
+        }
+      } catch (error) {
+        console.error('TTS error:', error);
+        // Continue without audio if TTS fails
+      }
+    }
+
     return new Response(
-      JSON.stringify({ message: aiResponse.content, model: selectedModel }),
+      JSON.stringify({ 
+        message: aiResponse.content, 
+        model: selectedModel,
+        transcript: transcript,
+        audioUrl: audioUrl,
+      }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
