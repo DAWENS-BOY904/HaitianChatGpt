@@ -19,7 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import Slider from '@react-native-community/slider';
 
-const { width, height } = Dimensions.get('window');
+const { height } = Dimensions.get('window');
 
 export default function CameraScreen() {
   const cameraRef = useRef<CameraView>(null);
@@ -31,8 +31,10 @@ export default function CameraScreen() {
   const [zoom, setZoom] = useState(0);
   const [recording, setRecording] = useState(false);
   const [capturing, setCapturing] = useState(false);
-  const [focusPoint, setFocusPoint] = useState<{ x: number; y: number } | null>(null);
+  const [focusPoint, setFocusPoint] =
+    useState<{ x: number; y: number } | null>(null);
 
+  /* ---------------- PERMISSIONS ---------------- */
   useEffect(() => {
     (async () => {
       const cam = await CameraView.requestCameraPermissionsAsync();
@@ -43,15 +45,16 @@ export default function CameraScreen() {
 
   /* ---------------- PHOTO ---------------- */
   const takePhoto = async () => {
-    if (!cameraRef.current) return;
-    setCapturing(true);
+    if (!cameraRef.current || recording) return;
 
     try {
+      setCapturing(true);
+
       const photo = await cameraRef.current.takePictureAsync({
         quality: 1,
       });
 
-      // APPLY REAL FILTER
+      // REAL FILTER
       const filtered = await ImageManipulator.manipulateAsync(
         photo.uri,
         [{ adjust: { contrast: 1.1, saturation: 1.2, brightness: 0.05 } }],
@@ -70,21 +73,31 @@ export default function CameraScreen() {
   };
 
   /* ---------------- VIDEO ---------------- */
-  const toggleVideo = async () => {
-    if (!cameraRef.current) return;
+  const startVideo = async () => {
+    if (!cameraRef.current || recording) return;
 
-    if (recording) {
-      cameraRef.current.stopRecording();
-      setRecording(false);
-    } else {
+    try {
       setRecording(true);
-      const video = await cameraRef.current.recordAsync();
-      setRecording(false);
+
+      const video = await cameraRef.current.recordAsync({
+        maxDuration: 60,
+        quality: '1080p',
+      });
 
       router.push({
         pathname: '/preview',
         params: { uri: video.uri, type: 'video' },
       });
+    } catch (e) {
+      console.log(e);
+    } finally {
+      setRecording(false);
+    }
+  };
+
+  const stopVideo = () => {
+    if (recording && cameraRef.current) {
+      cameraRef.current.stopRecording();
     }
   };
 
@@ -96,26 +109,29 @@ export default function CameraScreen() {
     });
 
     if (!res.canceled) {
+      const asset = res.assets[0];
       router.push({
         pathname: '/preview',
         params: {
-          uri: res.assets[0].uri,
-          type: res.assets[0].type,
+          uri: asset.uri,
+          type: asset.type === 'video' ? 'video' : 'image',
         },
       });
     }
   };
 
-  /* ---------------- TAP TO FOCUS ---------------- */
-  const onFocus = (event: any) => {
-    const { locationX, locationY } = event.nativeEvent;
+  /* ---------------- FOCUS UI ---------------- */
+  const onFocus = (e: any) => {
+    const { locationX, locationY } = e.nativeEvent;
     setFocusPoint({ x: locationX, y: locationY });
+    setTimeout(() => setFocusPoint(null), 800);
   };
 
+  /* ---------------- STATES ---------------- */
   if (permission === null) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator color="#fff" size="large" />
+        <ActivityIndicator size="large" color="#fff" />
       </View>
     );
   }
@@ -123,11 +139,12 @@ export default function CameraScreen() {
   if (!permission) {
     return (
       <View style={styles.center}>
-        <Text style={{ color: '#fff' }}>Permission denied</Text>
+        <Text style={{ color: '#fff' }}>Camera permission denied</Text>
       </View>
     );
   }
 
+  /* ---------------- UI ---------------- */
   return (
     <View style={styles.container}>
       <CameraView
@@ -139,7 +156,7 @@ export default function CameraScreen() {
         focusMode={FocusMode.auto}
         onTouchEnd={onFocus}
       >
-        {/* Focus UI */}
+        {/* Focus Box */}
         {focusPoint && (
           <View
             style={[
@@ -149,7 +166,7 @@ export default function CameraScreen() {
           />
         )}
 
-        {/* TOP */}
+        {/* TOP BAR */}
         <View style={styles.top}>
           <TouchableOpacity onPress={() => router.back()}>
             <Ionicons name="close" size={28} color="#fff" />
@@ -176,7 +193,7 @@ export default function CameraScreen() {
             value={zoom}
             onValueChange={setZoom}
             minimumTrackTintColor="#fff"
-            maximumTrackTintColor="#555"
+            maximumTrackTintColor="#666"
             style={{ width: 180 }}
           />
         </View>
@@ -193,7 +210,9 @@ export default function CameraScreen() {
               recording && { backgroundColor: 'red' },
             ]}
             onPress={takePhoto}
-            onLongPress={toggleVideo}
+            onLongPress={startVideo}
+            onPressOut={stopVideo}
+            disabled={capturing}
           />
 
           <TouchableOpacity
@@ -255,7 +274,7 @@ const styles = StyleSheet.create({
     width: 50,
     height: 50,
     borderWidth: 2,
-    borderColor: '#0f0',
+    borderColor: '#00ff00',
     borderRadius: 8,
   },
 });
