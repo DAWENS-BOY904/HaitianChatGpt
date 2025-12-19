@@ -1,223 +1,261 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
-  Platform,
   ActivityIndicator,
+  Dimensions,
 } from 'react-native';
-import { Camera, CameraType } from 'expo-camera';
+import {
+  CameraView,
+  CameraType,
+  FlashMode,
+  FocusMode,
+} from 'expo-camera';
+import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '../hooks/useTheme';
-import { useAlert } from '@/template';
 import { useRouter } from 'expo-router';
-import { Spacing, Typography, BorderRadius } from '../constants/theme';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Slider from '@react-native-community/slider';
+
+const { width, height } = Dimensions.get('window');
 
 export default function CameraScreen() {
-  const { colors } = useTheme();
-  const { showAlert } = useAlert();
+  const cameraRef = useRef<CameraView>(null);
   const router = useRouter();
-  const insets = useSafeAreaInsets();
-  const cameraRef = useRef<Camera>(null);
 
-  const [hasPermission, setHasPermission] = useState<boolean | null>(null);
-  const [type, setType] = useState(CameraType.back);
-  const [flash, setFlash] = useState(false);
+  const [permission, setPermission] = useState<boolean | null>(null);
+  const [facing, setFacing] = useState<CameraType>('back');
+  const [flash, setFlash] = useState<FlashMode>(FlashMode.off);
+  const [zoom, setZoom] = useState(0);
+  const [recording, setRecording] = useState(false);
   const [capturing, setCapturing] = useState(false);
+  const [focusPoint, setFocusPoint] = useState<{ x: number; y: number } | null>(null);
 
-  React.useEffect(() => {
+  useEffect(() => {
     (async () => {
-      const { status } = await Camera.requestCameraPermissionsAsync();
-      setHasPermission(status === 'granted');
+      const cam = await CameraView.requestCameraPermissionsAsync();
+      const gal = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      setPermission(cam.status === 'granted' && gal.status === 'granted');
     })();
   }, []);
 
-  const takePicture = async () => {
+  /* ---------------- PHOTO ---------------- */
+  const takePhoto = async () => {
     if (!cameraRef.current) return;
-
     setCapturing(true);
 
     try {
       const photo = await cameraRef.current.takePictureAsync({
-        quality: 0.8,
-        base64: true,
+        quality: 1,
       });
 
-      // Pass photo back to chat
-      // In a real implementation, you would navigate with the photo data
-      if (router && router.back) {
-        router.back();
-      }
-      showAlert('Photo Captured', 'Photo added to conversation');
-    } catch (error) {
-      console.error('Camera error:', error);
-      showAlert('Error', 'Failed to capture photo');
+      // APPLY REAL FILTER
+      const filtered = await ImageManipulator.manipulateAsync(
+        photo.uri,
+        [{ adjust: { contrast: 1.1, saturation: 1.2, brightness: 0.05 } }],
+        { compress: 0.9, format: ImageManipulator.SaveFormat.JPEG }
+      );
+
+      router.push({
+        pathname: '/preview',
+        params: { uri: filtered.uri, type: 'image' },
+      });
+    } catch (e) {
+      console.log(e);
     } finally {
       setCapturing(false);
     }
   };
 
-  const toggleCameraType = () => {
-    setType(current => 
-      current === CameraType.back ? CameraType.front : CameraType.back
-    );
+  /* ---------------- VIDEO ---------------- */
+  const toggleVideo = async () => {
+    if (!cameraRef.current) return;
+
+    if (recording) {
+      cameraRef.current.stopRecording();
+      setRecording(false);
+    } else {
+      setRecording(true);
+      const video = await cameraRef.current.recordAsync();
+      setRecording(false);
+
+      router.push({
+        pathname: '/preview',
+        params: { uri: video.uri, type: 'video' },
+      });
+    }
   };
 
-  const toggleFlash = () => {
-    setFlash(!flash);
+  /* ---------------- GALLERY ---------------- */
+  const openGallery = async () => {
+    const res = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.All,
+      quality: 1,
+    });
+
+    if (!res.canceled) {
+      router.push({
+        pathname: '/preview',
+        params: {
+          uri: res.assets[0].uri,
+          type: res.assets[0].type,
+        },
+      });
+    }
   };
 
-  const styles = StyleSheet.create({
-    container: {
-      flex: 1,
-      backgroundColor: '#000000',
-    },
-    camera: {
-      flex: 1,
-    },
-    topControls: {
-      position: 'absolute',
-      top: Platform.select({
-        ios: insets.top + Spacing.md,
-        android: insets.top + Spacing.md,
-      }),
-      left: 0,
-      right: 0,
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      paddingHorizontal: Spacing.md,
-      zIndex: 10,
-    },
-    controlButton: {
-      width: 48,
-      height: 48,
-      borderRadius: BorderRadius.full,
-      backgroundColor: 'rgba(0,0,0,0.6)',
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    bottomControls: {
-      position: 'absolute',
-      bottom: Platform.select({
-        ios: insets.bottom + Spacing.xl,
-        android: insets.bottom + Spacing.xl,
-      }),
-      left: 0,
-      right: 0,
-      flexDirection: 'row',
-      justifyContent: 'space-around',
-      alignItems: 'center',
-      paddingHorizontal: Spacing.xl,
-    },
-    captureButton: {
-      width: 80,
-      height: 80,
-      borderRadius: 40,
-      backgroundColor: 'rgba(255,255,255,0.3)',
-      alignItems: 'center',
-      justifyContent: 'center',
-      borderWidth: 4,
-      borderColor: '#FFFFFF',
-    },
-    captureButtonInner: {
-      width: 68,
-      height: 68,
-      borderRadius: 34,
-      backgroundColor: '#FFFFFF',
-    },
-    flipButton: {
-      width: 56,
-      height: 56,
-      borderRadius: 28,
-      backgroundColor: 'rgba(0,0,0,0.6)',
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    permissionContainer: {
-      flex: 1,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: colors.background,
-      padding: Spacing.xl,
-    },
-    permissionText: {
-      ...Typography.body,
-      color: colors.text,
-      textAlign: 'center',
-      marginTop: Spacing.md,
-    },
-  });
+  /* ---------------- TAP TO FOCUS ---------------- */
+  const onFocus = (event: any) => {
+    const { locationX, locationY } = event.nativeEvent;
+    setFocusPoint({ x: locationX, y: locationY });
+  };
 
-  if (hasPermission === null) {
+  if (permission === null) {
     return (
-      <View style={styles.permissionContainer}>
-        <ActivityIndicator size="large" color={colors.primary} />
+      <View style={styles.center}>
+        <ActivityIndicator color="#fff" size="large" />
       </View>
     );
   }
 
-  if (hasPermission === false) {
+  if (!permission) {
     return (
-      <View style={styles.permissionContainer}>
-        <Ionicons name="camera-outline" size={64} color={colors.textSecondary} />
-        <Text style={styles.permissionText}>
-          Camera permission is required to use this feature
-        </Text>
+      <View style={styles.center}>
+        <Text style={{ color: '#fff' }}>Permission denied</Text>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      <Camera
+      <CameraView
         ref={cameraRef}
         style={styles.camera}
-        type={type}
-        flashMode={flash ? 'on' : 'off'}
+        facing={facing}
+        flash={flash}
+        zoom={zoom}
+        focusMode={FocusMode.auto}
+        onTouchEnd={onFocus}
       >
-        <View style={styles.topControls}>
-          <TouchableOpacity 
-            style={styles.controlButton} 
-            onPress={() => {
-              if (router && router.back) {
-                router.back();
-              }
-            }}
-          >
-            <Ionicons name="close" size={28} color="#FFFFFF" />
+        {/* Focus UI */}
+        {focusPoint && (
+          <View
+            style={[
+              styles.focus,
+              { left: focusPoint.x - 25, top: focusPoint.y - 25 },
+            ]}
+          />
+        )}
+
+        {/* TOP */}
+        <View style={styles.top}>
+          <TouchableOpacity onPress={() => router.back()}>
+            <Ionicons name="close" size={28} color="#fff" />
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.controlButton} onPress={toggleFlash}>
+          <TouchableOpacity
+            onPress={() =>
+              setFlash(flash === FlashMode.on ? FlashMode.off : FlashMode.on)
+            }
+          >
             <Ionicons
-              name={flash ? 'flash' : 'flash-off'}
-              size={24}
-              color="#FFFFFF"
+              name={flash === FlashMode.on ? 'flash' : 'flash-off'}
+              size={26}
+              color="#fff"
             />
           </TouchableOpacity>
         </View>
 
-        <View style={styles.bottomControls}>
-          <View style={{ width: 56 }} />
+        {/* ZOOM */}
+        <View style={styles.zoom}>
+          <Slider
+            minimumValue={0}
+            maximumValue={1}
+            value={zoom}
+            onValueChange={setZoom}
+            minimumTrackTintColor="#fff"
+            maximumTrackTintColor="#555"
+            style={{ width: 180 }}
+          />
+        </View>
+
+        {/* BOTTOM */}
+        <View style={styles.bottom}>
+          <TouchableOpacity onPress={openGallery}>
+            <Ionicons name="images" size={30} color="#fff" />
+          </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.captureButton}
-            onPress={takePicture}
-            disabled={capturing}
-          >
-            {capturing ? (
-              <ActivityIndicator size="large" color="#FFFFFF" />
-            ) : (
-              <View style={styles.captureButtonInner} />
-            )}
-          </TouchableOpacity>
+            style={[
+              styles.capture,
+              recording && { backgroundColor: 'red' },
+            ]}
+            onPress={takePhoto}
+            onLongPress={toggleVideo}
+          />
 
-          <TouchableOpacity style={styles.flipButton} onPress={toggleCameraType}>
-            <Ionicons name="camera-reverse" size={28} color="#FFFFFF" />
+          <TouchableOpacity
+            onPress={() =>
+              setFacing(facing === 'back' ? 'front' : 'back')
+            }
+          >
+            <Ionicons name="camera-reverse" size={30} color="#fff" />
           </TouchableOpacity>
         </View>
-      </Camera>
+      </CameraView>
     </View>
   );
 }
+
+/* ---------------- STYLES ---------------- */
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#000' },
+  camera: { flex: 1 },
+  center: {
+    flex: 1,
+    backgroundColor: '#000',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  top: {
+    position: 'absolute',
+    top: 50,
+    left: 20,
+    right: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  bottom: {
+    position: 'absolute',
+    bottom: 40,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+  },
+  capture: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    borderWidth: 5,
+    borderColor: '#fff',
+    backgroundColor: '#fff',
+  },
+  zoom: {
+    position: 'absolute',
+    right: -60,
+    top: height / 2 - 60,
+    transform: [{ rotate: '-90deg' }],
+  },
+  focus: {
+    position: 'absolute',
+    width: 50,
+    height: 50,
+    borderWidth: 2,
+    borderColor: '#0f0',
+    borderRadius: 8,
+  },
+});
