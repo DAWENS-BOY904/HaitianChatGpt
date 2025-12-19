@@ -7,12 +7,7 @@ import {
   ActivityIndicator,
   Dimensions,
 } from 'react-native';
-import {
-  CameraView,
-  CameraType,
-  FlashMode,
-  FocusMode,
-} from 'expo-camera';
+import { Camera, CameraType, FlashMode } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,24 +17,24 @@ import Slider from '@react-native-community/slider';
 const { height } = Dimensions.get('window');
 
 export default function CameraScreen() {
-  const cameraRef = useRef<CameraView>(null);
+  const cameraRef = useRef<Camera | null>(null);
   const router = useRouter();
 
-  const [permission, setPermission] = useState<boolean | null>(null);
-  const [facing, setFacing] = useState<CameraType>('back');
+  const [hasPermission, setHasPermission] = useState<boolean | null>(null);
+  const [facing, setFacing] = useState<CameraType>(CameraType.back);
   const [flash, setFlash] = useState<FlashMode>(FlashMode.off);
   const [zoom, setZoom] = useState(0);
   const [recording, setRecording] = useState(false);
   const [capturing, setCapturing] = useState(false);
-  const [focusPoint, setFocusPoint] =
-    useState<{ x: number; y: number } | null>(null);
 
   /* ---------------- PERMISSIONS ---------------- */
   useEffect(() => {
     (async () => {
-      const cam = await CameraView.requestCameraPermissionsAsync();
+      const cam = await Camera.requestCameraPermissionsAsync();
       const gal = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      setPermission(cam.status === 'granted' && gal.status === 'granted');
+      setHasPermission(
+        cam.status === 'granted' && gal.status === 'granted'
+      );
     })();
   }, []);
 
@@ -52,9 +47,9 @@ export default function CameraScreen() {
 
       const photo = await cameraRef.current.takePictureAsync({
         quality: 1,
+        skipProcessing: false,
       });
 
-      // REAL FILTER
       const filtered = await ImageManipulator.manipulateAsync(
         photo.uri,
         [{ adjust: { contrast: 1.1, saturation: 1.2, brightness: 0.05 } }],
@@ -65,8 +60,8 @@ export default function CameraScreen() {
         pathname: '/preview',
         params: { uri: filtered.uri, type: 'image' },
       });
-    } catch (e) {
-      console.log(e);
+    } catch (err) {
+      console.log(err);
     } finally {
       setCapturing(false);
     }
@@ -81,15 +76,15 @@ export default function CameraScreen() {
 
       const video = await cameraRef.current.recordAsync({
         maxDuration: 60,
-        quality: '1080p',
+        quality: Camera.Constants.VideoQuality['1080p'],
       });
 
       router.push({
         pathname: '/preview',
         params: { uri: video.uri, type: 'video' },
       });
-    } catch (e) {
-      console.log(e);
+    } catch (err) {
+      console.log(err);
     } finally {
       setRecording(false);
     }
@@ -120,15 +115,8 @@ export default function CameraScreen() {
     }
   };
 
-  /* ---------------- FOCUS UI ---------------- */
-  const onFocus = (e: any) => {
-    const { locationX, locationY } = e.nativeEvent;
-    setFocusPoint({ x: locationX, y: locationY });
-    setTimeout(() => setFocusPoint(null), 800);
-  };
-
   /* ---------------- STATES ---------------- */
-  if (permission === null) {
+  if (hasPermission === null) {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" color="#fff" />
@@ -136,7 +124,7 @@ export default function CameraScreen() {
     );
   }
 
-  if (!permission) {
+  if (!hasPermission) {
     return (
       <View style={styles.center}>
         <Text style={{ color: '#fff' }}>Camera permission denied</Text>
@@ -147,25 +135,14 @@ export default function CameraScreen() {
   /* ---------------- UI ---------------- */
   return (
     <View style={styles.container}>
-      <CameraView
+      <Camera
         ref={cameraRef}
         style={styles.camera}
-        facing={facing}
-        flash={flash}
+        type={facing}
+        flashMode={flash}
         zoom={zoom}
-        focusMode={FocusMode.auto}
-        onTouchEnd={onFocus}
+        ratio="16:9"
       >
-        {/* Focus Box */}
-        {focusPoint && (
-          <View
-            style={[
-              styles.focus,
-              { left: focusPoint.x - 25, top: focusPoint.y - 25 },
-            ]}
-          />
-        )}
-
         {/* TOP BAR */}
         <View style={styles.top}>
           <TouchableOpacity onPress={() => router.back()}>
@@ -174,7 +151,9 @@ export default function CameraScreen() {
 
           <TouchableOpacity
             onPress={() =>
-              setFlash(flash === FlashMode.on ? FlashMode.off : FlashMode.on)
+              setFlash(
+                flash === FlashMode.on ? FlashMode.off : FlashMode.on
+              )
             }
           >
             <Ionicons
@@ -217,13 +196,17 @@ export default function CameraScreen() {
 
           <TouchableOpacity
             onPress={() =>
-              setFacing(facing === 'back' ? 'front' : 'back')
+              setFacing(
+                facing === CameraType.back
+                  ? CameraType.front
+                  : CameraType.back
+              )
             }
           >
             <Ionicons name="camera-reverse" size={30} color="#fff" />
           </TouchableOpacity>
         </View>
-      </CameraView>
+      </Camera>
     </View>
   );
 }
@@ -268,13 +251,5 @@ const styles = StyleSheet.create({
     right: -60,
     top: height / 2 - 60,
     transform: [{ rotate: '-90deg' }],
-  },
-  focus: {
-    position: 'absolute',
-    width: 50,
-    height: 50,
-    borderWidth: 2,
-    borderColor: '#00ff00',
-    borderRadius: 8,
   },
 });
