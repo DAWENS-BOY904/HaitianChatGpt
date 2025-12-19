@@ -25,31 +25,36 @@ const STYLES = [
   {
     id: 'sketch',
     name: 'Sketch',
-    image: require('../assets/images/sketch-style.jpg'),
+    icon: 'brush-outline',
+    color: '#8E8E93',
     prompt: 'Create a detailed pencil sketch of the person in the uploaded photo. Show them drawing themselves, with realistic shading and pencil texture on white paper.',
   },
   {
     id: 'holiday',
     name: 'Holiday portrait',
-    image: require('../assets/images/holiday-style.jpg'),
+    icon: 'gift-outline',
+    color: '#FF3B30',
     prompt: 'Create a festive holiday portrait of the person in the uploaded photo with warm lighting, Christmas decorations, and a cozy atmosphere.',
   },
   {
     id: 'dramatic',
     name: 'Dramatic',
-    image: require('../assets/images/dramatic-style.jpg'),
+    icon: 'flash-outline',
+    color: '#000000',
     prompt: 'Create a dramatic black and white portrait of the person in the uploaded photo with intense contrast, moody lighting, and powerful expression.',
   },
   {
     id: 'plushie',
     name: 'Plushie',
-    image: require('../assets/images/plushie-style.jpg'),
+    icon: 'heart-outline',
+    color: '#FF9500',
     prompt: 'Transform the person in the uploaded photo into an adorable soft plushie toy with cute features, fabric texture, and gentle colors.',
   },
   {
     id: 'baseball',
     name: 'Baseball bobblehead',
-    image: require('../assets/images/baseball-style.jpg'),
+    icon: 'baseball-outline',
+    color: '#007AFF',
     prompt: 'Create a fun baseball bobblehead figurine of the person in the uploaded photo wearing team uniform, with exaggerated head and cute proportions.',
   },
 ];
@@ -58,17 +63,20 @@ const DISCOVER_IDEAS = [
   {
     id: 'holiday-card',
     title: 'Create a holiday card',
-    image: require('../assets/images/holiday-card.jpg'),
+    icon: 'card-outline',
+    color: '#34C759',
   },
   {
     id: 'kpop',
     title: 'What would I look like as a K-Pop star?',
-    image: require('../assets/images/kpop.jpg'),
+    icon: 'musical-notes-outline',
+    color: '#AF52DE',
   },
   {
     id: 'pearl',
     title: 'Me as The Girl with a Pearl',
-    image: require('../assets/images/pearl.jpg'),
+    icon: 'diamond-outline',
+    color: '#5856D6',
   },
 ];
 
@@ -258,6 +266,8 @@ export default function ImagesScreen() {
       borderRadius: BorderRadius.lg,
       backgroundColor: colors.surface,
       marginBottom: Spacing.xs,
+      justifyContent: 'center',
+      alignItems: 'center',
     },
     styleName: {
       ...Typography.caption,
@@ -280,6 +290,8 @@ export default function ImagesScreen() {
       borderRadius: BorderRadius.md,
       backgroundColor: colors.surface,
       marginRight: Spacing.md,
+      justifyContent: 'center',
+      alignItems: 'center',
     },
     discoverTitle: {
       ...Typography.body,
@@ -357,7 +369,9 @@ export default function ImagesScreen() {
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.stylesScroll}>
             {STYLES.map((style) => (
               <TouchableOpacity key={style.id} style={styles.styleItem} onPress={() => handleStyleSelect(style)}>
-                <Image source={style.image} style={styles.styleImage} resizeMode="cover" />
+                <View style={[styles.styleImage, { backgroundColor: style.color }]}>
+                  <Ionicons name={style.icon as any} size={64} color="#FFFFFF" />
+                </View>
                 <Text style={styles.styleName}>{style.name}</Text>
               </TouchableOpacity>
             ))}
@@ -369,7 +383,9 @@ export default function ImagesScreen() {
           <Text style={styles.sectionTitle}>Discover something new</Text>
           {DISCOVER_IDEAS.map((idea) => (
             <TouchableOpacity key={idea.id} style={styles.discoverItem}>
-              <Image source={idea.image} style={styles.discoverImage} resizeMode="cover" />
+              <View style={[styles.discoverImage, { backgroundColor: idea.color }]}>
+                <Ionicons name={idea.icon as any} size={32} color="#FFFFFF" />
+              </View>
               <Text style={styles.discoverTitle}>{idea.title}</Text>
               <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
             </TouchableOpacity>
