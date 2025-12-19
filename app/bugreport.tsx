@@ -8,7 +8,7 @@ import {
   ScrollView,
   Platform,
   Image,
-} from 'react';
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
 import { useAuth, useAlert } from '@/template';
