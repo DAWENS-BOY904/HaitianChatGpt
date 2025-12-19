@@ -33,11 +33,11 @@ interface AIModel {
 
 /* 🖼️ PHOTOS DES MODÈLES */
 const modelImages: Record<string, any> = {
-  'openai-gpt4': require('../assets/models/gpt4.png'),
-  'google-gemini': require('../assets/models/gemini.png'),
-  'claude-3': require('../assets/models/claude.png'),
-  'groq-llama': require('../assets/models/groq.png'),
-  'mistral-large': require('../assets/models/mistral.png'),
+  'openai-gpt4': require('../assets/models/IMG_0834.jpeg'),
+  'google-gemini': require('../assets/models/IMG_0835.png'),
+  'claude-3': require('../assets/models/IMG_0836.png'),
+  'groq-llama': require('../assets/models/IMG_0837.png'),
+  'mistral-large': require('../assets/models/IMG_0838.png'),
 };
 
 export default function ModelSelectorScreen() {
