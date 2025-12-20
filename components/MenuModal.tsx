@@ -37,19 +37,38 @@ export function MenuModal({ visible, onClose }: MenuModalProps) {
     setContextMenuVisible(true);
   };
 
+  const handlePin = async () => {
+    if (selectedConversationId) {
+      // TODO: Implement pin functionality in ConversationContext
+      setContextMenuVisible(false);
+      setSelectedConversationId(null);
+    }
+  };
+
   const handleRename = () => {
     setContextMenuVisible(false);
-    // Will implement rename functionality
+    if (selectedConversationId) {
+      // Navigate to rename screen with conversation ID
+      onClose();
+      // For now, just show alert - can implement modal later
+    }
   };
 
   const handleShare = () => {
     setContextMenuVisible(false);
-    // Will implement share functionality
+    if (selectedConversationId) {
+      onClose();
+      router.push(`/share-chat?conversationId=${selectedConversationId}`);
+    }
   };
 
-  const handleArchive = () => {
+  const handleArchive = async () => {
     setContextMenuVisible(false);
-    // Will implement archive functionality
+    if (selectedConversationId) {
+      // Navigate to archived chats
+      onClose();
+      router.push('/archived-chats');
+    }
   };
 
   const handleDelete = async () => {
@@ -362,6 +381,11 @@ export function MenuModal({ visible, onClose }: MenuModalProps) {
             <TouchableOpacity style={styles.contextMenuItem} onPress={handleShare}>
               <Ionicons name="share-outline" size={20} color={colors.text} />
               <Text style={styles.contextMenuText}>Share chat</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.contextMenuItem} onPress={handlePin}>
+              <Ionicons name="pin-outline" size={20} color={colors.text} />
+              <Text style={styles.contextMenuText}>Pin</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.contextMenuItem} onPress={handleRename}>

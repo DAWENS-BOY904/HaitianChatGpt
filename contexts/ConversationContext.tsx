@@ -54,18 +54,30 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
   const loadConversations = async () => {
     if (!user) return;
 
-    const { data, error } = await supabase
+    // Only load conversations that have at least one message
+    const { data: conversationsWithMessages, error } = await supabase
       .from('conversations')
-      .select('*')
+      .select(`
+        id,
+        title,
+        created_at,
+        updated_at,
+        messages (count)
+      `)
       .order('updated_at', { ascending: false });
 
-    if (!error && data) {
-      setConversations(data.map(c => ({
-        id: c.id,
-        title: c.title,
-        createdAt: c.created_at,
-        updatedAt: c.updated_at,
-      })));
+    if (!error && conversationsWithMessages) {
+      // Filter out conversations with 0 messages
+      const validConversations = conversationsWithMessages
+        .filter((c: any) => c.messages && c.messages.length > 0)
+        .map(c => ({
+          id: c.id,
+          title: c.title,
+          createdAt: c.created_at,
+          updatedAt: c.updated_at,
+        }));
+      
+      setConversations(validConversations);
     }
   };
 
@@ -87,7 +99,7 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
       updatedAt: data.updated_at,
     };
 
-    setConversations([newConv, ...conversations]);
+    // DO NOT add to conversations list yet - will be added when first message is sent
     setCurrentConversation(newConv);
     setMessages([]);
     return data.id;
@@ -157,11 +169,33 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
     if (messages.length === 0) {
       const title = content.slice(0, 50);
       await updateConversationTitle(currentConversation.id, title);
+      
+      // Add to conversations list on first message
+      const newConv: Conversation = {
+        id: currentConversation.id,
+        title: title,
+        createdAt: currentConversation.createdAt,
+        updatedAt: new Date().toISOString(),
+      };
+      setConversations(prev => [newConv, ...prev]);
     } else {
       await supabase
         .from('conversations')
         .update({ updated_at: new Date().toISOString() })
         .eq('id', currentConversation.id);
+      
+      // Update in conversations list
+      setConversations(prev => {
+        const updated = prev.map(c => 
+          c.id === currentConversation.id 
+            ? { ...c, updatedAt: new Date().toISOString() } 
+            : c
+        );
+        // Move to top
+        const current = updated.find(c => c.id === currentConversation.id);
+        const others = updated.filter(c => c.id !== currentConversation.id);
+        return current ? [current, ...others] : updated;
+      });
     }
   };
 

@@ -178,7 +178,7 @@ export function MessageItem({ message, onCancel, onEdit, isGenerating }: Message
   const styles = StyleSheet.create({
     container: {
       padding: Spacing.md,
-      marginVertical: Spacing.xs,
+      marginVertical: 0,
       overflow: 'hidden',
     },
     userMessage: {

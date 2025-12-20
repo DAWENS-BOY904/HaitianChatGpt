@@ -115,7 +115,7 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.md,
     borderWidth: 1,
     borderColor: '#E1E4E8',
-    marginVertical: 4,
+    marginVertical: 0,
     overflow: 'hidden',
   },
 

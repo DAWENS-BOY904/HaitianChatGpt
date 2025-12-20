@@ -61,6 +61,7 @@ export default function RootLayout() {
                     <Stack.Screen name="images" />
                     <Stack.Screen name="image-prompt" />
                     <Stack.Screen name="image-viewer" />
+                    <Stack.Screen name="share-chat" />
                   </Stack>
                   </ConversationProvider>
                 </SocialProvider>
