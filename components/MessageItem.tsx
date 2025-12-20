@@ -20,6 +20,9 @@ interface MessageItemProps {
     role: 'user' | 'assistant';
     content: string;
     image_url?: string;
+    file_url?: string;
+    file_name?: string;
+    file_type?: string;
     created_at: string;
     edited?: boolean;
     edited_at?: string;
@@ -270,6 +273,39 @@ export function MessageItem({ message, onCancel, onEdit, isGenerating }: Message
       borderRadius: BorderRadius.sm,
       marginBottom: Spacing.sm,
     },
+    fileAttachment: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.background,
+      borderRadius: BorderRadius.md,
+      padding: Spacing.md,
+      marginBottom: Spacing.sm,
+      borderWidth: 1,
+      borderColor: colors.border,
+      gap: Spacing.md,
+    },
+    fileIcon: {
+      width: 44,
+      height: 44,
+      borderRadius: BorderRadius.sm,
+      backgroundColor: `${colors.primary}20`,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    fileInfo: {
+      flex: 1,
+    },
+    fileName: {
+      ...Typography.body,
+      color: colors.text,
+      fontWeight: '600',
+      marginBottom: 2,
+    },
+    fileSize: {
+      ...Typography.caption,
+      color: colors.textSecondary,
+      fontSize: 12,
+    },
     messageText: {
       ...Typography.body,
     },
@@ -390,9 +426,33 @@ export function MessageItem({ message, onCancel, onEdit, isGenerating }: Message
           message.role === 'user' ? styles.userMessage : styles.assistantMessage,
         ]}
       >
+        {/* Display inline image preview */}
         {message.image_url && (
           <TouchableOpacity onPress={() => handleImagePress(message.image_url!)}>
             <Image source={{ uri: message.image_url }} style={styles.messageImage} />
+          </TouchableOpacity>
+        )}
+        
+        {/* Display file attachment card */}
+        {message.file_url && message.file_name && (
+          <TouchableOpacity 
+            style={styles.fileAttachment}
+            onPress={() => handleFileDownload(message.file_name!, '', message.file_type || 'txt')}
+          >
+            <View style={styles.fileIcon}>
+              <Ionicons 
+                name={message.file_type === 'csv' ? 'document-text' : 
+                      message.file_type === 'html' ? 'code-slash' : 
+                      message.file_type === 'json' ? 'code' : 'document'} 
+                size={24} 
+                color={colors.primary} 
+              />
+            </View>
+            <View style={styles.fileInfo}>
+              <Text style={styles.fileName}>{message.file_name}</Text>
+              <Text style={styles.fileSize}>{message.file_type?.toUpperCase()} File</Text>
+            </View>
+            <Ionicons name="download-outline" size={20} color={colors.text} />
           </TouchableOpacity>
         )}
         

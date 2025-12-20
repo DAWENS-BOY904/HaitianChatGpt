@@ -810,11 +810,39 @@ Adapt your tone to match the user's communication style.
       image_url: userMessage.image_url || null,
     });
 
-    // Save AI response
+    // Save file to storage if generated
+    let fileUrl: string | undefined;
+    if (fileContent && fileName) {
+      try {
+        const filePathInStorage = `${conversationId}/${Date.now()}_${fileName}`;
+        const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
+          .from('media-files')
+          .upload(filePathInStorage, fileContent, {
+            contentType: 'text/plain',
+            upsert: true,
+          });
+        
+        if (!uploadError && uploadData) {
+          const { data: urlData } = supabaseAdmin.storage
+            .from('media-files')
+            .getPublicUrl(filePathInStorage);
+          fileUrl = urlData.publicUrl;
+          console.log('✅ File uploaded to storage:', fileUrl);
+        }
+      } catch (error) {
+        console.error('❌ File upload error:', error);
+      }
+    }
+
+    // Save AI response with image and/or file
     await supabaseAdmin.from('messages').insert({
       conversation_id: conversationId,
       role: 'assistant',
       content: aiResponse.content,
+      image_url: imageUrl || null,
+      file_url: fileUrl || null,
+      file_name: fileName || null,
+      file_type: fileName ? fileName.split('.').pop() : null,
     });
 
     // Update conversation timestamp
@@ -893,8 +921,9 @@ Adapt your tone to match the user's communication style.
         audioUrl: audioUrl || '',
         thinkingMode: thinkingMode,
         imageUrl: imageUrl || null,
-        fileContent: fileContent || null,
+        fileUrl: fileUrl || null,
         fileName: fileName || null,
+        fileType: fileName ? fileName.split('.').pop() : null,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

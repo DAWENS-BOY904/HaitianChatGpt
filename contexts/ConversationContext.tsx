@@ -7,6 +7,9 @@ interface Message {
   role: 'user' | 'assistant';
   content: string;
   image_url?: string;
+  file_url?: string;
+  file_name?: string;
+  file_type?: string;
   created_at: string;
   edited?: boolean;
   edited_at?: string;
@@ -188,9 +191,17 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
       return [...withoutTemp, tempUserMessage, tempAIMessage];
     });
 
-    // Update conversation title if first message
+    // Update conversation title if first message - generate smart title
     if (messages.length === 0) {
-      const title = content.slice(0, 50);
+      // Generate a smart title based on content type
+      let title = content.slice(0, 50);
+      if (aiResponse.imageUrl) {
+        title = content.includes('logo') ? '🎨 Logo Design' : '🖼️ Image Generation';
+      } else if (aiResponse.fileName) {
+        title = `📄 File: ${aiResponse.fileName}`;
+      } else if (content.length > 50) {
+        title = content.slice(0, 47) + '...';
+      }
       console.log('  📝 Setting conversation title:', title);
       await updateConversationTitle(currentConversation.id, title);
       
