@@ -1,19 +1,40 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Animated, Easing } from 'react-native';
 import { useTheme } from '../hooks/useTheme';
 import { Spacing, Typography, BorderRadius } from '../constants/theme';
 
 interface ThinkingIndicatorProps {
+  mode?: 'thinking' | 'creating_image' | 'creating_file' | 'editing_image' | 'analyzing';
   model?: string;
 }
 
-export function ThinkingIndicator({ model = 'AI' }: ThinkingIndicatorProps) {
+export function ThinkingIndicator({ mode = 'thinking', model = 'AI' }: ThinkingIndicatorProps) {
   const { colors } = useTheme();
+  const glowAnim = useRef(new Animated.Value(0)).current;
   const [dot1] = React.useState(new Animated.Value(0));
   const [dot2] = React.useState(new Animated.Value(0));
   const [dot3] = React.useState(new Animated.Value(0));
 
-  React.useEffect(() => {
+  useEffect(() => {
+    // Glow effect animation
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(glowAnim, {
+          toValue: 1,
+          duration: 1500,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(glowAnim, {
+          toValue: 0,
+          duration: 1500,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+
+    // Dots animation
     const animateDot = (dotValue: Animated.Value, delay: number) => {
       Animated.loop(
         Animated.sequence([
@@ -39,19 +60,57 @@ export function ThinkingIndicator({ model = 'AI' }: ThinkingIndicatorProps) {
     animateDot(dot3, 400);
   }, []);
 
+  const getModeText = () => {
+    switch (mode) {
+      case 'creating_image':
+        return 'Creating image';
+      case 'creating_file':
+        return 'Creating file';
+      case 'editing_image':
+        return 'Editing image';
+      case 'analyzing':
+        return 'Analyzing';
+      default:
+        return 'Thinking';
+    }
+  };
+
+  const glowOpacity = glowAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.3, 0.8],
+  });
+
   const styles = StyleSheet.create({
     container: {
+      padding: Spacing.md,
+      marginVertical: Spacing.sm,
+    },
+    content: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: colors.card,
+      backgroundColor: colors.surface,
       borderRadius: BorderRadius.md,
       padding: Spacing.md,
       alignSelf: 'flex-start',
       gap: Spacing.sm,
     },
+    glowContainer: {
+      position: 'relative',
+    },
+    glow: {
+      position: 'absolute',
+      top: -4,
+      left: -4,
+      right: -4,
+      bottom: -4,
+      backgroundColor: colors.primary,
+      borderRadius: BorderRadius.md,
+      opacity: 0.2,
+    },
     text: {
       ...Typography.body,
-      color: colors.textSecondary,
+      color: colors.text,
+      fontWeight: '500',
     },
     dotsContainer: {
       flexDirection: 'row',
@@ -64,7 +123,7 @@ export function ThinkingIndicator({ model = 'AI' }: ThinkingIndicatorProps) {
       backgroundColor: colors.primary,
     },
     modelBadge: {
-      backgroundColor: colors.primary,
+      backgroundColor: `${colors.primary}20`,
       paddingHorizontal: Spacing.xs,
       paddingVertical: 2,
       borderRadius: BorderRadius.sm,
@@ -72,7 +131,7 @@ export function ThinkingIndicator({ model = 'AI' }: ThinkingIndicatorProps) {
     },
     modelText: {
       ...Typography.small,
-      color: '#FFFFFF',
+      color: colors.primary,
       fontSize: 10,
       fontWeight: '600',
     },
@@ -80,38 +139,50 @@ export function ThinkingIndicator({ model = 'AI' }: ThinkingIndicatorProps) {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.text}>Thinking</Text>
-      <View style={styles.dotsContainer}>
+      <View style={styles.glowContainer}>
         <Animated.View 
           style={[
-            styles.dot,
+            styles.glow,
             {
-              opacity: dot1,
-              transform: [{ scale: dot1 }],
+              opacity: glowOpacity,
             },
           ]} 
         />
-        <Animated.View 
-          style={[
-            styles.dot,
-            {
-              opacity: dot2,
-              transform: [{ scale: dot2 }],
-            },
-          ]} 
-        />
-        <Animated.View 
-          style={[
-            styles.dot,
-            {
-              opacity: dot3,
-              transform: [{ scale: dot3 }],
-            },
-          ]} 
-        />
-      </View>
-      <View style={styles.modelBadge}>
-        <Text style={styles.modelText}>{model.toUpperCase()}</Text>
+        <View style={styles.content}>
+          <Text style={styles.text}>{getModeText()}</Text>
+          <View style={styles.dotsContainer}>
+            <Animated.View 
+              style={[
+                styles.dot,
+                {
+                  opacity: dot1,
+                  transform: [{ scale: dot1 }],
+                },
+              ]} 
+            />
+            <Animated.View 
+              style={[
+                styles.dot,
+                {
+                  opacity: dot2,
+                  transform: [{ scale: dot2 }],
+                },
+              ]} 
+            />
+            <Animated.View 
+              style={[
+                styles.dot,
+                {
+                  opacity: dot3,
+                  transform: [{ scale: dot3 }],
+                },
+              ]} 
+            />
+          </View>
+          <View style={styles.modelBadge}>
+            <Text style={styles.modelText}>{model.toUpperCase()}</Text>
+          </View>
+        </View>
       </View>
     </View>
   );

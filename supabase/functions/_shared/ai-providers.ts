@@ -316,6 +316,101 @@ async function callOnSpaceAI(messages: AIMessage[], modelHint: string): Promise<
 }
 
 /**
+ * Detect content type from user message
+ */
+export function detectContentType(userMessage: string): 'image' | 'file' | 'text' {
+  const lowerMsg = userMessage.toLowerCase();
+  
+  // Image generation keywords
+  const imageKeywords = [
+    'create a logo', 'create logo', 'generate logo', 'make a logo',
+    'create an image', 'create image', 'generate image', 'make an image',
+    'design a logo', 'design logo', 'draw', 'paint', 'illustrate',
+    'create a picture', 'generate a picture'
+  ];
+  
+  // File creation keywords
+  const fileKeywords = [
+    'create a file', 'generate file', 'create file',
+    'send file', 'make a file',
+    'csv file', 'html file', 'json file', 'txt file',
+    'create .txt', 'create .csv', 'create .html', 'create .json',
+    'send yon file', 'gen file', 'download file'
+  ];
+  
+  for (const keyword of imageKeywords) {
+    if (lowerMsg.includes(keyword)) {
+      return 'image';
+    }
+  }
+  
+  for (const keyword of fileKeywords) {
+    if (lowerMsg.includes(keyword)) {
+      return 'file';
+    }
+  }
+  
+  return 'text';
+}
+
+/**
+ * Generate image using OnSpace AI
+ */
+export async function generateImage(prompt: string): Promise<{imageUrl?: string; error?: string}> {
+  const apiKey = Deno.env.get('ONSPACE_AI_API_KEY');
+  const baseUrl = Deno.env.get('ONSPACE_AI_BASE_URL');
+  
+  if (!apiKey || !baseUrl) {
+    return { error: 'OnSpace AI not configured' };
+  }
+
+  try {
+    const response = await fetch(`${baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash-image-preview',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are an expert logo and image designer. Create high-quality, professional, modern designs based on user requests.'
+          },
+          {
+            role: 'user',
+            content: prompt
+          }
+        ],
+        modalities: ['image', 'text'],
+        image_config: {
+          aspect_ratio: '1:1'
+        }
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Image generation error:', errorText);
+      return { error: `Failed to generate image: ${errorText}` };
+    }
+
+    const data = await response.json();
+    const imageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+    
+    if (!imageUrl) {
+      return { error: 'No image was generated' };
+    }
+
+    return { imageUrl };
+  } catch (error) {
+    console.error('Image generation error:', error);
+    return { error: error.message };
+  }
+}
+
+/**
  * Router function - calls the appropriate AI provider
  */
 export async function callAI(modelId: string, messages: AIMessage[]): Promise<AIResponse> {

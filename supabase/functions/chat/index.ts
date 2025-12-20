@@ -1,6 +1,6 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
-import { callAI } from '../_shared/ai-providers.ts';
+import { callAI, detectContentType, generateImage } from '../_shared/ai-providers.ts';
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -8,7 +8,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { messages, conversationId, aiModel = 'google-gemini', fileContents, generateImage, audio, voice, responseType } = await req.json();
+    const { messages, conversationId, aiModel = 'google-gemini', fileContents, audio, voice, responseType, editImageUrl, editPrompt } = await req.json();
 
     const authHeader = req.headers.get('Authorization');
     const token = authHeader?.replace('Bearer ', '');
@@ -727,14 +727,102 @@ Adapt your tone to match the user's communication style.
 
     console.log(`Calling AI model: ${selectedModel}`);
 
-    // Call the appropriate AI provider
-    const aiResponse = await callAI(selectedModel, aiMessages);
+    // Detect content type from user message
+    const userMessage = messages[messages.length - 1]?.content || '';
+    const contentType = detectContentType(userMessage);
+    console.log(`Detected content type: ${contentType}`);
 
-    if (aiResponse.error) {
-      return new Response(
-        JSON.stringify({ error: aiResponse.error }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    let aiResponse: any = { content: '', model: selectedModel };
+    let imageUrl: string | undefined;
+    let fileContent: string | undefined;
+    let fileName: string | undefined;
+    let thinkingMode = 'thinking';
+
+    // Handle image editing
+    if (editImageUrl && editPrompt) {
+      thinkingMode = 'editing_image';
+      // Generate edited image
+      const { imageUrl: newImageUrl, error: imgError } = await generateImage(
+        `Edit this image: ${editPrompt}. Original image: ${editImageUrl}`
       );
+      
+      if (imgError) {
+        return new Response(
+          JSON.stringify({ error: imgError }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      imageUrl = newImageUrl;
+      aiResponse.content = 'Image edited successfully!';
+    }
+    // Handle image generation
+    else if (contentType === 'image') {
+      thinkingMode = 'creating_image';
+      const { imageUrl: generatedImageUrl, error: imgError } = await generateImage(userMessage);
+      
+      if (imgError) {
+        return new Response(
+          JSON.stringify({ error: imgError }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      imageUrl = generatedImageUrl;
+      aiResponse.content = 'Image created';
+    }
+    // Handle file generation
+    else if (contentType === 'file') {
+      thinkingMode = 'creating_file';
+      
+      // Ask AI to generate the file content
+      const fileGenMessages = [
+        {
+          role: 'system' as const,
+          content: 'You are a file generation assistant. Generate the exact file content requested by the user. Only output the file content, nothing else.'
+        },
+        {
+          role: 'user' as const,
+          content: userMessage
+        }
+      ];
+      
+      const fileResponse = await callAI(selectedModel, fileGenMessages);
+      
+      if (fileResponse.error) {
+        return new Response(
+          JSON.stringify({ error: fileResponse.error }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      fileContent = fileResponse.content;
+      
+      // Detect file type and name
+      const lowerMsg = userMessage.toLowerCase();
+      if (lowerMsg.includes('csv')) {
+        fileName = 'generated_file.csv';
+      } else if (lowerMsg.includes('html')) {
+        fileName = 'generated_file.html';
+      } else if (lowerMsg.includes('json')) {
+        fileName = 'generated_file.json';
+      } else {
+        fileName = 'generated_file.txt';
+      }
+      
+      aiResponse.content = `File created: ${fileName}`;
+    }
+    // Handle regular text conversation
+    else {
+      thinkingMode = 'thinking';
+      aiResponse = await callAI(selectedModel, aiMessages);
+
+      if (aiResponse.error) {
+        return new Response(
+          JSON.stringify({ error: aiResponse.error }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
     }
 
     // Save messages to database
@@ -826,6 +914,10 @@ Adapt your tone to match the user's communication style.
         model: selectedModel,
         transcript: transcript,
         audioUrl: audioUrl,
+        thinkingMode: thinkingMode,
+        imageUrl: imageUrl,
+        fileContent: fileContent,
+        fileName: fileName,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
