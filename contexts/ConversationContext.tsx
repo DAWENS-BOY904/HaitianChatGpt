@@ -127,47 +127,71 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
   const sendMessage = async (content: string, imageUrl?: string, aiModel?: string) => {
     if (!currentConversation || !user) return;
 
-    // Add user message to state immediately
+    console.log('📨 ConversationContext.sendMessage called');
+    console.log('  - Content:', content.slice(0, 50));
+    console.log('  - AI Model:', aiModel);
+    console.log('  - Current messages count:', messages.length);
+
+    // CRITICAL: Add user message to local state IMMEDIATELY (optimistic UI)
     const tempUserMessage: Message = {
-      id: `temp-${Date.now()}`,
+      id: `temp-user-${Date.now()}`,
       role: 'user',
       content,
       image_url: imageUrl,
       created_at: new Date().toISOString(),
     };
-    setMessages(prev => [...prev, tempUserMessage]);
+    setMessages(prev => {
+      console.log('  ✅ Adding user message to UI immediately');
+      return [...prev, tempUserMessage];
+    });
 
-    // Build context messages for AI
+    // Build context messages for AI (include the new user message)
     const contextMessages = [...messages, tempUserMessage].map(m => ({
       role: m.role,
-      content: m.image_url 
-        ? [
-            { type: 'text', text: m.content },
-            { type: 'image_url', image_url: { url: m.image_url } }
-          ]
-        : m.content,
+      content: m.content,
+      image_url: m.image_url,
     }));
+
+    console.log('  🤖 Calling AI Edge Function...');
+    console.log('  📊 Context messages count:', contextMessages.length);
 
     // Call AI Edge Function
     const { data: aiResponse, error: aiError } = await supabase.functions.invoke('chat', {
       body: {
         messages: contextMessages,
         conversationId: currentConversation.id,
-        aiModel: aiModel || 'gemini',
+        aiModel: aiModel || 'google-gemini',
       },
     });
 
     if (aiError) {
-      console.error('AI error:', aiError);
-      return;
+      console.error('❌ AI error:', aiError);
+      // Remove temp message on error
+      setMessages(prev => prev.filter(m => m.id !== tempUserMessage.id));
+      throw aiError;
     }
 
-    // The Edge Function already saved messages to the database, so reload them
-    await selectConversation(currentConversation.id);
+    console.log('  ✅ AI response received');
+    console.log('  📝 AI message:', aiResponse.message?.slice(0, 50));
+    console.log('  💭 Thinking mode:', aiResponse.thinkingMode);
+
+    // Add AI response to local state immediately
+    const tempAIMessage: Message = {
+      id: `temp-ai-${Date.now()}`,
+      role: 'assistant',
+      content: aiResponse.message || 'Response generated',
+      created_at: new Date().toISOString(),
+    };
+    setMessages(prev => {
+      // Replace temp user message with real one, add AI message
+      const withoutTemp = prev.filter(m => m.id !== tempUserMessage.id);
+      return [...withoutTemp, tempUserMessage, tempAIMessage];
+    });
 
     // Update conversation title if first message
     if (messages.length === 0) {
       const title = content.slice(0, 50);
+      console.log('  📝 Setting conversation title:', title);
       await updateConversationTitle(currentConversation.id, title);
       
       // Add to conversations list on first message
@@ -177,26 +201,34 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
         createdAt: currentConversation.createdAt,
         updatedAt: new Date().toISOString(),
       };
-      setConversations(prev => [newConv, ...prev]);
+      setConversations(prev => {
+        console.log('  ✅ Adding conversation to history');
+        return [newConv, ...prev];
+      });
     } else {
       await supabase
         .from('conversations')
         .update({ updated_at: new Date().toISOString() })
         .eq('id', currentConversation.id);
       
-      // Update in conversations list
+      // Update in conversations list (move to top)
       setConversations(prev => {
         const updated = prev.map(c => 
           c.id === currentConversation.id 
             ? { ...c, updatedAt: new Date().toISOString() } 
             : c
         );
-        // Move to top
+        // Move current to top
         const current = updated.find(c => c.id === currentConversation.id);
         const others = updated.filter(c => c.id !== currentConversation.id);
         return current ? [current, ...others] : updated;
       });
     }
+
+    // Finally, reload from database to get real IDs
+    console.log('  🔄 Reloading messages from database...');
+    await selectConversation(currentConversation.id);
+    console.log('  ✅ Message flow complete');
   };
 
   const updateConversationTitle = async (id: string, title: string) => {

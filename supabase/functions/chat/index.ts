@@ -10,6 +10,11 @@ Deno.serve(async (req) => {
   try {
     const { messages, conversationId, aiModel = 'google-gemini', fileContents, audio, voice, responseType, editImageUrl, editPrompt } = await req.json();
 
+    console.log('🚀 Chat Edge Function called');
+    console.log('  📊 Messages count:', messages?.length || 0);
+    console.log('  🤖 AI Model:', aiModel);
+    console.log('  💬 Conversation ID:', conversationId);
+
     const authHeader = req.headers.get('Authorization');
     const token = authHeader?.replace('Bearer ', '');
 
@@ -725,12 +730,15 @@ Adapt your tone to match the user's communication style.
       ...messages,
     ];
 
-    console.log(`🚀 Calling AI model: ${selectedModel}`);
+    console.log(`🚀 Using AI model: ${selectedModel}`);
+    console.log(`🎯 This is the model the user selected`);
 
     // Detect content type from user message
     const lastUserMessage = messages[messages.length - 1]?.content || '';
     const detectionResult = detectContentType(lastUserMessage);
-    console.log(`🔍 Detected content type: ${detectionResult.type}, suggested model: ${detectionResult.suggestedModel}`);
+    console.log(`🔍 Detected content type: ${detectionResult.type}`);
+    console.log(`💡 Suggested model (for reference): ${detectionResult.suggestedModel}`);
+    console.log(`⚠️  BUT we will use user's selected model: ${selectedModel}`);
 
     let aiResponse: any = { content: '', model: selectedModel };
     let imageUrl: string | undefined;
@@ -954,7 +962,12 @@ Adapt your tone to match the user's communication style.
       }
     }
 
-    console.log('📤 Sending response with thinking mode:', thinkingMode);
+    console.log('📤 Sending response:');
+    console.log('  💭 Thinking mode:', thinkingMode);
+    console.log('  🤖 Model used:', selectedModel);
+    console.log('  📝 Message length:', aiResponse.content?.length || 0);
+    console.log('  🖼️  Image URL:', imageUrl ? 'Yes' : 'No');
+    console.log('  📄 File:', fileName || 'No');
     
     return new Response(
       JSON.stringify({ 

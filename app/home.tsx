@@ -44,11 +44,14 @@ export default function HomeScreen() {
   const flatListRef = useRef<FlatList>(null);
   const supabase = getSupabaseClient();
 
+  // DO NOT create conversation on mount - only when user sends first message
   useEffect(() => {
-    if (!currentConversation) {
-      createConversation();
+    // Load existing conversation or prepare for new one
+    if (!currentConversation && conversations.length > 0) {
+      // If conversations exist, don't auto-create
+      // User can click "New Chat" button
     }
-  }, []);
+  }, [conversations]);
 
   useEffect(() => {
     if (messages.length > 0) {
@@ -92,11 +95,23 @@ export default function HomeScreen() {
       return;
     }
 
+    // Create conversation if it doesn't exist (first message)
+    let conversationId = currentConversation?.id;
+    if (!conversationId) {
+      conversationId = await createConversation();
+      if (!conversationId) {
+        showAlert('Error', 'Failed to create conversation');
+        return;
+      }
+    }
+
     setSending(true);
     setGenerating(true);
     const text = inputText;
     const media = selectedMedia;
     const editingId = editingMessageId;
+    
+    // Clear input immediately for better UX
     setInputText('');
     setSelectedMedia([]);
     setEditingMessageId(null);
@@ -107,91 +122,47 @@ export default function HomeScreen() {
     try {
       // If editing an existing message
       if (editingId) {
+        console.log('🔄 Editing message:', editingId);
         await updateMessageAndRegenerate(editingId, text, currentAIModel);
-      } else {
-        // Creating a new message
-        let imageUrl: string | undefined;
-        
-        // Upload media if any
-        if (media.length > 0) {
-          const firstMedia = media[0];
-          
-          if (firstMedia.type === 'image' && firstMedia.base64) {
-            const fileName = `${Date.now()}.jpg`;
-            const filePath = `${currentConversation?.id}/${fileName}`;
-            
-            const { error: uploadError } = await supabase.storage
-              .from('chat-images')
-              .upload(filePath, decode(firstMedia.base64), {
-                contentType: 'image/jpeg',
-              });
+        setGenerating(false);
+        setSending(false);
+        return;
+      }
 
-            if (!uploadError) {
-              const { data: urlData } = supabase.storage
-                .from('chat-images')
-                .getPublicUrl(filePath);
-              imageUrl = urlData.publicUrl;
-            }
+      // NEW MESSAGE FLOW
+      console.log('📤 Sending new message with model:', currentAIModel);
+      
+      // Upload media if any
+      let imageUrl: string | undefined;
+      if (media.length > 0) {
+        const firstMedia = media[0];
+        if (firstMedia.type === 'image' && firstMedia.base64) {
+          const fileName = `${Date.now()}.jpg`;
+          const filePath = `${conversationId}/${fileName}`;
+          
+          const { error: uploadError } = await supabase.storage
+            .from('chat-images')
+            .upload(filePath, decode(firstMedia.base64), {
+              contentType: 'image/jpeg',
+            });
+
+          if (!uploadError) {
+            const { data: urlData } = supabase.storage
+              .from('chat-images')
+              .getPublicUrl(filePath);
+            imageUrl = urlData.publicUrl;
           }
         }
-
-        // Call AI and get response with thinking mode
-        const { data: aiData, error: aiError } = await supabase.functions.invoke('chat', {
-          body: {
-            messages: [
-              ...messages.map(m => ({
-                role: m.role,
-                content: m.content,
-                image_url: m.image_url
-              })),
-              {
-                role: 'user',
-                content: text || '[Image]',
-                image_url: imageUrl
-              }
-            ],
-            conversationId: currentConversation?.id,
-            aiModel: currentAIModel,
-          },
-        });
-        
-        if (aiError) {
-          console.error('AI error:', aiError);
-          throw new Error('Failed to get AI response');
-        }
-        
-        // Update thinking mode from response
-        if (aiData?.thinkingMode) {
-          setThinkingMode(aiData.thinkingMode);
-        }
-        
-        // Save user message
-        await supabase.from('messages').insert({
-          conversation_id: currentConversation?.id,
-          role: 'user',
-          content: text || '[Image]',
-          image_url: imageUrl,
-        });
-        
-        // Save AI response
-        await supabase.from('messages').insert({
-          conversation_id: currentConversation?.id,
-          role: 'assistant',
-          content: aiData.message || 'Response generated',
-          ai_generated_image: aiData.imageUrl || null,
-          file_content: aiData.fileContent || null,
-          file_name: aiData.fileName || null,
-        });
-        
-        // Update conversation
-        await supabase.from('conversations').update({
-          updated_at: new Date().toISOString()
-        }).eq('id', currentConversation?.id);
-        
-        await incrementMessageCount();
       }
+
+      // Use ConversationContext's sendMessage which handles everything
+      await sendMessage(text || '[Image]', imageUrl, currentAIModel);
+      
+      // Increment guest message count
+      await incrementMessageCount();
+      
     } catch (error) {
-      console.error('Send error:', error);
+      console.error('❌ Send error:', error);
       showAlert('Error', editingId ? 'Failed to update message' : 'Failed to send message');
     } finally {
       setSending(false);
@@ -219,8 +190,10 @@ export default function HomeScreen() {
   };
 
   const handleAIModelSelect = async (model: string) => {
+    console.log('🤖 AI Model changed to:', model);
     setCurrentAIModel(model);
     await updateSetting('preferredAiModel', model);
+    showAlert('Model Updated', `Now using ${model === 'gemini' ? 'Gemini' : model === 'openai' ? 'OpenAI' : model === 'claude' ? 'Claude' : 'Llama'} for all responses`);
   };
 
   const handleStartRecording = async () => {
