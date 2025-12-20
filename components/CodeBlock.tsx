@@ -11,6 +11,87 @@ interface CodeBlockProps {
   language?: string;
 }
 
+// Syntax highlighting for common tokens
+function highlightSyntax(code: string, language: string) {
+  const tokens: { text: string; color: string }[] = [];
+  
+  if (language === 'html' || language === 'xml') {
+    // HTML/XML syntax highlighting
+    const regex = /(<\/?[a-zA-Z][a-zA-Z0-9]*)|([a-zA-Z-]+)(=)|("[^"]*")|('[^']*')|(<!--[\s\S]*?-->)/g;
+    let lastIndex = 0;
+    let match;
+    
+    while ((match = regex.exec(code)) !== null) {
+      // Add plain text before match
+      if (match.index > lastIndex) {
+        tokens.push({ text: code.substring(lastIndex, match.index), color: '#24292e' });
+      }
+      
+      if (match[1]) {
+        // Tag name
+        tokens.push({ text: match[1], color: '#D73A49' });
+      } else if (match[2]) {
+        // Attribute name
+        tokens.push({ text: match[2], color: '#6F42C1' });
+      } else if (match[3]) {
+        // Equals sign
+        tokens.push({ text: match[3], color: '#24292e' });
+      } else if (match[4] || match[5]) {
+        // String value
+        tokens.push({ text: match[4] || match[5], color: '#032F62' });
+      } else if (match[6]) {
+        // Comment
+        tokens.push({ text: match[6], color: '#6A737D' });
+      }
+      
+      lastIndex = regex.lastIndex;
+    }
+    
+    // Add remaining text
+    if (lastIndex < code.length) {
+      tokens.push({ text: code.substring(lastIndex), color: '#24292e' });
+    }
+  } else {
+    // Default highlighting for other languages
+    const keywords = /\b(function|const|let|var|if|else|return|import|export|class|async|await|for|while|switch|case)\b/g;
+    const strings = /(["'`][^"'`]*["'`])/g;
+    const comments = /(\/\/[^\n]*|\/\*[\s\S]*?\*\/)/g;
+    
+    let processedCode = code;
+    const matches: { text: string; color: string; index: number }[] = [];
+    
+    // Find all matches
+    let match;
+    while ((match = keywords.exec(code)) !== null) {
+      matches.push({ text: match[0], color: '#D73A49', index: match.index });
+    }
+    while ((match = strings.exec(code)) !== null) {
+      matches.push({ text: match[0], color: '#032F62', index: match.index });
+    }
+    while ((match = comments.exec(code)) !== null) {
+      matches.push({ text: match[0], color: '#6A737D', index: match.index });
+    }
+    
+    // Sort by index
+    matches.sort((a, b) => a.index - b.index);
+    
+    let lastIndex = 0;
+    for (const m of matches) {
+      if (m.index > lastIndex) {
+        tokens.push({ text: code.substring(lastIndex, m.index), color: '#24292e' });
+      }
+      tokens.push({ text: m.text, color: m.color });
+      lastIndex = m.index + m.text.length;
+    }
+    
+    if (lastIndex < code.length) {
+      tokens.push({ text: code.substring(lastIndex), color: '#24292e' });
+    }
+  }
+  
+  return tokens.length > 0 ? tokens : [{ text: code, color: '#24292e' }];
+}
+
 export function CodeBlock({ code, language = 'code' }: CodeBlockProps) {
   const { colors } = useTheme();
   const { showAlert } = useAlert();
@@ -23,11 +104,15 @@ export function CodeBlock({ code, language = 'code' }: CodeBlockProps) {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const highlightedTokens = highlightSyntax(code, language);
+
   const styles = StyleSheet.create({
     container: {
-      backgroundColor: '#1E1E1E',
+      backgroundColor: '#FFFFFF',
       borderRadius: BorderRadius.md,
       marginVertical: Spacing.sm,
+      borderWidth: 1,
+      borderColor: '#E1E4E8',
       overflow: 'hidden',
     },
     header: {
@@ -36,15 +121,15 @@ export function CodeBlock({ code, language = 'code' }: CodeBlockProps) {
       alignItems: 'center',
       paddingHorizontal: Spacing.md,
       paddingVertical: Spacing.sm,
-      backgroundColor: '#2D2D2D',
+      backgroundColor: '#F6F8FA',
       borderBottomWidth: 1,
-      borderBottomColor: '#3D3D3D',
+      borderBottomColor: '#E1E4E8',
     },
     language: {
       ...Typography.caption,
-      color: '#CCCCCC',
+      color: '#586069',
       fontSize: 12,
-      textTransform: 'capitalize',
+      textTransform: 'lowercase',
     },
     copyButton: {
       flexDirection: 'row',
@@ -53,20 +138,20 @@ export function CodeBlock({ code, language = 'code' }: CodeBlockProps) {
       paddingHorizontal: Spacing.sm,
       paddingVertical: 4,
       borderRadius: BorderRadius.sm,
-      backgroundColor: copied ? '#10A37F' : '#3D3D3D',
+      backgroundColor: copied ? '#10A37F' : 'transparent',
     },
     copyButtonText: {
       ...Typography.caption,
-      color: '#FFFFFF',
+      color: copied ? '#FFFFFF' : '#586069',
       fontSize: 12,
     },
     codeContainer: {
-      padding: Spacing.md,
+      paddingHorizontal: Spacing.md,
+      paddingVertical: Spacing.sm,
     },
     code: {
       ...Typography.body,
       fontFamily: 'monospace',
-      color: '#D4D4D4',
       fontSize: 13,
       lineHeight: 20,
     },
@@ -80,15 +165,21 @@ export function CodeBlock({ code, language = 'code' }: CodeBlockProps) {
           <Ionicons 
             name={copied ? 'checkmark' : 'copy-outline'} 
             size={14} 
-            color="#FFFFFF" 
+            color={copied ? '#FFFFFF' : '#586069'} 
           />
           <Text style={styles.copyButtonText}>
-            {copied ? 'Copied!' : 'Copy code'}
+            {copied ? 'Copied!' : 'Copy'}
           </Text>
         </TouchableOpacity>
       </View>
       <ScrollView horizontal style={styles.codeContainer}>
-        <Text style={styles.code}>{code}</Text>
+        <Text style={styles.code}>
+          {highlightedTokens.map((token, index) => (
+            <Text key={index} style={{ color: token.color }}>
+              {token.text}
+            </Text>
+          ))}
+        </Text>
       </ScrollView>
     </View>
   );
