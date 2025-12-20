@@ -1,5 +1,14 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal, ActivityIndicator, Platform } from 'react-native';
+import React, { useState, useRef } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Modal,
+  ActivityIndicator,
+  Platform,
+  Linking,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { WebView } from 'react-native-webview';
 import { useTheme } from '../hooks/useTheme';
@@ -18,7 +27,7 @@ export function WebViewModal({ visible, url, onClose }: WebViewModalProps) {
   const [loading, setLoading] = useState(true);
   const [canGoBack, setCanGoBack] = useState(false);
   const [canGoForward, setCanGoForward] = useState(false);
-  const webViewRef = React.useRef<WebView>(null);
+  const webViewRef = useRef<WebView>(null);
 
   const handleGoBack = () => {
     webViewRef.current?.goBack();
@@ -32,11 +41,22 @@ export function WebViewModal({ visible, url, onClose }: WebViewModalProps) {
     webViewRef.current?.reload();
   };
 
+  // 🔗 OPEN IN SAFARI / ANDROID BROWSER
+  const openExternal = () => {
+    Linking.openURL(url).catch(err =>
+      console.warn('Failed to open URL:', err),
+    );
+  };
+
   const styles = StyleSheet.create({
     container: {
       flex: 1,
       backgroundColor: colors.background,
-      paddingTop: Platform.select({ ios: insets.top, android: insets.top, default: 0 }),
+      paddingTop: Platform.select({
+        ios: insets.top,
+        android: insets.top,
+        default: 0,
+      }),
     },
     header: {
       flexDirection: 'row',
@@ -86,7 +106,11 @@ export function WebViewModal({ visible, url, onClose }: WebViewModalProps) {
       alignItems: 'center',
       justifyContent: 'space-around',
       padding: Spacing.md,
-      paddingBottom: Platform.select({ ios: insets.bottom + Spacing.md, android: insets.bottom + Spacing.md, default: Spacing.md }),
+      paddingBottom: Platform.select({
+        ios: insets.bottom + Spacing.md,
+        android: insets.bottom + Spacing.md,
+        default: Spacing.md,
+      }),
       borderTopWidth: 1,
       borderTopColor: colors.border,
       backgroundColor: colors.background,
@@ -111,6 +135,7 @@ export function WebViewModal({ visible, url, onClose }: WebViewModalProps) {
       onRequestClose={onClose}
     >
       <View style={styles.container}>
+        {/* HEADER */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
             <TouchableOpacity style={styles.closeButton} onPress={onClose}>
@@ -122,13 +147,14 @@ export function WebViewModal({ visible, url, onClose }: WebViewModalProps) {
           </View>
         </View>
 
+        {/* WEBVIEW */}
         <WebView
           ref={webViewRef}
           source={{ uri: url }}
           style={styles.webView}
           onLoadStart={() => setLoading(true)}
           onLoadEnd={() => setLoading(false)}
-          onNavigationStateChange={(navState) => {
+          onNavigationStateChange={navState => {
             setCanGoBack(navState.canGoBack);
             setCanGoForward(navState.canGoForward);
           }}
@@ -138,15 +164,20 @@ export function WebViewModal({ visible, url, onClose }: WebViewModalProps) {
           scalesPageToFit
         />
 
+        {/* LOADING */}
         {loading && (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={colors.primary} />
           </View>
         )}
 
+        {/* FOOTER */}
         <View style={styles.footer}>
           <TouchableOpacity
-            style={[styles.footerButton, !canGoBack && styles.footerButtonDisabled]}
+            style={[
+              styles.footerButton,
+              !canGoBack && styles.footerButtonDisabled,
+            ]}
             onPress={handleGoBack}
             disabled={!canGoBack}
           >
@@ -154,18 +185,39 @@ export function WebViewModal({ visible, url, onClose }: WebViewModalProps) {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.footerButton, !canGoForward && styles.footerButtonDisabled]}
+            style={[
+              styles.footerButton,
+              !canGoForward && styles.footerButtonDisabled,
+            ]}
             onPress={handleGoForward}
             disabled={!canGoForward}
           >
             <Ionicons name="chevron-forward" size={24} color={colors.text} />
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.footerButton} onPress={handleRefresh}>
+          <TouchableOpacity
+            style={styles.footerButton}
+            onPress={handleRefresh}
+          >
             <Ionicons name="refresh" size={24} color={colors.text} />
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.footerButton} onPress={onClose}>
+          {/* 🆕 OPEN IN SAFARI / ANDROID */}
+          <TouchableOpacity
+            style={styles.footerButton}
+            onPress={openExternal}
+          >
+            <Ionicons
+              name={Platform.OS === 'ios' ? 'logo-apple' : 'logo-android'}
+              size={24}
+              color={colors.text}
+            />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.footerButton}
+            onPress={onClose}
+          >
             <Ionicons name="home" size={24} color={colors.text} />
           </TouchableOpacity>
         </View>
