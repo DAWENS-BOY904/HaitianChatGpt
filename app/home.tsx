@@ -40,7 +40,8 @@ export default function HomeScreen() {
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [lastShake, setLastShake] = useState(0);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
-  const [thinkingMode, setThinkingMode] = useState<'thinking' | 'creating_image' | 'creating_file' | 'editing_image'>('thinking');
+  const [thinkingMode, setThinkingMode] = useState<'thinking' | 'creating_image' | 'analyzing' | 'editing_image'>('thinking');
+  const [showCompletionStatus, setShowCompletionStatus] = useState(false);
   const flatListRef = useRef<FlatList>(null);
   const supabase = getSupabaseClient();
 
@@ -157,6 +158,12 @@ export default function HomeScreen() {
 
       // Use ConversationContext's sendMessage which handles everything
       await sendMessage(text || '[Image]', imageUrl, currentAIModel);
+      
+      // Show completion status briefly after AI response
+      setShowCompletionStatus(true);
+      setTimeout(() => {
+        setShowCompletionStatus(false);
+      }, 2000);
       
       // Increment guest message count
       await incrementMessageCount();
@@ -455,7 +462,13 @@ export default function HomeScreen() {
           renderItem={renderMessage}
           keyExtractor={item => item.id}
           contentContainerStyle={{ paddingVertical: Spacing.md }}
-          ListFooterComponent={generating ? <ThinkingIndicator mode={thinkingMode} model={modelName} /> : null}
+          ListFooterComponent={generating ? (
+            <ThinkingIndicator 
+              mode={thinkingMode} 
+              model={modelName}
+              showCompletion={showCompletionStatus}
+            />
+          ) : null}
           onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
         />
       )}

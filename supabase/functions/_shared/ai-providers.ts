@@ -405,32 +405,42 @@ export const AI_MODELS = {
 };
 
 /**
- * Detect content type and select appropriate model
+ * Detect content type and select appropriate thinking mode
  */
 export function detectContentType(userMessage: string): {
   type: 'image' | 'file' | 'code' | 'text';
+  thinkingMode: 'thinking' | 'creating_image' | 'analyzing' | 'editing_image';
   suggestedModel: string;
 } {
   const lowerMsg = userMessage.toLowerCase();
   
-  // Image generation keywords
+  // Image generation keywords (PRIORITY 1)
   const imageKeywords = [
-    'create a logo', 'create logo', 'generate logo', 'make a logo',
-    'create an image', 'create image', 'generate image', 'make an image',
-    'design a logo', 'design logo', 'draw', 'paint', 'illustrate',
-    'create a picture', 'generate a picture', 'design an icon'
+    'create a logo', 'create logo', 'generate logo', 'make a logo', 'logo for',
+    'create an image', 'create image', 'generate image', 'make an image', 'image for',
+    'design a logo', 'design logo', 'design an image', 'design image',
+    'draw', 'paint', 'illustrate', 'sketch',
+    'create a picture', 'generate a picture', 'design an icon', 'icon for',
+    'kreye yon logo', 'kreye logo', 'fe yon logo', 'fe logo'
   ];
   
-  // File creation keywords
+  // Image editing keywords (PRIORITY 1.5)
+  const editKeywords = [
+    'edit image', 'edit the image', 'modify image', 'change image',
+    'update image', 'improve image', 'enhance image', 'fix image'
+  ];
+  
+  // File creation keywords (PRIORITY 2)
   const fileKeywords = [
-    'create a file', 'generate file', 'create file',
-    'send file', 'make a file', 'gen file',
-    'csv file', 'html file', 'json file', 'txt file',
+    'send file', 'send a file', 'send yon file',
+    'create a file', 'generate file', 'create file', 'make a file', 'gen file',
+    'csv file', 'html file', 'json file', 'txt file', 'text file',
     'create .txt', 'create .csv', 'create .html', 'create .json',
-    'send yon file', 'download file', 'ki gen', 'ligne', 'ladan'
+    'download file', 'file ki gen', 'file with', 'ligne', 'ladan',
+    'ki gen', 'lines', 'rows of'
   ];
   
-  // Code keywords
+  // Code keywords (PRIORITY 3)
   const codeKeywords = [
     'write code', 'create code', 'generate code', 'code for',
     'function', 'class', 'api', 'javascript', 'python', 'html',
@@ -438,28 +448,56 @@ export function detectContentType(userMessage: string): {
     'koma ka add', 'fason senp', 'html shop'
   ];
   
-  // Check for image requests
+  // Check for image editing first
+  for (const keyword of editKeywords) {
+    if (lowerMsg.includes(keyword)) {
+      return { 
+        type: 'image', 
+        thinkingMode: 'editing_image',
+        suggestedModel: 'logo-designer' 
+      };
+    }
+  }
+  
+  // Check for image generation
   for (const keyword of imageKeywords) {
     if (lowerMsg.includes(keyword)) {
-      return { type: 'image', suggestedModel: 'logo-designer' };
+      return { 
+        type: 'image', 
+        thinkingMode: 'creating_image',
+        suggestedModel: 'logo-designer' 
+      };
     }
   }
   
-  // Check for file requests
+  // Check for file requests (must show "Analyzing")
   for (const keyword of fileKeywords) {
     if (lowerMsg.includes(keyword)) {
-      return { type: 'file', suggestedModel: 'file-creator' };
+      return { 
+        type: 'file', 
+        thinkingMode: 'analyzing',
+        suggestedModel: 'file-creator' 
+      };
     }
   }
   
-  // Check for code requests
+  // Check for code requests (show "Thinking")
   for (const keyword of codeKeywords) {
     if (lowerMsg.includes(keyword)) {
-      return { type: 'code', suggestedModel: 'code-generator' };
+      return { 
+        type: 'code', 
+        thinkingMode: 'thinking',
+        suggestedModel: 'code-generator' 
+      };
     }
   }
   
-  return { type: 'text', suggestedModel: 'general-assistant' };
+  // Default to text (show "Thinking")
+  return { 
+    type: 'text', 
+    thinkingMode: 'thinking',
+    suggestedModel: 'general-assistant' 
+  };
 }
 
 /**

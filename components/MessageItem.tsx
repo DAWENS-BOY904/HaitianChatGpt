@@ -9,6 +9,9 @@ import { Spacing, Typography, BorderRadius } from '../constants/theme';
 import { CodeBlock } from './CodeBlock';
 import { LinkSafetyModal } from './LinkSafetyModal';
 import { WebViewModal } from './WebViewModal';
+import { ImageViewerModal } from './ImageViewerModal';
+import { ImageEditModal } from './ImageEditModal';
+import { FileDownloadModal } from './FileDownloadModal';
 import { getSupabaseClient } from '@/template';
 
 interface MessageItemProps {
@@ -36,6 +39,11 @@ export function MessageItem({ message, onCancel, onEdit, isGenerating }: Message
   const [linkModalVisible, setLinkModalVisible] = useState(false);
   const [selectedLink, setSelectedLink] = useState('');
   const [webViewVisible, setWebViewVisible] = useState(false);
+  const [imageViewerVisible, setImageViewerVisible] = useState(false);
+  const [imageEditVisible, setImageEditVisible] = useState(false);
+  const [selectedImageUrl, setSelectedImageUrl] = useState('');
+  const [fileModalVisible, setFileModalVisible] = useState(false);
+  const [fileData, setFileData] = useState({ name: '', content: '', type: '' });
   const supabase = getSupabaseClient();
 
   const handleLongPress = (event: any) => {
@@ -95,6 +103,66 @@ export function MessageItem({ message, onCancel, onEdit, isGenerating }: Message
 
   const handleOpenLink = (url: string) => {
     setWebViewVisible(true);
+  };
+
+  const handleImagePress = (imageUrl: string) => {
+    setSelectedImageUrl(imageUrl);
+    setImageViewerVisible(true);
+  };
+
+  const handleImageEdit = () => {
+    setImageViewerVisible(false);
+    setImageEditVisible(true);
+  };
+
+  const handleApplyImageEdits = async (editPrompt: string) => {
+    try {
+      // Call edge function to edit image
+      const { data, error } = await supabase.functions.invoke('chat', {
+        body: {
+          editImageUrl: selectedImageUrl,
+          editPrompt,
+          messages: [],
+          conversationId: 'temp',
+        },
+      });
+
+      if (error) throw error;
+
+      // Update the image with edited version
+      if (data.imageUrl) {
+        setSelectedImageUrl(data.imageUrl);
+        showAlert('Success', 'Image edited successfully!');
+        setImageEditVisible(false);
+        setImageViewerVisible(true);
+      }
+    } catch (error) {
+      console.error('Edit error:', error);
+      throw error;
+    }
+  };
+
+  const handleFileDownload = (fileName: string, fileContent: string, fileType: string) => {
+    setFileData({ name: fileName, content: fileContent, type: fileType });
+    setFileModalVisible(true);
+  };
+
+  // Detect "Download file" links
+  const detectFileDownload = (content: string) => {
+    const downloadRegex = /Download file la|Download file|👉.*?Download.*?↗/i;
+    return downloadRegex.test(content);
+  };
+
+  // Extract file info from message
+  const extractFileInfo = (content: string): { fileName: string; type: string } | null => {
+    const fileMatch = content.match(/File created: ([\w_]+\.(txt|csv|html|json|js))/i);
+    if (fileMatch) {
+      return {
+        fileName: fileMatch[1],
+        type: fileMatch[2],
+      };
+    }
+    return null;
   };
 
   // Detect URLs in text
@@ -323,7 +391,9 @@ export function MessageItem({ message, onCancel, onEdit, isGenerating }: Message
         ]}
       >
         {message.image_url && (
-          <Image source={{ uri: message.image_url }} style={styles.messageImage} />
+          <TouchableOpacity onPress={() => handleImagePress(message.image_url!)}>
+            <Image source={{ uri: message.image_url }} style={styles.messageImage} />
+          </TouchableOpacity>
         )}
         
         {contentParts.map((part, index) => {
@@ -393,6 +463,27 @@ export function MessageItem({ message, onCancel, onEdit, isGenerating }: Message
 
         {message.role === 'assistant' && !isGenerating && (
           <View style={styles.actionsContainer}>
+            {detectFileDownload(message.content) && (
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={() => {
+                  const fileInfo = extractFileInfo(message.content);
+                  if (fileInfo) {
+                    // In real implementation, we'd have the file content stored
+                    // For now, show a placeholder
+                    handleFileDownload(
+                      fileInfo.fileName,
+                      'File content would be here',
+                      fileInfo.type
+                    );
+                  }
+                }}
+              >
+                <Ionicons name="download-outline" size={14} color={colors.text} />
+                <Text style={styles.actionButtonText}>Download</Text>
+              </TouchableOpacity>
+            )}
+            
             <TouchableOpacity
               style={[
                 styles.actionButton,
@@ -472,6 +563,32 @@ export function MessageItem({ message, onCancel, onEdit, isGenerating }: Message
         visible={webViewVisible}
         url={selectedLink}
         onClose={() => setWebViewVisible(false)}
+      />
+
+      {/* Image Viewer Modal */}
+      <ImageViewerModal
+        visible={imageViewerVisible}
+        imageUrl={selectedImageUrl}
+        onClose={() => setImageViewerVisible(false)}
+        onEdit={handleImageEdit}
+        title="Image created"
+      />
+
+      {/* Image Edit Modal */}
+      <ImageEditModal
+        visible={imageEditVisible}
+        imageUrl={selectedImageUrl}
+        onClose={() => setImageEditVisible(false)}
+        onApplyEdits={handleApplyImageEdits}
+      />
+
+      {/* File Download Modal */}
+      <FileDownloadModal
+        visible={fileModalVisible}
+        fileName={fileData.name}
+        fileContent={fileData.content}
+        fileType={fileData.type}
+        onClose={() => setFileModalVisible(false)}
       />
     </>
   );

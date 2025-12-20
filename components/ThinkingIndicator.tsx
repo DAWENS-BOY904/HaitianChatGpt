@@ -4,11 +4,12 @@ import { useTheme } from '../hooks/useTheme';
 import { Spacing, Typography, BorderRadius } from '../constants/theme';
 
 interface ThinkingIndicatorProps {
-  mode?: 'thinking' | 'creating_image' | 'creating_file' | 'editing_image' | 'analyzing';
+  mode?: 'thinking' | 'creating_image' | 'analyzing' | 'editing_image' | 'image_created' | 'file_ready' | 'processing' | 'generating' | 'optimizing' | 'finalizing';
   model?: string;
+  showCompletion?: boolean;
 }
 
-export function ThinkingIndicator({ mode = 'thinking', model = 'AI' }: ThinkingIndicatorProps) {
+export function ThinkingIndicator({ mode = 'thinking', model = 'AI', showCompletion = false }: ThinkingIndicatorProps) {
   const { colors } = useTheme();
   const glowAnim = useRef(new Animated.Value(0)).current;
   const [dot1] = React.useState(new Animated.Value(0));
@@ -61,15 +62,40 @@ export function ThinkingIndicator({ mode = 'thinking', model = 'AI' }: ThinkingI
   }, []);
 
   const getModeText = () => {
+    if (showCompletion) {
+      switch (mode) {
+        case 'creating_image':
+        case 'image_created':
+          return 'Image created';
+        case 'analyzing':
+        case 'file_ready':
+          return 'File ready';
+        case 'editing_image':
+          return 'Image edited';
+        default:
+          return 'Done';
+      }
+    }
+    
     switch (mode) {
       case 'creating_image':
         return 'Creating image';
-      case 'creating_file':
-        return 'Creating file';
-      case 'editing_image':
-        return 'Editing image';
       case 'analyzing':
         return 'Analyzing';
+      case 'editing_image':
+        return 'Editing image';
+      case 'image_created':
+        return 'Image created';
+      case 'file_ready':
+        return 'File ready';
+      case 'processing':
+        return 'Processing';
+      case 'generating':
+        return 'Generating';
+      case 'optimizing':
+        return 'Optimizing';
+      case 'finalizing':
+        return 'Finalizing';
       case 'thinking':
       default:
         return 'Thinking';
@@ -100,13 +126,13 @@ export function ThinkingIndicator({ mode = 'thinking', model = 'AI' }: ThinkingI
     },
     glow: {
       position: 'absolute',
-      top: -4,
-      left: -4,
-      right: -4,
-      bottom: -4,
-      backgroundColor: colors.primary,
-      borderRadius: BorderRadius.md,
-      opacity: 0.2,
+      top: -6,
+      left: -6,
+      right: -6,
+      bottom: -6,
+      backgroundColor: showCompletion ? '#34C759' : colors.primary,
+      borderRadius: BorderRadius.lg,
+      opacity: 0.15,
     },
     text: {
       ...Typography.body,
@@ -121,10 +147,10 @@ export function ThinkingIndicator({ mode = 'thinking', model = 'AI' }: ThinkingI
       width: 8,
       height: 8,
       borderRadius: BorderRadius.full,
-      backgroundColor: colors.primary,
+      backgroundColor: showCompletion ? '#34C759' : colors.primary,
     },
     modelBadge: {
-      backgroundColor: `${colors.primary}20`,
+      backgroundColor: showCompletion ? '#34C75920' : `${colors.primary}20`,
       paddingHorizontal: Spacing.xs,
       paddingVertical: 2,
       borderRadius: BorderRadius.sm,
@@ -132,7 +158,7 @@ export function ThinkingIndicator({ mode = 'thinking', model = 'AI' }: ThinkingI
     },
     modelText: {
       ...Typography.small,
-      color: colors.primary,
+      color: showCompletion ? '#34C759' : colors.primary,
       fontSize: 10,
       fontWeight: '600',
     },

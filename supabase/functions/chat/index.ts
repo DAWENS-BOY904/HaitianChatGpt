@@ -737,6 +737,7 @@ Adapt your tone to match the user's communication style.
     const lastUserMessage = messages[messages.length - 1]?.content || '';
     const detectionResult = detectContentType(lastUserMessage);
     console.log(`🔍 Detected content type: ${detectionResult.type}`);
+    console.log(`💭 Detected thinking mode: ${detectionResult.thinkingMode}`);
     console.log(`💡 Suggested model (for reference): ${detectionResult.suggestedModel}`);
     console.log(`⚠️  BUT we will use user's selected model: ${selectedModel}`);
 
@@ -744,19 +745,9 @@ Adapt your tone to match the user's communication style.
     let imageUrl: string | undefined;
     let fileContent: string | undefined;
     let fileName: string | undefined;
-    let thinkingMode = 'thinking';
     
-    // Set thinking mode based on content type
-    if (detectionResult.type === 'image') {
-      thinkingMode = 'creating_image';
-    } else if (detectionResult.type === 'file') {
-      thinkingMode = 'creating_file';
-    } else if (detectionResult.type === 'code') {
-      thinkingMode = 'thinking';
-    } else {
-      thinkingMode = 'thinking';
-    }
-    
+    // Use the detected thinking mode directly
+    let thinkingMode = detectionResult.thinkingMode;
     console.log(`💭 Thinking mode set to: ${thinkingMode}`);
 
     // Handle image editing
@@ -771,7 +762,7 @@ Adapt your tone to match the user's communication style.
       if (imgError) {
         console.error('❌ Image edit failed:', imgError);
         return new Response(
-          JSON.stringify({ error: imgError }),
+          JSON.stringify({ error: imgError, thinkingMode }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
@@ -780,9 +771,8 @@ Adapt your tone to match the user's communication style.
       aiResponse.content = 'Image edited successfully! ✨';
       console.log('✅ Image edited successfully');
     }
-    // Handle image generation
+    // Handle image generation (thinking mode already set to 'creating_image')
     else if (detectionResult.type === 'image') {
-      thinkingMode = 'creating_image';
       console.log('🎨 Creating image...');
       
       const { imageUrl: generatedImageUrl, error: imgError } = await generateImage(lastUserMessage);
@@ -794,7 +784,7 @@ Adapt your tone to match the user's communication style.
         aiResponse = await callAI(selectedModel, aiMessages);
         if (aiResponse.error) {
           return new Response(
-            JSON.stringify({ error: `Image generation failed: ${imgError}. Text response also failed: ${aiResponse.error}` }),
+            JSON.stringify({ error: `Image generation failed: ${imgError}. Text response also failed: ${aiResponse.error}`, thinkingMode }),
             { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
@@ -804,10 +794,9 @@ Adapt your tone to match the user's communication style.
         console.log('✅ Image created successfully');
       }
     }
-    // Handle file generation
+    // Handle file generation (thinking mode already set to 'analyzing')
     else if (detectionResult.type === 'file') {
-      thinkingMode = 'creating_file';
-      console.log('📄 Creating file...');
+      console.log('📄 Analyzing and creating file...');
       
       // Ask AI to generate the file content
       const fileGenMessages = [
@@ -830,7 +819,7 @@ Adapt your tone to match the user's communication style.
         aiResponse = await callAI(selectedModel, aiMessages);
         if (aiResponse.error) {
           return new Response(
-            JSON.stringify({ error: `File generation failed: ${fileResponse.error}` }),
+            JSON.stringify({ error: `File generation failed: ${fileResponse.error}`, thinkingMode }),
             { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
@@ -855,9 +844,8 @@ Adapt your tone to match the user's communication style.
         console.log('✅ File created successfully:', fileName);
       }
     }
-    // Handle regular text/code conversation
+    // Handle regular text/code conversation (thinking mode already set to 'thinking')
     else {
-      thinkingMode = 'thinking';
       console.log('💬 Processing text conversation...');
       
       aiResponse = await callAI(selectedModel, aiMessages);
@@ -865,7 +853,7 @@ Adapt your tone to match the user's communication style.
       if (aiResponse.error) {
         console.error('❌ AI response failed:', aiResponse.error);
         return new Response(
-          JSON.stringify({ error: aiResponse.error }),
+          JSON.stringify({ error: aiResponse.error, thinkingMode }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
