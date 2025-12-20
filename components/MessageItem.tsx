@@ -179,6 +179,7 @@ export function MessageItem({ message, onCancel, onEdit, isGenerating }: Message
     container: {
       padding: Spacing.md,
       marginVertical: Spacing.xs,
+      overflow: 'hidden',
     },
     userMessage: {
       alignSelf: 'flex-end',
@@ -193,6 +194,7 @@ export function MessageItem({ message, onCancel, onEdit, isGenerating }: Message
       borderRadius: BorderRadius.md,
       maxWidth: '90%',
       marginLeft: Spacing.md,
+      paddingBottom: Spacing.md,
     },
     messageImage: {
       width: '100%',
@@ -327,11 +329,12 @@ export function MessageItem({ message, onCancel, onEdit, isGenerating }: Message
         {contentParts.map((part, index) => {
           if (part.type === 'code') {
             return (
-              <CodeBlock
-                key={index}
-                code={part.content}
-                language={part.language}
-              />
+              <View key={index} style={{ marginVertical: 0 }}>
+                <CodeBlock
+                  code={part.content}
+                  language={part.language}
+                />
+              </View>
             );
           }
           

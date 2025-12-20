@@ -93,6 +93,7 @@ export const CodeBlock = memo(function CodeBlock({
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.codeContent}
+        style={styles.scrollContainer}
       >
         <Text style={styles.codeText}>
           {tokens.map((t, i) => (
@@ -114,8 +115,13 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.md,
     borderWidth: 1,
     borderColor: '#E1E4E8',
-    marginVertical: 6,
+    marginVertical: 4,
     overflow: 'hidden',
+  },
+
+  scrollContainer: {
+    flexGrow: 0,
+    flexShrink: 1,
   },
 
   header: {
@@ -152,17 +158,18 @@ const styles = StyleSheet.create({
 
   codeContent: {
     paddingHorizontal: 12,
-    paddingVertical: 4, // ✅ NO EXTRA SPACE
-    alignItems: 'flex-start',
+    paddingTop: 8,
+    paddingBottom: 8,
+    flexGrow: 0,
   },
 
   codeText: {
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
     fontSize: 13,
-    lineHeight: 17, // ✅ iOS-tight
+    lineHeight: 18,
     padding: 0,
     margin: 0,
-    includeFontPadding: false, // ANDROID FIX
+    includeFontPadding: false,
     textAlignVertical: 'top',
   },
 });
