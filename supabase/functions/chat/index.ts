@@ -1,6 +1,6 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
-import { callAI, detectContentType, generateImage } from '../_shared/ai-providers.ts';
+import { callAI, detectContentType, generateImage, AI_MODELS } from '../_shared/ai-providers.ts';
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -725,28 +725,43 @@ Adapt your tone to match the user's communication style.
       ...messages,
     ];
 
-    console.log(`Calling AI model: ${selectedModel}`);
+    console.log(`🚀 Calling AI model: ${selectedModel}`);
 
     // Detect content type from user message
-    const userMessage = messages[messages.length - 1]?.content || '';
-    const contentType = detectContentType(userMessage);
-    console.log(`Detected content type: ${contentType}`);
+    const lastUserMessage = messages[messages.length - 1]?.content || '';
+    const detectionResult = detectContentType(lastUserMessage);
+    console.log(`🔍 Detected content type: ${detectionResult.type}, suggested model: ${detectionResult.suggestedModel}`);
 
     let aiResponse: any = { content: '', model: selectedModel };
     let imageUrl: string | undefined;
     let fileContent: string | undefined;
     let fileName: string | undefined;
     let thinkingMode = 'thinking';
+    
+    // Set thinking mode based on content type
+    if (detectionResult.type === 'image') {
+      thinkingMode = 'creating_image';
+    } else if (detectionResult.type === 'file') {
+      thinkingMode = 'creating_file';
+    } else if (detectionResult.type === 'code') {
+      thinkingMode = 'thinking';
+    } else {
+      thinkingMode = 'thinking';
+    }
+    
+    console.log(`💭 Thinking mode set to: ${thinkingMode}`);
 
     // Handle image editing
     if (editImageUrl && editPrompt) {
       thinkingMode = 'editing_image';
-      // Generate edited image
+      console.log('🎨 Editing image...');
+      
       const { imageUrl: newImageUrl, error: imgError } = await generateImage(
         `Edit this image: ${editPrompt}. Original image: ${editImageUrl}`
       );
       
       if (imgError) {
+        console.error('❌ Image edit failed:', imgError);
         return new Response(
           JSON.stringify({ error: imgError }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -754,75 +769,106 @@ Adapt your tone to match the user's communication style.
       }
       
       imageUrl = newImageUrl;
-      aiResponse.content = 'Image edited successfully!';
+      aiResponse.content = 'Image edited successfully! ✨';
+      console.log('✅ Image edited successfully');
     }
     // Handle image generation
-    else if (contentType === 'image') {
+    else if (detectionResult.type === 'image') {
       thinkingMode = 'creating_image';
-      const { imageUrl: generatedImageUrl, error: imgError } = await generateImage(userMessage);
+      console.log('🎨 Creating image...');
+      
+      const { imageUrl: generatedImageUrl, error: imgError } = await generateImage(lastUserMessage);
       
       if (imgError) {
-        return new Response(
-          JSON.stringify({ error: imgError }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        console.error('❌ Image generation failed:', imgError);
+        // Fallback to text response if image fails
+        thinkingMode = 'thinking';
+        aiResponse = await callAI(selectedModel, aiMessages);
+        if (aiResponse.error) {
+          return new Response(
+            JSON.stringify({ error: `Image generation failed: ${imgError}. Text response also failed: ${aiResponse.error}` }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      } else {
+        imageUrl = generatedImageUrl;
+        aiResponse.content = 'Image created ✨';
+        console.log('✅ Image created successfully');
       }
-      
-      imageUrl = generatedImageUrl;
-      aiResponse.content = 'Image created';
     }
     // Handle file generation
-    else if (contentType === 'file') {
+    else if (detectionResult.type === 'file') {
       thinkingMode = 'creating_file';
+      console.log('📄 Creating file...');
       
       // Ask AI to generate the file content
       const fileGenMessages = [
         {
           role: 'system' as const,
-          content: 'You are a file generation assistant. Generate the exact file content requested by the user. Only output the file content, nothing else.'
+          content: 'You are a file generation assistant. Generate the exact file content requested by the user. Only output the file content, nothing else. Be precise and complete.'
         },
         {
           role: 'user' as const,
-          content: userMessage
+          content: lastUserMessage
         }
       ];
       
       const fileResponse = await callAI(selectedModel, fileGenMessages);
       
       if (fileResponse.error) {
-        return new Response(
-          JSON.stringify({ error: fileResponse.error }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-      
-      fileContent = fileResponse.content;
-      
-      // Detect file type and name
-      const lowerMsg = userMessage.toLowerCase();
-      if (lowerMsg.includes('csv')) {
-        fileName = 'generated_file.csv';
-      } else if (lowerMsg.includes('html')) {
-        fileName = 'generated_file.html';
-      } else if (lowerMsg.includes('json')) {
-        fileName = 'generated_file.json';
+        console.error('❌ File generation failed:', fileResponse.error);
+        // Fallback to text response
+        thinkingMode = 'thinking';
+        aiResponse = await callAI(selectedModel, aiMessages);
+        if (aiResponse.error) {
+          return new Response(
+            JSON.stringify({ error: `File generation failed: ${fileResponse.error}` }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
       } else {
-        fileName = 'generated_file.txt';
+        fileContent = fileResponse.content;
+        
+        // Detect file type and name
+        const lowerMsg = lastUserMessage.toLowerCase();
+        if (lowerMsg.includes('csv')) {
+          fileName = 'generated_file.csv';
+        } else if (lowerMsg.includes('html')) {
+          fileName = 'generated_file.html';
+        } else if (lowerMsg.includes('json')) {
+          fileName = 'generated_file.json';
+        } else if (lowerMsg.includes('js') || lowerMsg.includes('javascript')) {
+          fileName = 'generated_file.js';
+        } else {
+          fileName = 'generated_file.txt';
+        }
+        
+        aiResponse.content = `File created: ${fileName} 📄`;
+        console.log('✅ File created successfully:', fileName);
       }
-      
-      aiResponse.content = `File created: ${fileName}`;
     }
-    // Handle regular text conversation
+    // Handle regular text/code conversation
     else {
       thinkingMode = 'thinking';
+      console.log('💬 Processing text conversation...');
+      
       aiResponse = await callAI(selectedModel, aiMessages);
 
       if (aiResponse.error) {
+        console.error('❌ AI response failed:', aiResponse.error);
         return new Response(
           JSON.stringify({ error: aiResponse.error }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
+      
+      console.log('✅ AI response generated successfully');
+    }
+    
+    // CRITICAL: Always ensure we have a response
+    if (!aiResponse.content && !imageUrl && !fileContent) {
+      console.error('❌ No response content generated!');
+      aiResponse.content = 'I apologize, but I could not generate a proper response. Please try again.';
     }
 
     // Save messages to database
@@ -908,16 +954,18 @@ Adapt your tone to match the user's communication style.
       }
     }
 
+    console.log('📤 Sending response with thinking mode:', thinkingMode);
+    
     return new Response(
       JSON.stringify({ 
-        message: aiResponse.content, 
+        message: aiResponse.content || 'Response generated', 
         model: selectedModel,
-        transcript: transcript,
-        audioUrl: audioUrl,
+        transcript: transcript || '',
+        audioUrl: audioUrl || '',
         thinkingMode: thinkingMode,
-        imageUrl: imageUrl,
-        fileContent: fileContent,
-        fileName: fileName,
+        imageUrl: imageUrl || null,
+        fileContent: fileContent || null,
+        fileName: fileName || null,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

@@ -70,6 +70,7 @@ export function ThinkingIndicator({ mode = 'thinking', model = 'AI' }: ThinkingI
         return 'Editing image';
       case 'analyzing':
         return 'Analyzing';
+      case 'thinking':
       default:
         return 'Thinking';
     }

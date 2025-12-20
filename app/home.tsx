@@ -40,6 +40,7 @@ export default function HomeScreen() {
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [lastShake, setLastShake] = useState(0);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [thinkingMode, setThinkingMode] = useState<'thinking' | 'creating_image' | 'creating_file' | 'editing_image'>('thinking');
   const flatListRef = useRef<FlatList>(null);
   const supabase = getSupabaseClient();
 
@@ -99,6 +100,9 @@ export default function HomeScreen() {
     setInputText('');
     setSelectedMedia([]);
     setEditingMessageId(null);
+    
+    // Set default thinking mode
+    setThinkingMode('thinking');
 
     try {
       // If editing an existing message
@@ -131,7 +135,59 @@ export default function HomeScreen() {
           }
         }
 
-        await sendMessage(text || '[Image]', imageUrl, currentAIModel);
+        // Call AI and get response with thinking mode
+        const { data: aiData, error: aiError } = await supabase.functions.invoke('chat', {
+          body: {
+            messages: [
+              ...messages.map(m => ({
+                role: m.role,
+                content: m.content,
+                image_url: m.image_url
+              })),
+              {
+                role: 'user',
+                content: text || '[Image]',
+                image_url: imageUrl
+              }
+            ],
+            conversationId: currentConversation?.id,
+            aiModel: currentAIModel,
+          },
+        });
+        
+        if (aiError) {
+          console.error('AI error:', aiError);
+          throw new Error('Failed to get AI response');
+        }
+        
+        // Update thinking mode from response
+        if (aiData?.thinkingMode) {
+          setThinkingMode(aiData.thinkingMode);
+        }
+        
+        // Save user message
+        await supabase.from('messages').insert({
+          conversation_id: currentConversation?.id,
+          role: 'user',
+          content: text || '[Image]',
+          image_url: imageUrl,
+        });
+        
+        // Save AI response
+        await supabase.from('messages').insert({
+          conversation_id: currentConversation?.id,
+          role: 'assistant',
+          content: aiData.message || 'Response generated',
+          ai_generated_image: aiData.imageUrl || null,
+          file_content: aiData.fileContent || null,
+          file_name: aiData.fileName || null,
+        });
+        
+        // Update conversation
+        await supabase.from('conversations').update({
+          updated_at: new Date().toISOString()
+        }).eq('id', currentConversation?.id);
+        
         await incrementMessageCount();
       }
     } catch (error) {
@@ -426,7 +482,7 @@ export default function HomeScreen() {
           renderItem={renderMessage}
           keyExtractor={item => item.id}
           contentContainerStyle={{ paddingVertical: Spacing.md }}
-          ListFooterComponent={generating ? <ThinkingIndicator model={modelName} /> : null}
+          ListFooterComponent={generating ? <ThinkingIndicator mode={thinkingMode} model={modelName} /> : null}
           onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
         />
       )}

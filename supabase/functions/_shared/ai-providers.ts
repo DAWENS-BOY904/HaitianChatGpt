@@ -316,9 +316,101 @@ async function callOnSpaceAI(messages: AIMessage[], modelHint: string): Promise<
 }
 
 /**
- * Detect content type from user message
+ * Available AI Models with specializations
  */
-export function detectContentType(userMessage: string): 'image' | 'file' | 'text' {
+export const AI_MODELS = {
+  // Image Generation
+  'image-generator': {
+    name: 'Image Generator',
+    model: 'google/gemini-2.5-flash-image-preview',
+    specialization: 'image',
+    description: 'Creates high-quality logos, images, and visual designs'
+  },
+  'logo-designer': {
+    name: 'Logo Designer',
+    model: 'google/gemini-2.5-flash-image-preview',
+    specialization: 'image',
+    description: 'Specialized in professional logo design'
+  },
+  
+  // File Generation
+  'file-creator': {
+    name: 'File Creator',
+    model: 'google/gemini-3-flash-preview',
+    specialization: 'file',
+    description: 'Generates files in any format (HTML, CSV, JSON, TXT, etc.)'
+  },
+  
+  // Code & Development
+  'code-generator': {
+    name: 'Code Generator',
+    model: 'google/gemini-3-flash-preview',
+    specialization: 'code',
+    description: 'Expert in code generation and programming'
+  },
+  'code-debugger': {
+    name: 'Code Debugger',
+    model: 'google/gemini-3-flash-preview',
+    specialization: 'debug',
+    description: 'Finds and fixes bugs in code'
+  },
+  'ui-designer': {
+    name: 'UI/UX Designer',
+    model: 'google/gemini-3-flash-preview',
+    specialization: 'ui',
+    description: 'Creates beautiful UI/UX designs and components'
+  },
+  
+  // Data & API
+  'api-expert': {
+    name: 'API Expert',
+    model: 'google/gemini-3-flash-preview',
+    specialization: 'api',
+    description: 'API integration, REST, GraphQL, and data handling'
+  },
+  'data-analyst': {
+    name: 'Data Analyst',
+    model: 'google/gemini-3-flash-preview',
+    specialization: 'data',
+    description: 'Data analysis, CSV processing, and statistics'
+  },
+  
+  // Content & Writing
+  'content-writer': {
+    name: 'Content Writer',
+    model: 'google/gemini-3-flash-preview',
+    specialization: 'writing',
+    description: 'Creative writing, articles, and content creation'
+  },
+  'explainer': {
+    name: 'Explainer',
+    model: 'google/gemini-3-flash-preview',
+    specialization: 'explanation',
+    description: 'Explains complex topics in simple terms'
+  },
+  
+  // General
+  'general-assistant': {
+    name: 'General Assistant',
+    model: 'google/gemini-3-flash-preview',
+    specialization: 'general',
+    description: 'Versatile assistant for all tasks'
+  },
+  'editor': {
+    name: 'Text Editor',
+    model: 'google/gemini-3-flash-preview',
+    specialization: 'editing',
+    description: 'Edits, rewrites, and improves text'
+  },
+};
+
+/**
+ * Detect content type and select appropriate model
+ */
+export function detectContentType(userMessage: string): {
+  type: 'image' | 'file' | 'code' | 'text';
+  suggestedModel: string;
+} {
   const lowerMsg = userMessage.toLowerCase();
   
   // Image generation keywords
@@ -326,31 +418,48 @@ export function detectContentType(userMessage: string): 'image' | 'file' | 'text
     'create a logo', 'create logo', 'generate logo', 'make a logo',
     'create an image', 'create image', 'generate image', 'make an image',
     'design a logo', 'design logo', 'draw', 'paint', 'illustrate',
-    'create a picture', 'generate a picture'
+    'create a picture', 'generate a picture', 'design an icon'
   ];
   
   // File creation keywords
   const fileKeywords = [
     'create a file', 'generate file', 'create file',
-    'send file', 'make a file',
+    'send file', 'make a file', 'gen file',
     'csv file', 'html file', 'json file', 'txt file',
     'create .txt', 'create .csv', 'create .html', 'create .json',
-    'send yon file', 'gen file', 'download file'
+    'send yon file', 'download file', 'ki gen', 'ligne', 'ladan'
   ];
   
+  // Code keywords
+  const codeKeywords = [
+    'write code', 'create code', 'generate code', 'code for',
+    'function', 'class', 'api', 'javascript', 'python', 'html',
+    'css', 'react', 'component', 'fix bug', 'debug', 'error',
+    'koma ka add', 'fason senp', 'html shop'
+  ];
+  
+  // Check for image requests
   for (const keyword of imageKeywords) {
     if (lowerMsg.includes(keyword)) {
-      return 'image';
+      return { type: 'image', suggestedModel: 'logo-designer' };
     }
   }
   
+  // Check for file requests
   for (const keyword of fileKeywords) {
     if (lowerMsg.includes(keyword)) {
-      return 'file';
+      return { type: 'file', suggestedModel: 'file-creator' };
     }
   }
   
-  return 'text';
+  // Check for code requests
+  for (const keyword of codeKeywords) {
+    if (lowerMsg.includes(keyword)) {
+      return { type: 'code', suggestedModel: 'code-generator' };
+    }
+  }
+  
+  return { type: 'text', suggestedModel: 'general-assistant' };
 }
 
 /**
@@ -365,6 +474,8 @@ export async function generateImage(prompt: string): Promise<{imageUrl?: string;
   }
 
   try {
+    console.log('🎨 Generating image with prompt:', prompt);
+    
     const response = await fetch(`${baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
@@ -376,7 +487,7 @@ export async function generateImage(prompt: string): Promise<{imageUrl?: string;
         messages: [
           {
             role: 'system',
-            content: 'You are an expert logo and image designer. Create high-quality, professional, modern designs based on user requests.'
+            content: 'You are an expert logo and image designer. Create high-quality, professional, modern designs based on user requests. Always generate beautiful, creative, and polished visuals.'
           },
           {
             role: 'user',
@@ -392,7 +503,7 @@ export async function generateImage(prompt: string): Promise<{imageUrl?: string;
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('Image generation error:', errorText);
+      console.error('❌ Image generation error:', errorText);
       return { error: `Failed to generate image: ${errorText}` };
     }
 
@@ -400,12 +511,14 @@ export async function generateImage(prompt: string): Promise<{imageUrl?: string;
     const imageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
     
     if (!imageUrl) {
+      console.error('❌ No image URL in response');
       return { error: 'No image was generated' };
     }
 
+    console.log('✅ Image generated successfully');
     return { imageUrl };
   } catch (error) {
-    console.error('Image generation error:', error);
+    console.error('❌ Image generation error:', error);
     return { error: error.message };
   }
 }
