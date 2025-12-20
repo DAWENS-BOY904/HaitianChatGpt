@@ -24,7 +24,7 @@ export default function HomeScreen() {
   const { settings, updateSetting } = useSettings();
   const { user } = useAuth();
   const { canSendMessage, incrementMessageCount, remainingMessages } = useGuestLimits();
-  const { messages, currentConversation, sendMessage, updateMessage, updateMessageAndRegenerate, createConversation, loading, updateConversationTitle, deleteConversation } = useConversation();
+  const { conversations, messages, currentConversation, sendMessage, updateMessage, updateMessageAndRegenerate, createConversation, loading, updateConversationTitle, deleteConversation } = useConversation();
   const { showAlert } = useAlert();
   const router = useRouter();
   const insets = useSafeAreaInsets();
