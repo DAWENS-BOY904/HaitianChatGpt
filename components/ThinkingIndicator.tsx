@@ -21,14 +21,15 @@ interface ThinkingModel {
 }
 
 interface ThinkingIndicatorProps {
-  userMessage: string;
+  userMessage?: string;
   completed?: boolean;
 }
 
 /* ======================================================
    AUTO INTENT DETECTION
 ====================================================== */
-function detectIntent(message: string): IntentType {
+function detectIntent(message?: string): IntentType {
+  if (!message) return 'message';
   const msg = message.toLowerCase();
 
   if (msg.includes('edit') && (msg.includes('image') || msg.includes('photo'))) {
@@ -110,7 +111,7 @@ const THINKING_MAP: Record<IntentType, ThinkingModel[]> = {
    MAIN COMPONENT
 ====================================================== */
 export function ThinkingIndicator({
-  userMessage,
+  userMessage = '',
   completed = false,
 }: ThinkingIndicatorProps) {
   const { colors } = useTheme();

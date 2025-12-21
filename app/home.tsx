@@ -464,9 +464,8 @@ export default function HomeScreen() {
           contentContainerStyle={{ paddingVertical: Spacing.md }}
           ListFooterComponent={generating ? (
             <ThinkingIndicator 
-              mode={thinkingMode} 
-              model={modelName}
-              showCompletion={showCompletionStatus}
+              userMessage={messages.length > 0 ? messages[messages.length - 1].content : inputText}
+              completed={showCompletionStatus}
             />
           ) : null}
           onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
