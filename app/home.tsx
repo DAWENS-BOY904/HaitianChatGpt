@@ -70,7 +70,7 @@ export default function HomeScreen() {
       const now = Date.now();
       
       // Increased threshold to 3.0 and added 2-second cooldown to prevent accidental triggers
-      if (acceleration > 5.0 && now - lastShake > 1000) {
+      if (acceleration > 3.0 && now - lastShake > 1000) {
         setLastShake(now);
         router.push('/bugreport');
       }
