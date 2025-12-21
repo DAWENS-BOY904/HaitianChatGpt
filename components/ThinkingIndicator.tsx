@@ -15,7 +15,6 @@ type IntentType =
   | 'message';
 
 interface ThinkingModel {
-  id: string;
   model: string;
   text: string;
 }
@@ -32,22 +31,19 @@ function detectIntent(message?: string): IntentType {
   if (!message) return 'message';
   const msg = message.toLowerCase();
 
-  if (msg.includes('edit') && (msg.includes('image') || msg.includes('photo'))) {
+  if (msg.includes('edit') && (msg.includes('image') || msg.includes('photo')))
     return 'edit_image';
-  }
 
-  if (msg.includes('image') || msg.includes('photo') || msg.includes('img')) {
+  if (msg.includes('image') || msg.includes('photo') || msg.includes('img'))
     return 'image';
-  }
 
   if (
     msg.includes('file') ||
     msg.includes('document') ||
     msg.includes('pdf') ||
     msg.includes('upload')
-  ) {
+  )
     return 'file';
-  }
 
   if (
     msg.includes('search') ||
@@ -55,51 +51,54 @@ function detectIntent(message?: string): IntentType {
     msg.includes('example') ||
     msg.includes('internet') ||
     msg.includes('google')
-  ) {
+  )
     return 'web_search';
-  }
 
   return 'message';
 }
 
 /* ======================================================
-   THINKING MODELS
+   THINKING STEPS (5 MODELS EACH)
 ====================================================== */
 const THINKING_MAP: Record<IntentType, ThinkingModel[]> = {
-  image: [
-    { id: 'i1', model: 'Vision-A', text: 'Analyzing image concept' },
-    { id: 'i2', model: 'Vision-B', text: 'Designing visual layout' },
-    { id: 'i3', model: 'Vision-C', text: 'Generating image assets' },
-    { id: 'i4', model: 'Vision-D', text: 'Rendering image details' },
-    { id: 'i5', model: 'Vision-E', text: 'Finalizing image quality' },
-  ],
-  edit_image: [
-    { id: 'e1', model: 'Edit-A', text: 'Analyzing existing image' },
-    { id: 'e2', model: 'Edit-B', text: 'Detecting edit zones' },
-    { id: 'e3', model: 'Edit-C', text: 'Applying modifications' },
-    { id: 'e4', model: 'Edit-D', text: 'Optimizing edits' },
-    { id: 'e5', model: 'Edit-E', text: 'Rendering final image' },
-  ],
-  file: [
-    { id: 'f1', model: 'File-A', text: 'Reading file content' },
-    { id: 'f2', model: 'File-B', text: 'Analyzing file structure' },
-    { id: 'f3', model: 'File-C', text: 'Extracting key data' },
-    { id: 'f4', model: 'File-D', text: 'Validating information' },
-    { id: 'f5', model: 'File-E', text: 'Preparing final file' },
-  ],
-  web_search: [
-    { id: 'w1', model: 'Web-A', text: 'Searching the web' },
-    { id: 'w2', model: 'Web-B', text: 'Scanning online examples' },
-    { id: 'w3', model: 'Web-C', text: 'Filtering best results' },
-    { id: 'w4', model: 'Web-D', text: 'Summarizing findings' },
-    { id: 'w5', model: 'Web-E', text: 'Preparing web response' },
-  ],
   message: [
-    { id: 'm1', model: 'Chat-A', text: 'Understanding message intent' },
-    { id: 'm2', model: 'Chat-B', text: 'Thinking about response' },
-    { id: 'm3', model: 'Chat-C', text: 'Structuring reply' },
-    { id: 'm4', model: 'Chat-D', text: 'Optimizing clarity' },
-    { id: 'm5', model: 'Chat-E', text: 'Finalizing answer' },
+    { model: 'Chat-A', text: 'Understanding message intent' },
+    { model: 'Chat-B', text: 'Thinking about response' },
+    { model: 'Chat-C', text: 'Structuring reply' },
+    { model: 'Chat-D', text: 'Optimizing clarity' },
+    { model: 'Chat-E', text: 'Finalizing answer' },
+  ],
+
+  image: [
+    { model: 'Vision-A', text: 'Analyzing image concept' },
+    { model: 'Vision-B', text: 'Designing visual layout' },
+    { model: 'Vision-C', text: 'Generating image assets' },
+    { model: 'Vision-D', text: 'Rendering image details' },
+    { model: 'Vision-E', text: 'Finalizing image quality' },
+  ],
+
+  edit_image: [
+    { model: 'Edit-A', text: 'Analyzing existing image' },
+    { model: 'Edit-B', text: 'Detecting edit zones' },
+    { model: 'Edit-C', text: 'Applying modifications' },
+    { model: 'Edit-D', text: 'Optimizing edits' },
+    { model: 'Edit-E', text: 'Rendering final image' },
+  ],
+
+  file: [
+    { model: 'File-A', text: 'Reading file content' },
+    { model: 'File-B', text: 'Analyzing file structure' },
+    { model: 'File-C', text: 'Extracting key data' },
+    { model: 'File-D', text: 'Validating information' },
+    { model: 'File-E', text: 'Preparing final file' },
+  ],
+
+  web_search: [
+    { model: 'Web-A', text: 'Searching the web' },
+    { model: 'Web-B', text: 'Scanning online examples' },
+    { model: 'Web-C', text: 'Filtering best results' },
+    { model: 'Web-D', text: 'Summarizing findings' },
+    { model: 'Web-E', text: 'Preparing web response' },
   ],
 };
 
@@ -112,48 +111,41 @@ export function ThinkingIndicator({
 }: ThinkingIndicatorProps) {
   const { colors } = useTheme();
   const intent = detectIntent(userMessage);
-  const models = THINKING_MAP[intent];
+  const steps = THINKING_MAP[intent];
 
-  // State pou kenbe rows aktyèl yo
-  const [currentModels, setCurrentModels] = useState<ThinkingModel[]>(models);
+  const [stepIndex, setStepIndex] = useState(0);
 
-  // Lè mesaj chanje, replace row nan menm plas 1 pa 1
   useEffect(() => {
-    let i = 0;
+    setStepIndex(0);
+
     const interval = setInterval(() => {
-      if (i >= models.length) {
-        clearInterval(interval);
-        return;
-      }
-
-      setCurrentModels(prev => {
-        const newModels = [...prev];
-        newModels[i] = models[i]; // replace nan menm plas
-        return newModels;
+      setStepIndex(prev => {
+        if (prev >= steps.length - 1) {
+          clearInterval(interval);
+          return prev;
+        }
+        return prev + 1;
       });
-
-      i++;
-    }, 1000); // 1s ant chak update
+    }, 1000);
 
     return () => clearInterval(interval);
   }, [userMessage]);
 
+  const current = steps[stepIndex];
+
   return (
     <View style={styles.container}>
-      {currentModels.map(item => (
-        <ThinkingRow
-          key={item.id}
-          model={item.model}
-          text={completed ? 'Done' : item.text}
-          color={completed ? '#34C759' : colors.primary}
-        />
-      ))}
+      <ThinkingRow
+        model={current.model}
+        text={completed ? 'Done' : current.text}
+        color={completed ? '#34C759' : colors.primary}
+      />
     </View>
   );
 }
 
 /* ======================================================
-   SINGLE THINKING ROW
+   SINGLE ROW (EDIT MODE)
 ====================================================== */
 function ThinkingRow({
   model,
@@ -169,16 +161,8 @@ function ThinkingRow({
   useEffect(() => {
     Animated.loop(
       Animated.sequence([
-        Animated.timing(dot, {
-          toValue: 1,
-          duration: 400,
-          useNativeDriver: true,
-        }),
-        Animated.timing(dot, {
-          toValue: 0,
-          duration: 400,
-          useNativeDriver: true,
-        }),
+        Animated.timing(dot, { toValue: 1, duration: 400, useNativeDriver: true }),
+        Animated.timing(dot, { toValue: 0, duration: 400, useNativeDriver: true }),
       ])
     ).start();
   }, []);
@@ -218,7 +202,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#1c1c1e',
     padding: Spacing.md,
     borderRadius: BorderRadius.md,
-    marginBottom: Spacing.sm,
   },
   text: {
     ...Typography.body,
