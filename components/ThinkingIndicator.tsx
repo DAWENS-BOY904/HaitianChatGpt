@@ -1,5 +1,5 @@
 // ThinkingIndicator.tsx
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { View, Text, StyleSheet, Animated } from 'react-native';
 import { useTheme } from '../hooks/useTheme';
 import { Spacing, Typography, BorderRadius } from '../constants/theme';
@@ -63,7 +63,7 @@ function detectIntent(message?: string): IntentType {
 }
 
 /* ======================================================
-   5 THINKING MODELS PER INTENT
+   THINKING MODELS
 ====================================================== */
 const THINKING_MAP: Record<IntentType, ThinkingModel[]> = {
   image: [
@@ -73,7 +73,6 @@ const THINKING_MAP: Record<IntentType, ThinkingModel[]> = {
     { id: 'i4', model: 'Vision-D', text: 'Rendering image details' },
     { id: 'i5', model: 'Vision-E', text: 'Finalizing image quality' },
   ],
-
   edit_image: [
     { id: 'e1', model: 'Edit-A', text: 'Analyzing existing image' },
     { id: 'e2', model: 'Edit-B', text: 'Detecting edit zones' },
@@ -81,7 +80,6 @@ const THINKING_MAP: Record<IntentType, ThinkingModel[]> = {
     { id: 'e4', model: 'Edit-D', text: 'Optimizing edits' },
     { id: 'e5', model: 'Edit-E', text: 'Rendering final image' },
   ],
-
   file: [
     { id: 'f1', model: 'File-A', text: 'Reading file content' },
     { id: 'f2', model: 'File-B', text: 'Analyzing file structure' },
@@ -89,7 +87,6 @@ const THINKING_MAP: Record<IntentType, ThinkingModel[]> = {
     { id: 'f4', model: 'File-D', text: 'Validating information' },
     { id: 'f5', model: 'File-E', text: 'Preparing final file' },
   ],
-
   web_search: [
     { id: 'w1', model: 'Web-A', text: 'Searching the web' },
     { id: 'w2', model: 'Web-B', text: 'Scanning online examples' },
@@ -97,7 +94,6 @@ const THINKING_MAP: Record<IntentType, ThinkingModel[]> = {
     { id: 'w4', model: 'Web-D', text: 'Summarizing findings' },
     { id: 'w5', model: 'Web-E', text: 'Preparing web response' },
   ],
-
   message: [
     { id: 'm1', model: 'Chat-A', text: 'Understanding message intent' },
     { id: 'm2', model: 'Chat-B', text: 'Thinking about response' },
@@ -118,9 +114,33 @@ export function ThinkingIndicator({
   const intent = detectIntent(userMessage);
   const models = THINKING_MAP[intent];
 
+  // State pou kenbe rows aktyèl yo
+  const [currentModels, setCurrentModels] = useState<ThinkingModel[]>(models);
+
+  // Lè mesaj chanje, replace row nan menm plas 1 pa 1
+  useEffect(() => {
+    let i = 0;
+    const interval = setInterval(() => {
+      if (i >= models.length) {
+        clearInterval(interval);
+        return;
+      }
+
+      setCurrentModels(prev => {
+        const newModels = [...prev];
+        newModels[i] = models[i]; // replace nan menm plas
+        return newModels;
+      });
+
+      i++;
+    }, 1000); // 1s ant chak update
+
+    return () => clearInterval(interval);
+  }, [userMessage]);
+
   return (
     <View style={styles.container}>
-      {models.map(item => (
+      {currentModels.map(item => (
         <ThinkingRow
           key={item.id}
           model={item.model}
