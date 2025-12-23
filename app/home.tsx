@@ -168,9 +168,14 @@ export default function HomeScreen() {
       // Increment guest message count
       await incrementMessageCount();
       
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Send error:', error);
-      showAlert('Error', editingId ? 'Failed to update message' : 'Failed to send message');
+      
+      // Show detailed error message to user
+      const errorMsg = error?.message || (editingId ? 'Failed to update message' : 'Failed to send message');
+      console.error('📋 Error message shown to user:', errorMsg);
+      
+      showAlert('Error', errorMsg);
     } finally {
       setSending(false);
       setGenerating(false);

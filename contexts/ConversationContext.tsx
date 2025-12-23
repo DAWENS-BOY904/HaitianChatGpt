@@ -1,6 +1,7 @@
 import React, { createContext, ReactNode, useState, useEffect } from 'react';
 import { useAuth } from '../template';
 import { getSupabaseClient } from '../template';
+import { FunctionsHttpError } from '@supabase/supabase-js';
 
 interface Message {
   id: string;
@@ -169,9 +170,29 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
 
     if (aiError) {
       console.error('❌ AI error:', aiError);
+      
+      // Extract detailed error message
+      let errorMessage = 'Failed to send message';
+      if (aiError instanceof FunctionsHttpError) {
+        try {
+          const statusCode = aiError.context?.status ?? 500;
+          const textContent = await aiError.context?.text();
+          errorMessage = `[Code: ${statusCode}] ${textContent || aiError.message || 'Unknown error'}`;
+          console.error('📋 Detailed error:', errorMessage);
+        } catch (e) {
+          errorMessage = aiError.message || 'Failed to read error response';
+          console.error('📋 Error message:', errorMessage);
+        }
+      } else {
+        errorMessage = aiError.message || 'Unknown error occurred';
+        console.error('📋 Error message:', errorMessage);
+      }
+      
       // Remove temp message on error
       setMessages(prev => prev.filter(m => m.id !== tempUserMessage.id));
-      throw aiError;
+      
+      // Throw with detailed message
+      throw new Error(errorMessage);
     }
 
     console.log('  ✅ AI response received');
@@ -382,6 +403,16 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
 
     if (aiError) {
       console.error('AI regeneration error:', aiError);
+      
+      // Extract detailed error for regeneration
+      if (aiError instanceof FunctionsHttpError) {
+        try {
+          const textContent = await aiError.context?.text();
+          console.error('📋 Regeneration error details:', textContent);
+        } catch (e) {
+          console.error('📋 Could not read error details');
+        }
+      }
       return;
     }
 
