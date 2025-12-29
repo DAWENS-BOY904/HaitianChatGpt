@@ -222,8 +222,9 @@ export async function callMistral(messages: AIMessage[]): Promise<AIResponse> {
   const apiKey = Deno.env.get('MISTRAL_API_KEY');
   
   if (!apiKey) {
-    // Fallback to OnSpace AI if Mistral key not available
-    return callOnSpaceAI(messages, 'mistral-large');
+    // Fallback to OpenAI if Mistral key not available
+    console.log('⚠️ Mistral API key not found - using OpenAI instead');
+    return await callOpenAI(messages);
   }
 
   try {
@@ -262,57 +263,13 @@ export async function callMistral(messages: AIMessage[]): Promise<AIResponse> {
 }
 
 /**
- * OnSpace AI Fallback (uses unified gateway)
- * Used when specific provider API keys are not configured
+ * DEPRECATED: OnSpace AI is no longer used
+ * The app now uses only your own API keys (OpenAI, Gemini, etc.)
  */
 async function callOnSpaceAI(messages: AIMessage[], modelHint: string): Promise<AIResponse> {
-  const apiKey = Deno.env.get('ONSPACE_AI_API_KEY');
-  const baseUrl = Deno.env.get('ONSPACE_AI_BASE_URL');
-  
-  if (!apiKey || !baseUrl) {
-    return { content: '', model: modelHint, error: 'OnSpace AI not configured' };
-  }
-
-  try {
-    const modelMap: Record<string, string> = {
-      'openai-gpt4': 'openai/gpt-5.1',
-      'google-gemini': 'google/gemini-3-flash-preview',
-      'claude-3': 'google/gemini-3-flash-preview',
-      'groq-llama': 'google/gemini-3-flash-preview',
-      'mistral-large': 'google/gemini-3-flash-preview',
-    };
-
-    const response = await fetch(`${baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: modelMap[modelHint] || 'google/gemini-3-flash-preview',
-        messages: messages.map(m => ({
-          role: m.role,
-          content: m.content,
-        })),
-        stream: false,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('OnSpace AI error:', errorText);
-      return { content: '', model: modelHint, error: `OnSpace AI error: ${errorText}` };
-    }
-
-    const data = await response.json();
-    return {
-      content: data.choices[0].message.content,
-      model: modelHint,
-    };
-  } catch (error) {
-    console.error('OnSpace AI error:', error);
-    return { content: '', model: modelHint, error: error.message };
-  }
+  // This function is no longer used - fallback to OpenAI
+  console.log('⚠️ OnSpace AI called but deprecated - using OpenAI instead');
+  return await callOpenAI(messages);
 }
 
 /**
@@ -501,59 +458,49 @@ export function detectContentType(userMessage: string): {
 }
 
 /**
- * Generate image using OnSpace AI
+ * Generate image using YOUR OpenAI API key
  */
 export async function generateImage(prompt: string): Promise<{imageUrl?: string; error?: string}> {
-  const apiKey = Deno.env.get('ONSPACE_AI_API_KEY');
-  const baseUrl = Deno.env.get('ONSPACE_AI_BASE_URL');
+  const apiKey = Deno.env.get('OPENAI_API_KEY');
   
-  if (!apiKey || !baseUrl) {
-    return { error: 'OnSpace AI not configured' };
+  if (!apiKey) {
+    return { error: 'OpenAI API key not configured' };
   }
 
   try {
-    console.log('🎨 Generating image with prompt:', prompt);
+    console.log('🎨 Generating image with YOUR OpenAI API key');
+    console.log('📝 Prompt:', prompt);
     
-    const response = await fetch(`${baseUrl}/chat/completions`, {
+    const response = await fetch('https://api.openai.com/v1/images/generations', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash-image-preview',
-        messages: [
-          {
-            role: 'system',
-            content: 'You are an expert logo and image designer. Create high-quality, professional, modern designs based on user requests. Always generate beautiful, creative, and polished visuals.'
-          },
-          {
-            role: 'user',
-            content: prompt
-          }
-        ],
-        modalities: ['image', 'text'],
-        image_config: {
-          aspect_ratio: '1:1'
-        }
+        model: 'dall-e-3',
+        prompt: prompt,
+        n: 1,
+        size: '1024x1024',
+        quality: 'standard'
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('❌ Image generation error:', errorText);
+      console.error('❌ OpenAI DALL-E error:', errorText);
       return { error: `Failed to generate image: ${errorText}` };
     }
 
     const data = await response.json();
-    const imageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+    const imageUrl = data.data?.[0]?.url;
     
     if (!imageUrl) {
       console.error('❌ No image URL in response');
       return { error: 'No image was generated' };
     }
 
-    console.log('✅ Image generated successfully');
+    console.log('✅ Image generated with YOUR OpenAI DALL-E 3');
     return { imageUrl };
   } catch (error) {
     console.error('❌ Image generation error:', error);
@@ -563,9 +510,10 @@ export async function generateImage(prompt: string): Promise<{imageUrl?: string;
 
 /**
  * Router function - calls the appropriate AI provider
+ * USES ONLY YOUR OWN API KEYS - NO OnSpace AI
  */
 export async function callAI(modelId: string, messages: AIMessage[]): Promise<AIResponse> {
-  console.log(`Routing to AI provider: ${modelId}`);
+  console.log(`✅ Using YOUR API keys - Model: ${modelId}`);
 
   switch (modelId) {
     case 'openai-gpt4':
@@ -583,7 +531,9 @@ export async function callAI(modelId: string, messages: AIMessage[]): Promise<AI
     case 'mistral-large':
       return await callMistral(messages);
     
+    // Default to OpenAI for any unknown model
     default:
-      return await callOnSpaceAI(messages, modelId);
+      console.log(`⚠️ Unknown model ${modelId} - defaulting to OpenAI`);
+      return await callOpenAI(messages);
   }
 }
