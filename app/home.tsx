@@ -62,23 +62,28 @@ export default function HomeScreen() {
     }
   }, [messages]);
 
-  // Shake detection for bug report (less sensitive)
+  // Shake detection for bug report (only on native mobile - not web)
   useEffect(() => {
-    const subscription = Accelerometer.addListener(accelerometerData => {
-      const { x, y, z } = accelerometerData;
-      const acceleration = Math.sqrt(x * x + y * y + z * z);
-      const now = Date.now();
-      
-      // Increased threshold to 3.0 and added 2-second cooldown to prevent accidental triggers
-      if (acceleration > 3.0 && now - lastShake > 1000) {
-        setLastShake(now);
-        router.push('/bugreport');
-      }
-    });
+    // Only enable accelerometer on iOS and Android, not on web
+    if (Platform.OS === 'ios' || Platform.OS === 'android') {
+      const subscription = Accelerometer.addListener(accelerometerData => {
+        const { x, y, z } = accelerometerData;
+        const acceleration = Math.sqrt(x * x + y * y + z * z);
+        const now = Date.now();
+        
+        // Increased threshold to 3.0 and added 2-second cooldown to prevent accidental triggers
+        if (acceleration > 3.0 && now - lastShake > 1000) {
+          setLastShake(now);
+          router.push('/bugreport');
+        }
+      });
 
-    Accelerometer.setUpdateInterval(100);
+      Accelerometer.setUpdateInterval(100);
 
-    return () => subscription.remove();
+      return () => subscription.remove();
+    }
+    // No cleanup needed for web
+    return () => {};
   }, [lastShake]);
 
   const handleSend = async () => {
