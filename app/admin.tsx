@@ -426,6 +426,23 @@ export default function AdminDashboard() {
             <Text style={styles.sectionTitle}>App Settings</Text>
             <TouchableOpacity 
               style={styles.actionButton}
+              onPress={() => router.push('/admin-api-keys')}
+            >
+              <Ionicons
+                name="key"
+                size={24}
+                color={colors.text}
+                style={styles.actionIcon}
+              />
+              <Text style={styles.actionText}>API Keys</Text>
+              <Ionicons
+                name="chevron-forward"
+                size={20}
+                color={colors.textSecondary}
+              />
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.actionButton}
               onPress={() => router.push('/admin-content')}
             >
               <Ionicons

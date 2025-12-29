@@ -65,6 +65,7 @@ export default function RootLayout() {
                     <Stack.Screen name="admin-verify" />
                     <Stack.Screen name="admin-team" />
                     <Stack.Screen name="admin-activity-logs" />
+                    <Stack.Screen name="admin-api-keys" />
                     <Stack.Screen name="project-upload" />
                   </Stack>
                   </ConversationProvider>
