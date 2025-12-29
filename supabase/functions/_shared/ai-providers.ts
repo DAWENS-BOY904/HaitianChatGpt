@@ -185,6 +185,8 @@ export async function callGroq(messages: AIMessage[]): Promise<AIResponse> {
   }
 
   try {
+    // Updated to use current Groq model (llama3-70b-8192 was decommissioned)
+    // Available models: llama-3.3-70b-versatile, llama-3.1-70b-versatile, mixtral-8x7b-32768
     const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -192,7 +194,7 @@ export async function callGroq(messages: AIMessage[]): Promise<AIResponse> {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'llama3-70b-8192',
+        model: 'llama-3.3-70b-versatile', // Updated to current model
         messages: messages.map(m => ({
           role: m.role,
           content: m.content,
@@ -536,7 +538,8 @@ function shouldFallback(error: string): boolean {
  * USES ONLY YOUR OWN API KEYS - NO OnSpace AI
  */
 export async function callAI(modelId: string, messages: AIMessage[]): Promise<AIResponse> {
-  console.log(`🚀 Attempting AI call with model: ${modelId}`);
+  console.log(`🚀 User selected model: ${modelId}`);
+  console.log(`🎯 This is the model the user wants to use`);
 
   // Define fallback order based on primary model
   let fallbackOrder: string[] = [];
@@ -546,7 +549,11 @@ export async function callAI(modelId: string, messages: AIMessage[]): Promise<AI
       fallbackOrder = ['openai-gpt4', 'google-gemini', 'claude-3', 'groq-llama'];
       break;
     case 'google-gemini':
+    case 'google-gemini-2.0-flash':
       fallbackOrder = ['google-gemini', 'claude-3', 'groq-llama', 'openai-gpt4'];
+      break;
+    case 'google-gemini-pro':
+      fallbackOrder = ['google-gemini-pro', 'google-gemini', 'claude-3', 'openai-gpt4'];
       break;
     case 'claude-3':
       fallbackOrder = ['claude-3', 'google-gemini', 'groq-llama', 'openai-gpt4'];
