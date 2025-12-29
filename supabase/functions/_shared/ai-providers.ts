@@ -509,31 +509,134 @@ export async function generateImage(prompt: string): Promise<{imageUrl?: string;
 }
 
 /**
- * Router function - calls the appropriate AI provider
+ * Check if error is a quota/rate limit error that should trigger fallback
+ */
+function shouldFallback(error: string): boolean {
+  const lowerError = error.toLowerCase();
+  return (
+    lowerError.includes('insufficient_quota') ||
+    lowerError.includes('quota') ||
+    lowerError.includes('rate_limit') ||
+    lowerError.includes('429') ||
+    lowerError.includes('billing') ||
+    lowerError.includes('exceeded') ||
+    lowerError.includes('limit')
+  );
+}
+
+/**
+ * Router function with AUTOMATIC FALLBACK
+ * Tries multiple AI providers if one fails due to quota/rate limits
  * USES ONLY YOUR OWN API KEYS - NO OnSpace AI
  */
 export async function callAI(modelId: string, messages: AIMessage[]): Promise<AIResponse> {
-  console.log(`✅ Using YOUR API keys - Model: ${modelId}`);
+  console.log(`🚀 Attempting AI call with model: ${modelId}`);
 
+  // Define fallback order based on primary model
+  let fallbackOrder: string[] = [];
+  
   switch (modelId) {
     case 'openai-gpt4':
-      return await callOpenAI(messages);
-    
+      fallbackOrder = ['openai-gpt4', 'google-gemini', 'claude-3', 'groq-llama'];
+      break;
     case 'google-gemini':
-      return await callGemini(messages);
-    
+      fallbackOrder = ['google-gemini', 'claude-3', 'groq-llama', 'openai-gpt4'];
+      break;
     case 'claude-3':
-      return await callClaude(messages);
-    
+      fallbackOrder = ['claude-3', 'google-gemini', 'groq-llama', 'openai-gpt4'];
+      break;
     case 'groq-llama':
-      return await callGroq(messages);
-    
+      fallbackOrder = ['groq-llama', 'google-gemini', 'claude-3', 'openai-gpt4'];
+      break;
     case 'mistral-large':
-      return await callMistral(messages);
-    
-    // Default to OpenAI for any unknown model
+      fallbackOrder = ['mistral-large', 'google-gemini', 'claude-3', 'openai-gpt4'];
+      break;
     default:
-      console.log(`⚠️ Unknown model ${modelId} - defaulting to OpenAI`);
-      return await callOpenAI(messages);
+      // Default fallback order
+      fallbackOrder = ['google-gemini', 'claude-3', 'groq-llama', 'openai-gpt4'];
+      break;
   }
+
+  console.log(`📋 Fallback order: ${fallbackOrder.join(' → ')}`);
+
+  // Try each model in fallback order
+  let lastError = '';
+  
+  for (let i = 0; i < fallbackOrder.length; i++) {
+    const currentModel = fallbackOrder[i];
+    console.log(`\n${i === 0 ? '🎯' : '🔄'} Trying model: ${currentModel}${i > 0 ? ' (fallback)' : ''}`);
+    
+    let response: AIResponse;
+    
+    try {
+      switch (currentModel) {
+        case 'openai-gpt4':
+          response = await callOpenAI(messages);
+          break;
+        case 'google-gemini':
+          response = await callGemini(messages);
+          break;
+        case 'claude-3':
+          response = await callClaude(messages);
+          break;
+        case 'groq-llama':
+          response = await callGroq(messages);
+          break;
+        case 'mistral-large':
+          response = await callMistral(messages);
+          break;
+        default:
+          response = await callGemini(messages);
+          break;
+      }
+
+      // Check if response has an error
+      if (response.error) {
+        lastError = response.error;
+        console.log(`❌ ${currentModel} failed: ${response.error}`);
+        
+        // Check if we should try next fallback
+        if (shouldFallback(response.error) && i < fallbackOrder.length - 1) {
+          console.log(`⚠️  Quota/rate limit detected - trying next fallback...`);
+          continue;
+        } else if (i === fallbackOrder.length - 1) {
+          // Last model also failed
+          console.log(`❌ All models failed. Last error: ${response.error}`);
+          return response;
+        } else {
+          // Non-quota error, return immediately
+          console.log(`❌ Non-quota error - not falling back`);
+          return response;
+        }
+      }
+
+      // Success!
+      if (i > 0) {
+        console.log(`✅ Fallback successful! Using ${currentModel} instead of ${modelId}`);
+        // Add note to response that we used fallback
+        response.content = `[Using ${currentModel} - ${modelId} unavailable]\n\n${response.content}`;
+      } else {
+        console.log(`✅ Primary model ${currentModel} succeeded`);
+      }
+      
+      return response;
+      
+    } catch (error) {
+      lastError = error.message || 'Unknown error';
+      console.log(`❌ ${currentModel} threw exception: ${lastError}`);
+      
+      if (i < fallbackOrder.length - 1) {
+        console.log(`⚠️  Trying next fallback...`);
+        continue;
+      }
+    }
+  }
+
+  // All models failed
+  console.log(`❌ CRITICAL: All AI models failed!`);
+  return {
+    content: '',
+    model: modelId,
+    error: `All AI models are currently unavailable. Last error: ${lastError}. Please try again later or check your API keys.`
+  };
 }
