@@ -62,10 +62,11 @@ export async function callOpenAI(messages: AIMessage[]): Promise<AIResponse> {
  * Google Gemini Integration (with dynamic model selection)
  * Best for: Fast responses, multimodal tasks, general queries
  * Available models:
- * - gemini-1.5-flash (fast, efficient, recommended default)
+ * - gemini-2.0-flash (latest, fastest, multimodal - RECOMMENDED)
+ * - gemini-1.5-flash (fast, efficient, stable)
  * - gemini-1.5-pro (more capable, slower, more expensive)
  */
-export async function callGemini(messages: AIMessage[], modelName: string = 'gemini-1.5-flash'): Promise<AIResponse> {
+export async function callGemini(messages: AIMessage[], modelName: string = 'gemini-2.0-flash'): Promise<AIResponse> {
   const apiKey = Deno.env.get('GOOGLE_AI_API_KEY');
   
   if (!apiKey) {
@@ -575,9 +576,13 @@ export async function callAI(modelId: string, messages: AIMessage[]): Promise<AI
     
     try {
       // Determine which Gemini model to use based on context
-      let geminiModel = 'gemini-1.5-flash'; // Default to fast model
+      let geminiModel = 'gemini-2.0-flash'; // Default to latest fast model
       if (modelId === 'google-gemini-pro') {
         geminiModel = 'gemini-1.5-pro'; // User explicitly requested Pro
+      } else if (modelId === 'google-gemini') {
+        geminiModel = 'gemini-1.5-flash'; // Classic Gemini Flash
+      } else if (modelId === 'google-gemini-2.0-flash') {
+        geminiModel = 'gemini-2.0-flash'; // Latest 2.0 Flash
       }
 
       switch (currentModel) {
