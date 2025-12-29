@@ -58,6 +58,8 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
   const loadConversations = async () => {
     if (!user) return;
 
+    console.log('🔄 Loading conversations for user:', user.id);
+
     // Only load conversations that have at least one message
     const { data: conversationsWithMessages, error } = await supabase
       .from('conversations')
@@ -66,14 +68,22 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
         title,
         created_at,
         updated_at,
-        messages (count)
+        messages!inner (id)
       `)
+      .eq('user_id', user.id)
       .order('updated_at', { ascending: false });
 
     if (!error && conversationsWithMessages) {
+      console.log('📊 Raw conversations:', conversationsWithMessages.length);
+      
       // Filter out conversations with 0 messages
       const validConversations = conversationsWithMessages
-        .filter((c: any) => c.messages && c.messages.length > 0)
+        .filter((c: any) => {
+          // Use inner join result - if messages exist, c.messages will be an array
+          const hasMessages = Array.isArray(c.messages) && c.messages.length > 0;
+          console.log(`  - ${c.id}: ${c.title} - Messages: ${hasMessages ? c.messages.length : 0}`);
+          return hasMessages;
+        })
         .map(c => ({
           id: c.id,
           title: c.title,
@@ -81,12 +91,17 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
           updatedAt: c.updated_at,
         }));
       
+      console.log('✅ Valid conversations:', validConversations.length);
       setConversations(validConversations);
+    } else if (error) {
+      console.error('❌ Error loading conversations:', error);
     }
   };
 
   const createConversation = async (): Promise<string | null> => {
     if (!user) return null;
+
+    console.log('📝 Creating new conversation...');
 
     const { data, error } = await supabase
       .from('conversations')
@@ -94,7 +109,12 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
       .select()
       .single();
 
-    if (error || !data) return null;
+    if (error || !data) {
+      console.error('❌ Failed to create conversation:', error);
+      return null;
+    }
+
+    console.log('✅ Conversation created:', data.id);
 
     const newConv: Conversation = {
       id: data.id,
@@ -177,7 +197,27 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
         try {
           const statusCode = aiError.context?.status ?? 500;
           const textContent = await aiError.context?.text();
-          errorMessage = `[Code: ${statusCode}] ${textContent || aiError.message || 'Unknown error'}`;
+          
+          // Check if it's a JSON error response
+          try {
+            const jsonError = JSON.parse(textContent || '{}');
+            if (jsonError.error) {
+              // Handle OnSpace AI errors
+              if (typeof jsonError.error === 'string' && jsonError.error.includes('Insufficient balance')) {
+                errorMessage = '❌ OnSpace AI credit limit reached. Please upgrade your plan or use your own API key.';
+              } else if (typeof jsonError.error === 'string') {
+                errorMessage = jsonError.error;
+              } else {
+                errorMessage = jsonError.error.message || JSON.stringify(jsonError.error);
+              }
+            } else {
+              errorMessage = `[Code: ${statusCode}] ${textContent || aiError.message || 'Unknown error'}`;
+            }
+          } catch (parseError) {
+            // Not JSON, use raw text
+            errorMessage = `[Code: ${statusCode}] ${textContent || aiError.message || 'Unknown error'}`;
+          }
+          
           console.error('📋 Detailed error:', errorMessage);
         } catch (e) {
           errorMessage = aiError.message || 'Failed to read error response';

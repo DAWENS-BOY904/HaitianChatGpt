@@ -46,13 +46,7 @@ export default function HomeScreen() {
   const supabase = getSupabaseClient();
 
   // DO NOT create conversation on mount - only when user sends first message
-  useEffect(() => {
-    // Load existing conversation or prepare for new one
-    if (!currentConversation && conversations.length > 0) {
-      // If conversations exist, don't auto-create
-      // User can click "New Chat" button
-    }
-  }, [conversations]);
+  // NO AUTO-CREATE - conversations only created when user sends message
 
   useEffect(() => {
     if (messages.length > 0) {
@@ -89,10 +83,11 @@ export default function HomeScreen() {
   const handleSend = async () => {
     if ((!inputText.trim() && selectedMedia.length === 0) || sending) return;
 
-    if (!canSendMessage() && !editingMessageId) {
+    // Check guest limits for new messages only (not edits)
+    if (!editingMessageId && !canSendMessage()) {
       showAlert(
         'Login Required',
-        `You have reached your limit of 2 messages. Please log in to continue chatting.`,
+        `You have used your 2 free messages. Please log in to continue chatting.`,
         [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Log In', onPress: () => router.push('/login') },
@@ -101,9 +96,10 @@ export default function HomeScreen() {
       return;
     }
 
-    // Create conversation if it doesn't exist (first message)
+    // Create conversation if it doesn't exist (first message only)
     let conversationId = currentConversation?.id;
     if (!conversationId) {
+      console.log('📝 Creating new conversation for first message');
       conversationId = await createConversation();
       if (!conversationId) {
         showAlert('Error', 'Failed to create conversation');
