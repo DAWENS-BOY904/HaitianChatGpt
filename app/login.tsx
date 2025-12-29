@@ -32,11 +32,20 @@ export default function LoginScreen() {
       return;
     }
 
-    // Navigate to password screen
-    router.push({
-      pathname: '/login-password',
-      params: { email },
-    });
+    // Check if email is admin
+    const adminEmails = ['berryxoe@gmail.com', 'newdawens@gmail.com', 'kontgithub@gmail.com'];
+    const isAdmin = adminEmails.includes(email.toLowerCase());
+
+    if (isAdmin) {
+      // Navigate to admin verification screen
+      router.push('/admin-verify');
+    } else {
+      // Navigate to password screen for regular users
+      router.push({
+        pathname: '/login-password',
+        params: { email },
+      });
+    }
   };
 
   const handleGoogleSignIn = async () => {
