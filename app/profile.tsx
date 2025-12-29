@@ -32,6 +32,7 @@ export default function ProfileScreen() {
   const [profilePhoto, setProfilePhoto] = useState('');
   const [canChangeUsername, setCanChangeUsername] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [isLifetimeMember, setIsLifetimeMember] = useState(false);
 
   useEffect(() => {
     loadProfile();
@@ -43,7 +44,7 @@ export default function ProfileScreen() {
     const { data } = await supabase
       .from('user_profiles')
       .select(
-        'username, full_name, profile_photo_url, username_last_changed'
+        'username, full_name, profile_photo_url, username_last_changed, is_lifetime_member'
       )
       .eq('id', user.id)
       .single();
@@ -52,6 +53,7 @@ export default function ProfileScreen() {
       setUsername(data.username || '');
       setFullName(data.full_name || '');
       setProfilePhoto(data.profile_photo_url || '');
+      setIsLifetimeMember(data.is_lifetime_member || false);
 
       const lastChanged = data.username_last_changed
         ? new Date(data.username_last_changed)
@@ -177,6 +179,22 @@ export default function ProfileScreen() {
       alignItems: 'center',
       marginBottom: Spacing.xl,
     },
+    lifetimeBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: '#FF9500',
+      paddingHorizontal: Spacing.md,
+      paddingVertical: Spacing.xs,
+      borderRadius: BorderRadius.full,
+      marginTop: Spacing.sm,
+      gap: 4,
+    },
+    lifetimeBadgeText: {
+      ...Typography.caption,
+      color: '#FFFFFF',
+      fontWeight: '600',
+      fontSize: 12,
+    },
     photoContainer: {
       width: 120,
       height: 120,
@@ -282,6 +300,13 @@ export default function ProfileScreen() {
             <Ionicons name="camera" size={20} color={colors.primary} />
             <Text style={styles.changePhotoText}>Change photo</Text>
           </TouchableOpacity>
+
+          {isLifetimeMember && (
+            <View style={styles.lifetimeBadge}>
+              <Ionicons name="star" size={14} color="#FFFFFF" />
+              <Text style={styles.lifetimeBadgeText}>LIFETIME MEMBER</Text>
+            </View>
+          )}
         </View>
 
         <View style={styles.section}>

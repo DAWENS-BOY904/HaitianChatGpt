@@ -67,6 +67,8 @@ export default function RootLayout() {
                     <Stack.Screen name="admin-activity-logs" />
                     <Stack.Screen name="admin-api-keys" />
                     <Stack.Screen name="project-upload" />
+                    <Stack.Screen name="billing" />
+                    <Stack.Screen name="stripe-checkout" />
                   </Stack>
                   </ConversationProvider>
                 </SocialProvider>
