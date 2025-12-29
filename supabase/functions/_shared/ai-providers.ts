@@ -59,10 +59,13 @@ export async function callOpenAI(messages: AIMessage[]): Promise<AIResponse> {
 }
 
 /**
- * Google Gemini Pro Integration
+ * Google Gemini Integration (with dynamic model selection)
  * Best for: Fast responses, multimodal tasks, general queries
+ * Available models:
+ * - gemini-1.5-flash (fast, efficient, recommended default)
+ * - gemini-1.5-pro (more capable, slower, more expensive)
  */
-export async function callGemini(messages: AIMessage[]): Promise<AIResponse> {
+export async function callGemini(messages: AIMessage[], modelName: string = 'gemini-1.5-flash'): Promise<AIResponse> {
   const apiKey = Deno.env.get('GOOGLE_AI_API_KEY');
   
   if (!apiKey) {
@@ -91,14 +94,15 @@ export async function callGemini(messages: AIMessage[]): Promise<AIResponse> {
       });
     }
 
+    console.log(`🔷 Using Gemini model: ${modelName}`);
     const response = await fetch(
-  `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro:generateContent?key=${apiKey}`,
-  {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ contents }),
-  }
-);
+      `https://generativelanguage.googleapis.com/v1/models/${modelName}:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents }),
+      }
+    );
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -273,89 +277,90 @@ async function callOnSpaceAI(messages: AIMessage[], modelHint: string): Promise<
 }
 
 /**
- * Available AI Models with specializations
+ * Available AI Models - REAL MODELS ONLY
+ * These map to actual API model IDs that exist
  */
 export const AI_MODELS = {
-  // Image Generation
+  // Image Generation (using OpenAI DALL-E)
   'image-generator': {
     name: 'Image Generator',
-    model: 'google/gemini-2.5-flash-image-preview',
+    model: 'openai-gpt4', // Uses OpenAI for prompting + DALL-E for generation
     specialization: 'image',
-    description: 'Creates high-quality logos, images, and visual designs'
+    description: 'Creates high-quality logos and images using DALL-E 3'
   },
   'logo-designer': {
     name: 'Logo Designer',
-    model: 'google/gemini-2.5-flash-image-preview',
+    model: 'openai-gpt4', // Uses OpenAI for design prompts
     specialization: 'image',
     description: 'Specialized in professional logo design'
   },
   
-  // File Generation
+  // File Generation (using fast Gemini)
   'file-creator': {
     name: 'File Creator',
-    model: 'google/gemini-3-flash-preview',
+    model: 'google-gemini',
     specialization: 'file',
     description: 'Generates files in any format (HTML, CSV, JSON, TXT, etc.)'
   },
   
-  // Code & Development
+  // Code & Development (using appropriate models)
   'code-generator': {
     name: 'Code Generator',
-    model: 'google/gemini-3-flash-preview',
+    model: 'openai-gpt4', // GPT-4 best for code
     specialization: 'code',
     description: 'Expert in code generation and programming'
   },
   'code-debugger': {
     name: 'Code Debugger',
-    model: 'google/gemini-3-flash-preview',
+    model: 'openai-gpt4',
     specialization: 'debug',
     description: 'Finds and fixes bugs in code'
   },
   'ui-designer': {
     name: 'UI/UX Designer',
-    model: 'google/gemini-3-flash-preview',
+    model: 'claude-3', // Claude good for creative UI work
     specialization: 'ui',
     description: 'Creates beautiful UI/UX designs and components'
   },
   
-  // Data & API
+  // Data & API (fast models)
   'api-expert': {
     name: 'API Expert',
-    model: 'google/gemini-3-flash-preview',
+    model: 'google-gemini',
     specialization: 'api',
     description: 'API integration, REST, GraphQL, and data handling'
   },
   'data-analyst': {
     name: 'Data Analyst',
-    model: 'google/gemini-3-flash-preview',
+    model: 'google-gemini',
     specialization: 'data',
     description: 'Data analysis, CSV processing, and statistics'
   },
   
-  // Content & Writing
+  // Content & Writing (Claude excels here)
   'content-writer': {
     name: 'Content Writer',
-    model: 'google/gemini-3-flash-preview',
+    model: 'claude-3',
     specialization: 'writing',
     description: 'Creative writing, articles, and content creation'
   },
   'explainer': {
     name: 'Explainer',
-    model: 'google/gemini-3-flash-preview',
+    model: 'claude-3',
     specialization: 'explanation',
     description: 'Explains complex topics in simple terms'
   },
   
-  // General
+  // General (fast Gemini or Groq)
   'general-assistant': {
     name: 'General Assistant',
-    model: 'google/gemini-3-flash-preview',
+    model: 'google-gemini', // Changed to fast Gemini default
     specialization: 'general',
     description: 'Versatile assistant for all tasks'
   },
   'editor': {
     name: 'Text Editor',
-    model: 'google/gemini-3-flash-preview',
+    model: 'google-gemini',
     specialization: 'editing',
     description: 'Edits, rewrites, and improves text'
   },
@@ -569,12 +574,19 @@ export async function callAI(modelId: string, messages: AIMessage[]): Promise<AI
     let response: AIResponse;
     
     try {
+      // Determine which Gemini model to use based on context
+      let geminiModel = 'gemini-1.5-flash'; // Default to fast model
+      if (modelId === 'google-gemini-pro') {
+        geminiModel = 'gemini-1.5-pro'; // User explicitly requested Pro
+      }
+
       switch (currentModel) {
         case 'openai-gpt4':
           response = await callOpenAI(messages);
           break;
         case 'google-gemini':
-          response = await callGemini(messages);
+        case 'google-gemini-pro':
+          response = await callGemini(messages, geminiModel);
           break;
         case 'claude-3':
           response = await callClaude(messages);
@@ -586,7 +598,7 @@ export async function callAI(modelId: string, messages: AIMessage[]): Promise<AI
           response = await callMistral(messages);
           break;
         default:
-          response = await callGemini(messages);
+          response = await callGemini(messages, 'gemini-1.5-flash');
           break;
       }
 
