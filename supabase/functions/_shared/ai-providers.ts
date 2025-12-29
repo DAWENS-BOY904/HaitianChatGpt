@@ -31,7 +31,7 @@ export async function callOpenAI(messages: AIMessage[]): Promise<AIResponse> {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4-turbo-preview',
+        model: 'gpt-4o',
         messages: messages.map(m => ({
           role: m.role,
           content: m.content,

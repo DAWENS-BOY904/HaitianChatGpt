@@ -45,8 +45,16 @@ export default function HomeScreen() {
   const flatListRef = useRef<FlatList>(null);
   const supabase = getSupabaseClient();
 
-  // DO NOT create conversation on mount - only when user sends first message
-  // NO AUTO-CREATE - conversations only created when user sends message
+  // Auto-create conversation when user enters home page (if none exists)
+  useEffect(() => {
+    const initConversation = async () => {
+      if (!currentConversation && user) {
+        console.log('🆕 Auto-creating new conversation on mount');
+        await createConversation();
+      }
+    };
+    initConversation();
+  }, []);
 
   useEffect(() => {
     if (messages.length > 0) {
