@@ -96,7 +96,7 @@ export async function callGemini(messages: AIMessage[], modelName: string = 'gem
 
     console.log(`🔷 Using Gemini model: ${modelName}`);
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1/models/${modelName}:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
