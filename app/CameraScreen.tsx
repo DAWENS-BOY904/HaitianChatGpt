@@ -54,7 +54,7 @@ export default function CameraScreen() {
       );
 
       router.push({
-        pathname: '/preview',
+        pathname: 'preview',
         params: { uri: edited.uri, type: 'image' },
       });
     } finally {
