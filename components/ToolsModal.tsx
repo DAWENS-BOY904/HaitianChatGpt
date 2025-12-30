@@ -150,53 +150,7 @@ export function ToolsModal({
       action: () => setShowAISelector(true),
     },
 
-    // 🔥 NAVIGATION TO SCREENS
-   {
-  id: 'create-image',
-  label: 'Create image',
-  icon: 'color-wand',
-  action: () => {
-    router.push('/create-image');
-    onClose();
-  },
-},
-{
-  id: 'thinking',
-  label: 'Think mode',
-  icon: 'bulb',
-  action: () => {
-    router.push('/think-mode');
-    onClose();
-  },
-},
-{
-  id: 'research',
-  label: 'Deep research',
-  icon: 'search',
-  action: () => {
-    router.push('/deep-research');
-    onClose();
-  },
-},
-{
-  id: 'web-search',
-  label: 'Web search',
-  icon: 'globe',
-  action: () => {
-    router.push('/web-search');
-    onClose();
-  },
-},
-{
-  id: 'study',
-  label: 'Study & learn',
-  icon: 'school',
-  action: () => {
-    router.push('/study-learn');
-    onClose();
-  },
-},
-],
+  ];
   /* ---------------- STYLES ---------------- */
 
   const styles = StyleSheet.create({
