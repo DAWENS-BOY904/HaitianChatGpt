@@ -34,6 +34,11 @@ export default function RootLayout() {
                     <Stack.Screen name="data-controls" />
                     <Stack.Screen name="personalization" />
                     <Stack.Screen name="profile" />
+                    <Stack.Screen name="create-image" />
+                    <Stack.Screen name="think-mode" />
+                    <Stack.Screen name="deep-research" />
+                    <Stack.Screen name="web-search" />
+                    <Stack.Screen name="study-learn" />
                     <Stack.Screen name="languages" />
                     <Stack.Screen name="payment" />
                     <Stack.Screen name="groupinfo" />
