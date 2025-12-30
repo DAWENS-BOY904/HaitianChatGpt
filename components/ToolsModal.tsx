@@ -151,53 +151,52 @@ export function ToolsModal({
     },
 
     // 🔥 NAVIGATION TO SCREENS
-    {
-      id: 'create-image',
-      label: 'Create image',
-      icon: 'color-wand',
-      action: () => {
-        navigation.navigate('CreateImage');
-        onClose();
-      },
-    },
-    {
-      id: 'thinking',
-      label: 'Think mode',
-      icon: 'bulb',
-      action: () => {
-        navigation.navigate('ThinkMode');
-        onClose();
-      },
-    },
-    {
-      id: 'research',
-      label: 'Deep research',
-      icon: 'search',
-      action: () => {
-        navigation.navigate('DeepResearch');
-        onClose();
-      },
-    },
-    {
-      id: 'web-search',
-      label: 'Web search',
-      icon: 'globe',
-      action: () => {
-        navigation.navigate('WebSearch');
-        onClose();
-      },
-    },
-    {
-      id: 'study',
-      label: 'Study & learn',
-      icon: 'school',
-      action: () => {
-        navigation.navigate('StudyLearn');
-        onClose();
-      },
-    },
-  ];
-
+   {
+  id: 'create-image',
+  label: 'Create image',
+  icon: 'color-wand',
+  action: () => {
+    router.push('/create-image');
+    onClose();
+  },
+},
+{
+  id: 'thinking',
+  label: 'Think mode',
+  icon: 'bulb',
+  action: () => {
+    router.push('/think-mode');
+    onClose();
+  },
+},
+{
+  id: 'research',
+  label: 'Deep research',
+  icon: 'search',
+  action: () => {
+    router.push('/deep-research');
+    onClose();
+  },
+},
+{
+  id: 'web-search',
+  label: 'Web search',
+  icon: 'globe',
+  action: () => {
+    router.push('/web-search');
+    onClose();
+  },
+},
+{
+  id: 'study',
+  label: 'Study & learn',
+  icon: 'school',
+  action: () => {
+    router.push('/study-learn');
+    onClose();
+  },
+},
+],
   /* ---------------- STYLES ---------------- */
 
   const styles = StyleSheet.create({
