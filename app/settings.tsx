@@ -299,6 +299,33 @@ export default function SettingsScreen() {
   );
 
   const appearanceOptions: Array<'System' | 'Light' | 'Dark'> = ['System', 'Light', 'Dark'];
+
+function setTheme(theme: 'System' | 'Light' | 'Dark') {
+    const root = document.documentElement;
+
+    if (theme === 'Dark') {
+        root.classList.add('dark');
+    } else {
+        root.classList.remove('dark');
+    }
+
+    if (theme === 'Light') {
+        root.classList.add('light');
+    } else {
+        root.classList.remove('light');
+    }
+
+    // If "System", you can check prefers-color-scheme
+    if (theme === 'System') {
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        if (prefersDark) {
+            root.classList.add('dark');
+        } else {
+            root.classList.remove('dark');
+        }
+    }
+}
+
   const accentColors = ['#10A37F', '#0084FF', '#FF3B30', '#FF9500', '#5856D6'];
 
   const tierNames: Record<string, string> = {
