@@ -149,7 +149,7 @@ export function ToolsModal({
       subtitle: currentModel.toUpperCase(),
       action: () => setShowAISelector(true),
     },
-
+{ id: 'create-image', label: 'Create image', icon: 'color-wand', action: () => { onSelectTool('Create Image'); onClose(); } }, { id: 'thinking', label: 'Think mode', icon: 'bulb', action: () => { onSelectTool('Think Mode'); onClose(); } }, { id: 'research', label: 'Deep research', icon: 'search', action: () => { onSelectTool('Deep Research'); onClose(); } }, { id: 'web-search', label: 'Web search', icon: 'globe', action: () => { onSelectTool('Web Search'); onClose(); } }, { id: 'study', label: 'Study & learn', icon: 'school', action: () => { onSelectTool('Study and Learn'); onClose(); } },
   ];
   /* ---------------- STYLES ---------------- */
 
