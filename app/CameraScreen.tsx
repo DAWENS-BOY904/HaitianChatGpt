@@ -7,7 +7,7 @@ import {
   ActivityIndicator,
   Dimensions,
 } from 'react-native';
-import { CameraView, CameraType, FlashMode } from 'expo-camera';
+import { CameraView, CameraType, FlashMode, CameraMode } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { Ionicons } from '@expo/vector-icons';
@@ -23,6 +23,7 @@ export default function CameraScreen() {
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [facing, setFacing] = useState<CameraType>('back');
   const [flash, setFlash] = useState<FlashMode>('off');
+  const [mode, setMode] = useState<CameraMode>('picture');
   const [zoom, setZoom] = useState(0);
   const [recording, setRecording] = useState(false);
   const [capturing, setCapturing] = useState(false);
@@ -32,31 +33,38 @@ export default function CameraScreen() {
     (async () => {
       const cam = await CameraView.requestCameraPermissionsAsync();
       const gal = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const mic = await CameraView.requestMicrophonePermissionsAsync(); // Required for video
+      
       setHasPermission(
-        cam.status === 'granted' && gal.status === 'granted'
+        cam.status === 'granted' && 
+        gal.status === 'granted' && 
+        mic.status === 'granted'
       );
     })();
   }, []);
 
   /* -------- PHOTO -------- */
   const takePhoto = async () => {
-    if (!cameraRef.current || recording) return;
+    if (!cameraRef.current || recording || mode !== 'picture') return;
 
     try {
       setCapturing(true);
-
       const photo = await cameraRef.current.takePictureAsync();
 
-      const edited = await ImageManipulator.manipulateAsync(
-        photo.uri,
-        [{ adjust: { contrast: 1.1, saturation: 1.2 } }],
-        { compress: 0.9, format: ImageManipulator.SaveFormat.JPEG }
-      );
+      if (photo) {
+        const edited = await ImageManipulator.manipulateAsync(
+          photo.uri,
+          [{ adjust: { contrast: 1.1, saturation: 1.2 } }],
+          { compress: 0.9, format: ImageManipulator.SaveFormat.JPEG }
+        );
 
-      router.push({
-        pathname: 'preview',
-        params: { uri: edited.uri, type: 'image' },
-      });
+        router.push({
+          pathname: '/preview',
+          params: { uri: edited.uri, type: 'image' },
+        });
+      }
+    } catch (e) {
+      console.error("Photo error:", e);
     } finally {
       setCapturing(false);
     }
@@ -67,15 +75,23 @@ export default function CameraScreen() {
     if (!cameraRef.current || recording) return;
 
     try {
+      setMode('video'); // Switch mode before recording
       setRecording(true);
+      
+      // Small delay to allow mode switch
       const video = await cameraRef.current.recordAsync({ maxDuration: 60 });
 
-      router.push({
-        pathname: '/preview',
-        params: { uri: video.uri, type: 'video' },
-      });
+      if (video) {
+        router.push({
+          pathname: '/preview',
+          params: { uri: video.uri, type: 'video' },
+        });
+      }
+    } catch (e) {
+      console.error("Video error:", e);
     } finally {
       setRecording(false);
+      setMode('picture'); // Reset to picture mode
     }
   };
 
@@ -103,7 +119,6 @@ export default function CameraScreen() {
     }
   };
 
-  /* -------- STATES -------- */
   if (hasPermission === null) {
     return (
       <View style={styles.center}>
@@ -115,12 +130,11 @@ export default function CameraScreen() {
   if (!hasPermission) {
     return (
       <View style={styles.center}>
-        <Text style={{ color: '#fff' }}>Permission denied</Text>
+        <Text style={{ color: '#fff' }}>Permissions for Camera/Mic denied</Text>
       </View>
     );
   }
 
-  /* -------- UI -------- */
   return (
     <View style={styles.container}>
       <CameraView
@@ -129,15 +143,15 @@ export default function CameraScreen() {
         facing={facing}
         flash={flash}
         zoom={zoom}
+        mode={mode} // Explicitly set mode
       >
-        {/* TOP */}
         <View style={styles.top}>
           <TouchableOpacity onPress={() => router.back()}>
             <Ionicons name="close" size={28} color="#fff" />
           </TouchableOpacity>
 
           <TouchableOpacity
-            onPress={() => setFlash(flash === 'on' ? 'off' : 'on')}
+            onPress={() => setFlash(prev => (prev === 'on' ? 'off' : 'on'))}
           >
             <Ionicons
               name={flash === 'on' ? 'flash' : 'flash-off'}
@@ -147,7 +161,6 @@ export default function CameraScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* ZOOM */}
         <View style={styles.zoom}>
           <Slider
             minimumValue={0}
@@ -160,14 +173,13 @@ export default function CameraScreen() {
           />
         </View>
 
-        {/* BOTTOM */}
         <View style={styles.bottom}>
           <TouchableOpacity onPress={openGallery}>
             <Ionicons name="images" size={30} color="#fff" />
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.capture, recording && { backgroundColor: 'red' }]}
+            style={[styles.capture, recording && { backgroundColor: 'red', borderColor: 'rgba(255,255,255,0.5)' }]}
             onPress={takePhoto}
             onLongPress={startVideo}
             onPressOut={stopVideo}
@@ -175,9 +187,7 @@ export default function CameraScreen() {
           />
 
           <TouchableOpacity
-            onPress={() =>
-              setFacing(facing === 'back' ? 'front' : 'back')
-            }
+            onPress={() => setFacing(prev => (prev === 'back' ? 'front' : 'back'))}
           >
             <Ionicons name="camera-reverse" size={30} color="#fff" />
           </TouchableOpacity>
@@ -187,7 +197,6 @@ export default function CameraScreen() {
   );
 }
 
-/* -------- STYLES -------- */
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
   camera: { flex: 1 },
@@ -204,6 +213,7 @@ const styles = StyleSheet.create({
     right: 20,
     flexDirection: 'row',
     justifyContent: 'space-between',
+    zIndex: 10,
   },
   bottom: {
     position: 'absolute',
@@ -220,7 +230,7 @@ const styles = StyleSheet.create({
     borderRadius: 40,
     borderWidth: 5,
     borderColor: '#fff',
-    backgroundColor: '#fff',
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
   },
   zoom: {
     position: 'absolute',
