@@ -24,7 +24,7 @@ export async function callOpenAI(messages: AIMessage[]): Promise<AIResponse> {
   }
 
   try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    const response = await fetch('https://api.openai.com/v1/responses', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
@@ -150,7 +150,7 @@ export async function callClaude(messages: AIMessage[]): Promise<AIResponse> {
         max_tokens: 4000,
         system: systemMessage,
         messages: conversationMessages.map(m => ({
-          role: m.role,
+          role: m.role === 'assistant' ? 'assistant' : 'user'
           content: m.content,
         })),
       }),
