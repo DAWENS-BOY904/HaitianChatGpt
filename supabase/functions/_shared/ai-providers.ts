@@ -74,51 +74,65 @@ export async function callGemini(messages: AIMessage[], modelName: string = 'gem
   }
 
   try {
-    // Convert chat messages to Gemini format
-    const contents = messages
-      .filter(m => m.role !== 'system')
-      .map(m => ({
-        role: m.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: m.content }],
-      }));
+    // 1. Prepare the request body
+    const requestBody: any = {
+      contents: messages
+        .filter(m => m.role !== 'system')
+        .map(m => ({
+          role: m.role === 'assistant' ? 'model' : 'user',
+          parts: [{ text: m.content }],
+        })),
+    };
 
-    // Add system message as first user message
+    // 2. Add system instruction correctly (not as a user message)
     const systemMessage = messages.find(m => m.role === 'system');
     if (systemMessage) {
-      contents.unshift({
-        role: 'user',
-        parts: [{ text: systemMessage.content }],
-      });
-      contents.splice(1, 0, {
-        role: 'model',
-        parts: [{ text: 'I understand and will follow these instructions.' }],
-      });
+      requestBody.system_instruction = {
+        parts: [{ text: systemMessage.content }]
+      };
     }
 
     console.log(`🔷 Using Gemini model: ${modelName}`);
+
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents }),
+        body: JSON.stringify(requestBody),
       }
     );
 
+    // 3. Handle HTTP errors
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Gemini API error:', errorText);
-      return { content: '', model: 'google-gemini', error: `Gemini error: ${errorText}` };
+      const errorData = await response.json().catch(() => ({}));
+      const errorMsg = errorData.error?.message || response.statusText;
+      console.error('Gemini API error:', errorMsg);
+      return { content: '', model: 'google-gemini', error: `Gemini error: ${errorMsg}` };
     }
 
     const data = await response.json();
+
+    // 4. Validate and extract content
+    const content = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    
+    if (!content) {
+      const finishReason = data.candidates?.[0]?.finishReason;
+      return { 
+        content: '', 
+        model: 'google-gemini', 
+        error: finishReason ? `Blocked by safety: ${finishReason}` : 'Empty response from Gemini' 
+      };
+    }
+
     return {
-      content: data.candidates[0].content.parts[0].text,
-      model: 'google-gemini',
+      content: content,
+      model: `google-gemini (${modelName})`,
     };
-  } catch (error) {
-    console.error('Gemini error:', error);
-    return { content: '', model: 'google-gemini', error: error.message };
+
+  } catch (error: any) {
+    console.error('Gemini Fetch Error:', error);
+    return { content: '', model: 'google-gemini', error: error.message || 'Unknown error' };
   }
 }
 
@@ -150,8 +164,10 @@ export async function callClaude(messages: AIMessage[]): Promise<AIResponse> {
         max_tokens: 4000,
         system: systemMessage,
         messages: conversationMessages.map(m => ({
-          role: m.role === 'assistant' ? 'assistant' : 'user'
-          content: m.content,
+          {
+  role: m.role === 'assistant' ? 'assistant' : 'user',
+  content: m.content,
+}
         })),
       }),
     });
