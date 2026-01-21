@@ -16,15 +16,17 @@ interface AIResponse {
  * OpenAI GPT-4 Integration
  * Best for: Complex reasoning, long conversations, detailed analysis
  */
+/**
+ * AI Provider Service - Optimized and Fixed
+ */
+
+// 1. Ranje callOpenAI (URL ak Endpoint)
 export async function callOpenAI(messages: AIMessage[]): Promise<AIResponse> {
   const apiKey = Deno.env.get('OPENAI_API_KEY');
-  
-  if (!apiKey) {
-    return { content: '', model: 'openai-gpt4', error: 'OpenAI API key not configured' };
-  }
+  if (!apiKey) return { content: '', model: 'openai-gpt4', error: 'OpenAI API key not configured' };
 
   try {
-    const response = await fetch('https://api.openai.com/v1/responses', {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', { // FIXED URL
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
@@ -32,28 +34,16 @@ export async function callOpenAI(messages: AIMessage[]): Promise<AIResponse> {
       },
       body: JSON.stringify({
         model: 'gpt-4o',
-        messages: messages.map(m => ({
-          role: m.role,
-          content: m.content,
-        })),
+        messages: messages.map(m => ({ role: m.role, content: m.content })),
         temperature: 0.7,
-        max_tokens: 4000,
       }),
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('OpenAI API error:', errorText);
-      return { content: '', model: 'openai-gpt4', error: `OpenAI error: ${errorText}` };
-    }
-
     const data = await response.json();
-    return {
-      content: data.choices[0].message.content,
-      model: 'openai-gpt4',
-    };
-  } catch (error) {
-    console.error('OpenAI error:', error);
+    if (!response.ok) return { content: '', model: 'openai-gpt4', error: data.error?.message || 'OpenAI Error' };
+
+    return { content: data.choices[0].message.content, model: 'openai-gpt4' };
+  } catch (error: any) {
     return { content: '', model: 'openai-gpt4', error: error.message };
   }
 }
@@ -142,13 +132,9 @@ export async function callGemini(messages: AIMessage[], modelName: string = 'gem
  */
 export async function callClaude(messages: AIMessage[]): Promise<AIResponse> {
   const apiKey = Deno.env.get('ANTHROPIC_API_KEY');
-  
-  if (!apiKey) {
-    return { content: '', model: 'claude-3', error: 'Anthropic API key not configured' };
-  }
+  if (!apiKey) return { content: '', model: 'claude-3', error: 'Anthropic API key not configured' };
 
   try {
-    // Extract system message
     const systemMessage = messages.find(m => m.role === 'system')?.content || '';
     const conversationMessages = messages.filter(m => m.role !== 'system');
 
@@ -160,31 +146,21 @@ export async function callClaude(messages: AIMessage[]): Promise<AIResponse> {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'claude-3-sonnet-20240229',
+        model: 'claude-3-5-sonnet-latest', // Sèvi ak vèsyon ki pi resan an
         max_tokens: 4000,
         system: systemMessage,
-        messages: conversationMessages.map(m => ({
-          {
-  role: m.role === 'assistant' ? 'assistant' : 'user',
-  content: m.content,
-}
+        messages: conversationMessages.map(m => ({ // FIXED SYNTAX
+          role: m.role === 'assistant' ? 'assistant' : 'user',
+          content: m.content,
         })),
       }),
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Claude API error:', errorText);
-      return { content: '', model: 'claude-3', error: `Claude error: ${errorText}` };
-    }
-
     const data = await response.json();
-    return {
-      content: data.content[0].text,
-      model: 'claude-3',
-    };
-  } catch (error) {
-    console.error('Claude error:', error);
+    if (!response.ok) return { content: '', model: 'claude-3', error: data.error?.message || 'Claude Error' };
+
+    return { content: data.content[0].text, model: 'claude-3' };
+  } catch (error: any) {
     return { content: '', model: 'claude-3', error: error.message };
   }
 }
