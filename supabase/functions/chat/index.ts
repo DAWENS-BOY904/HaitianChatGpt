@@ -779,18 +779,40 @@ Adapt your tone to match the user's communication style.
         fileContent = fileResponse.content;
         
         // Detect file type and name
-        const lowerMsg = lastUserMessage.toLowerCase();
-        if (lowerMsg.includes('csv')) {
-          fileName = 'generated_file.csv';
-        } else if (lowerMsg.includes('html')) {
-          fileName = 'generated_file.html';
-        } else if (lowerMsg.includes('json')) {
-          fileName = 'generated_file.json';
-        } else if (lowerMsg.includes('js') || lowerMsg.includes('javascript')) {
-          fileName = 'generated_file.js';
-        } else {
-          fileName = 'generated_file.txt';
-        }
+const lowerMsg = lastUserMessage.toLowerCase();
+let fileName = 'generated_file.txt';
+
+if (lowerMsg.includes('csv')) {
+  fileName = 'generated_file.csv';
+} else if (lowerMsg.includes('html')) {
+  fileName = 'generated_file.html';
+} else if (lowerMsg.includes('json')) {
+  fileName = 'generated_file.json';
+} else if (lowerMsg.includes('js') || lowerMsg.includes('javascript')) {
+  fileName = 'generated_file.js';
+} else if (lowerMsg.includes('ts') || lowerMsg.includes('typescript')) {
+  fileName = 'generated_file.ts';
+} else if (lowerMsg.includes('python') || lowerMsg.includes('py')) {
+  fileName = 'generated_file.py';
+} else if (lowerMsg.includes('java')) {
+  fileName = 'generated_file.java';
+} else if (lowerMsg.includes('c++')) {
+  fileName = 'generated_file.cpp';
+} else if (lowerMsg.includes('c#')) {
+  fileName = 'generated_file.cs';
+} else if (lowerMsg.includes('php')) {
+  fileName = 'generated_file.php';
+} else if (lowerMsg.includes('xml')) {
+  fileName = 'generated_file.xml';
+} else if (lowerMsg.includes('yaml') || lowerMsg.includes('yml')) {
+  fileName = 'generated_file.yml';
+} else if (lowerMsg.includes('sql')) {
+  fileName = 'generated_file.sql';
+} else if (lowerMsg.includes('md') || lowerMsg.includes('markdown')) {
+  fileName = 'generated_file.md';
+} else if (lowerMsg.includes('css')) {
+  fileName = 'generated_file.css';
+}
         
         aiResponse.content = `File created: ${fileName} 📄`;
         console.log('✅ File created successfully:', fileName);
