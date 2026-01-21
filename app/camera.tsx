@@ -28,15 +28,19 @@ export default function CameraScreen() {
   const [capturing, setCapturing] = useState(false);
 
   /* -------- PERMISSIONS -------- */
-  useEffect(() => {
-    (async () => {
-      const cam = await CameraView.requestCameraPermissionsAsync();
-      const gal = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      setHasPermission(
-        cam.status === 'granted' && gal.status === 'granted'
-      );
-    })();
-  }, []);
+useEffect(() => {
+  (async () => {
+    const cam = await CameraView.requestCameraPermissionsAsync();
+    const gal = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    const mic = await CameraView.requestMicrophonePermissionsAsync(); // Add this
+    
+    setHasPermission(
+      cam.status === 'granted' && 
+      gal.status === 'granted' && 
+      mic.status === 'granted'
+    );
+  })();
+}, []);
 
   /* -------- PHOTO -------- */
   const takePhoto = async () => {
@@ -123,13 +127,14 @@ export default function CameraScreen() {
   /* -------- UI -------- */
   return (
     <View style={styles.container}>
-      <CameraView
-        ref={cameraRef}
-        style={styles.camera}
-        facing={facing}
-        flash={flash}
-        zoom={zoom}
-      >
+     <CameraView
+  ref={cameraRef}
+  style={styles.camera}
+  facing={facing}
+  flash={flash}
+  zoom={zoom}
+  mode={recording ? "video" : "picture"} // Switch mode dynamically
+>
         {/* TOP */}
         <View style={styles.top}>
           <TouchableOpacity onPress={() => router.back()}>
@@ -137,8 +142,8 @@ export default function CameraScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            onPress={() => setFlash(flash === 'on' ? 'off' : 'on')}
-          >
+  onPress={() => setFlash(prev => (prev === 'on' ? 'off' : 'on'))}
+>
             <Ionicons
               name={flash === 'on' ? 'flash' : 'flash-off'}
               size={26}
