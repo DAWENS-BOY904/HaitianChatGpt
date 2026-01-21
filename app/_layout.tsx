@@ -7,7 +7,26 @@ import { SocialProvider } from '../contexts/SocialContext';
 import { SubscriptionProvider } from '../contexts/SubscriptionContext';
 import { GuestLimitsProvider } from '../contexts/GuestLimitsContext';
 
+// Create a helper component
+const Compose = ({ providers, children }: { providers: React.ElementType[], children: React.ReactNode }) => {
+  return (
+    <>
+      {providers.reduceRight((acc, Provider) => <Provider>{acc}</Provider>, children)}
+    </>
+  );
+};
 export default function RootLayout() {
+  const providers = [
+    AlertProvider,
+    AuthProvider,
+    ThemeProvider,
+    SettingsProvider,
+    SubscriptionProvider,
+    GuestLimitsProvider,
+    SocialProvider,
+    ConversationProvider,
+  ];
+  
   return (
     <AlertProvider>
       <AuthProvider>
