@@ -796,27 +796,43 @@ Adapt your tone to match the user's communication style.
     }
     // Handle image generation (thinking mode already set to 'creating_image')
     else if (detectionResult.type === 'image') {
-      console.log('🎨 Creating image...');
-      
-      const { imageUrl: generatedImageUrl, error: imgError } = await generateImage(lastUserMessage);
-      
-      if (imgError) {
-        console.error('❌ Image generation failed:', imgError);
-        // Fallback to text response if image fails
-        thinkingMode = 'thinking';
-        aiResponse = await callAI(selectedModel, aiMessages);
-        if (aiResponse.error) {
-          return new Response(
-            JSON.stringify({ error: `Image generation failed: ${imgError}. Text response also failed: ${aiResponse.error}`, thinkingMode }),
-            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-      } else {
-        imageUrl = generatedImageUrl;
-        aiResponse.content = 'Image created ✨';
-        console.log('✅ Image created successfully');
+  console.log('🎨 Creating image...');
+
+  // Lis modèl image-capable
+  const IMAGE_MODELS = ['gpt-image-1', 'space-image-1', 'gemini-image'];
+
+  // Si user selected model pa image-capable, chwazi fallback
+  let imageModel = IMAGE_MODELS.includes(selectedModel) ? selectedModel : 'gpt-image-1';
+  console.log(`💡 Using image model: ${imageModel}`);
+
+  // Eseye jenere imaj
+  let { imageUrl, error: imgError } = await generateImage(lastUserMessage, imageModel);
+
+  // Fallback si echwe
+  if (imgError) {
+    console.warn('❌ Image generation failed, retrying with fallback model space-image-1', imgError);
+    ({ imageUrl, error: imgError } = await generateImage(lastUserMessage, 'space-image-1'));
+    
+    if (imgError) {
+      console.error('❌ Fallback image generation also failed:', imgError);
+      // Si fallback echwe, voye text response
+      thinkingMode = 'thinking';
+      aiResponse = await callAI(selectedModel, aiMessages);
+      if (aiResponse.error) {
+        return new Response(
+          JSON.stringify({ error: `Image generation failed: ${imgError}. Text fallback failed: ${aiResponse.error}`, thinkingMode }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
       }
     }
+  }
+
+  // Si imaj fèt, mete response
+  if (imageUrl) {
+    aiResponse.content = 'Image created ✨';
+    console.log('✅ Image created successfully:', imageUrl);
+  }
+}
     // Handle file generation (thinking mode already set to 'analyzing')
     else if (detectionResult.type === 'file') {
       console.log('📄 Analyzing and creating file...');
