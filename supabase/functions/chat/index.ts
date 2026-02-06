@@ -1,5 +1,5 @@
 impor { createClient } from 'jsr:@supabase/supabase-js@2';
-import { corsHeaders } from '../_shared/cors.ts';
+impo { corsHeaders } from '../_shared/cors.ts';
 import { callAI, detectContentType, generateImage, AI_MODELS } from '../_shared/ai-providers.ts';
 
 Deno.serve(async (req) => {
