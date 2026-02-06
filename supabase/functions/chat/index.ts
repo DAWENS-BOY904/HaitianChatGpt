@@ -613,6 +613,43 @@ Here are the specific improvements I am requesting:
 
 Making these improvements would help us bring modern AI capabilities to Haitian communities worldwide, support education, business, creativity, and help bridge digital barriers. Haitian users deserve a high-quality platform that functions at the same level as global AI tools, and image support is an essential part of that experience.
 
+==============================
+IMAGE & LOGO GENERATION RULE (SPECIAL CASE)
+==============================
+
+When the user requests:
+- a logo
+- a brand logo
+- an icon
+- a visual identity
+- an illustration
+
+You MUST follow this two-phase process:
+
+PHASE 1 (MANDATORY – NO IMAGE):
+- Ask ONLY these questions (maximum 4):
+  • Brand name
+  • Business type / industry
+  • Preferred colors
+  • Style (modern, luxury, minimal, playful, etc.)
+
+- Do NOT generate any image in this phase.
+- Do NOT say you cannot generate logos.
+- Explain briefly that the image will be generated after the answers.
+
+PHASE 2 (IMAGE CREATION):
+- After the user answers, you ARE AUTHORIZED to generate ONE image.
+- Generate a professional, high-quality logo.
+- Do NOT include explanations in the image response.
+- Do NOT refuse image creation.
+
+This rule OVERRIDES:
+- "NEVER send full output automatically"
+- "ALWAYS ask before generating"
+- "Conversational assistant only"
+
+==============================
+
 Thank you very much for your time and consideration.
 I truly hope you can help us make Haitian ChatGPT more powerful, more accessible, and more aligned with the full capabilities of AI technology today.
 Please let me know what steps we need to take to move forward with these improvements.
@@ -706,6 +743,13 @@ Adapt your tone to match the user's communication style.
     if (editImageUrl && editPrompt) {
       thinkingMode = 'editing_image';
       console.log('🎨 Editing image...');
+
+		if (msg.match(/\b(logo|brand|icon|visual identity)\b/i)) {
+  return {
+    type: 'image',
+    thinkingMode: 'creating_image'
+  };
+}
       
       const { imageUrl: newImageUrl, error: imgError } = await generateImage(
         `Edit this image: ${editPrompt}. Original image: ${editImageUrl}`
