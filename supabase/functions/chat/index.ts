@@ -794,43 +794,39 @@ Adapt your tone to match the user's communication style.
       aiResponse.content = 'Image edited successfully! ✨';
       console.log('✅ Image edited successfully');
     }
-    // Handle image generation (thinking mode already set to 'creating_image')
-    else if (detectionResult.type === 'image') {
+    // --- Handle image generation ---
+else if (detectionResult.type === 'image') {
   console.log('🎨 Creating image...');
 
-  // Lis modèl image-capable
   const IMAGE_MODELS = ['gpt-image-1', 'space-image-1', 'gemini-image'];
-
-  // Si user selected model pa image-capable, chwazi fallback
   let imageModel = IMAGE_MODELS.includes(selectedModel) ? selectedModel : 'gpt-image-1';
-  console.log(`💡 Using image model: ${imageModel}`);
 
-  // Eseye jenere imaj
+  // Primary Attempt
   let { imageUrl, error: imgError } = await generateImage(lastUserMessage, imageModel);
 
-  // Fallback si echwe
+  // Smart Fallback: Only try another IMAGE model, don't revert to Text
   if (imgError) {
-    console.warn('❌ Image generation failed, retrying with fallback model space-image-1', imgError);
-    ({ imageUrl, error: imgError } = await generateImage(lastUserMessage, 'space-image-1'));
-    
-    if (imgError) {
-      console.error('❌ Fallback image generation also failed:', imgError);
-      // Si fallback echwe, voye text response
-      thinkingMode = 'thinking';
-      aiResponse = await callAI(selectedModel, aiMessages);
-      if (aiResponse.error) {
-        return new Response(
-          JSON.stringify({ error: `Image generation failed: ${imgError}. Text fallback failed: ${aiResponse.error}`, thinkingMode }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-    }
+    console.warn(`⚠️ ${imageModel} failed, trying backup image engine...`);
+    const backup = await generateImage(lastUserMessage, 'space-image-1');
+    imageUrl = backup.imageUrl;
+    imgError = backup.error;
   }
 
-  // Si imaj fèt, mete response
+  // FINAL CHECK: If it still fails, DO NOT callAI() (text). Return the error.
+  if (imgError) {
+    console.error('❌ All image engines failed');
+    return new Response(
+      JSON.stringify({ 
+        error: "We couldn't generate the image right now. Please try a different prompt.", 
+        thinkingMode: 'error' 
+      }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
   if (imageUrl) {
     aiResponse.content = 'Image created ✨';
-    console.log('✅ Image created successfully:', imageUrl);
+    aiResponse.imageUrl = imageUrl; // Ensure your frontend receives the URL
   }
 }
     // Handle file generation (thinking mode already set to 'analyzing')
