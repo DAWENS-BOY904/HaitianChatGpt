@@ -227,7 +227,7 @@ export async function callGroq(messages: AIMessage[]): Promise<AIResponse> {
       },
       body: JSON.stringify({
         // llama-4-maverick is the 2026 flagship for speed/intelligence balance
-        model: 'llama-4-maverick-17b-128e-instruct', 
+        model: 'llama-3.3-70b-versatile', 
         messages: messages.map(m => ({
           role: m.role,
           content: m.content || '',
