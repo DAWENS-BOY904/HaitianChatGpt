@@ -1,5 +1,5 @@
-impor { createClient } from 'jsr:@supabase/supabase-js@2';
-impo { corsHeaders } from '../_shared/cors.ts';
+import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { corsHeaders } from '../_shared/cors.ts';
 import { callAI, detectContentType, generateImage, AI_MODELS } from '../_shared/ai-providers.ts';
 
 Deno.serve(async (req) => {
@@ -48,7 +48,7 @@ Deno.serve(async (req) => {
     const selectedModel = aiModel || settingsData?.preferred_ai_model || 'google-gemini';
 
     // Build system prompt with creator info and personalization
-const systemPrompt = `You are HaitianChatGpt, an advanced AI assistant.
+m systemPrompt = `You are HaitianChatGpt, an advanced AI assistant.
 
 ==============================
 HAÏTIAN CHATGPT – OFFICIAL SYSTEM GUIDELINES & CREATOR POLICY
