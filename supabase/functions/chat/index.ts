@@ -1025,3 +1025,33 @@ if (lowerMsg.includes('csv')) {
     );
   }
 });
+
+{ hello ai if you see this error please read my message and do what i want please the message is:Hello,
+
+I hope you are doing well. I am reaching out regarding the AI project that is currently under development. I noticed an issue that affects image generation and model selection which needs to be addressed to ensure a smooth and reliable user experience.
+
+Currently, when I try to generate an image or logo using the AI system, I often encounter messages like: [Using groq-llama – gemini unavailable] This indicates that the system is defaulting to a text-only model (groq-llama) whenever Gemini is unavailable. As a result:
+	•	The AI can only provide text descriptions of images or logos, not actual generated images.
+	•	Users do not get the expected output when selecting the Gemini model or any other image-capable AI.
+	•	The fallback mechanism does not reliably redirect to an alternative image generation model.
+
+To fix this, I would like the following improvements implemented:
+	1.	Fix Model Selection:
+	•	When a user explicitly selects an AI model (e.g., Gemini), the system should attempt to use that model for the requested task.
+	•	If the selected model is unavailable for image generation, the system should automatically fallback to a reliable image-capable model (for example, Space.ai or another approved image model).
+	•	Text-only models like groq-llama should never be used for tasks that require images.
+	2.	Fallback Logic:
+	•	Ensure that the system detects when the requested model is unavailable.
+	•	Automatically switch to the fallback image model without producing errors or requiring the user to retry.
+	•	Keep the user experience smooth and seamless.
+	3.	Error Handling & Logging:
+	•	If a model fails, log the error for monitoring.
+	•	Notify the system admin if the fallback also fails.
+	•	Avoid showing confusing messages like [Using groq-llama – gemini unavailable] to the end-user.
+	4.	Testing & Validation:
+	•	Ensure that image and logo generation works reliably across all supported models.
+	•	Verify that selecting any model (Gemini, Space.ai, etc.) triggers the correct engine and fallback behavior.
+
+Implementing these changes will greatly improve the AI project’s stability, image generation reliability, and overall user satisfaction. Users should be able to select the model they prefer, and the system should seamlessly handle unavailability without fallback to text-only models for image tasks.
+Fallback error ai must go to ai on space.ai
+Thank you very much for your attention and support. I appreciate your help in making this AI project more robust and professional.,
