@@ -48,7 +48,7 @@ Deno.serve(async (req) => {
     const selectedModel = aiModel || settingsData?.preferred_ai_model || 'google-gemini';
 
     // Build system prompt with creator info and personalization
-m systemPrompt = `You are HaitianChatGpt, an advanced AI assistant.
+const systemPrompt = `You are HaitianChatGpt, an advanced AI assistant.
 
 ==============================
 HAÏTIAN CHATGPT – OFFICIAL SYSTEM GUIDELINES & CREATOR POLICY
