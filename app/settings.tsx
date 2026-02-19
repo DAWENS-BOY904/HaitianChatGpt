@@ -745,9 +745,7 @@ export default function SettingsScreen() {
         {/* ABOUT SECTION */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>ABOUT</Text>
-          
-          {/* VERSION CHECK ROW */}
-          <VersionCheckRow />
+        
           
           <SettingRow 
             icon="bug-outline" 
@@ -762,19 +760,17 @@ export default function SettingsScreen() {
           <SettingRow 
             icon="document-text-outline" 
             title="Terms of Use" 
-            onPress={() => router.push('/content-viewer?type=terms_of_use')}
+            onPress={() => router.push('/terms-of-use')}
           />
           <SettingRow 
             icon="shield-checkmark-outline" 
             title="Privacy Policy" 
             onPress={() => router.push('/privacy-policy')}
           />
-          <SettingRow 
-            icon="help-circle-outline" 
-            title="FAQ" 
-            onPress={() => router.push('/content-viewer?type=faq')}
-          />
         </View>
+
+        {/* VERSION CHECK ROW */}
+          <VersionCheckRow />
 
         <Text style={styles.versionText}>HaitianChatGpt for iOS – v{currentVersion}</Text>
 
