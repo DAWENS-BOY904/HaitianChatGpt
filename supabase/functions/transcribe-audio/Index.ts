@@ -1,5 +1,12 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { corsHeaders } from '../_shared/cors.ts'
+import { 
+  callAI, 
+  detectContentType, 
+  generateImageSmart, 
+  isTextOnlyModel,
+  AI_MODELS 
+} from '../_shared/ai-providers.ts';
 
 serve(async (req) => {
   // Handle CORS preflight
