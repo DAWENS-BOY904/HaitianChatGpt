@@ -1,4 +1,5 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 // Inline CORS headers
 const corsHeaders = {
@@ -82,23 +83,31 @@ serve(async (req) => {
     return new Response('ok', { headers: corsHeaders })
   }
 
+  const startTime = Date.now()
+  console.log('🎤 [transcribe-audio] Request received at', new Date().toISOString())
+
   try {
     const openaiKey = Deno.env.get('OPENAI_API_KEY')
     if (!openaiKey) {
-      console.error('OPENAI_API_KEY not set')
+      console.error('❌ [transcribe-audio] OPENAI_API_KEY not configured')
       return new Response(
-        JSON.stringify({ error: 'Server configuration error' }),
+        JSON.stringify({ error: 'Server configuration error: Missing API key' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    // Parse request
+    // Parse request with timeout protection
     let body
     try {
-      body = await req.json()
+      const requestText = await req.text()
+      if (!requestText) {
+        throw new Error('Empty request body')
+      }
+      body = JSON.parse(requestText)
     } catch (e) {
+      console.error('❌ [transcribe-audio] Invalid request:', e.message)
       return new Response(
-        JSON.stringify({ error: 'Invalid JSON body' }),
+        JSON.stringify({ error: 'Invalid JSON body', details: e.message }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
@@ -106,19 +115,37 @@ serve(async (req) => {
     const { audio, userId, conversationId } = body
     
     if (!audio || typeof audio !== 'string') {
+      console.error('❌ [transcribe-audio] No audio data provided')
       return new Response(
         JSON.stringify({ error: 'No audio data provided' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    // Convert base64
+    console.log('📊 [transcribe-audio] Processing request:')
+    console.log('  - User ID:', userId || 'anonymous')
+    console.log('  - Conversation ID:', conversationId || 'none')
+    console.log('  - Audio size:', audio.length, 'chars')
+
+    // Convert base64 with validation
     let audioBuffer: Uint8Array
     try {
-      audioBuffer = Uint8Array.from(atob(audio), c => c.charCodeAt(0))
+      const decodedAudio = atob(audio)
+      if (decodedAudio.length === 0) {
+        throw new Error('Empty audio after decoding')
+      }
+      audioBuffer = Uint8Array.from(decodedAudio, c => c.charCodeAt(0))
+      console.log('✅ [transcribe-audio] Audio decoded successfully:', audioBuffer.length, 'bytes')
+      
+      // Validate audio size (max 25MB for Whisper)
+      const maxSize = 25 * 1024 * 1024
+      if (audioBuffer.length > maxSize) {
+        throw new Error(`Audio too large: ${(audioBuffer.length / 1024 / 1024).toFixed(2)}MB (max 25MB)`)
+      }
     } catch (e) {
+      console.error('❌ [transcribe-audio] Base64 decode error:', e.message)
       return new Response(
-        JSON.stringify({ error: 'Invalid base64 audio data' }),
+        JSON.stringify({ error: 'Invalid base64 audio data', details: e.message }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
@@ -129,50 +156,96 @@ serve(async (req) => {
     formData.append('model', 'whisper-1')
     formData.append('language', 'auto') // Auto-detect language
 
-    console.log('Calling Whisper API...')
+    console.log('🌐 [transcribe-audio] Calling OpenAI Whisper API...')
     
-    // Call OpenAI with timeout
+    // Call OpenAI with extended timeout (45 seconds)
     const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 25000)
+    const timeout = setTimeout(() => {
+      console.error('⏱️ [transcribe-audio] Whisper API timeout after 45s')
+      controller.abort()
+    }, 45000)
     
-    const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${openaiKey}` },
-      body: formData,
-      signal: controller.signal,
-    })
+    let response
+    try {
+      response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${openaiKey}` },
+        body: formData,
+        signal: controller.signal,
+      })
+    } catch (fetchError) {
+      clearTimeout(timeout)
+      console.error('❌ [transcribe-audio] Fetch error:', fetchError.message)
+      
+      if (fetchError.name === 'AbortError') {
+        return new Response(
+          JSON.stringify({ error: 'Transcription timed out. Please try recording a shorter audio or try again.' }),
+          { status: 504, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+      
+      return new Response(
+        JSON.stringify({ error: 'Failed to connect to transcription service', details: fetchError.message }),
+        { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
     
     clearTimeout(timeout)
 
     if (!response.ok) {
       const error = await response.text()
-      console.error('Whisper error:', response.status, error)
+      console.error('❌ [transcribe-audio] Whisper API error:', response.status, error)
+      
+      let errorMessage = 'Transcription failed'
+      if (response.status === 429) {
+        errorMessage = 'Too many requests. Please wait a moment and try again.'
+      } else if (response.status === 401) {
+        errorMessage = 'Server authentication error. Please contact support.'
+      } else if (response.status >= 500) {
+        errorMessage = 'Transcription service is temporarily unavailable. Please try again.'
+      }
+      
       return new Response(
-        JSON.stringify({ error: 'Transcription failed', details: error }),
+        JSON.stringify({ 
+          error: errorMessage, 
+          details: error.substring(0, 200),
+          statusCode: response.status 
+        }),
+        { status: response.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    let result
+    try {
+      result = await response.json()
+    } catch (e) {
+      console.error('❌ [transcribe-audio] Failed to parse Whisper response:', e.message)
+      return new Response(
+        JSON.stringify({ error: 'Invalid response from transcription service' }),
         { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    const result = await response.json()
     const transcribedText = result.text || ''
+    const processingTime = Date.now() - startTime
     
-    console.log('Transcribed:', transcribedText.substring(0, 100))
+    console.log('✅ [transcribe-audio] Transcribed successfully in', processingTime, 'ms')
+    console.log('📝 [transcribe-audio] Text preview:', transcribedText.substring(0, 100))
 
     // CONTENT MODERATION
     const scamDetection = detectScam(transcribedText)
     const isSexual = detectSexual(transcribedText)
     
     // If scam detected - AUTO BAN
-    if (scamDetection.isScam) {
-      console.error('🚨 SCAM DETECTED:', scamDetection.matchedWords, 'User:', userId)
+    if (scamDetection.isScam && userId) {
+      console.error('🚨 [transcribe-audio] SCAM DETECTED! Keywords:', scamDetection.matchedWords, 'User:', userId)
       
-      // Ban user for 10 days
-      if (userId) {
+      try {
         const banUntil = new Date()
         banUntil.setDate(banUntil.getDate() + 10)
         
-        // Call ban function (you need to implement this)
-        await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/ban-user`, {
+        // Call ban function
+        const banResponse = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/ban-user`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
@@ -189,22 +262,15 @@ serve(async (req) => {
               timestamp: new Date().toISOString(),
             }
           }),
-        }).catch(e => console.error('Ban failed:', e))
-      }
+        })
 
-      // Close conversation
-      if (conversationId) {
-        await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/close-conversation`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            conversationId,
-            reason: 'Scam content detected - conversation terminated',
-          }),
-        }).catch(e => console.error('Close conversation failed:', e))
+        if (!banResponse.ok) {
+          console.error('⚠️ [transcribe-audio] Ban failed:', await banResponse.text())
+        } else {
+          console.log('✅ [transcribe-audio] User banned successfully')
+        }
+      } catch (e) {
+        console.error('❌ [transcribe-audio] Ban error:', e.message)
       }
 
       return new Response(
@@ -221,9 +287,11 @@ serve(async (req) => {
 
     // Log sexual content but allow (optional)
     if (isSexual) {
-      console.log('⚠️ Sexual content detected (allowed):', userId)
-      // You can choose to flag or allow
+      console.log('⚠️ [transcribe-audio] Sexual content detected (allowed):', userId)
     }
+
+    const totalTime = Date.now() - startTime
+    console.log('🎉 [transcribe-audio] Success! Total processing time:', totalTime, 'ms')
 
     return new Response(
       JSON.stringify({ 
@@ -231,15 +299,25 @@ serve(async (req) => {
         moderation: {
           scamDetected: false,
           sexualContent: isSexual,
-        }
+        },
+        processingTime: totalTime
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 
   } catch (error) {
-    console.error('Function error:', error)
+    const totalTime = Date.now() - startTime
+    console.error('❌ [transcribe-audio] Function error after', totalTime, 'ms:', error)
+    console.error('  Error type:', error.name)
+    console.error('  Error message:', error.message)
+    console.error('  Stack:', error.stack)
+    
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ 
+        error: 'Internal server error during transcription',
+        details: error.message,
+        processingTime: totalTime
+      }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }
