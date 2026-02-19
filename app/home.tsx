@@ -11,6 +11,8 @@ import {
   StatusBar, 
   ActivityIndicator,
   Alert,
+  Image,
+  Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
@@ -272,7 +274,6 @@ export default function HomeScreen() {
             onPress: () => {
               // Clear current conversation
               setInputText('');
-              setTranscript('');
               // Navigate to suspended screen or logout
               router.push('/suspended');
             } 
@@ -290,7 +291,7 @@ export default function HomeScreen() {
       }
 
     } catch (error: any) {
-      console.error('Transccription error:', error);
+      console.error('Transcription error:', error);
       
       // Check if it's a ban error
       if (error?.message?.includes('Content violation') || error?.message?.includes('suspended')) {
