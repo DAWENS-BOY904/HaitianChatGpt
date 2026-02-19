@@ -58,6 +58,7 @@ export default function RootLayout() {
                     <Stack.Screen name="deep-research" />
                     <Stack.Screen name="web-search" />
                     <Stack.Screen name="privacy-policy" />
+                    <Stack.Screen name="terms-of-use" />
                     <Stack.Screen name="study-learn" />
                     <Stack.Screen name="languages" />
                     <Stack.Screen name="payment" />
