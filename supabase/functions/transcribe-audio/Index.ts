@@ -45,3 +45,12 @@ serve(async (req) => {
     headers: { 'Content-Type': 'application/json' },
   })
 })
+{
+  "eventMessage": "POST | 0 | http://njpuoozygqtpvlzhnjpu.backend.onspace.ai/functions/v1/transcribe-audio | ",
+  "functionId": "transcribe-audio",
+  "id": "",
+  "logLevel": "ERROR",
+  "method": "POST",
+  "statusCode": 0,
+  "timestamp": 1771536725
+}
