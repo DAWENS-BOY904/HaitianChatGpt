@@ -209,7 +209,7 @@ export default function HomeScreen() {
     }
   };
 
-  // Stop voice recording and process
+    // Stop voice recording and process
   const stopVoiceRecording = async () => {
     if (!recordingRef.current || recordingState !== 'recording') return;
 
@@ -224,7 +224,6 @@ export default function HomeScreen() {
         throw new Error('No recording URI');
       }
 
-      // Get recording info
       const info = await FileSystem.getInfoAsync(uri);
       if (!info.exists) {
         throw new Error('Recording file not found');
@@ -232,35 +231,55 @@ export default function HomeScreen() {
 
       console.log('🎤 Recording saved:', uri, 'Size:', info.size);
 
-      // Read file as base64
       const base64Audio = await FileSystem.readAsStringAsync(uri, {
         encoding: FileSystem.EncodingType.Base64,
       });
 
-      // Send to speech-to-text
+      // Appel fonksyon ki gen moderasyon
       await transcribeAudio(base64Audio);
 
     } catch (error) {
       console.error('Recording error:', error);
-      showAlert('Error', 'Failed to process recording');
-      setRecordingState('idle');
+      if (recordingState !== 'idle') {
+        setRecordingState('idle');
+      }
     } finally {
       recordingRef.current = null;
     }
   };
 
-  // Transcribe audio using OpenAI Whisper or similar
+
+   // Transcribe audio with scam/fraud detection
   const transcribeAudio = async (base64Audio: string) => {
     try {
-      // Option 1: Use Supabase Edge Function with OpenAI Whisper
       const { data, error } = await supabase.functions.invoke('transcribe-audio', {
         body: {
           audio: base64Audio,
-          model: 'whisper-1',
+          userId: user?.id,
+          conversationId: currentConversation?.id,
         },
       });
 
-      if (error) throw error;
+      // Check if user got banned for scam/fraud
+      if (error?.message?.includes('Content violation') || data?.banned) {
+        setRecordingState('idle');
+        
+        Alert.alert(
+          '🚫 Account Suspended',
+          "Don't fucking say that! Your account has been suspended for 10 days due to scam/fraud content. This conversation has been terminated.",
+          [{ 
+            text: 'OK', 
+            onPress: () => {
+              // Clear current conversation
+              setInputText('');
+              setTranscript('');
+              // Navigate to suspended screen or logout
+              router.push('/suspended');
+            } 
+          }]
+        );
+        return;
+      }
 
       if (data?.text) {
         console.log('📝 Transcribed:', data.text);
@@ -270,8 +289,14 @@ export default function HomeScreen() {
         throw new Error('No transcription received');
       }
 
-    } catch (error) {
-      console.error('Transcription error:', error);
+    } catch (error: any) {
+      console.error('Transccription error:', error);
+      
+      // Check if it's a ban error
+      if (error?.message?.includes('Content violation') || error?.message?.includes('suspended')) {
+        setRecordingState('idle');
+        return;
+      }
       
       // Fallback: Show manual input option
       Alert.alert(
@@ -291,6 +316,7 @@ export default function HomeScreen() {
       );
     }
   };
+
 
   // Toggle recording
   const toggleRecording = () => {
