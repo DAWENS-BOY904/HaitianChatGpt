@@ -69,6 +69,7 @@ export default function HomeScreen() {
   const recordingRef = useRef<Audio.Recording | null>(null);
   const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
   const audioPermissionRef = useRef<boolean>(false);
+  const isRecordingRef = useRef<boolean>(false); // <-- NOUVO: pou evite stale closure
 
   // Initialize audio permissions on mount
   useEffect(() => {
@@ -116,9 +117,7 @@ export default function HomeScreen() {
   useEffect(() => {
     return () => {
       stopRecordingTimer();
-      if (recordingRef.current) {
-        recordingRef.current.stopAndUnloadAsync().catch(() => {});
-      }
+      cleanupRecording();
     };
   }, []);
 
@@ -157,15 +156,27 @@ export default function HomeScreen() {
     }
   };
 
+  const cleanupRecording = async () => {
+    try {
+      if (recordingRef.current) {
+        await recordingRef.current.stopAndUnloadAsync();
+        recordingRef.current = null;
+      }
+    } catch (error) {
+      // Ignore cleanup errors
+    }
+  };
+
   const formatDuration = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Start voice recording
+  // Start voice recording - KORIJE
   const startVoiceRecording = async () => {
-    if (!audioPermissionRef.current) {
+    try {
+      // 1. Check permissions first
       const { status } = await Audio.requestPermissionsAsync();
       if (status !== 'granted') {
         Alert.alert(
@@ -179,81 +190,132 @@ export default function HomeScreen() {
         return;
       }
       audioPermissionRef.current = true;
-    }
 
-    try {
-      // Stop any existing recording
-      if (recordingRef.current) {
-        await recordingRef.current.stopAndUnloadAsync();
-      }
+      // 2. Cleanup any existing recording
+      await cleanupRecording();
 
-      setRecordingState('recording');
-      startRecordingTimer();
+      // 3. Set audio mode (IMPORTANT for iOS)
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+        shouldDuckAndroid: true,
+        playThroughEarpieceAndroid: false,
+      });
 
+      // 4. Start recording
+      console.log('🎤 Starting recording...');
       const { recording } = await Audio.Recording.createAsync(
         Audio.RecordingOptionsPresets.HIGH_QUALITY
       );
 
       recordingRef.current = recording;
+      isRecordingRef.current = true;
+      setRecordingState('recording');
+      startRecordingTimer();
 
-      // Auto-stop after 60 seconds
+      // 5. Auto-stop after 60 seconds - use ref to avoid stale closure
       setTimeout(() => {
-        if (recordingState === 'recording') {
+        if (isRecordingRef.current) {
+          console.log('⏱️ Auto-stopping recording after 60s');
           stopVoiceRecording();
         }
       }, 60000);
 
     } catch (error) {
-      console.error('Failed to start recording:', error);
+      console.error('❌ Failed to start recording:', error);
+      isRecordingRef.current = false;
       setRecordingState('idle');
       stopRecordingTimer();
-      showAlert('Error', 'Failed to start recording. Please try again.');
+      
+      // More specific error message
+      let errorMsg = 'Failed to start recording. Please try again.';
+      if (error instanceof Error) {
+        if (error.message.includes('permission')) {
+          errorMsg = 'Microphone permission denied. Please enable it in Settings.';
+        } else if (error.message.includes('busy')) {
+          errorMsg = 'Audio system is busy. Please try again in a moment.';
+        }
+      }
+      
+      showAlert('Error', errorMsg);
     }
   };
 
-    // Stop voice recording and process
+  // Stop voice recording and process - KORIJE
   const stopVoiceRecording = async () => {
-    if (!recordingRef.current || recordingState !== 'recording') return;
+    console.log('🛑 Stopping recording...');
+    
+    // Prevent double-stop
+    if (!isRecordingRef.current) {
+      console.log('Already stopped');
+      return;
+    }
 
+    isRecordingRef.current = false;
     stopRecordingTimer();
+
+    // If not in recording state, just cleanup
+    if (recordingState !== 'recording') {
+      await cleanupRecording();
+      return;
+    }
+
     setRecordingState('processing');
 
     try {
-      await recordingRef.current.stopAndUnloadAsync();
-      const uri = recordingRef.current.getURI();
-      
-      if (!uri) {
-        throw new Error('No recording URI');
+      if (!recordingRef.current) {
+        throw new Error('No active recording');
       }
 
+      // Stop and get URI
+      await recordingRef.current.stopAndUnloadAsync();
+      const uri = recordingRef.current.getURI();
+      recordingRef.current = null;
+
+      if (!uri) {
+        throw new Error('No recording URI available');
+      }
+
+      console.log('📁 Recording URI:', uri);
+
+      // Check file exists
       const info = await FileSystem.getInfoAsync(uri);
+      console.log('📊 File info:', info);
+
       if (!info.exists) {
         throw new Error('Recording file not found');
       }
 
-      console.log('🎤 Recording saved:', uri, 'Size:', info.size);
+      if (info.size === 0) {
+        throw new Error('Recording is empty');
+      }
 
+      // Read as base64
+      console.log('📖 Reading file...');
       const base64Audio = await FileSystem.readAsStringAsync(uri, {
         encoding: FileSystem.EncodingType.Base64,
       });
 
-      // Appel fonksyon ki gen moderasyon
+      console.log('✅ File read, size:', base64Audio.length);
+
+      // Transcribe
       await transcribeAudio(base64Audio);
 
     } catch (error) {
-      console.error('Recording error:', error);
-      if (recordingState !== 'idle') {
-        setRecordingState('idle');
-      }
-    } finally {
-      recordingRef.current = null;
+      console.error('❌ Recording error:', error);
+      setRecordingState('idle');
+      
+      const errorMsg = error instanceof Error ? error.message : 'Failed to process recording';
+      showAlert('Error', errorMsg);
     }
   };
 
-
-   // Transcribe audio with scam/fraud detection
+  // Transcribe audio with scam/fraud detection
   const transcribeAudio = async (base64Audio: string) => {
     try {
+      console.log('🔄 Sending to transcription...');
+      
       const { data, error } = await supabase.functions.invoke('transcribe-audio', {
         body: {
           audio: base64Audio,
@@ -262,7 +324,7 @@ export default function HomeScreen() {
         },
       });
 
-      // Check if user got banned for scam/fraud
+      // Check ban
       if (error?.message?.includes('Content violation') || data?.banned) {
         setRecordingState('idle');
         
@@ -272,15 +334,15 @@ export default function HomeScreen() {
           [{ 
             text: 'OK', 
             onPress: () => {
-              // Clear current conversation
               setInputText('');
-              // Navigate to suspended screen or logout
               router.push('/suspended');
             } 
           }]
         );
         return;
       }
+
+      if (error) throw error;
 
       if (data?.text) {
         console.log('📝 Transcribed:', data.text);
@@ -291,33 +353,23 @@ export default function HomeScreen() {
       }
 
     } catch (error: any) {
-      console.error('Transcription error:', error);
+      console.error('❌ Transcription error:', error);
+      setRecordingState('idle');
       
-      // Check if it's a ban error
       if (error?.message?.includes('Content violation') || error?.message?.includes('suspended')) {
-        setRecordingState('idle');
         return;
       }
       
-      // Fallback: Show manual input option
       Alert.alert(
         'Transcription Failed',
         'Could not transcribe audio. Would you like to try again or type manually?',
         [
-          { 
-            text: 'Try Again', 
-            onPress: () => startVoiceRecording() 
-          },
-          { 
-            text: 'Type Manually', 
-            style: 'cancel',
-            onPress: () => setRecordingState('idle')
-          },
+          { text: 'Try Again', onPress: () => startVoiceRecording() },
+          { text: 'Type Manually', style: 'cancel' },
         ]
       );
     }
   };
-
 
   // Toggle recording
   const toggleRecording = () => {
@@ -639,7 +691,6 @@ export default function HomeScreen() {
     : currentAIModel === 'claude' ? 'Claude'
     : 'Llama';
 
-  // Determine send button state
   const showSendButton = inputText.trim() || selectedMedia.length > 0;
   const isRecording = recordingState === 'recording';
   const isProcessing = recordingState === 'processing';
@@ -787,13 +838,12 @@ export default function HomeScreen() {
         </View>
         
         <TouchableOpacity 
-  style={styles.iconButton} 
-  onPress={() => router.push('/voice-control')}
-  disabled={editingMessageId !== null}
->
-  <Ionicons name="call-outline" size={24} color={editingMessageId ? colors.textSecondary : colors.text} />
-</TouchableOpacity>
-
+          style={styles.iconButton} 
+          onPress={() => router.push('/voice-control')}
+          disabled={editingMessageId !== null}
+        >
+          <Ionicons name="call-outline" size={24} color={editingMessageId ? colors.textSecondary : colors.text} />
+        </TouchableOpacity>
 
         {editingMessageId && (
           <TouchableOpacity 
@@ -866,3 +916,4 @@ export default function HomeScreen() {
     </KeyboardAvoidingView>
   );
 }
+
