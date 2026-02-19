@@ -12,6 +12,14 @@ const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
+ const { data: { user }, error: userError } = await supabaseClient.auth.getUser(token);
+    if (userError || !user) {
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
 serve(async (req) => {
   const { audio } = await req.json()
   
