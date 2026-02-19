@@ -11,6 +11,8 @@ import {
   StatusBar, 
   ActivityIndicator,
   Alert,
+  Linking, // ADDED: Missing import
+  Image,   // ADDED: Missing import
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
@@ -67,6 +69,7 @@ export default function HomeScreen() {
   const recordingRef = useRef<Audio.Recording | null>(null);
   const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
   const audioPermissionRef = useRef<boolean>(false);
+  const isRecordingRef = useRef<boolean>(false); // ADDED: For stable ref in timeouts
 
   // Initialize audio permissions on mount
   useEffect(() => {
@@ -78,15 +81,18 @@ export default function HomeScreen() {
       const { status } = await Audio.requestPermissionsAsync();
       audioPermissionRef.current = status === 'granted';
       
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: false,
-        shouldDuckAndroid: true,
-        playThroughEarpieceAndroid: false,
-      });
+      if (status === 'granted') {
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: true,
+          playsInSilentModeIOS: true,
+          staysActiveInBackground: false,
+          shouldDuckAndroid: true,
+          playThroughEarpieceAndroid: false,
+        });
+      }
     } catch (error) {
       console.error('Audio permission error:', error);
+      audioPermissionRef.current = false;
     }
   };
 
@@ -113,10 +119,7 @@ export default function HomeScreen() {
   // Cleanup recording on unmount
   useEffect(() => {
     return () => {
-      stopRecordingTimer();
-      if (recordingRef.current) {
-        recordingRef.current.stopAndUnloadAsync().catch(() => {});
-      }
+      cleanupRecording();
     };
   }, []);
 
@@ -161,73 +164,179 @@ export default function HomeScreen() {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Start voice recording
+  // IMPROVED: Cleanup function
+  const cleanupRecording = async () => {
+    stopRecordingTimer();
+    if (recordingRef.current) {
+      try {
+        const status = await recordingRef.current.getStatusAsync();
+        if (status.isRecording) {
+          await recordingRef.current.stopAndUnloadAsync();
+        }
+      } catch (e) {
+        // Ignore cleanup errors
+      }
+      recordingRef.current = null;
+    }
+    isRecordingRef.current = false;
+    setRecordingState('idle');
+  };
+
+  // IMPROVED: Start voice recording with better error handling
   const startVoiceRecording = async () => {
+    // Check permissions first
     if (!audioPermissionRef.current) {
-      const { status } = await Audio.requestPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert(
-          'Permission Required',
-          'Microphone access is needed for voice input. Please enable it in Settings.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Open Settings', onPress: () => Platform.OS === 'ios' ? Linking.openURL('app-settings:') : Linking.openSettings() }
-          ]
-        );
+      try {
+        const { status } = await Audio.requestPermissionsAsync();
+        audioPermissionRef.current = status === 'granted';
+        
+        if (status !== 'granted') {
+          Alert.alert(
+            'Microphone Access Required',
+            'Please enable microphone access in Settings to use voice recording.',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { 
+                text: 'Open Settings', 
+                onPress: () => {
+                  if (Platform.OS === 'ios') {
+                    Linking.openURL('app-settings:');
+                  } else {
+                    Linking.openSettings();
+                  }
+                }
+              }
+            ]
+          );
+          return;
+        }
+      } catch (permError) {
+        console.error('Permission request failed:', permError);
+        showAlert('Error', 'Unable to request microphone permissions. Please check your device settings.');
         return;
       }
-      audioPermissionRef.current = true;
     }
 
     try {
-      // Stop any existing recording
-      if (recordingRef.current) {
-        await recordingRef.current.stopAndUnloadAsync();
-      }
+      // Clean up any existing recording first
+      await cleanupRecording();
+
+      // Set audio mode explicitly before recording
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+        shouldDuckAndroid: true,
+        playThroughEarpieceAndroid: false,
+      });
 
       setRecordingState('recording');
+      isRecordingRef.current = true;
       startRecordingTimer();
 
-      const { recording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
-      );
+      // Create recording with specific options for better compatibility
+      const { recording } = await Audio.Recording.createAsync({
+        android: {
+          extension: '.m4a',
+          outputFormat: Audio.AndroidOutputFormat.MPEG_4,
+          audioEncoder: Audio.AndroidAudioEncoder.AAC,
+          sampleRate: 44100,
+          numberOfChannels: 2,
+          bitRate: 128000,
+        },
+        ios: {
+          extension: '.m4a',
+          audioQuality: Audio.IOSAudioQuality.HIGH,
+          sampleRate: 44100,
+          numberOfChannels: 1,
+          bitRate: 128000,
+          linearPCMBitDepth: 16,
+          linearPCMIsBigEndian: false,
+          linearPCMIsFloat: false,
+        },
+        web: {
+          mimeType: 'audio/webm',
+          bitsPerSecond: 128000,
+        },
+      });
 
       recordingRef.current = recording;
 
-      // Auto-stop after 60 seconds
+      // IMPROVED: Auto-stop using ref instead of state
       setTimeout(() => {
-        if (recordingState === 'recording') {
+        if (isRecordingRef.current) {
+          console.log('⏱️ Auto-stopping recording after 60 seconds');
           stopVoiceRecording();
         }
       }, 60000);
 
-    } catch (error) {
+      console.log('🎤 Recording started successfully');
+
+    } catch (error: any) {
       console.error('Failed to start recording:', error);
-      setRecordingState('idle');
-      stopRecordingTimer();
-      showAlert('Error', 'Failed to start recording. Please try again.');
+      await cleanupRecording();
+      
+      // Better error messages based on error type
+      let errorMessage = 'Unable to start recording. ';
+      
+      if (error.message?.includes('E_AUDIO_NODATA')) {
+        errorMessage += 'No audio data received. Please check your microphone.';
+      } else if (error.message?.includes('E_AUDIO_PERMISSIONS')) {
+        errorMessage += 'Microphone permission denied. Please enable it in Settings.';
+      } else if (error.message?.includes('E_AUDIO_BUSY')) {
+        errorMessage += 'Another app is using the microphone. Please close other apps and try again.';
+      } else if (error.message?.includes('E_AUDIO_RECORDING')) {
+        errorMessage += 'Recording is already in progress.';
+      } else {
+        errorMessage += 'Please try again or type your message manually.';
+      }
+      
+      Alert.alert(
+        'Recording Failed',
+        errorMessage,
+        [
+          { text: 'OK', style: 'default' },
+          { 
+            text: 'Type Instead', 
+            onPress: () => {
+              // Focus on text input could be added here
+            }
+          }
+        ]
+      );
     }
   };
 
-  // Stop voice recording and process
+  // IMPROVED: Stop voice recording with better error handling
   const stopVoiceRecording = async () => {
-    if (!recordingRef.current || recordingState !== 'recording') return;
+    if (!recordingRef.current || !isRecordingRef.current) {
+      console.log('⚠️ No active recording to stop');
+      return;
+    }
 
     stopRecordingTimer();
     setRecordingState('processing');
+    isRecordingRef.current = false;
 
     try {
+      // Stop recording
       await recordingRef.current.stopAndUnloadAsync();
       const uri = recordingRef.current.getURI();
       
       if (!uri) {
-        throw new Error('No recording URI');
+        throw new Error('Recording completed but no file URI available');
       }
 
-      // Get recording info
+      // Get file info
       const info = await FileSystem.getInfoAsync(uri);
       if (!info.exists) {
-        throw new Error('Recording file not found');
+        throw new Error('Recording file not found after saving');
+      }
+
+      // Validate file size (max 25MB for most transcription services)
+      const maxSize = 25 * 1024 * 1024; // 25MB
+      if (info.size && info.size > maxSize) {
+        throw new Error('Recording is too large. Please record a shorter message.');
       }
 
       console.log('🎤 Recording saved:', uri, 'Size:', info.size);
@@ -237,71 +346,125 @@ export default function HomeScreen() {
         encoding: FileSystem.EncodingType.Base64,
       });
 
+      if (!base64Audio || base64Audio.length === 0) {
+        throw new Error('Recording file is empty');
+      }
+
       // Send to speech-to-text
       await transcribeAudio(base64Audio);
 
-    } catch (error) {
-      console.error('Recording error:', error);
-      showAlert('Error', 'Failed to process recording');
+    } catch (error: any) {
+      console.error('Recording processing error:', error);
+      
+      Alert.alert(
+        'Processing Failed',
+        error.message || 'Failed to process your recording. Please try again.',
+        [
+          { 
+            text: 'Try Again', 
+            onPress: () => {
+              setRecordingState('idle');
+              setTimeout(() => startVoiceRecording(), 300);
+            }
+          },
+          { 
+            text: 'Type Manually', 
+            style: 'cancel',
+            onPress: () => setRecordingState('idle')
+          },
+        ]
+      );
+      
       setRecordingState('idle');
     } finally {
       recordingRef.current = null;
     }
   };
 
-  // Transcribe audio using OpenAI Whisper or similar
-const transcribeAudio = async (base64Audio: string) => {
-  try {
-    const { data, error } = await supabase.functions.invoke('transcribe-audio', {
-      body: {
-        audio: base64Audio,
-        userId: user?.id, // Pass user ID
-        conversationId: currentConversation?.id,
-      },
-    });
+  // IMPROVED: Transcribe audio with better error handling
+  const transcribeAudio = async (base64Audio: string) => {
+    try {
+      // Validate audio data
+      if (!base64Audio || base64Audio.length < 100) {
+        throw new Error('Audio data is too short or invalid');
+      }
 
-    // Check for content violation / account suspension
-    if (error?.message?.includes('Content violation')) {
+      const { data, error } = await supabase.functions.invoke('transcribe-audio', {
+        body: {
+          audio: base64Audio,
+          userId: user?.id,
+          conversationId: currentConversation?.id,
+        },
+      });
+
+      // Check for content violation / account suspension
+      if (error?.message?.includes('Content violation')) {
+        Alert.alert(
+          '🚫 Account Suspended',
+          "Don't fucking say that! Your account has been suspended for 10 days due to scam/fraud content. This conversation has been terminated.",
+          [{ text: 'OK', onPress: () => router.push('/suspended') }]
+        );
+        setRecordingState('idle');
+        return;
+      }
+
+      if (error) {
+        console.error('Transcription function error:', error);
+        throw new Error(error.message || 'Transcription service error');
+      }
+
+      if (data?.text && data.text.trim()) {
+        console.log('📝 Transcribed:', data.text);
+        setInputText(prev => prev + (prev ? ' ' : '') + data.text.trim());
+        setRecordingState('idle');
+      } else if (data?.text === '') {
+        // Empty transcription - speech not detected
+        Alert.alert(
+          'No Speech Detected',
+          "We couldn't detect any speech in your recording. Please try speaking louder or closer to the microphone.",
+          [
+            { 
+              text: 'Try Again', 
+              onPress: () => {
+                setRecordingState('idle');
+                setTimeout(() => startVoiceRecording(), 300);
+              }
+            },
+            { 
+              text: 'Type Manually', 
+              style: 'cancel',
+              onPress: () => setRecordingState('idle')
+            },
+          ]
+        );
+      } else {
+        throw new Error('No transcription received from service');
+      }
+
+    } catch (error: any) {
+      console.error('Transcription error:', error);
+      
       Alert.alert(
-        '🚫 Account Suspended',
-        "Don't fucking say that! Your account has been suspended for 10 days due to scam/fraud content. This conversation has been terminated.",
-        [{ text: 'OK', onPress: () => router.push('/suspended') }]
+        'Transcription Failed',
+        error.message || 'Could not transcribe your audio. Please try again or type your message.',
+        [
+          { 
+            text: 'Try Again', 
+            onPress: () => {
+              setRecordingState('idle');
+              setTimeout(() => startVoiceRecording(), 300);
+            }
+          },
+          { 
+            text: 'Type Manually', 
+            style: 'cancel',
+            onPress: () => setRecordingState('idle')
+          },
+        ]
       );
-      setRecordingState('idle');
-      return;
     }
+  };
 
-    if (error) throw error;
-
-    if (data?.text) {
-      console.log('📝 Transcribed:', data.text);
-      setInputText(prev => prev + (prev ? ' ' : '') + data.text);
-      setRecordingState('idle');
-    } else {
-      throw new Error('No transcription received');
-    }
-
-  } catch (error) {
-    console.error('Transcription error:', error);
-    
-    // Fallback: Show manual input option
-    Alert.alert(
-      'Transcription Failed',
-      'Could not transcribe audio. Would you like to try again or type manually?',
-      [
-        { 
-          text: 'Try Again', 
-          onPress: () => startVoiceRecording() 
-        },
-        { 
-          text: 'Type Manually', 
-          style: 'cancel',
-          onPress: () => setRecordingState('idle')
-        },
-      ]
-    );
-  }
-};
   // Toggle recording
   const toggleRecording = () => {
     if (recordingState === 'idle') {
@@ -770,13 +933,12 @@ const transcribeAudio = async (base64Audio: string) => {
         </View>
         
         <TouchableOpacity 
-  style={styles.iconButton} 
-  onPress={() => router.push('/voice-control')}
-  disabled={editingMessageId !== null}
->
-  <Ionicons name="call-outline" size={24} color={editingMessageId ? colors.textSecondary : colors.text} />
-</TouchableOpacity>
-
+          style={styles.iconButton} 
+          onPress={() => router.push('/voice-control')}
+          disabled={editingMessageId !== null}
+        >
+          <Ionicons name="call-outline" size={24} color={editingMessageId ? colors.textSecondary : colors.text} />
+        </TouchableOpacity>
 
         {editingMessageId && (
           <TouchableOpacity 
@@ -849,3 +1011,4 @@ const transcribeAudio = async (base64Audio: string) => {
     </KeyboardAvoidingView>
   );
 }
+
