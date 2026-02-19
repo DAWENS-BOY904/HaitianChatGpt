@@ -916,4 +916,3 @@ export default function HomeScreen() {
     </KeyboardAvoidingView>
   );
 }
-
