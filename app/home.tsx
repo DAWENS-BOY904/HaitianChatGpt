@@ -758,6 +758,15 @@ export default function HomeScreen() {
             />
           )}
         </View>
+        
+        <TouchableOpacity 
+  style={styles.iconButton} 
+  onPress={() => router.push('/voice-control')}
+  disabled={editingMessageId !== null}
+>
+  <Ionicons name="call-outline" size={24} color={editingMessageId ? colors.textSecondary : colors.text} />
+</TouchableOpacity>
+
 
         {editingMessageId && (
           <TouchableOpacity 
