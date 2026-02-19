@@ -1,6 +1,12 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
-import { callAI, detectContentType, generateImage, AI_MODELS } from '../_shared/ai-providers.ts';
+import { 
+  callAI, 
+  detectContentType, 
+  generateImageSmart, 
+  isTextOnlyModel,
+  AI_MODELS 
+} from '../_shared/ai-providers.ts';
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -48,7 +54,7 @@ Deno.serve(async (req) => {
     const selectedModel = aiModel || settingsData?.preferred_ai_model || 'google-gemini';
 
     // Build system prompt with creator info and personalization
-const systemPrompt = `You are HaitianChatGpt, an advanced AI assistant.
+    const systemPrompt = `You are HaitianChatGpt, an advanced AI assistant.
 
 ==============================
 HAÏTIAN CHATGPT – OFFICIAL SYSTEM GUIDELINES & CREATOR POLICY
@@ -710,7 +716,6 @@ Adapt your tone to match the user's communication style.
         const apiKey = Deno.env.get('OPENAI_API_KEY');
         if (!apiKey) throw new Error('OpenAI API key not configured');
 
-        // Decode base64 audio
         const audioData = Uint8Array.from(atob(audio), c => c.charCodeAt(0));
         const audioBlob = new Blob([audioData], { type: 'audio/mpeg' });
         
@@ -735,12 +740,11 @@ Adapt your tone to match the user's communication style.
         const transcription = await transcriptionResponse.json();
         transcript = transcription.text;
         
-        // Add transcribed text to messages
         messages.push({
           role: 'user',
           content: transcript,
         });
-      } catch (error) {
+      } catch (error: any) {
         console.error('Audio transcription error:', error);
         return new Response(
           JSON.stringify({ error: `Failed to transcribe audio: ${error.message}` }),
@@ -755,94 +759,97 @@ Adapt your tone to match the user's communication style.
       ...messages,
     ];
 
-    console.log(`🚀 Using AI model: ${selectedModel}`);
-    console.log(`🎯 This is the model the user selected`);
-
     // Detect content type from user message
     const lastUserMessage = messages[messages.length - 1]?.content || '';
     const detectionResult = detectContentType(lastUserMessage);
+    
     console.log(`🔍 Detected content type: ${detectionResult.type}`);
     console.log(`💭 Detected thinking mode: ${detectionResult.thinkingMode}`);
-    console.log(`💡 Suggested model (for reference): ${detectionResult.suggestedModel}`);
-    console.log(`⚠️  BUT we will use user's selected model: ${selectedModel}`);
+    console.log(`🤖 Suggested model: ${detectionResult.suggestedModel}`);
+    console.log(`🖼️  Is image task: ${detectionResult.isImageTask}`);
+    console.log(`🎯 User selected model: ${selectedModel}`);
 
     let aiResponse: any = { content: '', model: selectedModel };
     let imageUrl: string | undefined;
     let fileContent: string | undefined;
     let fileName: string | undefined;
     
-    // Use the detected thinking mode directly
     let thinkingMode = detectionResult.thinkingMode;
-    console.log(`💭 Thinking mode set to: ${thinkingMode}`);
+
+    // CRITICAL FIX: Check if user selected a text-only model for an image task
+    if (detectionResult.isImageTask && isTextOnlyModel(selectedModel)) {
+      console.warn(`🚫 User selected text-only model ${selectedModel} for image task. Forcing image generation.`);
+    }
 
     // Handle image editing
     if (editImageUrl && editPrompt) {
       thinkingMode = 'editing_image';
       console.log('🎨 Editing image...');
-
-		if (msg.match(/\b(logo|brand|icon|visual identity)\b/i)) {
-  return {
-    type: 'image',
-    thinkingMode: 'creating_image'
-  };
-}
       
-      const { imageUrl: newImageUrl, error: imgError } = await generateImage(
-        `Edit this image: ${editPrompt}. Original image: ${editImageUrl}`
+      // Use smart image generation for editing
+      const editResult = await generateImageSmart(
+        `Edit this image: ${editPrompt}. Base image: ${editImageUrl}`,
+        'gemini'
       );
       
-      if (imgError) {
-        console.error('❌ Image edit failed:', imgError);
+      if (editResult.error) {
+        console.error('❌ Image edit failed:', editResult.error);
         return new Response(
-          JSON.stringify({ error: imgError, thinkingMode }),
+          JSON.stringify({ 
+            error: editResult.error, 
+            thinkingMode,
+            details: 'Image editing failed. Please try again with a different description.'
+          }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
       
-      imageUrl = newImageUrl;
+      imageUrl = editResult.imageUrl;
       aiResponse.content = 'Image edited successfully! ✨';
-      console.log('✅ Image edited successfully');
+      aiResponse.model = editResult.model;
+      console.log('✅ Image edited successfully with model:', editResult.model);
     }
-    // --- Handle image generation ---
-else if (detectionResult.type === 'image') {
-  console.log('🎨 Creating image...');
-
-  const IMAGE_MODELS = ['gpt-image-1', 'space-image-1', 'gemini-image'];
-  let imageModel = IMAGE_MODELS.includes(selectedModel) ? selectedModel : 'gpt-image-1';
-
-  // Primary Attempt
-  let { imageUrl, error: imgError } = await generateImage(lastUserMessage, imageModel);
-
-  // Smart Fallback: Only try another IMAGE model, don't revert to Text
-  if (imgError) {
-    console.warn(`⚠️ ${imageModel} failed, trying backup image engine...`);
-    const backup = await generateImage(lastUserMessage, 'space-image-1');
-    imageUrl = backup.imageUrl;
-    imgError = backup.error;
-  }
-
-  // FINAL CHECK: If it still fails, DO NOT callAI() (text). Return the error.
-  if (imgError) {
-    console.error('❌ All image engines failed');
-    return new Response(
-      JSON.stringify({ 
-        error: "We couldn't generate the image right now. Please try a different prompt.", 
-        thinkingMode: 'error' 
-      }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-  }
-
-  if (imageUrl) {
-    aiResponse.content = 'Image created ✨';
-    aiResponse.imageUrl = imageUrl; // Ensure your frontend receives the URL
-  }
-}
-    // Handle file generation (thinking mode already set to 'analyzing')
+    // Handle image generation - CRITICAL FIX
+    else if (detectionResult.isImageTask) {
+      console.log('🎨 IMAGE TASK DETECTED - Using Smart Image Generation');
+      console.log('🚫 BLOCKING text-only models from image generation');
+      
+      // ALWAYS use generateImageSmart for image tasks - never callAI
+      const imageResult = await generateImageSmart(lastUserMessage, selectedModel);
+      
+      if (imageResult.error) {
+        console.error('❌ Image generation failed:', imageResult.error);
+        
+        // Provide helpful error message
+        return new Response(
+          JSON.stringify({ 
+            error: imageResult.error,
+            thinkingMode: 'error',
+            suggestion: 'Image generation is temporarily unavailable. You can try:\n1. Rephrasing your request\n2. Trying again in a few moments\n3. Asking for a text description instead'
+          }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      if (imageResult.imageUrl) {
+        imageUrl = imageResult.imageUrl;
+        aiResponse.content = `I've created your image using ${imageResult.model}. Here it is! ✨`;
+        aiResponse.model = imageResult.model;
+        console.log('✅ Image generated successfully with model:', imageResult.model);
+      } else {
+        return new Response(
+          JSON.stringify({ 
+            error: 'Image generation returned empty result',
+            thinkingMode: 'error'
+          }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+    // Handle file generation
     else if (detectionResult.type === 'file') {
       console.log('📄 Analyzing and creating file...');
       
-      // Ask AI to generate the file content
       const fileGenMessages = [
         {
           role: 'system' as const,
@@ -854,13 +861,13 @@ else if (detectionResult.type === 'image') {
         }
       ];
       
-      const fileResponse = await callAI(selectedModel, fileGenMessages);
+      // For file generation, we can use the normal router but mark as not image
+      const fileResponse = await callAI(selectedModel, fileGenMessages, false);
       
       if (fileResponse.error) {
         console.error('❌ File generation failed:', fileResponse.error);
-        // Fallback to text response
         thinkingMode = 'thinking';
-        aiResponse = await callAI(selectedModel, aiMessages);
+        aiResponse = await callAI(selectedModel, aiMessages, false);
         if (aiResponse.error) {
           return new Response(
             JSON.stringify({ error: `File generation failed: ${fileResponse.error}`, thinkingMode }),
@@ -871,50 +878,37 @@ else if (detectionResult.type === 'image') {
         fileContent = fileResponse.content;
         
         // Detect file type and name
-const lowerMsg = lastUserMessage.toLowerCase();
-let fileName = 'generated_file.txt';
+        const lowerMsg = lastUserMessage.toLowerCase();
+        let detectedFileName = 'generated_file.txt';
 
-if (lowerMsg.includes('csv')) {
-  fileName = 'generated_file.csv';
-} else if (lowerMsg.includes('html')) {
-  fileName = 'generated_file.html';
-} else if (lowerMsg.includes('json')) {
-  fileName = 'generated_file.json';
-} else if (lowerMsg.includes('js') || lowerMsg.includes('javascript')) {
-  fileName = 'generated_file.js';
-} else if (lowerMsg.includes('ts') || lowerMsg.includes('typescript')) {
-  fileName = 'generated_file.ts';
-} else if (lowerMsg.includes('python') || lowerMsg.includes('py')) {
-  fileName = 'generated_file.py';
-} else if (lowerMsg.includes('java')) {
-  fileName = 'generated_file.java';
-} else if (lowerMsg.includes('c++')) {
-  fileName = 'generated_file.cpp';
-} else if (lowerMsg.includes('c#')) {
-  fileName = 'generated_file.cs';
-} else if (lowerMsg.includes('php')) {
-  fileName = 'generated_file.php';
-} else if (lowerMsg.includes('xml')) {
-  fileName = 'generated_file.xml';
-} else if (lowerMsg.includes('yaml') || lowerMsg.includes('yml')) {
-  fileName = 'generated_file.yml';
-} else if (lowerMsg.includes('sql')) {
-  fileName = 'generated_file.sql';
-} else if (lowerMsg.includes('md') || lowerMsg.includes('markdown')) {
-  fileName = 'generated_file.md';
-} else if (lowerMsg.includes('css')) {
-  fileName = 'generated_file.css';
-}
+        if (lowerMsg.includes('csv')) detectedFileName = 'generated_file.csv';
+        else if (lowerMsg.includes('html')) detectedFileName = 'generated_file.html';
+        else if (lowerMsg.includes('json')) detectedFileName = 'generated_file.json';
+        else if (lowerMsg.includes('js') || lowerMsg.includes('javascript')) detectedFileName = 'generated_file.js';
+        else if (lowerMsg.includes('ts') || lowerMsg.includes('typescript')) detectedFileName = 'generated_file.ts';
+        else if (lowerMsg.includes('python') || lowerMsg.includes('py')) detectedFileName = 'generated_file.py';
+        else if (lowerMsg.includes('java')) detectedFileName = 'generated_file.java';
+        else if (lowerMsg.includes('c++')) detectedFileName = 'generated_file.cpp';
+        else if (lowerMsg.includes('c#')) detectedFileName = 'generated_file.cs';
+        else if (lowerMsg.includes('php')) detectedFileName = 'generated_file.php';
+        else if (lowerMsg.includes('xml')) detectedFileName = 'generated_file.xml';
+        else if (lowerMsg.includes('yaml') || lowerMsg.includes('yml')) detectedFileName = 'generated_file.yml';
+        else if (lowerMsg.includes('sql')) detectedFileName = 'generated_file.sql';
+        else if (lowerMsg.includes('md') || lowerMsg.includes('markdown')) detectedFileName = 'generated_file.md';
+        else if (lowerMsg.includes('css')) detectedFileName = 'generated_file.css';
         
+        fileName = detectedFileName;
         aiResponse.content = `File created: ${fileName} 📄`;
         console.log('✅ File created successfully:', fileName);
       }
     }
-    // Handle regular text/code conversation (thinking mode already set to 'thinking')
+    // Handle regular text/code conversation
     else {
       console.log('💬 Processing text conversation...');
+      console.log(`🤖 Using model: ${selectedModel} (text task)`);
       
-      aiResponse = await callAI(selectedModel, aiMessages);
+      // Text tasks - safe to use any model including groq-llama
+      aiResponse = await callAI(selectedModel, aiMessages, false);
 
       if (aiResponse.error) {
         console.error('❌ AI response failed:', aiResponse.error);
@@ -924,10 +918,10 @@ if (lowerMsg.includes('csv')) {
         );
       }
       
-      console.log('✅ AI response generated successfully');
+      console.log('✅ AI response generated successfully with model:', aiResponse.model);
     }
     
-    // CRITICAL: Always ensure we have a response
+    // Ensure we have a response
     if (!aiResponse.content && !imageUrl && !fileContent) {
       console.error('❌ No response content generated!');
       aiResponse.content = 'I apologize, but I could not generate a proper response. Please try again.';
@@ -1016,15 +1010,13 @@ if (lowerMsg.includes('csv')) {
           throw new Error(`TTS API error: ${ttsResponse.statusText}`);
         }
         
-        // Get audio buffer
         const audioBuffer = await ttsResponse.arrayBuffer();
         const audioUint8 = new Uint8Array(audioBuffer);
         
-        // Upload to Supabase Storage
-        const fileName = `voice_${Date.now()}.mp3`;
+        const voiceFileName = `voice_${Date.now()}.mp3`;
         const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
           .from('media-files')
-          .upload(`voice-clips/${fileName}`, audioUint8, {
+          .upload(`voice-clips/${voiceFileName}`, audioUint8, {
             contentType: 'audio/mpeg',
             upsert: true,
           });
@@ -1034,19 +1026,18 @@ if (lowerMsg.includes('csv')) {
         } else {
           const { data: urlData } = supabaseAdmin.storage
             .from('media-files')
-            .getPublicUrl(`voice-clips/${fileName}`);
+            .getPublicUrl(`voice-clips/${voiceFileName}`);
           
           audioUrl = urlData.publicUrl;
         }
       } catch (error) {
         console.error('TTS error:', error);
-        // Continue without audio if TTS fails
       }
     }
 
     console.log('📤 Sending response:');
     console.log('  💭 Thinking mode:', thinkingMode);
-    console.log('  🤖 Model used:', selectedModel);
+    console.log('  🤖 Model used:', aiResponse.model || selectedModel);
     console.log('  📝 Message length:', aiResponse.content?.length || 0);
     console.log('  🖼️  Image URL:', imageUrl ? 'Yes' : 'No');
     console.log('  📄 File:', fileName || 'No');
@@ -1054,7 +1045,7 @@ if (lowerMsg.includes('csv')) {
     return new Response(
       JSON.stringify({ 
         message: aiResponse.content || 'Response generated', 
-        model: selectedModel,
+        model: aiResponse.model || selectedModel,
         transcript: transcript || '',
         audioUrl: audioUrl || '',
         thinkingMode: thinkingMode,
@@ -1065,7 +1056,7 @@ if (lowerMsg.includes('csv')) {
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
-  } catch (error) {
+  } catch (error: any) {
     console.error('Chat error:', error);
     return new Response(
       JSON.stringify({ error: error.message || 'Internal server error' }),
