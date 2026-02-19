@@ -21,6 +21,7 @@ import Animated, {
   FadeIn,
   FadeInUp,
   SlideInDown,
+  runOnJS, // Add this
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 
