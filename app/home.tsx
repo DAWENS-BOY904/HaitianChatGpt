@@ -250,48 +250,58 @@ export default function HomeScreen() {
   };
 
   // Transcribe audio using OpenAI Whisper or similar
-  const transcribeAudio = async (base64Audio: string) => {
-    try {
-      // Option 1: Use Supabase Edge Function with OpenAI Whisper
-      const { data, error } = await supabase.functions.invoke('transcribe-audio', {
-        body: {
-          audio: base64Audio,
-          model: 'whisper-1',
-        },
-      });
+const transcribeAudio = async (base64Audio: string) => {
+  try {
+    const { data, error } = await supabase.functions.invoke('transcribe-audio', {
+      body: {
+        audio: base64Audio,
+        userId: user?.id, // Pass user ID
+        conversationId: currentConversation?.id,
+      },
+    });
 
-      if (error) throw error;
-
-      if (data?.text) {
-        console.log('📝 Transcribed:', data.text);
-        setInputText(prev => prev + (prev ? ' ' : '') + data.text);
-        setRecordingState('idle');
-      } else {
-        throw new Error('No transcription received');
-      }
-
-    } catch (error) {
-      console.error('Transcription error:', error);
-      
-      // Fallback: Show manual input option
+    // Check for content violation / account suspension
+    if (error?.message?.includes('Content violation')) {
       Alert.alert(
-        'Transcription Failed',
-        'Could not transcribe audio. Would you like to try again or type manually?',
-        [
-          { 
-            text: 'Try Again', 
-            onPress: () => startVoiceRecording() 
-          },
-          { 
-            text: 'Type Manually', 
-            style: 'cancel',
-            onPress: () => setRecordingState('idle')
-          },
-        ]
+        '🚫 Account Suspended',
+        "Don't fucking say that! Your account has been suspended for 10 days due to scam/fraud content. This conversation has been terminated.",
+        [{ text: 'OK', onPress: () => router.push('/suspended') }]
       );
+      setRecordingState('idle');
+      return;
     }
-  };
 
+    if (error) throw error;
+
+    if (data?.text) {
+      console.log('📝 Transcribed:', data.text);
+      setInputText(prev => prev + (prev ? ' ' : '') + data.text);
+      setRecordingState('idle');
+    } else {
+      throw new Error('No transcription received');
+    }
+
+  } catch (error) {
+    console.error('Transcription error:', error);
+    
+    // Fallback: Show manual input option
+    Alert.alert(
+      'Transcription Failed',
+      'Could not transcribe audio. Would you like to try again or type manually?',
+      [
+        { 
+          text: 'Try Again', 
+          onPress: () => startVoiceRecording() 
+        },
+        { 
+          text: 'Type Manually', 
+          style: 'cancel',
+          onPress: () => setRecordingState('idle')
+        },
+      ]
+    );
+  }
+};
   // Toggle recording
   const toggleRecording = () => {
     if (recordingState === 'idle') {
