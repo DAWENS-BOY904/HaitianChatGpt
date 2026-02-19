@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,8 +7,9 @@ import {
   Animated,
   Platform,
   Share,
+  Dimensions,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
 import { router } from 'expo-router';
 import { Spacing, Typography, BorderRadius } from '../constants/theme';
@@ -17,9 +18,10 @@ import { Audio } from 'expo-av';
 import { useAlert } from '@/template';
 import { getSupabaseClient } from '@/template';
 import { useAuth } from '@/template';
-import Canvas from 'react-native-canvas';
 
 type VoiceState = 'idle' | 'listening' | 'thinking' | 'speaking';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const VOICES = [
   {
@@ -27,30 +29,35 @@ const VOICES = [
     name: 'Ember',
     description: 'Confident and optimistic',
     color: '#FF6B35',
+    icon: 'fire',
   },
   {
     id: 'nova',
     name: 'Nova',
     description: 'Warm and engaging',
     color: '#4A90E2',
+    icon: 'star',
   },
   {
     id: 'alloy',
     name: 'Alloy',
     description: 'Neutral and balanced',
     color: '#718096',
+    icon: 'layers',
   },
   {
     id: 'echo',
     name: 'Echo',
     description: 'Clear and articulate',
     color: '#48BB78',
+    icon: 'volume-high',
   },
   {
     id: 'shimmer',
     name: 'Shimmer',
     description: 'Bright and cheerful',
     color: '#ED8936',
+    icon: 'sunny',
   },
 ];
 
@@ -68,15 +75,17 @@ export default function VoiceControlScreen() {
   const [transcript, setTranscript] = useState('');
   const [currentAudioUrl, setCurrentAudioUrl] = useState<string | null>(null);
 
-  // Animation
+  // Animation refs
   const orbScale = useRef(new Animated.Value(1)).current;
   const orbOpacity = useRef(new Animated.Value(1)).current;
   const pulseAnim = useRef(new Animated.Value(0)).current;
+  const pulseAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
+  const scaleAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
+  const opacityAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
 
   // Audio
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [sound, setSound] = useState<Audio.Sound | null>(null);
-  const ws = useRef<WebSocket | null>(null);
 
   useEffect(() => {
     setupAudio();
@@ -87,31 +96,53 @@ export default function VoiceControlScreen() {
 
   useEffect(() => {
     animateOrb();
+    return () => {
+      // Cleanup animations
+      pulseAnimationRef.current?.stop();
+      scaleAnimationRef.current?.stop();
+      opacityAnimationRef.current?.stop();
+    };
   }, [voiceState]);
 
   const setupAudio = async () => {
-    await Audio.requestPermissionsAsync();
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: true,
-      playsInSilentModeIOS: true,
-    });
+    try {
+      const { status } = await Audio.requestPermissionsAsync();
+      if (status !== 'granted') {
+        showAlert('Permission Required', 'Microphone access is needed for voice conversations.');
+        return;
+      }
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+        shouldDuckAndroid: true,
+      });
+    } catch (error) {
+      console.error('Audio setup error:', error);
+    }
   };
 
   const cleanup = async () => {
-    if (recording) {
-      await recording.stopAndUnloadAsync();
-    }
-    if (sound) {
-      await sound.unloadAsync();
-    }
-    if (ws.current) {
-      ws.current.close();
+    try {
+      if (recording) {
+        await recording.stopAndUnloadAsync();
+      }
+      if (sound) {
+        await sound.unloadAsync();
+      }
+    } catch (error) {
+      console.error('Cleanup error:', error);
     }
   };
 
-  const animateOrb = () => {
+  const animateOrb = useCallback(() => {
+    // Stop existing animations
+    pulseAnimationRef.current?.stop();
+    scaleAnimationRef.current?.stop();
+    opacityAnimationRef.current?.stop();
+
     if (voiceState === 'idle') {
-      Animated.parallel([
+      scaleAnimationRef.current = Animated.parallel([
         Animated.timing(orbScale, {
           toValue: 1,
           duration: 300,
@@ -122,9 +153,11 @@ export default function VoiceControlScreen() {
           duration: 300,
           useNativeDriver: true,
         }),
-      ]).start();
+      ]);
+      scaleAnimationRef.current.start();
     } else if (voiceState === 'listening') {
-      Animated.loop(
+      pulseAnim.setValue(0);
+      pulseAnimationRef.current = Animated.loop(
         Animated.sequence([
           Animated.timing(pulseAnim, {
             toValue: 1,
@@ -137,9 +170,10 @@ export default function VoiceControlScreen() {
             useNativeDriver: true,
           }),
         ])
-      ).start();
+      );
+      pulseAnimationRef.current.start();
     } else if (voiceState === 'thinking') {
-      Animated.loop(
+      scaleAnimationRef.current = Animated.loop(
         Animated.sequence([
           Animated.timing(orbScale, {
             toValue: 1.1,
@@ -152,9 +186,10 @@ export default function VoiceControlScreen() {
             useNativeDriver: true,
           }),
         ])
-      ).start();
+      );
+      scaleAnimationRef.current.start();
     } else if (voiceState === 'speaking') {
-      Animated.loop(
+      opacityAnimationRef.current = Animated.loop(
         Animated.sequence([
           Animated.timing(orbOpacity, {
             toValue: 0.7,
@@ -167,23 +202,20 @@ export default function VoiceControlScreen() {
             useNativeDriver: true,
           }),
         ])
-      ).start();
+      );
+      opacityAnimationRef.current.start();
     }
-  };
+  }, [voiceState, orbScale, orbOpacity, pulseAnim]);
 
   const startVoiceConversation = async () => {
     try {
       setVoiceState('listening');
       setTranscript('');
 
-      // Start recording
       const { recording: newRecording } = await Audio.Recording.createAsync(
         Audio.RecordingOptionsPresets.HIGH_QUALITY
       );
       setRecording(newRecording);
-
-      // Connect to OpenAI Realtime API (via Edge Function)
-      connectWebSocket();
     } catch (error) {
       console.error('Failed to start recording:', error);
       showAlert('Error', 'Failed to start voice conversation');
@@ -198,18 +230,11 @@ export default function VoiceControlScreen() {
         const uri = recording.getURI();
         
         if (uri) {
-          // Process audio
           await processAudio(uri);
         }
         
         setRecording(null);
       }
-
-      if (ws.current) {
-        ws.current.close();
-        ws.current = null;
-      }
-
       setVoiceState('idle');
     } catch (error) {
       console.error('Failed to stop recording:', error);
@@ -217,57 +242,44 @@ export default function VoiceControlScreen() {
     }
   };
 
-  const connectWebSocket = () => {
-    // In production, this would connect to OpenAI Realtime API
-    // For now, we'll use the Edge Function approach
-    const supabaseUrl = supabase.functions.getUrl('chat');
-    
-    // Note: WebSocket connection would be established here
-    // For this implementation, we'll use HTTP streaming instead
-  };
-
   const processAudio = async (audioUri: string) => {
     try {
       setVoiceState('thinking');
 
-      // Read audio file
       const response = await fetch(audioUri);
       const audioBlob = await response.blob();
+      
       const reader = new FileReader();
-
       reader.onloadend = async () => {
         const base64Audio = (reader.result as string).split(',')[1];
 
-        // Send to Edge Function
-        const { data, error } = await supabase.functions.invoke('chat', {
-          body: {
-            messages: [
-              {
-                role: 'user',
-                content: 'Transcribe and respond to this audio',
-              },
-            ],
-            audio: base64Audio,
-            voice: selectedVoice,
-            model: 'gpt-5.1',
-            responseType: 'audio',
-          },
-        });
+        try {
+          const { data, error } = await supabase.functions.invoke('chat', {
+            body: {
+              messages: [{ role: 'user', content: 'Transcribe and respond' }],
+              audio: base64Audio,
+              voice: selectedVoice,
+              model: 'gpt-4o',
+              responseType: 'audio',
+            },
+          });
 
-        if (error) {
-          console.error('Edge Function error:', error);
+          if (error) throw error;
+
+          if (data?.transcript) {
+            setTranscript(data.transcript);
+          }
+
+          if (data?.audioUrl) {
+            setCurrentAudioUrl(data.audioUrl);
+            await playAudioResponse(data.audioUrl);
+          } else {
+            setVoiceState('idle');
+          }
+        } catch (err) {
+          console.error('Processing error:', err);
           showAlert('Error', 'Failed to process audio');
           setVoiceState('idle');
-          return;
-        }
-
-        if (data.transcript) {
-          setTranscript(data.transcript);
-        }
-
-        if (data.audioUrl) {
-          setCurrentAudioUrl(data.audioUrl);
-          await playAudioResponse(data.audioUrl);
         }
       };
 
@@ -304,7 +316,7 @@ export default function VoiceControlScreen() {
   const handleMicPress = () => {
     if (voiceState === 'idle') {
       startVoiceConversation();
-    } else if (voiceState === 'listening') {
+    } else {
       stopVoiceConversation();
     }
   };
@@ -317,7 +329,7 @@ export default function VoiceControlScreen() {
 
     try {
       await Share.share({
-        message: 'Made with HaitianChatGPT\nVoice conversation powered by AI',
+        message: `Made with HaitianChatGPT\nVoice: ${VOICES.find(v => v.id === selectedVoice)?.name}`,
         url: currentAudioUrl,
       });
     } catch (error) {
@@ -340,6 +352,25 @@ export default function VoiceControlScreen() {
         return 'Speaking...';
       default:
         return 'Tap to speak';
+    }
+  };
+
+  const getVoiceIcon = (iconName: string, color: string) => {
+    const iconProps = { size: 24, color: '#FFFFFF' };
+    
+    switch (iconName) {
+      case 'fire':
+        return <MaterialCommunityIcons name="fire" {...iconProps} />;
+      case 'star':
+        return <Ionicons name="star" {...iconProps} />;
+      case 'layers':
+        return <Ionicons name="layers" {...iconProps} />;
+      case 'volume-high':
+        return <Ionicons name="volume-high" {...iconProps} />;
+      case 'sunny':
+        return <Ionicons name="sunny" {...iconProps} />;
+      default:
+        return <Ionicons name="mic" {...iconProps} />;
     }
   };
 
@@ -388,11 +419,19 @@ export default function VoiceControlScreen() {
       borderRadius: 100,
       justifyContent: 'center',
       alignItems: 'center',
+      shadowColor: getOrbColor(),
+      shadowOffset: { width: 0, height: 0 },
+      shadowOpacity: 0.5,
+      shadowRadius: 20,
+      elevation: 10,
     },
-    gradient: {
-      width: '100%',
-      height: '100%',
-      borderRadius: 100,
+    pulseRing: {
+      position: 'absolute',
+      width: 220,
+      height: 220,
+      borderRadius: 110,
+      borderWidth: 3,
+      borderColor: getOrbColor(),
     },
     stateText: {
       ...Typography.heading,
@@ -408,6 +447,7 @@ export default function VoiceControlScreen() {
       textAlign: 'center',
       lineHeight: 28,
       paddingHorizontal: Spacing.lg,
+      marginTop: Spacing.md,
     },
     bottomControls: {
       paddingBottom: Platform.select({
@@ -426,6 +466,8 @@ export default function VoiceControlScreen() {
       backgroundColor: colors.card,
       justifyContent: 'center',
       alignItems: 'center',
+      borderWidth: 1,
+      borderColor: colors.border,
     },
     micButton: {
       width: 80,
@@ -433,6 +475,11 @@ export default function VoiceControlScreen() {
       borderRadius: 40,
       justifyContent: 'center',
       alignItems: 'center',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.3,
+      shadowRadius: 8,
+      elevation: 8,
     },
     micButtonActive: {
       backgroundColor: '#FF3B30',
@@ -449,6 +496,11 @@ export default function VoiceControlScreen() {
         ios: insets.bottom + 20,
         android: 30,
       }),
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: -4 },
+      shadowOpacity: 0.2,
+      shadowRadius: 10,
+      elevation: 20,
     },
     voiceSelectorHeader: {
       padding: Spacing.lg,
@@ -463,6 +515,7 @@ export default function VoiceControlScreen() {
     },
     voiceList: {
       padding: Spacing.md,
+      maxHeight: 400,
     },
     voiceItem: {
       flexDirection: 'row',
@@ -471,17 +524,25 @@ export default function VoiceControlScreen() {
       marginBottom: Spacing.sm,
       borderRadius: BorderRadius.md,
       backgroundColor: colors.background,
+      borderWidth: 2,
+      borderColor: 'transparent',
     },
     voiceItemSelected: {
-      backgroundColor: colors.surface,
-      borderWidth: 2,
       borderColor: colors.primary,
+      backgroundColor: colors.surface,
     },
     voiceOrb: {
       width: 50,
       height: 50,
       borderRadius: 25,
       marginRight: Spacing.md,
+      justifyContent: 'center',
+      alignItems: 'center',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.2,
+      shadowRadius: 4,
+      elevation: 4,
     },
     voiceInfo: {
       flex: 1,
@@ -490,14 +551,17 @@ export default function VoiceControlScreen() {
       ...Typography.body,
       color: colors.text,
       fontWeight: '600',
+      fontSize: 16,
       marginBottom: 2,
     },
     voiceDescription: {
       ...Typography.caption,
       color: colors.textSecondary,
+      fontSize: 13,
     },
     doneButton: {
       margin: Spacing.md,
+      marginTop: 0,
       padding: Spacing.md,
       backgroundColor: colors.text,
       borderRadius: BorderRadius.lg,
@@ -507,6 +571,7 @@ export default function VoiceControlScreen() {
       ...Typography.body,
       color: colors.background,
       fontWeight: '600',
+      fontSize: 16,
     },
   });
 
@@ -526,9 +591,6 @@ export default function VoiceControlScreen() {
           )}
           <TouchableOpacity style={styles.iconButton}>
             <Ionicons name="settings-outline" size={24} color={colors.text} />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.iconButton}>
-            <Ionicons name="ellipsis-horizontal" size={24} color={colors.text} />
           </TouchableOpacity>
         </View>
       </View>
@@ -550,22 +612,17 @@ export default function VoiceControlScreen() {
             {voiceState === 'listening' && (
               <Animated.View
                 style={[
+                  styles.pulseRing,
                   {
-                    position: 'absolute',
-                    width: 220,
-                    height: 220,
-                    borderRadius: 110,
-                    borderWidth: 3,
-                    borderColor: getOrbColor(),
                     opacity: pulseAnim.interpolate({
                       inputRange: [0, 1],
-                      outputRange: [0.3, 0],
+                      outputRange: [0.5, 0],
                     }),
                     transform: [
                       {
                         scale: pulseAnim.interpolate({
                           inputRange: [0, 1],
-                          outputRange: [1, 1.3],
+                          outputRange: [1, 1.5],
                         }),
                       },
                     ],
@@ -573,6 +630,13 @@ export default function VoiceControlScreen() {
                 ]}
               />
             )}
+            
+            {/* Voice Icon in center */}
+            <Ionicons 
+              name={voiceState === 'idle' ? 'mic' : voiceState === 'listening' ? 'mic' : voiceState === 'thinking' ? 'ellipsis-horizontal' : 'volume-high'} 
+              size={48} 
+              color="#FFFFFF" 
+            />
           </Animated.View>
         </View>
 
@@ -580,7 +644,11 @@ export default function VoiceControlScreen() {
         <Text style={styles.stateText}>{getStateText()}</Text>
 
         {/* TRANSCRIPT */}
-        {transcript && <Text style={styles.transcript}>{transcript}</Text>}
+        {transcript ? (
+          <Text style={styles.transcript} numberOfLines={3}>
+            "{transcript}"
+          </Text>
+        ) : null}
       </View>
 
       {/* BOTTOM CONTROLS */}
@@ -592,10 +660,10 @@ export default function VoiceControlScreen() {
         <TouchableOpacity
           style={[
             styles.micButton,
-            { backgroundColor: getOrbColor() },
-            voiceState !== 'idle' && styles.micButtonActive,
+            { backgroundColor: voiceState === 'idle' ? getOrbColor() : '#FF3B30' },
           ]}
           onPress={handleMicPress}
+          activeOpacity={0.8}
         >
           <Ionicons
             name={voiceState === 'idle' ? 'mic' : 'stop'}
@@ -628,16 +696,17 @@ export default function VoiceControlScreen() {
                   selectedVoice === voice.id && styles.voiceItemSelected,
                 ]}
                 onPress={() => setSelectedVoice(voice.id)}
+                activeOpacity={0.7}
               >
-                <View
-                  style={[styles.voiceOrb, { backgroundColor: voice.color }]}
-                />
+                <View style={[styles.voiceOrb, { backgroundColor: voice.color }]}>
+                  {getVoiceIcon(voice.icon, voice.color)}
+                </View>
                 <View style={styles.voiceInfo}>
                   <Text style={styles.voiceName}>{voice.name}</Text>
                   <Text style={styles.voiceDescription}>{voice.description}</Text>
                 </View>
                 {selectedVoice === voice.id && (
-                  <Ionicons name="checkmark" size={24} color={colors.primary} />
+                  <Ionicons name="checkmark-circle" size={24} color={colors.primary} />
                 )}
               </TouchableOpacity>
             ))}
@@ -646,6 +715,7 @@ export default function VoiceControlScreen() {
           <TouchableOpacity
             style={styles.doneButton}
             onPress={() => setShowVoiceSelector(false)}
+            activeOpacity={0.8}
           >
             <Text style={styles.doneButtonText}>Done</Text>
           </TouchableOpacity>
@@ -654,3 +724,4 @@ export default function VoiceControlScreen() {
     </View>
   );
 }
+
