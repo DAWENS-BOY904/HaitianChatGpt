@@ -12,21 +12,41 @@ interface AIResponse {
   error?: string;
 }
 
+// List of models that CANNOT generate images - used for blocking
+const TEXT_ONLY_MODELS = ['groq-llama', 'groq-llama-4', 'llama-3.3-70b-versatile', 'llama-4-maverick'];
+
+// List of models that CAN generate images
+const IMAGE_CAPABLE_MODELS = ['gemini-2.0-flash', 'gemini-1.5-pro', 'openai-gpt4', 'openai', 'dalle-3'];
+
+/**
+ * Check if a model is text-only (cannot generate images)
+ */
+export function isTextOnlyModel(modelId: string): boolean {
+  const normalized = modelId.toLowerCase();
+  return TEXT_ONLY_MODELS.some(m => normalized.includes(m));
+}
+
+/**
+ * Check if a model can generate images
+ */
+export function isImageCapableModel(modelId: string): boolean {
+  const normalized = modelId.toLowerCase();
+  return IMAGE_CAPABLE_MODELS.some(m => normalized.includes(m)) || 
+         normalized.includes('gemini') || 
+         normalized.includes('openai') ||
+         normalized.includes('dalle');
+}
+
 /**
  * OpenAI GPT-4 Integration
  * Best for: Complex reasoning, long conversations, detailed analysis
  */
-/**
- * AI Provider Service - Optimized and Fixed
- */
-
-// 1. Ranje callOpenAI (URL ak Endpoint)
 export async function callOpenAI(messages: AIMessage[]): Promise<AIResponse> {
   const apiKey = Deno.env.get('OPENAI_API_KEY');
   if (!apiKey) return { content: '', model: 'openai-gpt4', error: 'OpenAI API key not configured' };
 
   try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', { // FIXED URL
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
@@ -127,11 +147,83 @@ export async function callGemini(messages: AIMessage[], modelName: string = 'gem
 }
 
 /**
- * Claude 3.5 Sonnet Integration
- * Optimizations: Type safety, error handling, and message validation.
+ * Gemini Image Generation using Imagen-3
+ * Supports: gemini-2.0-flash-exp-image-generation or dedicated image models
  */
+export async function generateImageWithGemini(prompt: string, modelName: string = 'gemini-2.0-flash-exp-image-generation'): Promise<{
+  imageUrl?: string;
+  error?: string;
+}> {
+  const apiKey = Deno.env.get('GOOGLE_AI_API_KEY');
+  
+  if (!apiKey) {
+    return { error: 'Google AI API key not configured' };
+  }
 
-// Define internal types for the Anthropic API response
+  try {
+    console.log(`🎨 Generating image with Gemini (${modelName})...`);
+
+    const requestBody = {
+      contents: [{
+        role: 'user',
+        parts: [
+          { text: `Generate an image: ${prompt}. Create a high-quality, detailed image.` }
+        ]
+      }],
+      generationConfig: {
+        responseModalities: ["TEXT", "IMAGE"]
+      }
+    };
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody),
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      const errorMsg = errorData.error?.message || response.statusText;
+      console.error('Gemini Image API error:', errorMsg);
+      return { error: `Gemini Image error: ${errorMsg}` };
+    }
+
+    const data = await response.json();
+    
+    // Extract image data from response
+    const parts = data.candidates?.[0]?.content?.parts || [];
+    const imagePart = parts.find((p: any) => p.inlineData);
+    
+    if (imagePart?.inlineData?.data) {
+      // Convert base64 to data URL
+      const mimeType = imagePart.inlineData.mimeType || 'image/png';
+      const base64Data = imagePart.inlineData.data;
+      const dataUrl = `data:${mimeType};base64,${base64Data}`;
+      
+      console.log('✅ Gemini image generated successfully');
+      return { imageUrl: dataUrl };
+    }
+
+    // If no image in response, check for text response (might be refusal)
+    const textPart = parts.find((p: any) => p.text);
+    if (textPart?.text) {
+      return { error: `Image generation failed: ${textPart.text}` };
+    }
+
+    return { error: 'No image data received from Gemini' };
+
+  } catch (error: any) {
+    console.error('Gemini Image Generation Error:', error);
+    return { error: error.message || 'Unknown error during image generation' };
+  }
+}
+
+/**
+ * Claude 3.5 Sonnet Integration
+ */
 interface AnthropicResponse {
   content: Array<{ text: string; type: string }>;
   error?: { message: string };
@@ -153,7 +245,6 @@ export async function callClaude(messages: AIMessage[]): Promise<AIResponse> {
         content: m.content || '',
       }));
 
-    // Ensure we don't send an empty message array
     if (conversationMessages.length === 0) {
       return { content: '', model: 'claude-3-5', error: 'No user messages provided' };
     }
@@ -183,7 +274,6 @@ export async function callClaude(messages: AIMessage[]): Promise<AIResponse> {
       };
     }
 
-    // Claude returns content as an array; ensure the text block exists
     const textContent = data.content.find(c => c.type === 'text')?.text;
 
     if (!textContent) {
@@ -199,11 +289,9 @@ export async function callClaude(messages: AIMessage[]): Promise<AIResponse> {
 }
 
 /**
- * Groq Llama Integration (2026 Optimized)
- * Best for: Sub-second latency, real-time agentic workflows.
+ * Groq Llama Integration - TEXT ONLY
+ * ⚠️ CRITICAL: This model CANNOT generate images. Never use for image tasks.
  */
-
-// Define the response shape for better TS support
 interface GroqChatResponse {
   choices: Array<{
     message: { content: string };
@@ -226,14 +314,13 @@ export async function callGroq(messages: AIMessage[]): Promise<AIResponse> {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        // llama-4-maverick is the 2026 flagship for speed/intelligence balance
         model: 'llama-3.3-70b-versatile', 
         messages: messages.map(m => ({
           role: m.role,
           content: m.content || '',
         })),
-        temperature: 0.6, // Slightly lower for better consistency in fast chat
-        max_completion_tokens: 4000, // Updated from deprecated 'max_tokens'
+        temperature: 0.6,
+        max_completion_tokens: 4000,
         stream: false,
       }),
     });
@@ -263,10 +350,8 @@ export async function callGroq(messages: AIMessage[]): Promise<AIResponse> {
 }
 
 /**
- * Mistral Large 24.11 / Codestral Integration
- * Features: Automatic retries, safe parsing, and intelligent fallbacks.
+ * Mistral Large Integration
  */
-
 interface MistralChoice {
   message: { content: string };
   finish_reason: string;
@@ -275,13 +360,9 @@ interface MistralChoice {
 export async function callMistral(messages: AIMessage[]): Promise<AIResponse> {
   const apiKey = Deno.env.get('MISTRAL_API_KEY');
   
-  // High-intelligence Fallback Logic
   if (!apiKey) {
     console.warn('⚠️ Mistral API key missing. Redirecting to OpenAI...');
-    // Ensure callOpenAI is imported or defined in scope
-    return typeof callOpenAI === 'function' 
-      ? await callOpenAI(messages) 
-      : { content: '', model: 'mistral-fallback', error: 'No API provider available' };
+    return await callOpenAI(messages);
   }
 
   const executeRequest = async (retries = 2): Promise<AIResponse> => {
@@ -294,19 +375,17 @@ export async function callMistral(messages: AIMessage[]): Promise<AIResponse> {
           'Accept': 'application/json',
         },
         body: JSON.stringify({
-          // 'mistral-large-latest' points to the most capable reasoning model
           model: 'mistral-large-latest', 
           messages: messages.map(m => ({
             role: m.role,
             content: m.content || '',
           })),
-          temperature: 0.2, // Lowered for technical accuracy
+          temperature: 0.2,
           max_tokens: 4000,
-          safe_prompt: false, // Set to true if building a public-facing wrapper
+          safe_prompt: false,
         }),
       });
 
-      // Handle Rate Limiting (429) with exponential backoff
       if (response.status === 429 && retries > 0) {
         const wait = Math.pow(2, 3 - retries) * 1000;
         await new Promise(res => setTimeout(res, wait));
@@ -348,127 +427,339 @@ export async function callMistral(messages: AIMessage[]): Promise<AIResponse> {
 }
 
 /**
- * DEPRECATED: OnSpace AI is no longer used
- * The app now uses only your own API keys (OpenAI, Gemini, etc.)
+ * DALL-E 3 Image Generation (OpenAI)
  */
-async function callOnSpaceAI(messages: AIMessage[], modelHint: string): Promise<AIResponse> {
-  // This function is no longer used - fallback to OpenAI
-  console.log('⚠️ OnSpace AI called but deprecated - using OpenAI instead');
-  return await callOpenAI(messages);
+interface DalleResponse {
+  data: Array<{
+    url: string;
+    revised_prompt: string;
+  }>;
+  error?: { message: string };
+}
+
+export async function generateImageWithDalle(prompt: string): Promise<{
+  imageUrl?: string;
+  revisedPrompt?: string;
+  error?: string;
+}> {
+  const apiKey = Deno.env.get('OPENAI_API_KEY');
+  if (!apiKey) return { error: 'Missing OPENAI_API_KEY' };
+
+  try {
+    console.log('🎨 Generating image with DALL-E 3...');
+
+    const response = await fetch('https://api.openai.com/v1/images/generations', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'dall-e-3',
+        prompt: prompt.trim(),
+        n: 1,
+        size: '1024x1024',
+        quality: 'hd',
+        style: 'vivid',
+      }),
+    });
+
+    const data: DalleResponse = await response.json();
+
+    if (response.status === 400 && data.error?.message?.includes('safety')) {
+      return { error: 'The request was flagged by the safety filter. Try rephrasing.' };
+    }
+
+    if (!response.ok) {
+      return { error: data.error?.message || `OpenAI Error: ${response.status}` };
+    }
+
+    const imageResult = data.data?.[0];
+
+    if (!imageResult?.url) {
+      return { error: 'No image URL was returned from the API.' };
+    }
+
+    console.log('✅ DALL-E image generated successfully');
+    return { 
+      imageUrl: imageResult.url, 
+      revisedPrompt: imageResult.revised_prompt 
+    };
+
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : 'Unknown generation error';
+    return { error: msg };
+  }
 }
 
 /**
- * Available AI Models - 2026 Optimized
- * Mapped to industry-leading model IDs for specialized workflows.
+ * SMART IMAGE GENERATION ROUTER
+ * This function ONLY uses image-capable models and NEVER falls back to text-only models
+ * Priority: Gemini -> OpenAI DALL-E -> Error
  */
-export const AI_MODELS = {
-  // --- IMAGE & DESIGN (DALL-E 4 + Imagen 4) ---
-  'image-generator': {
-    name: 'Image Generator',
-    model: 'dalle-4', // Next-gen fidelity and text rendering
-    specialization: 'image',
-    description: 'Hyper-realistic imagery and complex scene generation via DALL-E 4'
-  },
-  'logo-designer': {
-    name: 'Logo Designer',
-    model: 'imagen-4.0-ultra', // Best for vector-like clarity and typography
-    specialization: 'image',
-    description: 'Precision brand assets and professional logo typography'
-  },
+export async function generateImageSmart(
+  prompt: string, 
+  preferredModel: string = 'gemini'
+): Promise<{
+  imageUrl?: string;
+  model: string;
+  error?: string;
+  revisedPrompt?: string;
+}> {
+  console.log(`🖼️  Smart Image Generation started`);
+  console.log(`   Preferred model: ${preferredModel}`);
+  console.log(`   Prompt: ${prompt.substring(0, 50)}...`);
 
-  // --- CODE & TECHNICAL (GPT-5 & Claude Opus 4) ---
-  'code-generator': {
-    name: 'Code Generator',
-    model: 'gpt-5.2-codex', // OpenAI's flagship for long-horizon agentic coding
-    specialization: 'code',
-    description: 'Senior-level code generation with full project context'
-  },
-  'code-debugger': {
-    name: 'Code Debugger',
-    model: 'claude-opus-4.6', // Anthropic's highest reasoning for finding logical edge cases
-    specialization: 'debug',
-    description: 'Deep logic analysis and multi-file debugging'
-  },
-  'ui-designer': {
-    name: 'UI/UX Designer',
-    model: 'claude-sonnet-4.5', // Fast artifacts and better CSS/Frontend spatial reasoning
-    specialization: 'ui',
-    description: 'High-fidelity UI components and design system architecture'
-  },
+  // Validate that preferred model is not text-only
+  if (isTextOnlyModel(preferredModel)) {
+    console.warn(`⚠️  Text-only model ${preferredModel} selected for image task. Switching to Gemini.`);
+    preferredModel = 'gemini';
+  }
 
-  // --- DATA & PERFORMANCE (Gemini 3 + Groq) ---
-  'file-creator': {
-    name: 'File Creator',
-    model: 'gemini-3-flash', // Unmatched speed for generating large CSV/JSON sets
-    specialization: 'file',
-    description: 'Instant generation of structured data and documents'
-  },
-  'data-analyst': {
-    name: 'Data Analyst',
-    model: 'gemini-3-pro', // 2M+ token context window for huge datasets
-    specialization: 'data',
-    description: 'Deep insights from massive datasets and multi-file analysis'
-  },
-  'api-expert': {
-    name: 'API Expert',
-    model: 'llama-4-maverick', // Powered by Groq for sub-second API schema generation
-    specialization: 'api',
-    description: 'Instant REST/GraphQL integration and documentation'
-  },
+  // Try Gemini first (if preferred or as default)
+  if (preferredModel.includes('gemini') || preferredModel === 'google-gemini') {
+    console.log('🔄 Trying Gemini for image generation...');
+    
+    // Try Gemini 2.0 Flash with image generation
+    const geminiResult = await generateImageWithGemini(prompt, 'gemini-2.0-flash-exp-image-generation');
+    
+    if (geminiResult.imageUrl) {
+      return { 
+        imageUrl: geminiResult.imageUrl, 
+        model: 'gemini-2.0-flash-image',
+        revisedPrompt: prompt 
+      };
+    }
+    
+    console.log('⚠️  Gemini image generation failed:', geminiResult.error);
+    // Continue to OpenAI fallback
+  }
 
-  // --- CONTENT & WRITING (Claude & GPT-5 Thinking) ---
-  'content-writer': {
-    name: 'Content Writer',
-    model: 'claude-opus-4.6', // The current "gold standard" for human-like prose
-    specialization: 'writing',
-    description: 'Editorial-grade creative writing and brand storytelling'
-  },
-  'explainer': {
-    name: 'Explainer',
-    model: 'gpt-5.2-thinking', // Best for chain-of-thought educational breakdowns
-    specialization: 'explanation',
-    description: 'Complex concept simplification using advanced reasoning'
-  },
+  // Fallback to OpenAI DALL-E 3
+  console.log('🔄 Falling back to OpenAI DALL-E 3...');
+  const dalleResult = await generateImageWithDalle(prompt);
+  
+  if (dalleResult.imageUrl) {
+    return { 
+      imageUrl: dalleResult.imageUrl, 
+      model: 'dalle-3',
+      revisedPrompt: dalleResult.revisedPrompt 
+    };
+  }
 
-  // --- GENERAL UTILITY ---
-  'general-assistant': {
-    name: 'General Assistant',
-    model: 'gpt-5.2-mini', // The 2026 standard for smart, fast, general chat
-    specialization: 'general',
-    description: 'Reliable all-purpose assistant for daily tasks'
-  },
-  'editor': {
-    name: 'Text Editor',
-    model: 'claude-haiku-4.5', // Extremely fast and precise for stylistic editing
-    specialization: 'editing',
-    description: 'Grammar, tone refinement, and structural editing'
-  },
-};
+  console.error('❌ All image generation models failed');
+  return { 
+    error: 'Unable to generate image. Both Gemini and OpenAI image services are unavailable. Please try again later.',
+    model: 'none'
+  };
+}
+
+/**
+ * Check if error is a quota/rate limit error that should trigger fallback
+ */
+function shouldFallback(error: string): boolean {
+  const lowerError = error.toLowerCase();
+  return (
+    lowerError.includes('insufficient_quota') ||
+    lowerError.includes('quota') ||
+    lowerError.includes('rate_limit') ||
+    lowerError.includes('429') ||
+    lowerError.includes('billing') ||
+    lowerError.includes('exceeded') ||
+    lowerError.includes('limit')
+  );
+}
+
+/**
+ * Router function with AUTOMATIC FALLBACK
+ * ⚠️ CRITICAL FIX: Blocks text-only models from image tasks
+ */
+export async function callAI(modelId: string, messages: AIMessage[], isImageTask: boolean = false): Promise<AIResponse> {
+  console.log(`🚀 User selected model: ${modelId}`);
+  console.log(`🎯 Is image task: ${isImageTask}`);
+
+  // CRITICAL: Block text-only models from image tasks
+  if (isImageTask && isTextOnlyModel(modelId)) {
+    console.error(`🚫 BLOCKED: ${modelId} cannot handle image tasks. Forcing image-capable model.`);
+    // Force redirect to image-capable model
+    modelId = 'google-gemini';
+  }
+
+  // Define fallback order based on primary model and task type
+  let fallbackOrder: string[] = [];
+  
+  if (isImageTask) {
+    // For image tasks: ONLY use image-capable models, NEVER groq-llama
+    fallbackOrder = ['google-gemini', 'openai-gpt4'];
+  } else {
+    // For text tasks: normal fallback chain
+    switch (modelId) {
+      case 'openai-gpt4':
+        fallbackOrder = ['openai-gpt4', 'google-gemini', 'claude-3', 'groq-llama'];
+        break;
+      case 'google-gemini':
+      case 'google-gemini-2.0-flash':
+        fallbackOrder = ['google-gemini', 'claude-3', 'groq-llama', 'openai-gpt4'];
+        break;
+      case 'google-gemini-pro':
+        fallbackOrder = ['google-gemini-pro', 'google-gemini', 'claude-3', 'openai-gpt4'];
+        break;
+      case 'claude-3':
+        fallbackOrder = ['claude-3', 'google-gemini', 'groq-llama', 'openai-gpt4'];
+        break;
+      case 'groq-llama':
+        fallbackOrder = ['groq-llama', 'google-gemini', 'claude-3', 'openai-gpt4'];
+        break;
+      case 'mistral-large':
+        fallbackOrder = ['mistral-large', 'google-gemini', 'claude-3', 'openai-gpt4'];
+        break;
+      default:
+        fallbackOrder = ['google-gemini', 'claude-3', 'groq-llama', 'openai-gpt4'];
+        break;
+    }
+  }
+
+  console.log(`📋 Fallback order: ${fallbackOrder.join(' → ')}`);
+
+  // Try each model in fallback order
+  let lastError = '';
+  
+  for (let i = 0; i < fallbackOrder.length; i++) {
+    const currentModel = fallbackOrder[i];
+    
+    // Double-check: skip text-only models for image tasks
+    if (isImageTask && isTextOnlyModel(currentModel)) {
+      console.log(`⏭️  Skipping ${currentModel} - text-only model cannot handle images`);
+      continue;
+    }
+    
+    console.log(`\n${i === 0 ? '🎯' : '🔄'} Trying model: ${currentModel}${i > 0 ? ' (fallback)' : ''}`);
+    
+    let response: AIResponse;
+    
+    try {
+      // Determine which Gemini model to use based on context
+      let geminiModel = 'gemini-2.0-flash';
+      if (modelId === 'google-gemini-pro') {
+        geminiModel = 'gemini-1.5-pro';
+      } else if (modelId === 'google-gemini') {
+        geminiModel = 'gemini-1.5-flash';
+      } else if (modelId === 'google-gemini-2.0-flash') {
+        geminiModel = 'gemini-2.0-flash';
+      }
+
+      switch (currentModel) {
+        case 'openai-gpt4':
+          response = await callOpenAI(messages);
+          break;
+        case 'google-gemini':
+        case 'google-gemini-pro':
+          response = await callGemini(messages, geminiModel);
+          break;
+        case 'claude-3':
+          response = await callClaude(messages);
+          break;
+        case 'groq-llama':
+          response = await callGroq(messages);
+          break;
+        case 'mistral-large':
+          response = await callMistral(messages);
+          break;
+        default:
+          response = await callGemini(messages, 'gemini-2.0-flash');
+          break;
+      }
+
+      // Check if response has an error
+      if (response.error) {
+        lastError = response.error;
+        console.log(`❌ ${currentModel} failed: ${response.error}`);
+        
+        // Check if we should try next fallback
+        if (shouldFallback(response.error) && i < fallbackOrder.length - 1) {
+          console.log(`⚠️  Quota/rate limit detected - trying next fallback...`);
+          continue;
+        } else if (i === fallbackOrder.length - 1) {
+          console.log(`❌ All models failed. Last error: ${response.error}`);
+          return response;
+        } else {
+          console.log(`❌ Non-quota error - not falling back`);
+          return response;
+        }
+      }
+
+      // Success!
+      if (i > 0) {
+        console.log(`✅ Fallback successful! Using ${currentModel} instead of ${modelId}`);
+        response.content = `[Using ${currentModel} - ${modelId} unavailable]\n\n${response.content}`;
+      } else {
+        console.log(`✅ Primary model ${currentModel} succeeded`);
+      }
+      
+      return response;
+      
+    } catch (error: any) {
+      lastError = error.message || 'Unknown error';
+      console.log(`❌ ${currentModel} threw exception: ${lastError}`);
+      
+      if (i < fallbackOrder.length - 1) {
+        console.log(`⚠️  Trying next fallback...`);
+        continue;
+      }
+    }
+  }
+
+  // All models failed
+  console.log(`❌ CRITICAL: All AI models failed!`);
+  return {
+    content: '',
+    model: modelId,
+    error: `All AI models are currently unavailable. Last error: ${lastError}. Please try again later or check your API keys.`
+  };
+}
 
 /**
  * Detect content type and select appropriate thinking mode
+ * ENHANCED: Better detection for image generation requests
  */
 export function detectContentType(userMessage: string): {
   type: 'image' | 'file' | 'code' | 'text';
   thinkingMode: 'thinking' | 'creating_image' | 'analyzing' | 'editing_image';
   suggestedModel: string;
+  isImageTask: boolean;
 } {
   const lowerMsg = userMessage.toLowerCase();
   
-  // Image generation keywords (PRIORITY 1)
+  // Image generation keywords (PRIORITY 1) - EXPANDED LIST
   const imageKeywords = [
     'create a logo', 'create logo', 'generate logo', 'make a logo', 'logo for',
     'create an image', 'create image', 'generate image', 'make an image', 'image for',
     'design a logo', 'design logo', 'design an image', 'design image',
     'draw', 'paint', 'illustrate', 'sketch',
     'create a picture', 'generate a picture', 'design an icon', 'icon for',
-    'kreye yon logo', 'kreye logo', 'fe yon logo', 'fe logo'
+    'kreye yon logo', 'kreye logo', 'fe yon logo', 'fe logo',
+    'generate a logo', 'make logo', 'logo design', 'brand logo',
+    'create photo', 'generate photo', 'make photo', 'photo of',
+    'create illustration', 'generate illustration', 'make illustration',
+    'create artwork', 'generate artwork', 'make artwork',
+    'create graphic', 'generate graphic', 'make graphic',
+    'create banner', 'generate banner', 'make banner',
+    'create poster', 'generate poster', 'make poster',
+    'create avatar', 'generate avatar', 'make avatar',
+    'create thumbnail', 'generate thumbnail', 'make thumbnail',
+    'create meme', 'generate meme', 'make meme',
+    'draw a', 'paint a', 'sketch a', 'illustrate a',
+    'image of', 'picture of', 'photo of', 'drawing of', 'painting of',
+    'visualize', 'render', 'generate art', 'create art', 'ai art',
+    'text to image', 'text-to-image', 'image generation'
   ];
   
   // Image editing keywords (PRIORITY 1.5)
   const editKeywords = [
     'edit image', 'edit the image', 'modify image', 'change image',
-    'update image', 'improve image', 'enhance image', 'fix image'
+    'update image', 'improve image', 'enhance image', 'fix image',
+    'edit photo', 'modify photo', 'change photo', 'update photo',
+    'edit picture', 'modify picture', 'change picture'
   ];
   
   // File creation keywords (PRIORITY 2)
@@ -495,272 +786,140 @@ export function detectContentType(userMessage: string): {
       return { 
         type: 'image', 
         thinkingMode: 'editing_image',
-        suggestedModel: 'logo-designer' 
+        suggestedModel: 'gemini-2.0-flash',
+        isImageTask: true
       };
     }
   }
   
-  // Check for image generation
+  // Check for image generation - STRICT DETECTION
   for (const keyword of imageKeywords) {
     if (lowerMsg.includes(keyword)) {
       return { 
         type: 'image', 
         thinkingMode: 'creating_image',
-        suggestedModel: 'logo-designer' 
+        suggestedModel: 'gemini-2.0-flash',
+        isImageTask: true
       };
     }
   }
   
-  // Check for file requests (must show "Analyzing")
+  // Check for file requests
   for (const keyword of fileKeywords) {
     if (lowerMsg.includes(keyword)) {
       return { 
         type: 'file', 
         thinkingMode: 'analyzing',
-        suggestedModel: 'file-creator' 
+        suggestedModel: 'file-creator',
+        isImageTask: false
       };
     }
   }
   
-  // Check for code requests (show "Thinking")
+  // Check for code requests
   for (const keyword of codeKeywords) {
     if (lowerMsg.includes(keyword)) {
       return { 
         type: 'code', 
         thinkingMode: 'thinking',
-        suggestedModel: 'code-generator' 
+        suggestedModel: 'code-generator',
+        isImageTask: false
       };
     }
   }
   
-  // Default to text (show "Thinking")
+  // Default to text
   return { 
     type: 'text', 
     thinkingMode: 'thinking',
-    suggestedModel: 'general-assistant' 
+    suggestedModel: 'general-assistant',
+    isImageTask: false
   };
 }
 
 /**
- * DALL-E 3 Production Integration
- * Optimized for: Image fidelity, safety handling, and prompt transparency.
+ * Available AI Models - 2026 Optimized
  */
+export const AI_MODELS = {
+  // --- IMAGE & DESIGN (DALL-E 3 + Gemini Imagen) ---
+  'image-generator': {
+    name: 'Image Generator',
+    model: 'dalle-3',
+    specialization: 'image',
+    description: 'Hyper-realistic imagery and complex scene generation via DALL-E 3 or Gemini Imagen'
+  },
+  'logo-designer': {
+    name: 'Logo Designer',
+    model: 'gemini-2.0-flash-image',
+    specialization: 'image',
+    description: 'Precision brand assets and professional logo generation'
+  },
 
-interface DalleResponse {
-  data: Array<{
-    url: string;
-    revised_prompt: string; // Crucial for seeing how OpenAI changed your prompt
-  }>;
-  error?: { message: string };
-}
+  // --- CODE & TECHNICAL (GPT-4 & Claude) ---
+  'code-generator': {
+    name: 'Code Generator',
+    model: 'gpt-4o',
+    specialization: 'code',
+    description: 'Senior-level code generation with full project context'
+  },
+  'code-debugger': {
+    name: 'Code Debugger',
+    model: 'claude-3-5-sonnet',
+    specialization: 'debug',
+    description: 'Deep logic analysis and multi-file debugging'
+  },
+  'ui-designer': {
+    name: 'UI/UX Designer',
+    model: 'claude-3-5-sonnet',
+    specialization: 'ui',
+    description: 'High-fidelity UI components and design system architecture'
+  },
 
-export async function generateImage(prompt: string): Promise<{
-  imageUrl?: string;
-  revisedPrompt?: string;
-  error?: string;
-}> {
-  const apiKey = Deno.env.get('OPENAI_API_KEY');
-  if (!apiKey) return { error: 'Missing OPENAI_API_KEY' };
+  // --- DATA & PERFORMANCE (Gemini + Groq) ---
+  'file-creator': {
+    name: 'File Creator',
+    model: 'gemini-2.0-flash',
+    specialization: 'file',
+    description: 'Instant generation of structured data and documents'
+  },
+  'data-analyst': {
+    name: 'Data Analyst',
+    model: 'gemini-1.5-pro',
+    specialization: 'data',
+    description: 'Deep insights from massive datasets and multi-file analysis'
+  },
+  'api-expert': {
+    name: 'API Expert',
+    model: 'groq-llama-4',
+    specialization: 'api',
+    description: 'Fast API schema generation and documentation'
+  },
 
-  try {
-    // 1. Prompt Pre-processing
-    // Adding a subtle style guide ensures better consistency in 2026
-    const enhancedPrompt = prompt.trim();
+  // --- CONTENT & WRITING (Claude & GPT) ---
+  'content-writer': {
+    name: 'Content Writer',
+    model: 'claude-3-5-sonnet',
+    specialization: 'writing',
+    description: 'Editorial-grade creative writing and brand storytelling'
+  },
+  'explainer': {
+    name: 'Explainer',
+    model: 'gpt-4o',
+    specialization: 'explanation',
+    description: 'Complex concept simplification using advanced reasoning'
+  },
 
-    const response = await fetch('https://api.openai.com/v1/images/generations', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'dall-e-3',
-        prompt: enhancedPrompt,
-        n: 1,
-        size: '1024x1024',
-        quality: 'hd', // Upgraded to 'hd' for 2026 professional standard
-        style: 'vivid', // 'vivid' for dramatic art, 'natural' for realism
-        user: 'app-user-id-001', // Helpful for tracking/preventing abuse
-      }),
-    });
-
-    const data: DalleResponse = await response.json();
-
-    // 2. Handle Safety Blocks (HTTP 400)
-    if (response.status === 400 && data.error?.message.includes('safety')) {
-      return { 
-        error: 'The request was flagged by the safety filter. Try rephrasing.' 
-      };
-    }
-
-    if (!response.ok) {
-      return { error: data.error?.message || `OpenAI Error: ${response.status}` };
-    }
-
-    const imageResult = data.data?.[0];
-
-    if (!imageResult?.url) {
-      return { error: 'No image URL was returned from the API.' };
-    }
-
-    // 3. Return both the image AND the revised prompt
-    // This allows you to show the user exactly how the AI interpreted them
-    return { 
-      imageUrl: imageResult.url, 
-      revisedPrompt: imageResult.revised_prompt 
-    };
-
-  } catch (error: unknown) {
-    const msg = error instanceof Error ? error.message : 'Unknown generation error';
-    return { error: msg };
-  }
-}
-
-/**
- * Check if error is a quota/rate limit error that should trigger fallback
- */
-function shouldFallback(error: string): boolean {
-  const lowerError = error.toLowerCase();
-  return (
-    lowerError.includes('insufficient_quota') ||
-    lowerError.includes('quota') ||
-    lowerError.includes('rate_limit') ||
-    lowerError.includes('429') ||
-    lowerError.includes('billing') ||
-    lowerError.includes('exceeded') ||
-    lowerError.includes('limit')
-  );
-}
-
-/**
- * Router function with AUTOMATIC FALLBACK
- * Tries multiple AI providers if one fails due to quota/rate limits
- * USES ONLY YOUR OWN API KEYS - NO OnSpace AI
- */
-export async function callAI(modelId: string, messages: AIMessage[]): Promise<AIResponse> {
-  console.log(`🚀 User selected model: ${modelId}`);
-  console.log(`🎯 This is the model the user wants to use`);
-
-  // Define fallback order based on primary model
-  let fallbackOrder: string[] = [];
-  
-  switch (modelId) {
-    case 'openai-gpt4':
-      fallbackOrder = ['openai-gpt4', 'google-gemini', 'claude-3', 'groq-llama'];
-      break;
-    case 'google-gemini':
-    case 'google-gemini-2.0-flash':
-      fallbackOrder = ['google-gemini', 'claude-3', 'groq-llama', 'openai-gpt4'];
-      break;
-    case 'google-gemini-pro':
-      fallbackOrder = ['google-gemini-pro', 'google-gemini', 'claude-3', 'openai-gpt4'];
-      break;
-    case 'claude-3':
-      fallbackOrder = ['claude-3', 'google-gemini', 'groq-llama', 'openai-gpt4'];
-      break;
-    case 'groq-llama':
-      fallbackOrder = ['groq-llama', 'google-gemini', 'claude-3', 'openai-gpt4'];
-      break;
-    case 'mistral-large':
-      fallbackOrder = ['mistral-large', 'google-gemini', 'claude-3', 'openai-gpt4'];
-      break;
-    default:
-      // Default fallback order
-      fallbackOrder = ['google-gemini', 'claude-3', 'groq-llama', 'openai-gpt4'];
-      break;
-  }
-
-  console.log(`📋 Fallback order: ${fallbackOrder.join(' → ')}`);
-
-  // Try each model in fallback order
-  let lastError = '';
-  
-  for (let i = 0; i < fallbackOrder.length; i++) {
-    const currentModel = fallbackOrder[i];
-    console.log(`\n${i === 0 ? '🎯' : '🔄'} Trying model: ${currentModel}${i > 0 ? ' (fallback)' : ''}`);
-    
-    let response: AIResponse;
-    
-    try {
-      // Determine which Gemini model to use based on context
-      let geminiModel = 'gemini-2.0-flash'; // Default to latest fast model
-      if (modelId === 'google-gemini-pro') {
-        geminiModel = 'gemini-1.5-pro'; // User explicitly requested Pro
-      } else if (modelId === 'google-gemini') {
-        geminiModel = 'gemini-1.5-flash'; // Classic Gemini Flash
-      } else if (modelId === 'google-gemini-2.0-flash') {
-        geminiModel = 'gemini-2.0-flash'; // Latest 2.0 Flash
-      }
-
-      switch (currentModel) {
-        case 'openai-gpt4':
-          response = await callOpenAI(messages);
-          break;
-        case 'google-gemini':
-        case 'google-gemini-pro':
-          response = await callGemini(messages, geminiModel);
-          break;
-        case 'claude-3':
-          response = await callClaude(messages);
-          break;
-        case 'groq-llama':
-          response = await callGroq(messages);
-          break;
-        case 'mistral-large':
-          response = await callMistral(messages);
-          break;
-        default:
-          response = await callGemini(messages, 'gemini-1.5-flash');
-          break;
-      }
-
-      // Check if response has an error
-      if (response.error) {
-        lastError = response.error;
-        console.log(`❌ ${currentModel} failed: ${response.error}`);
-        
-        // Check if we should try next fallback
-        if (shouldFallback(response.error) && i < fallbackOrder.length - 1) {
-          console.log(`⚠️  Quota/rate limit detected - trying next fallback...`);
-          continue;
-        } else if (i === fallbackOrder.length - 1) {
-          // Last model also failed
-          console.log(`❌ All models failed. Last error: ${response.error}`);
-          return response;
-        } else {
-          // Non-quota error, return immediately
-          console.log(`❌ Non-quota error - not falling back`);
-          return response;
-        }
-      }
-
-      // Success!
-      if (i > 0) {
-        console.log(`✅ Fallback successful! Using ${currentModel} instead of ${modelId}`);
-        // Add note to response that we used fallback
-        response.content = `[Using ${currentModel} - ${modelId} unavailable]\n\n${response.content}`;
-      } else {
-        console.log(`✅ Primary model ${currentModel} succeeded`);
-      }
-      
-      return response;
-      
-    } catch (error) {
-      lastError = error.message || 'Unknown error';
-      console.log(`❌ ${currentModel} threw exception: ${lastError}`);
-      
-      if (i < fallbackOrder.length - 1) {
-        console.log(`⚠️  Trying next fallback...`);
-        continue;
-      }
-    }
-  }
-
-  // All models failed
-  console.log(`❌ CRITICAL: All AI models failed!`);
-  return {
-    content: '',
-    model: modelId,
-    error: `All AI models are currently unavailable. Last error: ${lastError}. Please try again later or check your API keys.`
-  };
-}
+  // --- GENERAL UTILITY ---
+  'general-assistant': {
+    name: 'General Assistant',
+    model: 'gemini-2.0-flash',
+    specialization: 'general',
+    description: 'Reliable all-purpose assistant for daily tasks'
+  },
+  'editor': {
+    name: 'Text Editor',
+    model: 'claude-3-5-haiku',
+    specialization: 'editing',
+    description: 'Grammar, tone refinement, and structural editing'
+  },
+};
