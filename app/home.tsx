@@ -11,8 +11,6 @@ import {
   StatusBar, 
   ActivityIndicator,
   Alert,
-  Image,
-  Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
@@ -69,7 +67,6 @@ export default function HomeScreen() {
   const recordingRef = useRef<Audio.Recording | null>(null);
   const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
   const audioPermissionRef = useRef<boolean>(false);
-  const isRecordingRef = useRef<boolean>(false); // <-- NOUVO: pou evite stale closure
 
   // Initialize audio permissions on mount
   useEffect(() => {
@@ -117,7 +114,9 @@ export default function HomeScreen() {
   useEffect(() => {
     return () => {
       stopRecordingTimer();
-      cleanupRecording();
+      if (recordingRef.current) {
+        recordingRef.current.stopAndUnloadAsync().catch(() => {});
+      }
     };
   }, []);
 
@@ -156,27 +155,15 @@ export default function HomeScreen() {
     }
   };
 
-  const cleanupRecording = async () => {
-    try {
-      if (recordingRef.current) {
-        await recordingRef.current.stopAndUnloadAsync();
-        recordingRef.current = null;
-      }
-    } catch (error) {
-      // Ignore cleanup errors
-    }
-  };
-
   const formatDuration = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Start voice recording - KORIJE
+  // Start voice recording
   const startVoiceRecording = async () => {
-    try {
-      // 1. Check permissions first
+    if (!audioPermissionRef.current) {
       const { status } = await Audio.requestPermissionsAsync();
       if (status !== 'granted') {
         Alert.alert(
@@ -190,157 +177,88 @@ export default function HomeScreen() {
         return;
       }
       audioPermissionRef.current = true;
+    }
 
-      // 2. Cleanup any existing recording
-      await cleanupRecording();
+    try {
+      // Stop any existing recording
+      if (recordingRef.current) {
+        await recordingRef.current.stopAndUnloadAsync();
+      }
 
-      // 3. Set audio mode (IMPORTANT for iOS)
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: false,
-        shouldDuckAndroid: true,
-        playThroughEarpieceAndroid: false,
-      });
+      setRecordingState('recording');
+      startRecordingTimer();
 
-      // 4. Start recording
-      console.log('🎤 Starting recording...');
       const { recording } = await Audio.Recording.createAsync(
         Audio.RecordingOptionsPresets.HIGH_QUALITY
       );
 
       recordingRef.current = recording;
-      isRecordingRef.current = true;
-      setRecordingState('recording');
-      startRecordingTimer();
 
-      // 5. Auto-stop after 60 seconds - use ref to avoid stale closure
+      // Auto-stop after 60 seconds
       setTimeout(() => {
-        if (isRecordingRef.current) {
-          console.log('⏱️ Auto-stopping recording after 60s');
+        if (recordingState === 'recording') {
           stopVoiceRecording();
         }
       }, 60000);
 
     } catch (error) {
-      console.error('❌ Failed to start recording:', error);
-      isRecordingRef.current = false;
+      console.error('Failed to start recording:', error);
       setRecordingState('idle');
       stopRecordingTimer();
-      
-      // More specific error message
-      let errorMsg = 'Failed to start recording. Please try again.';
-      if (error instanceof Error) {
-        if (error.message.includes('permission')) {
-          errorMsg = 'Microphone permission denied. Please enable it in Settings.';
-        } else if (error.message.includes('busy')) {
-          errorMsg = 'Audio system is busy. Please try again in a moment.';
-        }
-      }
-      
-      showAlert('Error', errorMsg);
+      showAlert('Error', 'Failed to start recording. Please try again.');
     }
   };
 
-  // Stop voice recording and process - KORIJE
+  // Stop voice recording and process
   const stopVoiceRecording = async () => {
-    console.log('🛑 Stopping recording...');
-    
-    // Prevent double-stop
-    if (!isRecordingRef.current) {
-      console.log('Already stopped');
-      return;
-    }
+    if (!recordingRef.current || recordingState !== 'recording') return;
 
-    isRecordingRef.current = false;
     stopRecordingTimer();
-
-    // If not in recording state, just cleanup
-    if (recordingState !== 'recording') {
-      await cleanupRecording();
-      return;
-    }
-
     setRecordingState('processing');
 
     try {
-      if (!recordingRef.current) {
-        throw new Error('No active recording');
-      }
-
-      // Stop and get URI
       await recordingRef.current.stopAndUnloadAsync();
       const uri = recordingRef.current.getURI();
-      recordingRef.current = null;
-
+      
       if (!uri) {
-        throw new Error('No recording URI available');
+        throw new Error('No recording URI');
       }
 
-      console.log('📁 Recording URI:', uri);
-
-      // Check file exists
+      // Get recording info
       const info = await FileSystem.getInfoAsync(uri);
-      console.log('📊 File info:', info);
-
       if (!info.exists) {
         throw new Error('Recording file not found');
       }
 
-      if (info.size === 0) {
-        throw new Error('Recording is empty');
-      }
+      console.log('🎤 Recording saved:', uri, 'Size:', info.size);
 
-      // Read as base64
-      console.log('📖 Reading file...');
+      // Read file as base64
       const base64Audio = await FileSystem.readAsStringAsync(uri, {
         encoding: FileSystem.EncodingType.Base64,
       });
 
-      console.log('✅ File read, size:', base64Audio.length);
-
-      // Transcribe
+      // Send to speech-to-text
       await transcribeAudio(base64Audio);
 
     } catch (error) {
-      console.error('❌ Recording error:', error);
+      console.error('Recording error:', error);
+      showAlert('Error', 'Failed to process recording');
       setRecordingState('idle');
-      
-      const errorMsg = error instanceof Error ? error.message : 'Failed to process recording';
-      showAlert('Error', errorMsg);
+    } finally {
+      recordingRef.current = null;
     }
   };
 
-  // Transcribe audio with scam/fraud detection
+  // Transcribe audio using OpenAI Whisper or similar
   const transcribeAudio = async (base64Audio: string) => {
     try {
-      console.log('🔄 Sending to transcription...');
-      
+      // Option 1: Use Supabase Edge Function with OpenAI Whisper
       const { data, error } = await supabase.functions.invoke('transcribe-audio', {
         body: {
           audio: base64Audio,
-          userId: user?.id,
-          conversationId: currentConversation?.id,
+          model: 'whisper-1',
         },
       });
-
-      // Check ban
-      if (error?.message?.includes('Content violation') || data?.banned) {
-        setRecordingState('idle');
-        
-        Alert.alert(
-          '🚫 Account Suspended',
-          "Don't fucking say that! Your account has been suspended for 10 days due to scam/fraud content. This conversation has been terminated.",
-          [{ 
-            text: 'OK', 
-            onPress: () => {
-              setInputText('');
-              router.push('/suspended');
-            } 
-          }]
-        );
-        return;
-      }
 
       if (error) throw error;
 
@@ -352,20 +270,23 @@ export default function HomeScreen() {
         throw new Error('No transcription received');
       }
 
-    } catch (error: any) {
-      console.error('❌ Transcription error:', error);
-      setRecordingState('idle');
+    } catch (error) {
+      console.error('Transcription error:', error);
       
-      if (error?.message?.includes('Content violation') || error?.message?.includes('suspended')) {
-        return;
-      }
-      
+      // Fallback: Show manual input option
       Alert.alert(
         'Transcription Failed',
         'Could not transcribe audio. Would you like to try again or type manually?',
         [
-          { text: 'Try Again', onPress: () => startVoiceRecording() },
-          { text: 'Type Manually', style: 'cancel' },
+          { 
+            text: 'Try Again', 
+            onPress: () => startVoiceRecording() 
+          },
+          { 
+            text: 'Type Manually', 
+            style: 'cancel',
+            onPress: () => setRecordingState('idle')
+          },
         ]
       );
     }
@@ -691,6 +612,7 @@ export default function HomeScreen() {
     : currentAIModel === 'claude' ? 'Claude'
     : 'Llama';
 
+  // Determine send button state
   const showSendButton = inputText.trim() || selectedMedia.length > 0;
   const isRecording = recordingState === 'recording';
   const isProcessing = recordingState === 'processing';
@@ -838,12 +760,13 @@ export default function HomeScreen() {
         </View>
         
         <TouchableOpacity 
-          style={styles.iconButton} 
-          onPress={() => router.push('/voice-control')}
-          disabled={editingMessageId !== null}
-        >
-          <Ionicons name="call-outline" size={24} color={editingMessageId ? colors.textSecondary : colors.text} />
-        </TouchableOpacity>
+  style={styles.iconButton} 
+  onPress={() => router.push('/voice-control')}
+  disabled={editingMessageId !== null}
+>
+  <Ionicons name="call-outline" size={24} color={editingMessageId ? colors.textSecondary : colors.text} />
+</TouchableOpacity>
+
 
         {editingMessageId && (
           <TouchableOpacity 
