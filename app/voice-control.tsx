@@ -18,46 +18,51 @@ import { Audio } from 'expo-av';
 import { useAlert } from '@/template';
 import { getSupabaseClient } from '@/template';
 import { useAuth } from '@/template';
+import fireIcon from '@/assets/icons/fire.svg';
+import starIcon from '@/assets/icons/star.svg';
+import layersIcon from '@/assets/icons/layers.svg';
+import volumeHighIcon from '@/assets/icons/volume-high.svg';
+import sunnyIcon from '@/assets/icons/sunny.svg';
 
 type VoiceState = 'idle' | 'listening' | 'thinking' | 'speaking';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-const VOICES = [
+export const VOICES = [
   {
     id: 'ember',
     name: 'Ember',
     description: 'Confident and optimistic',
     color: '#FF6B35',
-    icon: 'fire',
+    icon: fireIcon,
   },
   {
     id: 'nova',
     name: 'Nova',
     description: 'Warm and engaging',
     color: '#4A90E2',
-    icon: 'star',
+    icon: starIcon,
   },
   {
     id: 'alloy',
     name: 'Alloy',
     description: 'Neutral and balanced',
     color: '#718096',
-    icon: 'layers',
+    icon: layersIcon,
   },
   {
     id: 'echo',
     name: 'Echo',
     description: 'Clear and articulate',
     color: '#48BB78',
-    icon: 'volume-high',
+    icon: volumeHighIcon,
   },
   {
     id: 'shimmer',
     name: 'Shimmer',
     description: 'Bright and cheerful',
     color: '#ED8936',
-    icon: 'sunny',
+    icon: sunnyIcon,
   },
 ];
 
