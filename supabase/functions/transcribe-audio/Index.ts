@@ -44,7 +44,9 @@ serve(async (req) => {
   return new Response(JSON.stringify({ text: result.text }), {
     headers: { 'Content-Type': 'application/json' },
   })
-})
+}
+
+      hello fix all error
 {
   "eventMessage": "POST | 0 | http://njpuoozygqtpvlzhnjpu.backend.onspace.ai/functions/v1/transcribe-audio | ",
   "functionId": "transcribe-audio",
