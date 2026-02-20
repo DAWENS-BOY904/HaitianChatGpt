@@ -330,8 +330,45 @@ When generating multiple files, use this format:
 [full file content]
 \`\`\`
 
-PROJECT STRUCTURE:
-Always start with:
+I want you to strictly follow my project structure depending on the technology stack I’m using.
+
+When the project is TypeScript with Expo (React Native), you must structure it exactly like this:
+
+For Expo React Native (TypeScript):
+\`\`\`
+The root folder must contain:
+	•	expo/
+	•	app/
+	•	assets/
+	•	components/
+	•	constants/
+	•	contexts/
+	•	hooks/
+	•	scripts/
+	•	supabase/functions/
+	•	template/
+	•	.env
+	•	.gitignore
+	•	README.md
+	•	app.json
+	•	babel.config.js
+	•	eslint.config.js
+	•	expo-env.d.ts
+	•	package.json
+	•	pnpm-lock.yaml
+	•	tsconfig.json
+
+All routes must be created inside the app/ folder (Expo Router style).
+Reusable UI must go inside components/.
+Business logic must go inside hooks/ or contexts/.
+Constants must go inside constants/.
+Supabase edge functions must go inside supabase/functions/.
+Never mix web structure with Expo structure.
+
+⸻
+
+When the project is TypeScript Web, you must always start your response with this exact section:
+
 📁 Project Structure:
 \`\`\`
 project-name/
@@ -339,14 +376,85 @@ project-name/
 ├── tsconfig.json
 ├── .env.example
 ├── README.md
+├── public/
 ├── src/
 │   ├── components/
 │   ├── pages/
 │   └── utils/
 └── backend/
-    ├── server.js
-    └── api/
+├── server.js
+└── api/
+└── supabase/functions/
+
+Frontend routes must be inside src/pages/.
+Reusable UI must be inside src/components/.
+Helpers and utilities must go inside src/utils/.
+Backend routes must be inside backend/api/.
+Supabase functions must go inside supabase/functions/.
+
+Always define clear routes for both frontend and backend so I can auto-place them correctly.
+
+⸻
+
+When the project is Python, you must define routes clearly like this:
+
+📁 Project Structure:
+\`\`\`
+project-name/
+├── requirements.txt
+├── .env.example
+├── README.md
+├── app/
+│   ├── main.py
+│   ├── routes/
+│   ├── models/
+│   ├── schemas/
+│   ├── services/
+│   └── utils/
+
+All API routes must be inside app/routes/.
+Each route file must represent a feature (auth.py, products.py, users.py, etc.).
+Business logic must go inside services/.
+Models must go inside models/.
+
+Clearly separate route logic from business logic.
+
+⸻
+
+When the project is Java, you must structure it like this:
+
+📁 Project Structure:
+\`\`\`
+project-name/
+├── pom.xml (or build.gradle)
+├── src/
+│   └── main/
+│       ├── java/
+│       │   └── com/projectname/
+│       │       ├── controller/
+│       │       ├── service/
+│       │       ├── repository/
+│       │       └── model/
+│       └── resources/
+│           ├── application.properties
+│           └── static/
 \`\`\``,
+All API routes must be inside controller/.
+Business logic must go inside service/.
+Database logic must go inside repository/.
+Entities must go inside model/.
+
+⸻
+
+Very Important Rules:
+	•	Always define routes clearly so I can auto-place them.
+	•	Never mix project structures.
+	•	Never change folder naming.
+	•	Always respect the stack I specify.
+	•	Always show the full project structure first before writing code (for web, python, and java).
+	•	Keep the architecture clean and scalable.
+
+The AI must choose the correct structure depending on the technology I mention and strictly follow it.,
             },
             {
               role: 'user',
