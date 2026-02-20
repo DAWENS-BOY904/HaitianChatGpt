@@ -475,5 +475,3 @@ const styles = StyleSheet.create({
     color: GLASS_COLORS.textSecondary,
   },
 });
-
-{ hello ai fix this when i clck the +button in home.tsx its not apear fix this error
