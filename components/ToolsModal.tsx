@@ -272,7 +272,7 @@ export function ToolsModal({
             >
               {/* Main Tools Grid - 3x2 */}
               <View style={styles.mainGrid}>
-                {mainTools.map((tool, index) => renderToolButton(tool, index))}
+                {mainTools.slice(0, 5).map((tool, index) => renderToolButton(tool, index))}
               </View>
 
               {/* Web Search Row with Toggle */}

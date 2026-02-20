@@ -82,11 +82,23 @@ export async function callGemini(messages: AIMessage[], modelName: string = 'gem
   }
 
   try {
-    // CRITICAL FIX: Auto-correct invalid model names
+    // CRITICAL FIX: Map to valid v1beta model names
     let validModelName = modelName;
-    if (modelName === 'gemini-2.0-flash') {
+    
+    // Map all gemini-1.5-flash variations to the correct v1beta name
+    if (modelName.includes('gemini-1.5-flash') || modelName === 'gemini-1.5-flash') {
+      validModelName = 'gemini-1.5-flash-002';
+      console.log(`🔄 Corrected: ${modelName} → ${validModelName}`);
+    }
+    // Map gemini-2.0-flash to experimental version
+    else if (modelName === 'gemini-2.0-flash' || modelName === 'gemini-flash') {
       validModelName = 'gemini-2.0-flash-exp';
-      console.log(`🔄 Auto-corrected: ${modelName} → ${validModelName}`);
+      console.log(`🔄 Corrected: ${modelName} → ${validModelName}`);
+    }
+    // Map gemini-1.5-pro
+    else if (modelName.includes('gemini-1.5-pro')) {
+      validModelName = 'gemini-1.5-pro-002';
+      console.log(`🔄 Corrected: ${modelName} → ${validModelName}`);
     }
 
     // Prepare the request body
@@ -713,14 +725,18 @@ export async function callAI(modelId: string, messages: AIMessage[], isImageTask
     let response: AIResponse;
     
     try {
-      // CRITICAL: Use valid Gemini model names
+      // CRITICAL FIX: Use valid Gemini model names for v1beta API
       let geminiModel = 'gemini-2.0-flash-exp';
       if (modelId === 'google-gemini-pro') {
-        geminiModel = 'gemini-1.5-pro';
-      } else if (modelId === 'google-gemini') {
-        geminiModel = 'gemini-1.5-flash';
+        geminiModel = 'gemini-1.5-pro-002';
+      } else if (modelId === 'google-gemini' || modelId === 'gemini') {
+        geminiModel = 'gemini-1.5-flash-002';
       } else if (modelId === 'google-gemini-2.0-flash' || modelId === 'gemini-2.0-flash') {
         geminiModel = 'gemini-2.0-flash-exp';
+      } else if (modelId.includes('gemini-1.5-flash')) {
+        geminiModel = 'gemini-1.5-flash-002';
+      } else if (modelId.includes('gemini-1.5-pro')) {
+        geminiModel = 'gemini-1.5-pro-002';
       }
 
       switch (currentModel) {
