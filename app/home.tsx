@@ -1011,3 +1011,4 @@ export default function HomeScreen() {
     </KeyboardAvoidingView>
   );
 }
+{ hello ai the +button when i click it must open ToolsModal.tsx and working good.,
