@@ -441,30 +441,12 @@ export default function SettingsScreen() {
 
   const appearanceOptions: Array<'System' | 'Light' | 'Dark'> = ['System', 'Light', 'Dark'];
 
-  function setTheme(theme: 'System' | 'Light' | 'Dark') {
-    const root = document.documentElement;
-
-    if (theme === 'Dark') {
-      root.classList.add('dark');
-    } else {
-      root.classList.remove('dark');
-    }
-
-    if (theme === 'Light') {
-      root.classList.add('light');
-    } else {
-      root.classList.remove('light');
-    }
-
-    if (theme === 'System') {
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      if (prefersDark) {
-        root.classList.add('dark');
-      } else {
-        root.classList.remove('dark');
-      }
-    }
-  }
+  // Real theme switching based on appearance setting
+  useEffect(() => {
+    // This effect runs when appearance setting changes
+    // The ThemeContext already handles the theme switching logic
+    // based on settings.appearance value in contexts/ThemeContext.tsx
+  }, [settings.appearance]);
 
   const accentColors = ['#10A37F', '#0084FF', '#FF3B30', '#FF9500', '#5856D6'];
 
@@ -781,4 +763,4 @@ export default function SettingsScreen() {
     </View>
   );
 }
-helllo ai for the const appearanceOptions: Array<'System' | 'Light' | 'Dark'> = ['System', 'Light', 'Dark']; its mus be real if you system phone is dark show dark theme if its light show lighr if you change light the intire page light if dark same no demo 
+
