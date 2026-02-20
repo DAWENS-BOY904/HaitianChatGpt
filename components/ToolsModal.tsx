@@ -296,7 +296,7 @@ export function ToolsModal({
       label: 'Code',
       icon: 'code-slash-outline',
       action: () => {
-        onSelectTool?.('code');
+        navigation.navigate('coding');
         onClose();
       },
     },

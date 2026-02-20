@@ -95,6 +95,7 @@ export default function RootLayout() {
                     <Stack.Screen name="project-upload" />
                     <Stack.Screen name="billing" />
                     <Stack.Screen name="stripe-checkout" />
+                    <Stack.Screen name="coding" />
                   </Stack>
                   </ConversationProvider>
                 </SocialProvider>
