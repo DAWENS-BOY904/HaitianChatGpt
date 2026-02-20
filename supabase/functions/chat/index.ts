@@ -9,10 +9,12 @@ import {
 } from '../_shared/ai-providers.ts';
 
 Deno.serve(async (req) => {
+  // CRITICAL: Handle OPTIONS first
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // CRITICAL: Top-level try-catch to prevent HTML error responses
   try {
     const { messages, conversationId, aiModel = 'google-gemini', fileContents, audio, voice, responseType, editImageUrl, editPrompt } = await req.json();
 
@@ -32,8 +34,12 @@ Deno.serve(async (req) => {
 
     const { data: { user }, error: userError } = await supabaseClient.auth.getUser(token);
     if (userError || !user) {
+      console.error('❌ Auth error:', userError);
       return new Response(
-        JSON.stringify({ error: 'Unauthorized' }),
+        JSON.stringify({ 
+          error: 'Authentication required. Please log in again.',
+          type: 'AuthError'
+        }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -747,7 +753,11 @@ Adapt your tone to match the user's communication style.
       } catch (error: any) {
         console.error('Audio transcription error:', error);
         return new Response(
-          JSON.stringify({ error: `Failed to transcribe audio: ${error.message}` }),
+          JSON.stringify({ 
+            error: `Failed to transcribe audio: ${error.message}`,
+            type: 'AudioTranscriptionError',
+            suggestion: 'Please check your audio file format and try again.'
+          }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
@@ -797,8 +807,9 @@ Adapt your tone to match the user's communication style.
         return new Response(
           JSON.stringify({ 
             error: editResult.error, 
+            type: 'ImageEditError',
             thinkingMode,
-            details: 'Image editing failed. Please try again with a different description.'
+            suggestion: 'Image editing failed. Please try again with a different description or a different image.'
           }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
@@ -824,8 +835,9 @@ Adapt your tone to match the user's communication style.
         return new Response(
           JSON.stringify({ 
             error: imageResult.error,
+            type: 'ImageGenerationError',
             thinkingMode: 'error',
-            suggestion: 'Image generation is temporarily unavailable. You can try:\n1. Rephrasing your request\n2. Trying again in a few moments\n3. Asking for a text description instead'
+            suggestion: 'Image generation is temporarily unavailable. You can try:\n1. Rephrasing your request\n2. Trying again in a few moments\n3. Selecting a different AI model\n4. Asking for a text description instead'
           }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
@@ -839,8 +851,10 @@ Adapt your tone to match the user's communication style.
       } else {
         return new Response(
           JSON.stringify({ 
-            error: 'Image generation returned empty result',
-            thinkingMode: 'error'
+            error: 'Image generation returned empty result. Please try again.',
+            type: 'EmptyImageResultError',
+            thinkingMode: 'error',
+            suggestion: 'Try rephrasing your image description or selecting a different AI model.'
           }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
@@ -870,7 +884,12 @@ Adapt your tone to match the user's communication style.
         aiResponse = await callAI(selectedModel, aiMessages, false);
         if (aiResponse.error) {
           return new Response(
-            JSON.stringify({ error: `File generation failed: ${fileResponse.error}`, thinkingMode }),
+            JSON.stringify({ 
+              error: `File generation failed: ${fileResponse.error}`,
+              type: 'FileGenerationError',
+              thinkingMode,
+              suggestion: 'Please try rephrasing your file request or selecting a different AI model.'
+            }),
             { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
@@ -913,7 +932,12 @@ Adapt your tone to match the user's communication style.
       if (aiResponse.error) {
         console.error('❌ AI response failed:', aiResponse.error);
         return new Response(
-          JSON.stringify({ error: aiResponse.error, thinkingMode }),
+          JSON.stringify({ 
+            error: aiResponse.error,
+            type: 'AIResponseError',
+            thinkingMode,
+            suggestion: 'AI response failed. Please try again or select a different AI model.'
+          }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
@@ -1057,10 +1081,26 @@ Adapt your tone to match the user's communication style.
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error: any) {
-    console.error('Chat error:', error);
+    // CRITICAL: Log full error details for debugging
+    console.error('❌ CHAT EDGE FUNCTION ERROR:', error);
+    console.error('📋 Error stack:', error.stack);
+    console.error('📋 Error name:', error.name);
+    console.error('📋 Error message:', error.message);
+    
+    // CRITICAL: ALWAYS return JSON with CORS headers
     return new Response(
-      JSON.stringify({ error: error.message || 'Internal server error' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      JSON.stringify({ 
+        error: error.message || 'Internal server error occurred',
+        type: error.name || 'UnknownError',
+        timestamp: new Date().toISOString(),
+      }),
+      { 
+        status: 500, 
+        headers: { 
+          ...corsHeaders, 
+          'Content-Type': 'application/json' 
+        } 
+      }
     );
   }
 });
