@@ -556,3 +556,4 @@ export default function ImagesScreen() {
     </View>
   );
 }
+hello ai When I upload my photo with the style I ask it’s must auto send in home page with my photo and prompt and it’s must look like that photo :https://files.catbox.moe/fos001.jpeg and the ai think like that photo:https://files.catbox.moe/30ls8p.jpeg and take the api generate time idk how much time the ai must think let the ai build it good time good delay and when its finish must looks like that photo:https://files.catbox.moe/3n2q59.jpeg read the photo and make all things real no demo like ChatGPT
