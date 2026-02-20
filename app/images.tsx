@@ -438,3 +438,4 @@ export default function ImagesScreen() {
     </View>
   );
 }
+i want it functional for custom image descriptions (without style presets),  and implement that feature! make sure the icon is the image style and the ai must look the icon image and make yours like them and real icon add some logo photo no icon real photo
