@@ -570,3 +570,4 @@ export default function VoiceControlScreen() {
     </KeyboardAvoidingView>
   );
 }
+when the ai send a message make sure all message save you if the ai send a message and you send one and the ai response the first ai message must still stay and you scrow to see the first and the color background must change change multi color remove the ... in rigt put a settings icon . ,
