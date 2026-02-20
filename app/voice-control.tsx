@@ -598,4 +598,4 @@ export default function VoiceControlScreen() {
     </KeyboardAvoidingView>
   );
 }
-make this better 
+make this better https://files.catbox.moe/ws4wa4.png
