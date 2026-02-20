@@ -598,4 +598,3 @@ export default function VoiceControlScreen() {
     </KeyboardAvoidingView>
   );
 }
-hello ai make this better like this photo redesign the page still live the settings icon https://files.catbox.moe/ws4wa4.png
