@@ -30,7 +30,7 @@ interface ConversationContextType {
   loading: boolean;
   createConversation: () => Promise<string | null>;
   selectConversation: (id: string) => Promise<void>;
-  sendMessage: (content: string, imageUrl?: string, aiModel?: string) => Promise<void>;
+  sendMessage: (content: string, imageUrl?: string, base64Image?: string, isImageGeneration?: boolean, aiModel?: string) => Promise<void>;
   updateMessage: (messageId: string, newContent: string) => Promise<void>;
   updateMessageAndRegenerate: (messageId: string, newContent: string, aiModel?: string) => Promise<void>;
   deleteConversation: (id: string) => Promise<void>;
@@ -148,7 +148,7 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
     setLoading(false);
   };
 
-  const sendMessage = async (content: string, imageUrl?: string, aiModel?: string) => {
+  const sendMessage = async (content: string, imageUrl?: string, base64Image?: string, isImageGeneration: boolean = false, aiModel?: string) => {
     if (!currentConversation || !user) return;
 
     console.log('📨 ConversationContext.sendMessage called');
@@ -176,16 +176,24 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
       image_url: m.image_url,
     }));
 
+    // For image generation, add base64 image data
+    const requestBody: any = {
+      messages: contextMessages,
+      conversationId: currentConversation.id,
+      aiModel: aiModel || 'google-gemini',
+    };
+
+    if (isImageGeneration && base64Image) {
+      requestBody.base64Image = base64Image;
+      requestBody.isImageGeneration = true;
+    }
+
     console.log('  🤖 Calling AI Edge Function...');
     console.log('  📊 Context messages count:', contextMessages.length);
 
     // Call AI Edge Function
     const { data: aiResponse, error: aiError } = await supabase.functions.invoke('chat', {
-      body: {
-        messages: contextMessages,
-        conversationId: currentConversation.id,
-        aiModel: aiModel || 'google-gemini',
-      },
+      body: requestBody,
     });
 
     if (aiError) {

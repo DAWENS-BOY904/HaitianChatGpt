@@ -20,6 +20,7 @@ import { Spacing, Typography, BorderRadius } from '../constants/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getSupabaseClient } from '@/template';
 import * as ImagePicker from 'expo-image-picker';
+import { useConversation } from '../hooks/useConversation';
 
 const STYLES = [
   {
@@ -87,6 +88,7 @@ export default function ImagesScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const supabase = getSupabaseClient();
+  const { sendMessage } = useConversation();
 
   const [myImages, setMyImages] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -168,16 +170,8 @@ export default function ImagesScreen() {
 
     if (!result.canceled && result.assets[0].base64) {
       if (style) {
-        // Style preset flow
-        router.push({
-          pathname: '/image-prompt',
-          params: {
-            image: result.assets[0].uri,
-            base64: result.assets[0].base64,
-            stylePrompt: style.prompt,
-            styleName: style.name,
-          },
-        });
+        // Auto-send to home page with photo and prompt
+        await sendImageGenerationToHome(result.assets[0].uri, result.assets[0].base64!, style);
       } else {
         // Custom description flow - store image and wait for description
         setCustomImage(result.assets[0].uri);
@@ -199,19 +193,23 @@ export default function ImagesScreen() {
 
     if (!result.canceled && result.assets[0].base64) {
       if (style) {
-        router.push({
-          pathname: '/image-prompt',
-          params: {
-            image: result.assets[0].uri,
-            base64: result.assets[0].base64,
-            stylePrompt: style.prompt,
-            styleName: style.name,
-          },
-        });
+        await sendImageGenerationToHome(result.assets[0].uri, result.assets[0].base64!, style);
       } else {
         setCustomImage(result.assets[0].uri);
       }
     }
+  };
+
+  const sendImageGenerationToHome = async (imageUri: string, base64: string, style: any) => {
+    // Navigate to home page first
+    router.replace('/home');
+    
+    // Small delay to ensure navigation completes
+    await new Promise(resolve => setTimeout(resolve, 300));
+    
+    // Send message with image and style prompt to conversation
+    const messageText = `${style.prompt}`;
+    await sendMessage(messageText, imageUri, base64, true); // true = isImageGeneration
   };
 
   const handleCustomImageGeneration = async () => {
@@ -221,7 +219,19 @@ export default function ImagesScreen() {
     }
 
     if (customImage) {
-      // User uploaded an image with custom description
+      // User uploaded an image with custom description - need to get base64
+      const customStyle = {
+        name: 'Custom',
+        prompt: customDescription,
+      };
+      
+      // Re-pick to get base64 (or use stored customImage if we already have it)
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        showAlert('Permission required', 'Please allow access to your photos');
+        return;
+      }
+
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         quality: 1,
@@ -229,25 +239,13 @@ export default function ImagesScreen() {
       });
 
       if (!result.canceled && result.assets[0].base64) {
-        router.push({
-          pathname: '/image-prompt',
-          params: {
-            image: result.assets[0].uri,
-            base64: result.assets[0].base64,
-            stylePrompt: customDescription,
-            styleName: 'Custom',
-          },
-        });
+        await sendImageGenerationToHome(result.assets[0].uri, result.assets[0].base64, customStyle);
       }
     } else {
-      // Generate from text only
-      router.push({
-        pathname: '/image-prompt',
-        params: {
-          stylePrompt: customDescription,
-          styleName: 'Custom',
-        },
-      });
+      // Generate from text only - send to home
+      router.replace('/home');
+      await new Promise(resolve => setTimeout(resolve, 300));
+      await sendMessage(customDescription, undefined, undefined, true);
     }
 
     setCustomDescription('');
@@ -556,4 +554,3 @@ export default function ImagesScreen() {
     </View>
   );
 }
-hello ai When I upload my photo with the style I ask it’s must auto send in home page with my photo and prompt and it’s must look like that photo :https://files.catbox.moe/fos001.jpeg and the ai think like that photo:https://files.catbox.moe/30ls8p.jpeg and take the api generate time idk how much time the ai must think let the ai build it good time good delay and when its finish must looks like that photo:https://files.catbox.moe/3n2q59.jpeg read the photo and make all things real no demo like ChatGPT
