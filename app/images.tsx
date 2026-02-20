@@ -558,3 +558,4 @@ export default function ImagesScreen() {
     </View>
   );
 }
+why the ai not doing the result in real time openai or gemini created image
