@@ -63,7 +63,18 @@ export default function VoiceControlScreen() {
   const [showKeyboard, setShowKeyboard] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [connectionDots, setConnectionDots] = useState(0);
-  const [messages, setMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
+  const [messages, setMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string; color: string }>>([]);
+  const scrollViewRef = useRef<ScrollView>(null);
+  
+  // Multi-color palette for message backgrounds
+  const colorPalette = [
+    'rgba(10, 132, 255, 0.25)',   // Blue
+    'rgba(175, 82, 222, 0.25)',   // Purple
+    'rgba(255, 55, 95, 0.25)',    // Pink
+    'rgba(52, 199, 89, 0.25)',    // Green
+    'rgba(255, 149, 0, 0.25)',    // Orange
+    'rgba(90, 200, 250, 0.25)',   // Cyan
+  ];
   
   // Recording
   const recordingRef = useRef<Audio.Recording | null>(null);
@@ -94,7 +105,7 @@ export default function VoiceControlScreen() {
       const timeout = setTimeout(() => {
         setCallState('connected');
         setAiTranscription('Hi, how are you today?');
-        setMessages([{ role: 'assistant', content: 'Hi, how are you today?' }]);
+        setMessages([{ role: 'assistant', content: 'Hi, how are you today?', color: colorPalette[0] }]);
         startListening();
       }, 2000);
 
@@ -183,7 +194,11 @@ export default function VoiceControlScreen() {
 
       if (!error && data?.text) {
         const userMessage = data.text;
-        setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+        const userColor = colorPalette[messages.length % colorPalette.length];
+        setMessages(prev => [...prev, { role: 'user', content: userMessage, color: userColor }]);
+        
+        // Scroll to bottom
+        setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
         
         // Get AI response
         await getAIResponse(userMessage);
@@ -199,7 +214,7 @@ export default function VoiceControlScreen() {
 
   const getAIResponse = async (userMessage: string) => {
     try {
-      setAiTranscription('...');
+      setAiTranscription('Thinking...');
 
       const { data, error } = await supabase.functions.invoke('chat', {
         body: {
@@ -212,8 +227,12 @@ export default function VoiceControlScreen() {
       });
 
       if (!error && data?.message) {
+        const aiColor = colorPalette[(messages.length + 1) % colorPalette.length];
         setAiTranscription(data.message);
-        setMessages(prev => [...prev, { role: 'assistant', content: data.message }]);
+        setMessages(prev => [...prev, { role: 'assistant', content: data.message, color: aiColor }]);
+        
+        // Scroll to bottom after AI response
+        setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
       }
     } catch (error) {
       console.error('AI response error:', error);
@@ -224,8 +243,12 @@ export default function VoiceControlScreen() {
     if (!userInput.trim()) return;
 
     const text = userInput;
+    const userColor = colorPalette[messages.length % colorPalette.length];
     setUserInput('');
-    setMessages(prev => [...prev, { role: 'user', content: text }]);
+    setMessages(prev => [...prev, { role: 'user', content: text, color: userColor }]);
+    
+    // Scroll to bottom
+    setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
     
     await getAIResponse(text);
   };
@@ -349,7 +372,6 @@ export default function VoiceControlScreen() {
     },
     userBubble: {
       alignSelf: 'flex-end',
-      backgroundColor: 'rgba(10, 132, 255, 0.25)',
     },
     assistantBubble: {
       alignSelf: 'flex-start',
@@ -461,8 +483,8 @@ export default function VoiceControlScreen() {
           <TouchableOpacity style={styles.iconButton}>
             <Ionicons name="volume-high-outline" size={24} color={GLASS.text} />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.iconButton}>
-            <Ionicons name="ellipsis-horizontal" size={24} color={GLASS.text} />
+          <TouchableOpacity style={styles.iconButton} onPress={() => router.push('/settings')}>
+            <Ionicons name="settings-outline" size={24} color={GLASS.text} />
           </TouchableOpacity>
         </View>
       </View>
@@ -500,15 +522,21 @@ export default function VoiceControlScreen() {
         </Animated.View>
       )}
 
-      {/* Conversation History */}
+      {/* Conversation History - Shows ALL messages with scrolling */}
       {showKeyboard && messages.length > 0 && (
-        <ScrollView style={styles.conversationHistory}>
-          {messages.slice(-5).map((msg, index) => (
+        <ScrollView 
+          ref={scrollViewRef}
+          style={styles.conversationHistory}
+          showsVerticalScrollIndicator={true}
+          onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
+        >
+          {messages.map((msg, index) => (
             <View
               key={index}
               style={[
                 styles.messageBubble,
                 msg.role === 'user' ? styles.userBubble : styles.assistantBubble,
+                { backgroundColor: msg.color },
               ]}
             >
               <Text style={styles.messageText}>{msg.content}</Text>
@@ -570,4 +598,3 @@ export default function VoiceControlScreen() {
     </KeyboardAvoidingView>
   );
 }
-when the ai send a message make sure all message save you if the ai send a message and you send one and the ai response the first ai message must still stay and you scrow to see the first and the color background must change change multi color remove the ... in rigt put a settings icon . ,
