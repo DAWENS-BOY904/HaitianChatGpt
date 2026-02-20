@@ -1012,3 +1012,4 @@ export default function HomeScreen() {
   );
 }
 
+fix toolmodal in this page to apeat
