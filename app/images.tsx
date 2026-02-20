@@ -558,4 +558,12 @@ export default function ImagesScreen() {
     </View>
   );
 }
-why the ai not doing the result in real time openai or gemini created image
+why the ai not doing the result in real time openai or gemini created image {
+  "eventMessage": "POST | 500 | http://njpuoozygqtpvlzhnjpu.backend.onspace.ai/functions/v1/chat | Internal Server Error",
+  "functionId": "chat",
+  "id": "c4792e83-82e7-4c83-b849-7c4e5edf0ec2",
+  "logLevel": "ERROR",
+  "method": "POST",
+  "statusCode": 500,
+  "timestamp": 1771561486
+}
