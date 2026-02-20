@@ -598,3 +598,4 @@ export default function VoiceControlScreen() {
     </KeyboardAvoidingView>
   );
 }
+make this better 
