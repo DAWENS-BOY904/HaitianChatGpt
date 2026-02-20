@@ -180,6 +180,18 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
       return [...prev, tempUserMessage];
     });
 
+    // For image generation, add a "Generating..." placeholder
+    let tempAIPlaceholder: Message | null = null;
+    if (isImageGeneration) {
+      tempAIPlaceholder = {
+        id: `temp-ai-generating-${Date.now()}`,
+        role: 'assistant',
+        content: '🎨 Generating your image...',
+        created_at: new Date().toISOString(),
+      };
+      setMessages(prev => [...prev, tempAIPlaceholder!]);
+    }
+
     // Build context messages for AI (include the new user message)
     const contextMessages = [...messages, tempUserMessage].map(m => ({
       role: m.role,
@@ -257,17 +269,22 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
     console.log('  ✅ AI response received');
     console.log('  📝 AI message:', aiResponse.message?.slice(0, 50));
     console.log('  💭 Thinking mode:', aiResponse.thinkingMode);
+    console.log('  🖼️  Image URL:', aiResponse.imageUrl || 'No image');
 
-    // Add AI response to local state immediately
+    // Add AI response to local state immediately (with image if generated)
     const tempAIMessage: Message = {
       id: `temp-ai-${Date.now()}`,
       role: 'assistant',
       content: aiResponse.message || 'Response generated',
+      image_url: aiResponse.imageUrl || undefined,
       created_at: new Date().toISOString(),
     };
     setMessages(prev => {
-      // Replace temp user message with real one, add AI message
-      const withoutTemp = prev.filter(m => m.id !== tempUserMessage.id);
+      // Remove temp user message and AI placeholder (if image generation)
+      const withoutTemp = prev.filter(m => 
+        m.id !== tempUserMessage.id && 
+        (tempAIPlaceholder ? m.id !== tempAIPlaceholder.id : true)
+      );
       return [...withoutTemp, tempUserMessage, tempAIMessage];
     });
 
