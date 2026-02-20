@@ -1030,4 +1030,3 @@ export default function HomeScreen() {
     </KeyboardAvoidingView>
   );
 }
-when i click the +button for the ToolsModal its apear like that photo https://files.catbox.moe/urhfvu.png but fix it to be like this photo https://files.catbox.moe/iajv7z.png make sure no error all things works good with no error 

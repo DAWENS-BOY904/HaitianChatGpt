@@ -377,36 +377,37 @@ const styles = StyleSheet.create({
     paddingTop: 8,
   },
   
-  // Main Grid - 3x2 layout like Kimi
+  // Main Grid - Compact 3-column grid
   mainGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
+    gap: 12,
     marginBottom: 20,
   },
   toolButtonContainer: {
-    width: '31%',
-    marginBottom: 16,
+    width: '30.5%',
   },
   toolButton: {
-    aspectRatio: 1.1,
+    aspectRatio: 1,
     backgroundColor: GLASS_COLORS.surface,
-    borderRadius: 16,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingVertical: 20,
     borderWidth: 1,
     borderColor: GLASS_COLORS.border,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 4,
   },
   toolLabel: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '500',
     color: GLASS_COLORS.text,
-    marginTop: 8,
+    marginTop: 10,
     textAlign: 'center',
   },
   
