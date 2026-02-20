@@ -18,10 +18,8 @@ import Animated, {
   useAnimatedStyle,
   withSpring,
   withTiming,
-  FadeIn,
   FadeInUp,
-  SlideInDown,
-  runOnJS, // Add this
+  runOnJS,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 
@@ -43,14 +41,14 @@ interface ToolsModalProps {
   currentModel?: string;
 }
 
-// Glassmorphism colors - translucent dark grays, not black/white
+// Glassmorphism colors
 const GLASS_COLORS = {
-  background: 'rgba(28, 28, 30, 0.85)', // iOS system gray6 with opacity
-  surface: 'rgba(44, 44, 46, 0.60)',    // iOS system gray5 with opacity
-  border: 'rgba(120, 120, 128, 0.20)',  // iOS system gray with low opacity
+  background: 'rgba(28, 28, 30, 0.95)',
+  surface: 'rgba(44, 44, 46, 0.70)',
+  border: 'rgba(120, 120, 128, 0.20)',
   text: '#FFFFFF',
   textSecondary: 'rgba(255, 255, 255, 0.60)',
-  accent: '#0A84FF', // iOS system blue
+  accent: '#0A84FF',
 };
 
 export function ToolsModal({
@@ -64,13 +62,13 @@ export function ToolsModal({
 }: ToolsModalProps) {
   const { colors } = useTheme();
   const navigation = useNavigation<any>();
-  const [showAISelector, setShowAISelector] = useState(false);
+  const [showWebSearchOptions, setShowWebSearchOptions] = useState(false);
+  const [webSearchMode, setWebSearchMode] = useState<'auto' | 'off'>('auto');
   const [loadingTool, setLoadingTool] = useState<string | null>(null);
 
   const translateY = useSharedValue(0);
   const opacity = useSharedValue(0);
 
-  // Spring animation for modal appearance
   const modalAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: translateY.value }],
     opacity: opacity.value,
@@ -86,7 +84,6 @@ export function ToolsModal({
     }
   }, [visible]);
 
-  // Pan gesture to dismiss
   const panGesture = Gesture.Pan()
     .onUpdate((e) => {
       if (e.translationY > 0) {
@@ -133,31 +130,6 @@ export function ToolsModal({
     }
   };
 
-  const handlePickVideo = async () => {
-    setLoadingTool('video');
-    try {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') return;
-
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Videos,
-        quality: 0.8,
-      });
-
-      if (!result.canceled && result.assets[0]) {
-        onPickMedia([
-          {
-            type: 'video',
-            uri: result.assets[0].uri,
-          },
-        ]);
-        onClose();
-      }
-    } finally {
-      setLoadingTool(null);
-    }
-  };
-
   const handlePickFile = async () => {
     setLoadingTool('file');
     try {
@@ -187,16 +159,7 @@ export function ToolsModal({
     action();
   }, [loadingTool]);
 
-  /* ---------------- AI MODELS ---------------- */
-
-  const aiModels = [
-    { id: 'openai', name: 'GPT-4o', icon: 'flash', color: '#10A37F', provider: 'OpenAI' },
-    { id: 'gemini', name: 'Gemini Pro', icon: 'diamond', color: '#4285F4', provider: 'Google' },
-    { id: 'claude', name: 'Claude 3', icon: 'cube', color: '#CC785C', provider: 'Anthropic' },
-    { id: 'llama', name: 'Llama 3', icon: 'paw', color: '#0467DF', provider: 'Meta' },
-  ];
-
-  /* ---------------- TOOLS CONFIG ---------------- */
+  /* ---------------- TOOLS CONFIG (MATCHING KIMI) ---------------- */
 
   const mainTools = [
     {
@@ -209,29 +172,35 @@ export function ToolsModal({
       },
     },
     {
-      id: 'images',
+      id: 'photos',
       label: 'Photos',
       icon: 'image-outline',
       action: handlePickImages,
     },
     {
-      id: 'file',
+      id: 'files',
       label: 'Files',
       icon: 'folder-open-outline',
       action: handlePickFile,
     },
     {
-      id: 'video',
-      label: 'Video',
-      icon: 'videocam-outline',
-      action: handlePickVideo,
+      id: 'wechat-files',
+      label: 'WeChat files',
+      icon: 'chatbubbles-outline',
+      action: () => {
+        // WeChat integration placeholder
+        onSelectTool?.('wechat-files');
+        onClose();
+      },
     },
     {
-      id: 'ai-model',
-      label: 'AI Model',
-      icon: 'hardware-chip-outline',
-      subtitle: aiModels.find(m => m.id === currentModel)?.name || 'Gemini',
-      action: () => setShowAISelector(true),
+      id: 'call',
+      label: 'Call',
+      icon: 'call-outline',
+      action: () => {
+        navigation.navigate('voice-control');
+        onClose();
+      },
     },
     {
       id: 'presets',
@@ -244,80 +213,19 @@ export function ToolsModal({
     },
   ];
 
-  const featureTools = [
-    {
-      id: 'create-image',
-      label: 'Create image',
-      icon: 'color-wand-outline',
-      action: () => {
-        onSelectTool?.('create-image');
-        onClose();
-      },
-    },
-    {
-      id: 'thinking',
-      label: 'Think mode',
-      icon: 'bulb-outline',
-      action: () => {
-        onSelectTool?.('thinking');
-        onClose();
-      },
-    },
-    {
-      id: 'research',
-      label: 'Deep research',
-      icon: 'search-outline',
-      action: () => {
-        onSelectTool?.('research');
-        onClose();
-      },
-    },
-    {
-      id: 'web-search',
-      label: 'Web search',
-      icon: 'globe-outline',
-      badge: 'Auto',
-      action: () => {
-        onSelectTool?.('web-search');
-        onClose();
-      },
-    },
-    {
-      id: 'study',
-      label: 'Study',
-      icon: 'school-outline',
-      action: () => {
-        onSelectTool?.('study');
-        onClose();
-      },
-    },
-    {
-      id: 'code',
-      label: 'Code',
-      icon: 'code-slash-outline',
-      action: () => {
-        navigation.navigate('coding');
-        onClose();
-      },
-    },
-  ];
+  /* ---------------- RENDER ---------------- */
 
-  /* ---------------- RENDER HELPERS ---------------- */
-
-  const renderToolButton = (tool: any, index: number, size: 'large' | 'small' = 'large') => {
+  const renderToolButton = (tool: any, index: number) => {
     const isLoading = loadingTool === tool.id;
-    const isLarge = size === 'large';
     
     return (
       <Animated.View
+        key={tool.id}
         entering={FadeInUp.delay(index * 50).duration(400)}
-        style={isLarge ? styles.toolButtonLarge : styles.toolButtonSmall}
+        style={styles.toolButtonContainer}
       >
         <TouchableOpacity
-          style={[
-            styles.toolContent,
-            isLarge ? styles.toolContentLarge : styles.toolContentSmall,
-          ]}
+          style={styles.toolButton}
           onPress={() => handleToolPress(tool.id, tool.action)}
           activeOpacity={0.7}
           disabled={isLoading}
@@ -325,31 +233,15 @@ export function ToolsModal({
           {isLoading ? (
             <ActivityIndicator size="small" color={GLASS_COLORS.accent} />
           ) : (
-            <Ionicons
-              name={tool.icon}
-              size={isLarge ? 28 : 24}
-              color={GLASS_COLORS.text}
-              style={styles.toolIcon}
-            />
-          )}
-          <Text style={[styles.toolLabel, isLarge && styles.toolLabelLarge]}>
-            {tool.label}
-          </Text>
-          {tool.subtitle && (
-            <Text style={styles.toolSubtitle}>{tool.subtitle}</Text>
-          )}
-          {tool.badge && (
-            <View style={styles.badgeContainer}>
-              <Text style={styles.badgeText}>{tool.badge}</Text>
-              <Ionicons name="chevron-forward" size={12} color={GLASS_COLORS.textSecondary} />
-            </View>
+            <>
+              <Ionicons name={tool.icon} size={28} color={GLASS_COLORS.text} />
+              <Text style={styles.toolLabel}>{tool.label}</Text>
+            </>
           )}
         </TouchableOpacity>
       </Animated.View>
     );
   };
-
-  /* ---------------- RENDER ---------------- */
 
   return (
     <Modal
@@ -360,14 +252,7 @@ export function ToolsModal({
       onRequestClose={onClose}
     >
       <View style={styles.overlay}>
-        {/* Blur background */}
-        <BlurView
-          intensity={20}
-          tint="dark"
-          style={StyleSheet.absoluteFill}
-        />
-        
-        {/* Semi-transparent dark overlay */}
+        <BlurView intensity={20} tint="dark" style={StyleSheet.absoluteFill} />
         <View style={styles.darkOverlay} />
 
         <TouchableOpacity
@@ -378,43 +263,23 @@ export function ToolsModal({
 
         <GestureDetector gesture={panGesture}>
           <Animated.View style={[styles.container, modalAnimatedStyle]}>
-            {/* Handle bar */}
             <View style={styles.handleBar} />
-
-            {/* Header */}
-            <View style={styles.header}>
-              <Text style={styles.headerTitle}>Tools</Text>
-              <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-                <Ionicons name="close" size={24} color={GLASS_COLORS.text} />
-              </TouchableOpacity>
-            </View>
 
             <ScrollView
               style={styles.scrollView}
               contentContainerStyle={styles.scrollContent}
               showsVerticalScrollIndicator={false}
             >
-              {/* Main Tools Grid - 3 columns */}
+              {/* Main Tools Grid - 3x2 */}
               <View style={styles.mainGrid}>
-                {mainTools.map((tool, index) => renderToolButton(tool, index, 'large'))}
+                {mainTools.map((tool, index) => renderToolButton(tool, index))}
               </View>
 
-              {/* Divider */}
-              <View style={styles.divider} />
-
-              {/* Feature Tools Grid */}
-              <View style={styles.featureGrid}>
-                {featureTools.map((tool, index) => renderToolButton(tool, index + 6, 'small'))}
-              </View>
-
-              {/* Web Search Row */}
-              <Animated.View entering={FadeInUp.delay(800).duration(400)}>
+              {/* Web Search Row with Toggle */}
+              <Animated.View entering={FadeInUp.delay(400).duration(400)}>
                 <TouchableOpacity
                   style={styles.webSearchRow}
-                  onPress={() => {
-                    onSelectTool?.('web-search');
-                    onClose();
-                  }}
+                  onPress={() => setShowWebSearchOptions(!showWebSearchOptions)}
                   activeOpacity={0.7}
                 >
                   <View style={styles.webSearchLeft}>
@@ -422,62 +287,52 @@ export function ToolsModal({
                     <Text style={styles.webSearchText}>Web search</Text>
                   </View>
                   <View style={styles.webSearchRight}>
-                    <Text style={styles.webSearchBadge}>Auto</Text>
+                    <Text style={styles.webSearchBadge}>{webSearchMode === 'auto' ? 'Auto' : 'Off'}</Text>
                     <Ionicons name="chevron-forward" size={18} color={GLASS_COLORS.textSecondary} />
                   </View>
                 </TouchableOpacity>
+
+                {/* Web Search Options */}
+                {showWebSearchOptions && (
+                  <View style={styles.webSearchOptions}>
+                    <TouchableOpacity
+                      style={[styles.webSearchOption, webSearchMode === 'auto' && styles.webSearchOptionActive]}
+                      onPress={() => {
+                        setWebSearchMode('auto');
+                        setTimeout(() => setShowWebSearchOptions(false), 300);
+                      }}
+                    >
+                      <View style={styles.webSearchOptionContent}>
+                        <Text style={styles.webSearchOptionTitle}>Auto</Text>
+                        <Text style={styles.webSearchOptionDesc}>Browses the web when needed</Text>
+                      </View>
+                      {webSearchMode === 'auto' && (
+                        <Ionicons name="checkmark" size={20} color={GLASS_COLORS.accent} />
+                      )}
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.webSearchOption, webSearchMode === 'off' && styles.webSearchOptionActive]}
+                      onPress={() => {
+                        setWebSearchMode('off');
+                        setTimeout(() => setShowWebSearchOptions(false), 300);
+                      }}
+                    >
+                      <View style={styles.webSearchOptionContent}>
+                        <Text style={styles.webSearchOptionTitle}>Off</Text>
+                        <Text style={styles.webSearchOptionDesc}>No web access</Text>
+                      </View>
+                      {webSearchMode === 'off' && (
+                        <Ionicons name="checkmark" size={20} color={GLASS_COLORS.accent} />
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                )}
               </Animated.View>
             </ScrollView>
           </Animated.View>
         </GestureDetector>
       </View>
-
-      {/* AI Model Selector Sub-Modal */}
-      <Modal
-        visible={showAISelector}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowAISelector(false)}
-      >
-        <View style={styles.subModalOverlay}>
-          <BlurView intensity={25} tint="dark" style={StyleSheet.absoluteFill} />
-          <TouchableOpacity
-            style={styles.subModalDismiss}
-            activeOpacity={1}
-            onPress={() => setShowAISelector(false)}
-          />
-          <Animated.View entering={SlideInDown} style={styles.aiSelectorContainer}>
-            <View style={styles.aiSelectorHandle} />
-            <Text style={styles.aiSelectorTitle}>Select AI Model</Text>
-            
-            {aiModels.map((model, index) => (
-              <TouchableOpacity
-                key={model.id}
-                style={[
-                  styles.aiModelItem,
-                  currentModel === model.id && styles.aiModelItemActive,
-                ]}
-                onPress={() => {
-                  onSelectAIModel?.(model.id);
-                  setShowAISelector(false);
-                  onClose();
-                }}
-              >
-                <View style={[styles.aiModelIcon, { backgroundColor: model.color }]}>
-                  <Ionicons name={model.icon as any} size={20} color="#FFF" />
-                </View>
-                <View style={styles.aiModelInfo}>
-                  <Text style={styles.aiModelName}>{model.name}</Text>
-                  <Text style={styles.aiModelProvider}>{model.provider}</Text>
-                </View>
-                {currentModel === model.id && (
-                  <Ionicons name="checkmark-circle" size={24} color={GLASS_COLORS.accent} />
-                )}
-              </TouchableOpacity>
-            ))}
-          </Animated.View>
-        </View>
-      </Modal>
     </Modal>
   );
 }
@@ -489,7 +344,7 @@ const styles = StyleSheet.create({
   },
   darkOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.3)', // Soft dark overlay, not pure black
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
   },
   dismissArea: {
     flex: 1,
@@ -498,9 +353,8 @@ const styles = StyleSheet.create({
     backgroundColor: GLASS_COLORS.background,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    maxHeight: SCREEN_HEIGHT * 0.85,
+    maxHeight: SCREEN_HEIGHT * 0.70,
     paddingBottom: Platform.OS === 'ios' ? 34 : 20,
-    // Glass border effect
     borderTopWidth: 1,
     borderLeftWidth: 1,
     borderRightWidth: 1,
@@ -513,46 +367,28 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.3)',
     alignSelf: 'center',
     marginTop: 12,
-    marginBottom: 8,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: GLASS_COLORS.text,
-    letterSpacing: -0.5,
-  },
-  closeButton: {
-    padding: 8,
-    borderRadius: 20,
-    backgroundColor: GLASS_COLORS.surface,
+    marginBottom: 16,
   },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    padding: 16,
+    padding: 20,
     paddingTop: 8,
   },
   
-  // Main Grid - 3 columns like reference image
+  // Main Grid - 3x2 layout like Kimi
   mainGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
+    marginBottom: 20,
+  },
+  toolButtonContainer: {
+    width: '31%',
     marginBottom: 16,
   },
-  toolButtonLarge: {
-    width: '31%',
-    marginBottom: 12,
-  },
-  toolContentLarge: {
+  toolButton: {
     aspectRatio: 1.1,
     backgroundColor: GLASS_COLORS.surface,
     borderRadius: 16,
@@ -560,79 +396,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: GLASS_COLORS.border,
-    // Subtle shadow for depth
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 3,
   },
-  
-  // Feature Grid
-  featureGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  toolButtonSmall: {
-    width: '31%',
-    marginBottom: 12,
-  },
-  toolContentSmall: {
-    aspectRatio: 1.3,
-    backgroundColor: GLASS_COLORS.surface,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: GLASS_COLORS.border,
-  },
-  
-  toolContent: {
-    padding: 12,
-  },
-  toolIcon: {
-    marginBottom: 8,
-    opacity: 0.9,
-  },
   toolLabel: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '500',
     color: GLASS_COLORS.text,
+    marginTop: 8,
     textAlign: 'center',
-  },
-  toolLabelLarge: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  toolSubtitle: {
-    fontSize: 11,
-    color: GLASS_COLORS.textSecondary,
-    marginTop: 2,
-    textAlign: 'center',
-  },
-  badgeContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 4,
-    backgroundColor: 'rgba(120, 120, 128, 0.24)',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
-  },
-  badgeText: {
-    fontSize: 11,
-    color: GLASS_COLORS.textSecondary,
-    marginRight: 2,
-  },
-  
-  // Divider
-  divider: {
-    height: 1,
-    backgroundColor: GLASS_COLORS.border,
-    marginVertical: 16,
-    marginHorizontal: 8,
   },
   
   // Web Search Row
@@ -645,6 +420,7 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: GLASS_COLORS.border,
+    marginBottom: 12,
   },
   webSearchLeft: {
     flexDirection: 'row',
@@ -667,74 +443,35 @@ const styles = StyleSheet.create({
     fontWeight: '400',
   },
   
-  // AI Selector Sub-Modal
-  subModalOverlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+  // Web Search Options
+  webSearchOptions: {
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    borderRadius: 12,
+    padding: 4,
+    marginTop: -8,
+    marginBottom: 12,
   },
-  subModalDismiss: {
-    flex: 1,
-  },
-  aiSelectorContainer: {
-    backgroundColor: GLASS_COLORS.background,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingHorizontal: 20,
-    paddingBottom: Platform.OS === 'ios' ? 40 : 20,
-    borderTopWidth: 1,
-    borderColor: GLASS_COLORS.border,
-  },
-  aiSelectorHandle: {
-    width: 36,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-    alignSelf: 'center',
-    marginTop: 12,
-    marginBottom: 16,
-  },
-  aiSelectorTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: GLASS_COLORS.text,
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  aiModelItem: {
+  webSearchOption: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 8,
-    backgroundColor: GLASS_COLORS.surface,
-    borderWidth: 1,
-    borderColor: 'transparent',
+    justifyContent: 'space-between',
+    padding: 12,
+    borderRadius: 8,
   },
-  aiModelItemActive: {
-    borderColor: GLASS_COLORS.accent,
-    backgroundColor: 'rgba(10, 132, 255, 0.1)',
+  webSearchOptionActive: {
+    backgroundColor: 'rgba(10, 132, 255, 0.15)',
   },
-  aiModelIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  aiModelInfo: {
+  webSearchOptionContent: {
     flex: 1,
   },
-  aiModelName: {
-    fontSize: 16,
+  webSearchOptionTitle: {
+    fontSize: 15,
     fontWeight: '600',
     color: GLASS_COLORS.text,
+    marginBottom: 2,
   },
-  aiModelProvider: {
+  webSearchOptionDesc: {
     fontSize: 13,
     color: GLASS_COLORS.textSecondary,
-    marginTop: 2,
   },
 });
-

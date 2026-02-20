@@ -1,727 +1,572 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
-  Animated,
   Platform,
-  Share,
+  StatusBar,
   Dimensions,
+  ActivityIndicator,
+  TextInput,
+  KeyboardAvoidingView,
+  ScrollView,
 } from 'react-native';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useTheme } from '../hooks/useTheme';
-import { router } from 'expo-router';
-import { Spacing, Typography, BorderRadius } from '../constants/theme';
+import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Audio } from 'expo-av';
-import { useAlert } from '@/template';
+import { BlurView } from 'expo-blur';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withTiming,
+  withSequence,
+  Easing,
+  FadeIn,
+} from 'react-native-reanimated';
+import { useTheme } from '../hooks/useTheme';
+import { useAuth, useAlert } from '@/template';
 import { getSupabaseClient } from '@/template';
-import { useAuth } from '@/template';
+import { Spacing, BorderRadius } from '../constants/theme';
+import { Audio } from 'expo-av';
+import * as FileSystem from 'expo-file-system';
 
-type VoiceState = 'idle' | 'listening' | 'thinking' | 'speaking';
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+// Glassmorphism theme
+const GLASS = {
+  bg: 'linear-gradient(135deg, rgba(25, 55, 95, 0.95), rgba(35, 75, 110, 0.95))',
+  bgDark: 'rgba(18, 38, 65, 0.98)',
+  surface: 'rgba(44, 64, 90, 0.70)',
+  border: 'rgba(255, 255, 255, 0.10)',
+  text: '#FFFFFF',
+  textSecondary: 'rgba(255, 255, 255, 0.70)',
+  accent: '#0A84FF',
+  error: '#FF453A',
+};
 
-export const VOICES = [
-  {
-    id: 'ember',
-    name: 'Ember',
-    description: 'Confident and optimistic',
-    color: '#FF6B35',
-    icon: 'fire',
-  },
-  {
-    id: 'nova',
-    name: 'Nova',
-    description: 'Warm and engaging',
-    color: '#4A90E2',
-    icon: 'star',
-  },
-  {
-    id: 'alloy',
-    name: 'Alloy',
-    description: 'Neutral and balanced',
-    color: '#718096',
-    icon: 'layers',
-  },
-  {
-    id: 'echo',
-    name: 'Echo',
-    description: 'Clear and articulate',
-    color: '#48BB78',
-    icon: 'volume-high',
-  },
-  {
-    id: 'shimmer',
-    name: 'Shimmer',
-    description: 'Bright and cheerful',
-    color: '#ED8936',
-    icon: 'sunny',
-  },
-];
+type CallState = 'connecting' | 'connected' | 'ended';
 
 export default function VoiceControlScreen() {
-  const { colors } = useTheme();
+  const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { showAlert } = useAlert();
+  const { colors } = useTheme();
   const { user } = useAuth();
+  const { showAlert } = useAlert();
   const supabase = getSupabaseClient();
 
   // State
-  const [voiceState, setVoiceState] = useState<VoiceState>('idle');
-  const [selectedVoice, setSelectedVoice] = useState('ember');
-  const [showVoiceSelector, setShowVoiceSelector] = useState(false);
-  const [transcript, setTranscript] = useState('');
-  const [currentAudioUrl, setCurrentAudioUrl] = useState<string | null>(null);
+  const [callState, setCallState] = useState<CallState>('connecting');
+  const [aiTranscription, setAiTranscription] = useState('');
+  const [userInput, setUserInput] = useState('');
+  const [showKeyboard, setShowKeyboard] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
+  const [connectionDots, setConnectionDots] = useState(0);
+  const [messages, setMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
+  
+  // Recording
+  const recordingRef = useRef<Audio.Recording | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
 
-  // Animation refs
-  const orbScale = useRef(new Animated.Value(1)).current;
-  const orbOpacity = useRef(new Animated.Value(1)).current;
-  const pulseAnim = useRef(new Animated.Value(0)).current;
-  const pulseAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
-  const scaleAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
-  const opacityAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
-
-  // Audio
-  const [recording, setRecording] = useState<Audio.Recording | null>(null);
-  const [sound, setSound] = useState<Audio.Sound | null>(null);
+  // Animations
+  const pulseAnimation = useSharedValue(1);
+  const dotAnimation = useSharedValue(0);
 
   useEffect(() => {
-    setupAudio();
-    return () => {
-      cleanup();
-    };
-  }, []);
+    // Pulse animation for status dots
+    pulseAnimation.value = withRepeat(
+      withSequence(
+        withTiming(1.2, { duration: 800, easing: Easing.inOut(Easing.ease) }),
+        withTiming(1, { duration: 800, easing: Easing.inOut(Easing.ease) })
+      ),
+      -1,
+      false
+    );
 
-  useEffect(() => {
-    animateOrb();
-    return () => {
-      // Cleanup animations
-      pulseAnimationRef.current?.stop();
-      scaleAnimationRef.current?.stop();
-      opacityAnimationRef.current?.stop();
-    };
-  }, [voiceState]);
+    // Connecting animation
+    if (callState === 'connecting') {
+      const interval = setInterval(() => {
+        setConnectionDots(prev => (prev + 1) % 8);
+      }, 200);
 
-  const setupAudio = async () => {
+      // Auto-connect after 2 seconds
+      const timeout = setTimeout(() => {
+        setCallState('connected');
+        setAiTranscription('Hi, how are you today?');
+        setMessages([{ role: 'assistant', content: 'Hi, how are you today?' }]);
+        startListening();
+      }, 2000);
+
+      return () => {
+        clearInterval(interval);
+        clearTimeout(timeout);
+      };
+    }
+  }, [callState]);
+
+  const startListening = async () => {
     try {
       const { status } = await Audio.requestPermissionsAsync();
       if (status !== 'granted') {
-        showAlert('Permission Required', 'Microphone access is needed for voice conversations.');
+        showAlert('Permission Denied', 'Microphone access is required for voice calls.');
         return;
       }
+
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
         playsInSilentModeIOS: true,
         staysActiveInBackground: false,
         shouldDuckAndroid: true,
+        playThroughEarpieceAndroid: false,
       });
-    } catch (error) {
-      console.error('Audio setup error:', error);
-    }
-  };
 
-  const cleanup = async () => {
-    try {
-      if (recording) {
-        await recording.stopAndUnloadAsync();
-      }
-      if (sound) {
-        await sound.unloadAsync();
-      }
-    } catch (error) {
-      console.error('Cleanup error:', error);
-    }
-  };
+      const { recording } = await Audio.Recording.createAsync({
+        android: {
+          extension: '.m4a',
+          outputFormat: Audio.AndroidOutputFormat.MPEG_4,
+          audioEncoder: Audio.AndroidAudioEncoder.AAC,
+          sampleRate: 44100,
+          numberOfChannels: 2,
+          bitRate: 128000,
+        },
+        ios: {
+          extension: '.m4a',
+          audioQuality: Audio.IOSAudioQuality.HIGH,
+          sampleRate: 44100,
+          numberOfChannels: 1,
+          bitRate: 128000,
+          linearPCMBitDepth: 16,
+          linearPCMIsBigEndian: false,
+          linearPCMIsFloat: false,
+        },
+        web: {
+          mimeType: 'audio/webm',
+          bitsPerSecond: 128000,
+        },
+      });
 
-  const animateOrb = useCallback(() => {
-    // Stop existing animations
-    pulseAnimationRef.current?.stop();
-    scaleAnimationRef.current?.stop();
-    opacityAnimationRef.current?.stop();
+      recordingRef.current = recording;
+      setIsRecording(true);
 
-    if (voiceState === 'idle') {
-      scaleAnimationRef.current = Animated.parallel([
-        Animated.timing(orbScale, {
-          toValue: 1,
-          duration: 300,
-          useNativeDriver: true,
-        }),
-        Animated.timing(orbOpacity, {
-          toValue: 1,
-          duration: 300,
-          useNativeDriver: true,
-        }),
-      ]);
-      scaleAnimationRef.current.start();
-    } else if (voiceState === 'listening') {
-      pulseAnim.setValue(0);
-      pulseAnimationRef.current = Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, {
-            toValue: 1,
-            duration: 800,
-            useNativeDriver: true,
-          }),
-          Animated.timing(pulseAnim, {
-            toValue: 0,
-            duration: 800,
-            useNativeDriver: true,
-          }),
-        ])
-      );
-      pulseAnimationRef.current.start();
-    } else if (voiceState === 'thinking') {
-      scaleAnimationRef.current = Animated.loop(
-        Animated.sequence([
-          Animated.timing(orbScale, {
-            toValue: 1.1,
-            duration: 600,
-            useNativeDriver: true,
-          }),
-          Animated.timing(orbScale, {
-            toValue: 0.9,
-            duration: 600,
-            useNativeDriver: true,
-          }),
-        ])
-      );
-      scaleAnimationRef.current.start();
-    } else if (voiceState === 'speaking') {
-      opacityAnimationRef.current = Animated.loop(
-        Animated.sequence([
-          Animated.timing(orbOpacity, {
-            toValue: 0.7,
-            duration: 400,
-            useNativeDriver: true,
-          }),
-          Animated.timing(orbOpacity, {
-            toValue: 1,
-            duration: 400,
-            useNativeDriver: true,
-          }),
-        ])
-      );
-      opacityAnimationRef.current.start();
-    }
-  }, [voiceState, orbScale, orbOpacity, pulseAnim]);
-
-  const startVoiceConversation = async () => {
-    try {
-      setVoiceState('listening');
-      setTranscript('');
-
-      const { recording: newRecording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
-      );
-      setRecording(newRecording);
-    } catch (error) {
-      console.error('Failed to start recording:', error);
-      showAlert('Error', 'Failed to start voice conversation');
-      setVoiceState('idle');
-    }
-  };
-
-  const stopVoiceConversation = async () => {
-    try {
-      if (recording) {
-        await recording.stopAndUnloadAsync();
-        const uri = recording.getURI();
-        
-        if (uri) {
-          await processAudio(uri);
+      // Auto-process every 5 seconds for real-time transcription
+      setInterval(async () => {
+        if (recordingRef.current && !isPaused) {
+          await processVoiceInput();
         }
-        
-        setRecording(null);
-      }
-      setVoiceState('idle');
+      }, 5000);
+
     } catch (error) {
-      console.error('Failed to stop recording:', error);
-      setVoiceState('idle');
+      console.error('Failed to start listening:', error);
     }
   };
 
-  const processAudio = async (audioUri: string) => {
+  const processVoiceInput = async () => {
     try {
-      setVoiceState('thinking');
+      if (!recordingRef.current) return;
 
-      const response = await fetch(audioUri);
-      const audioBlob = await response.blob();
+      // Stop current recording
+      await recordingRef.current.stopAndUnloadAsync();
+      const uri = recordingRef.current.getURI();
       
-      const reader = new FileReader();
-      reader.onloadend = async () => {
-        const base64Audio = (reader.result as string).split(',')[1];
+      if (!uri) return;
 
-        try {
-          const { data, error } = await supabase.functions.invoke('chat', {
-            body: {
-              messages: [{ role: 'user', content: 'Transcribe and respond' }],
-              audio: base64Audio,
-              voice: selectedVoice,
-              model: 'gpt-4o',
-              responseType: 'audio',
-            },
-          });
-
-          if (error) throw error;
-
-          if (data?.transcript) {
-            setTranscript(data.transcript);
-          }
-
-          if (data?.audioUrl) {
-            setCurrentAudioUrl(data.audioUrl);
-            await playAudioResponse(data.audioUrl);
-          } else {
-            setVoiceState('idle');
-          }
-        } catch (err) {
-          console.error('Processing error:', err);
-          showAlert('Error', 'Failed to process audio');
-          setVoiceState('idle');
-        }
-      };
-
-      reader.readAsDataURL(audioBlob);
-    } catch (error) {
-      console.error('Failed to process audio:', error);
-      showAlert('Error', 'Failed to process audio');
-      setVoiceState('idle');
-    }
-  };
-
-  const playAudioResponse = async (audioUrl: string) => {
-    try {
-      setVoiceState('speaking');
-
-      const { sound: newSound } = await Audio.Sound.createAsync(
-        { uri: audioUrl },
-        { shouldPlay: true }
-      );
-
-      setSound(newSound);
-
-      newSound.setOnPlaybackStatusUpdate((status) => {
-        if (status.isLoaded && status.didJustFinish) {
-          setVoiceState('idle');
-        }
+      // Read as base64
+      const base64Audio = await FileSystem.readAsStringAsync(uri, {
+        encoding: FileSystem.EncodingType.Base64,
       });
-    } catch (error) {
-      console.error('Failed to play audio:', error);
-      setVoiceState('idle');
-    }
-  };
 
-  const handleMicPress = () => {
-    if (voiceState === 'idle') {
-      startVoiceConversation();
-    } else {
-      stopVoiceConversation();
-    }
-  };
-
-  const handleShareClip = async () => {
-    if (!currentAudioUrl) {
-      showAlert('Error', 'No audio clip to share');
-      return;
-    }
-
-    try {
-      await Share.share({
-        message: `Made with HaitianChatGPT\nVoice: ${VOICES.find(v => v.id === selectedVoice)?.name}`,
-        url: currentAudioUrl,
+      // Transcribe
+      const { data, error } = await supabase.functions.invoke('transcribe-audio', {
+        body: { audio: base64Audio, userId: user?.id },
       });
+
+      if (!error && data?.text) {
+        const userMessage = data.text;
+        setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+        
+        // Get AI response
+        await getAIResponse(userMessage);
+      }
+
+      // Restart recording
+      startListening();
+
     } catch (error) {
-      console.error('Share failed:', error);
+      console.error('Voice processing error:', error);
     }
   };
 
-  const getOrbColor = () => {
-    const voice = VOICES.find((v) => v.id === selectedVoice);
-    return voice?.color || '#4A90E2';
-  };
+  const getAIResponse = async (userMessage: string) => {
+    try {
+      setAiTranscription('...');
 
-  const getStateText = () => {
-    switch (voiceState) {
-      case 'listening':
-        return 'Listening...';
-      case 'thinking':
-        return 'Thinking...';
-      case 'speaking':
-        return 'Speaking...';
-      default:
-        return 'Tap to speak';
+      const { data, error } = await supabase.functions.invoke('chat', {
+        body: {
+          messages: [
+            ...messages.map(m => ({ role: m.role, content: m.content })),
+            { role: 'user', content: userMessage }
+          ],
+          aiModel: 'gemini',
+        },
+      });
+
+      if (!error && data?.message) {
+        setAiTranscription(data.message);
+        setMessages(prev => [...prev, { role: 'assistant', content: data.message }]);
+      }
+    } catch (error) {
+      console.error('AI response error:', error);
     }
   };
 
-  const getVoiceIcon = (iconName: string, color: string) => {
-    const iconProps = { size: 24, color: '#FFFFFF' };
+  const handleSendText = async () => {
+    if (!userInput.trim()) return;
+
+    const text = userInput;
+    setUserInput('');
+    setMessages(prev => [...prev, { role: 'user', content: text }]);
     
-    switch (iconName) {
-      case 'fire':
-        return <MaterialCommunityIcons name="fire" {...iconProps} />;
-      case 'star':
-        return <Ionicons name="star" {...iconProps} />;
-      case 'layers':
-        return <Ionicons name="layers" {...iconProps} />;
-      case 'volume-high':
-        return <Ionicons name="volume-high" {...iconProps} />;
-      case 'sunny':
-        return <Ionicons name="sunny" {...iconProps} />;
-      default:
-        return <Ionicons name="mic" {...iconProps} />;
-    }
+    await getAIResponse(text);
   };
+
+  const handleEndCall = async () => {
+    if (recordingRef.current) {
+      try {
+        await recordingRef.current.stopAndUnloadAsync();
+      } catch (e) {}
+      recordingRef.current = null;
+    }
+    
+    setCallState('ended');
+    setTimeout(() => router.back(), 500);
+  };
+
+  const handlePauseCall = () => {
+    setIsPaused(!isPaused);
+  };
+
+  const pulseStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: pulseAnimation.value }],
+  }));
 
   const styles = StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: colors.background,
+      backgroundColor: GLASS.bgDark,
+      paddingTop: Platform.select({ ios: insets.top, android: insets.top, default: 0 }),
     },
-    header: {
-      paddingTop: Platform.select({
-        ios: insets.top + 10,
-        android: insets.top + 10,
-      }),
-      paddingHorizontal: Spacing.md,
-      paddingBottom: Spacing.md,
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-    },
-    closeButton: {
-      padding: Spacing.xs,
-    },
-    headerActions: {
-      flexDirection: 'row',
-      gap: Spacing.sm,
-    },
-    iconButton: {
-      padding: Spacing.xs,
-    },
-    content: {
-      flex: 1,
-      justifyContent: 'center',
-      alignItems: 'center',
-      paddingHorizontal: Spacing.xl,
-    },
-    orbContainer: {
-      width: 280,
-      height: 280,
-      justifyContent: 'center',
-      alignItems: 'center',
-      marginBottom: Spacing.xxl,
-    },
-    orb: {
-      width: 200,
-      height: 200,
-      borderRadius: 100,
-      justifyContent: 'center',
-      alignItems: 'center',
-      shadowColor: getOrbColor(),
-      shadowOffset: { width: 0, height: 0 },
-      shadowOpacity: 0.5,
-      shadowRadius: 20,
-      elevation: 10,
-    },
-    pulseRing: {
+    blurBackground: {
       position: 'absolute',
-      width: 220,
-      height: 220,
-      borderRadius: 110,
-      borderWidth: 3,
-      borderColor: getOrbColor(),
-    },
-    stateText: {
-      ...Typography.heading,
-      color: colors.text,
-      fontSize: 24,
-      marginBottom: Spacing.sm,
-      textAlign: 'center',
-    },
-    transcript: {
-      ...Typography.body,
-      color: colors.text,
-      fontSize: 18,
-      textAlign: 'center',
-      lineHeight: 28,
-      paddingHorizontal: Spacing.lg,
-      marginTop: Spacing.md,
-    },
-    bottomControls: {
-      paddingBottom: Platform.select({
-        ios: insets.bottom + 20,
-        android: 30,
-      }),
-      paddingHorizontal: Spacing.xl,
-      flexDirection: 'row',
-      justifyContent: 'space-around',
-      alignItems: 'center',
-    },
-    controlButton: {
-      width: 60,
-      height: 60,
-      borderRadius: 30,
-      backgroundColor: colors.card,
-      justifyContent: 'center',
-      alignItems: 'center',
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    micButton: {
-      width: 80,
-      height: 80,
-      borderRadius: 40,
-      justifyContent: 'center',
-      alignItems: 'center',
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.3,
-      shadowRadius: 8,
-      elevation: 8,
-    },
-    micButtonActive: {
-      backgroundColor: '#FF3B30',
-    },
-    voiceSelectorModal: {
-      position: 'absolute',
-      bottom: 0,
+      top: 0,
       left: 0,
       right: 0,
-      backgroundColor: colors.card,
-      borderTopLeftRadius: BorderRadius.xl,
-      borderTopRightRadius: BorderRadius.xl,
-      paddingBottom: Platform.select({
-        ios: insets.bottom + 20,
-        android: 30,
-      }),
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: -4 },
-      shadowOpacity: 0.2,
-      shadowRadius: 10,
-      elevation: 20,
+      bottom: 0,
     },
-    voiceSelectorHeader: {
-      padding: Spacing.lg,
-      alignItems: 'center',
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border,
-    },
-    voiceSelectorTitle: {
-      ...Typography.heading,
-      color: colors.text,
-      fontSize: 18,
-    },
-    voiceList: {
-      padding: Spacing.md,
-      maxHeight: 400,
-    },
-    voiceItem: {
+    header: {
       flexDirection: 'row',
       alignItems: 'center',
-      padding: Spacing.md,
-      marginBottom: Spacing.sm,
-      borderRadius: BorderRadius.md,
-      backgroundColor: colors.background,
-      borderWidth: 2,
-      borderColor: 'transparent',
+      justifyContent: 'space-between',
+      paddingHorizontal: Spacing.md,
+      paddingVertical: Spacing.md,
     },
-    voiceItemSelected: {
-      borderColor: colors.primary,
-      backgroundColor: colors.surface,
+    headerLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
     },
-    voiceOrb: {
-      width: 50,
-      height: 50,
-      borderRadius: 25,
-      marginRight: Spacing.md,
+    headerIcon: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      backgroundColor: 'rgba(255, 255, 255, 0.15)',
+      alignItems: 'center',
       justifyContent: 'center',
-      alignItems: 'center',
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.2,
-      shadowRadius: 4,
-      elevation: 4,
     },
-    voiceInfo: {
+    headerTitle: {
+      fontSize: 18,
+      fontWeight: '600',
+      color: GLASS.text,
+    },
+    headerRight: {
+      flexDirection: 'row',
+      gap: 16,
+    },
+    iconButton: {
+      padding: 8,
+    },
+    statusIndicator: {
+      alignItems: 'center',
+      paddingVertical: 40,
+    },
+    statusDots: {
+      flexDirection: 'row',
+      gap: 8,
+      marginBottom: 20,
+    },
+    dot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    },
+    dotActive: {
+      backgroundColor: GLASS.accent,
+    },
+    statusText: {
+      fontSize: 16,
+      color: GLASS.text,
+      fontWeight: '500',
+    },
+    transcriptionArea: {
       flex: 1,
+      paddingHorizontal: Spacing.lg,
+      paddingVertical: Spacing.xl,
     },
-    voiceName: {
-      ...Typography.body,
-      color: colors.text,
-      fontWeight: '600',
-      fontSize: 16,
-      marginBottom: 2,
+    transcriptionBubble: {
+      backgroundColor: 'rgba(60, 60, 67, 0.60)',
+      borderRadius: 18,
+      padding: 20,
+      minHeight: 100,
+      borderWidth: 1,
+      borderColor: GLASS.border,
     },
-    voiceDescription: {
-      ...Typography.caption,
-      color: colors.textSecondary,
-      fontSize: 13,
+    transcriptionText: {
+      fontSize: 18,
+      color: GLASS.text,
+      lineHeight: 26,
     },
-    doneButton: {
-      margin: Spacing.md,
-      marginTop: 0,
-      padding: Spacing.md,
-      backgroundColor: colors.text,
-      borderRadius: BorderRadius.lg,
+    conversationHistory: {
+      paddingHorizontal: Spacing.lg,
+      marginBottom: Spacing.xl,
+    },
+    messageBubble: {
+      backgroundColor: 'rgba(60, 60, 67, 0.50)',
+      borderRadius: 16,
+      padding: 14,
+      marginBottom: 10,
+      maxWidth: '80%',
+    },
+    userBubble: {
+      alignSelf: 'flex-end',
+      backgroundColor: 'rgba(10, 132, 255, 0.25)',
+    },
+    assistantBubble: {
+      alignSelf: 'flex-start',
+    },
+    messageText: {
+      fontSize: 15,
+      color: GLASS.text,
+      lineHeight: 21,
+    },
+    inputArea: {
+      borderTopWidth: 1,
+      borderTopColor: GLASS.border,
+      backgroundColor: 'rgba(30, 30, 30, 0.80)',
+      paddingHorizontal: Spacing.md,
+      paddingVertical: Spacing.sm,
+    },
+    inputRow: {
+      flexDirection: 'row',
       alignItems: 'center',
+      gap: 10,
     },
-    doneButtonText: {
-      ...Typography.body,
-      color: colors.background,
-      fontWeight: '600',
+    textInput: {
+      flex: 1,
+      backgroundColor: 'rgba(60, 60, 67, 0.50)',
+      borderRadius: 20,
+      paddingHorizontal: 16,
+      paddingVertical: 10,
       fontSize: 16,
+      color: GLASS.text,
+      maxHeight: 100,
+    },
+    sendButton: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      backgroundColor: GLASS.accent,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    keyboardToggle: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      paddingVertical: 10,
+    },
+    keyboardToggleText: {
+      fontSize: 14,
+      color: GLASS.textSecondary,
+      fontWeight: '500',
+    },
+    controls: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 40,
+      paddingVertical: 40,
+      paddingBottom: Platform.select({ ios: insets.bottom + 40, android: 40, default: 40 }),
+    },
+    controlButton: {
+      alignItems: 'center',
+      gap: 8,
+    },
+    endButton: {
+      width: 70,
+      height: 70,
+      borderRadius: 35,
+      backgroundColor: '#FF453A',
+      alignItems: 'center',
+      justifyContent: 'center',
+      shadowColor: '#FF453A',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.4,
+      shadowRadius: 12,
+      elevation: 8,
+    },
+    pauseButton: {
+      width: 70,
+      height: 70,
+      borderRadius: 35,
+      backgroundColor: 'rgba(255, 255, 255, 0.20)',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    controlLabel: {
+      fontSize: 14,
+      color: GLASS.text,
+      fontWeight: '500',
     },
   });
 
   return (
-    <View style={styles.container}>
-      {/* HEADER */}
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      <StatusBar barStyle="light-content" />
+      <BlurView intensity={30} tint="dark" style={styles.blurBackground} />
+
+      {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.closeButton} onPress={() => router.back()}>
-          <Ionicons name="close" size={28} color={colors.text} />
-        </TouchableOpacity>
-
-        <View style={styles.headerActions}>
-          {currentAudioUrl && (
-            <TouchableOpacity style={styles.iconButton} onPress={handleShareClip}>
-              <Ionicons name="share-outline" size={24} color={colors.text} />
-            </TouchableOpacity>
-          )}
+        <View style={styles.headerLeft}>
+          <View style={styles.headerIcon}>
+            <Ionicons name="sparkles" size={18} color={GLASS.text} />
+          </View>
+          <Text style={styles.headerTitle}>Kimi</Text>
+        </View>
+        <View style={styles.headerRight}>
           <TouchableOpacity style={styles.iconButton}>
-            <Ionicons name="settings-outline" size={24} color={colors.text} />
+            <Ionicons name="volume-high-outline" size={24} color={GLASS.text} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.iconButton}>
+            <Ionicons name="ellipsis-horizontal" size={24} color={GLASS.text} />
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* MAIN CONTENT */}
-      <View style={styles.content}>
-        {/* ORB */}
-        <View style={styles.orbContainer}>
-          <Animated.View
-            style={[
-              styles.orb,
-              {
-                backgroundColor: getOrbColor(),
-                transform: [{ scale: orbScale }],
-                opacity: orbOpacity,
-              },
-            ]}
-          >
-            {voiceState === 'listening' && (
-              <Animated.View
-                style={[
-                  styles.pulseRing,
-                  {
-                    opacity: pulseAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [0.5, 0],
-                    }),
-                    transform: [
-                      {
-                        scale: pulseAnim.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: [1, 1.5],
-                        }),
-                      },
-                    ],
-                  },
-                ]}
-              />
-            )}
-            
-            {/* Voice Icon in center */}
-            <Ionicons 
-              name={voiceState === 'idle' ? 'mic' : voiceState === 'listening' ? 'mic' : voiceState === 'thinking' ? 'ellipsis-horizontal' : 'volume-high'} 
-              size={48} 
-              color="#FFFFFF" 
+      {/* Status Indicator */}
+      <View style={styles.statusIndicator}>
+        <View style={styles.statusDots}>
+          {[0, 1, 2, 3, 4, 5, 6, 7].map((index) => (
+            <Animated.View
+              key={index}
+              style={[
+                styles.dot,
+                (callState === 'connecting' && index === connectionDots) && styles.dotActive,
+                (callState === 'connected' && index < 7) && styles.dotActive,
+                (callState === 'connecting' && index === connectionDots) && pulseStyle,
+              ]}
             />
-          </Animated.View>
+          ))}
         </View>
-
-        {/* STATE TEXT */}
-        <Text style={styles.stateText}>{getStateText()}</Text>
-
-        {/* TRANSCRIPT */}
-        {transcript ? (
-          <Text style={styles.transcript} numberOfLines={3}>
-            "{transcript}"
-          </Text>
-        ) : null}
+        <Text style={styles.statusText}>
+          {callState === 'connecting' && 'Connecting...'}
+          {callState === 'connected' && (isPaused ? 'Paused' : 'Connected')}
+          {callState === 'ended' && 'Call Ended'}
+        </Text>
       </View>
 
-      {/* BOTTOM CONTROLS */}
-      <View style={styles.bottomControls}>
-        <TouchableOpacity style={styles.controlButton}>
-          <Ionicons name="camera-outline" size={28} color={colors.text} />
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[
-            styles.micButton,
-            { backgroundColor: voiceState === 'idle' ? getOrbColor() : '#FF3B30' },
-          ]}
-          onPress={handleMicPress}
-          activeOpacity={0.8}
-        >
-          <Ionicons
-            name={voiceState === 'idle' ? 'mic' : 'stop'}
-            size={36}
-            color="#FFFFFF"
-          />
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.controlButton}
-          onPress={() => setShowVoiceSelector(true)}
-        >
-          <Ionicons name="volume-high-outline" size={28} color={colors.text} />
-        </TouchableOpacity>
-      </View>
-
-      {/* VOICE SELECTOR MODAL */}
-      {showVoiceSelector && (
-        <View style={styles.voiceSelectorModal}>
-          <View style={styles.voiceSelectorHeader}>
-            <Text style={styles.voiceSelectorTitle}>Choose a voice</Text>
+      {/* AI Transcription */}
+      {callState === 'connected' && (
+        <Animated.View entering={FadeIn} style={styles.transcriptionArea}>
+          <View style={styles.transcriptionBubble}>
+            <Text style={styles.transcriptionText}>
+              {aiTranscription || 'Listening...'}
+            </Text>
           </View>
+        </Animated.View>
+      )}
 
-          <View style={styles.voiceList}>
-            {VOICES.map((voice) => (
-              <TouchableOpacity
-                key={voice.id}
-                style={[
-                  styles.voiceItem,
-                  selectedVoice === voice.id && styles.voiceItemSelected,
-                ]}
-                onPress={() => setSelectedVoice(voice.id)}
-                activeOpacity={0.7}
-              >
-                <View style={[styles.voiceOrb, { backgroundColor: voice.color }]}>
-                  {getVoiceIcon(voice.icon, voice.color)}
-                </View>
-                <View style={styles.voiceInfo}>
-                  <Text style={styles.voiceName}>{voice.name}</Text>
-                  <Text style={styles.voiceDescription}>{voice.description}</Text>
-                </View>
-                {selectedVoice === voice.id && (
-                  <Ionicons name="checkmark-circle" size={24} color={colors.primary} />
-                )}
-              </TouchableOpacity>
-            ))}
+      {/* Conversation History */}
+      {showKeyboard && messages.length > 0 && (
+        <ScrollView style={styles.conversationHistory}>
+          {messages.slice(-5).map((msg, index) => (
+            <View
+              key={index}
+              style={[
+                styles.messageBubble,
+                msg.role === 'user' ? styles.userBubble : styles.assistantBubble,
+              ]}
+            >
+              <Text style={styles.messageText}>{msg.content}</Text>
+            </View>
+          ))}
+        </ScrollView>
+      )}
+
+      {/* Keyboard Input */}
+      {showKeyboard && (
+        <View style={styles.inputArea}>
+          <View style={styles.inputRow}>
+            <TextInput
+              style={styles.textInput}
+              placeholder="Type to continue chatting with Kimi"
+              placeholderTextColor={GLASS.textSecondary}
+              value={userInput}
+              onChangeText={setUserInput}
+              multiline
+            />
+            <TouchableOpacity style={styles.sendButton} onPress={handleSendText}>
+              <Ionicons name="arrow-up" size={22} color="#FFF" />
+            </TouchableOpacity>
           </View>
-
-          <TouchableOpacity
-            style={styles.doneButton}
-            onPress={() => setShowVoiceSelector(false)}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.doneButtonText}>Done</Text>
-          </TouchableOpacity>
         </View>
       )}
-    </View>
+
+      {/* Keyboard Toggle */}
+      {callState === 'connected' && (
+        <TouchableOpacity
+          style={styles.keyboardToggle}
+          onPress={() => setShowKeyboard(!showKeyboard)}
+        >
+          <Ionicons name="keypad-outline" size={18} color={GLASS.textSecondary} />
+          <Text style={styles.keyboardToggleText}>
+            {showKeyboard ? 'Hide keyboard' : 'Tap to show keyboard'}
+          </Text>
+        </TouchableOpacity>
+      )}
+
+      {/* Call Controls */}
+      <View style={styles.controls}>
+        <TouchableOpacity style={styles.controlButton} onPress={handleEndCall}>
+          <View style={styles.endButton}>
+            <Ionicons name="call" size={32} color="#FFF" />
+          </View>
+          <Text style={styles.controlLabel}>End</Text>
+        </TouchableOpacity>
+
+        {callState === 'connected' && (
+          <TouchableOpacity style={styles.controlButton} onPress={handlePauseCall}>
+            <View style={styles.pauseButton}>
+              <Ionicons name={isPaused ? "play" : "pause"} size={32} color={GLASS.text} />
+            </View>
+            <Text style={styles.controlLabel}>Pause</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    </KeyboardAvoidingView>
   );
 }
-
