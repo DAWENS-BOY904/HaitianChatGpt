@@ -1011,5 +1011,3 @@ export default function HomeScreen() {
     </KeyboardAvoidingView>
   );
 }
-
-fix toolmodal in this page to apeat
