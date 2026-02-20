@@ -781,4 +781,4 @@ export default function SettingsScreen() {
     </View>
   );
 }
-
+helllo ai for the const appearanceOptions: Array<'System' | 'Light' | 'Dark'> = ['System', 'Light', 'Dark']; its mus be real if you system phone is dark show dark theme if its light show lighr if you change light the intire page light if dark same no demo 
