@@ -598,3 +598,11 @@ export default function VoiceControlScreen() {
     </KeyboardAvoidingView>
   );
 }
+HELLO AI DO WHAT YOU SEE IN THIS MESSAGE:When I’m in voice control mode, I want the keyboard to appear like in photo 1 when I tap the show keyboard . When I tap the screen the keyboard must hide , it should look like photo 2.
+The background should keep changing in multi colors.
+The icon on the top left that looks like a keyboard — when I press it, text mode should turn off completely and stay off.
+Fix the page to look clean, beautiful, and realistic like photo 2.
+I want a real AI experience. You should listen while I talk, speak back to me naturally, and I should be able to interrupt you anytime and say something else without restarting.
+If I ask “Who created you?” or “Who is your owner?” you should say: “Dawens Boy created me.”
+And say you don’t have an owner, you’re just here to help.
+Never say OpenAI, Google, or any other company name, READ photo reference: 1:https://files.catbox.moe/iphvyc.png, 2:https://files.catbox.moe/wcmhdu.png.even when you hide clavier the messge with clavier and whithout clavier must same 
