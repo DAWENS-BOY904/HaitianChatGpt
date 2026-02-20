@@ -763,22 +763,3 @@ export default function SettingsScreen() {
     </View>
   );
 }
-useSettings must be used within SettingsProvider
-2026-02-19 21:48:26
-Dismiss
-Fix now
-Type:
-Uncaught Error
-File:
-contexts/ThemeContext.tsx(18:33)
-useSettings must be used within SettingsProvider
-     at useSettings (hooks/useSettings.tsx:7:11)
-     at ThemeProvider (contexts/ThemeContext.tsx:20:35)
-     at callComponent.reactStackBottomFrame (node_modules/.pnpm/react-dom@19.0.0_react@19.0.0/node_modules/react-dom/cjs/react-dom-client.development.js:22428:20)
-     at renderWithHooks (node_modules/.pnpm/react-dom@19.0.0_react@19.0.0/node_modules/react-dom/cjs/react-dom-client.development.js:5757:22)
-     at updateFunctionComponent (node_modules/.pnpm/react-dom@19.0.0_react@19.0.0/node_modules/react-dom/cjs/react-dom-client.development.js:8018:19)
-     at beginWork (node_modules/.pnpm/react-dom@19.0.0_react@19.0.0/node_modules/react-dom/cjs/react-dom-client.development.js:9683:18)
-     at runWithFiberInDEV (node_modules/.pnpm/react-dom@19.0.0_react@19.0.0/node_modules/react-dom/cjs/react-dom-client.development.js:543:16)
-     at performUnitOfWork (node_modules/.pnpm/react-dom@19.0.0_react@19.0.0/node_modules/react-dom/cjs/react-dom-client.development.js:15044:22)
-     at workLoopSync (node_modules/.pnpm/react-dom@19.0.0_react@19.0.0/node_modules/react-dom/cjs/react-dom-client.development.js:14870:41)
-     at renderRootSync (node_modules/.pnpm/react-dom@19.0.0_react@19.0.0/node_modules/react-dom/cjs/react-dom-client.development.js:14850:11)

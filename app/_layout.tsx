@@ -19,8 +19,8 @@ export default function RootLayout() {
   const providers = [
     AlertProvider,
     AuthProvider,
-    ThemeProvider,
     SettingsProvider,
+    ThemeProvider,
     SubscriptionProvider,
     GuestLimitsProvider,
     SocialProvider,
@@ -30,8 +30,8 @@ export default function RootLayout() {
   return (
     <AlertProvider>
       <AuthProvider>
-        <ThemeProvider>
-          <SettingsProvider>
+        <SettingsProvider>
+          <ThemeProvider>
             <SubscriptionProvider>
               <GuestLimitsProvider>
                 <SocialProvider>
@@ -101,8 +101,8 @@ export default function RootLayout() {
                 </SocialProvider>
               </GuestLimitsProvider>
             </SubscriptionProvider>
-          </SettingsProvider>
-        </ThemeProvider>
+          </ThemeProvider>
+        </SettingsProvider>
       </AuthProvider>
     </AlertProvider>
   );
