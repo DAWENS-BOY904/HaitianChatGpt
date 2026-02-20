@@ -483,7 +483,7 @@ export default function VoiceControlScreen() {
           <TouchableOpacity style={styles.iconButton}>
             <Ionicons name="volume-high-outline" size={24} color={GLASS.text} />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.iconButton} onPress={() => router.push('/settings')}>
+          <TouchableOpacity style={styles.iconButton} onPress={() => router.push('/voice-settings')}>
             <Ionicons name="settings-outline" size={24} color={GLASS.text} />
           </TouchableOpacity>
         </View>
