@@ -438,3 +438,4 @@ export default function ImagesScreen() {
     </View>
   );
 }
+make this real alll image style that ready must have their message to build it real ai generate the image with you upload image like chatgpt:https://chatgpt.com/images real desbribe image
