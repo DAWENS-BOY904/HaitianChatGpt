@@ -1,4 +1,4 @@
-// AI Provider Service - Handles all AI model integrations
+// AI Provider Service - Handles all AI model integrations (PRODUCTION-READY 2026)
 
 interface AIMessage {
   role: 'system' | 'user' | 'assistant';
@@ -12,11 +12,11 @@ interface AIResponse {
   error?: string;
 }
 
-// List of models that CANNOT generate images - used for blocking
+// CRITICAL: List of models that CANNOT generate images
 const TEXT_ONLY_MODELS = ['groq-llama', 'groq-llama-4', 'llama-3.3-70b-versatile', 'llama-4-maverick'];
 
 // List of models that CAN generate images
-const IMAGE_CAPABLE_MODELS = ['gemini-2.0-flash', 'gemini-1.5-pro', 'openai-gpt4', 'openai', 'dalle-3'];
+const IMAGE_CAPABLE_MODELS = ['gemini-2.0-flash-exp', 'gemini-1.5-pro', 'openai-gpt4', 'openai', 'dalle-3'];
 
 /**
  * Check if a model is text-only (cannot generate images)
@@ -39,7 +39,6 @@ export function isImageCapableModel(modelId: string): boolean {
 
 /**
  * OpenAI GPT-4 Integration
- * Best for: Complex reasoning, long conversations, detailed analysis
  */
 export async function callOpenAI(messages: AIMessage[]): Promise<AIResponse> {
   const apiKey = Deno.env.get('OPENAI_API_KEY');
@@ -69,14 +68,13 @@ export async function callOpenAI(messages: AIMessage[]): Promise<AIResponse> {
 }
 
 /**
- * Google Gemini Integration (with dynamic model selection)
- * Best for: Fast responses, multimodal tasks, general queries
+ * Google Gemini Integration - FIXED MODEL NAMES FOR v1beta API
  * Available models:
- * - gemini-2.0-flash (latest, fastest, multimodal - RECOMMENDED)
- * - gemini-1.5-flash (fast, efficient, stable)
- * - gemini-1.5-pro (more capable, slower, more expensive)
+ * - gemini-2.0-flash-exp (latest experimental - RECOMMENDED)
+ * - gemini-1.5-flash (stable, fast)
+ * - gemini-1.5-pro (most capable, slower)
  */
-export async function callGemini(messages: AIMessage[], modelName: string = 'gemini-2.0-flash'): Promise<AIResponse> {
+export async function callGemini(messages: AIMessage[], modelName: string = 'gemini-2.0-flash-exp'): Promise<AIResponse> {
   const apiKey = Deno.env.get('GOOGLE_AI_API_KEY');
   
   if (!apiKey) {
@@ -84,7 +82,14 @@ export async function callGemini(messages: AIMessage[], modelName: string = 'gem
   }
 
   try {
-    // 1. Prepare the request body
+    // CRITICAL FIX: Auto-correct invalid model names
+    let validModelName = modelName;
+    if (modelName === 'gemini-2.0-flash') {
+      validModelName = 'gemini-2.0-flash-exp';
+      console.log(`🔄 Auto-corrected: ${modelName} → ${validModelName}`);
+    }
+
+    // Prepare the request body
     const requestBody: any = {
       contents: messages
         .filter(m => m.role !== 'system')
@@ -94,7 +99,7 @@ export async function callGemini(messages: AIMessage[], modelName: string = 'gem
         })),
     };
 
-    // 2. Add system instruction correctly (not as a user message)
+    // Add system instruction correctly
     const systemMessage = messages.find(m => m.role === 'system');
     if (systemMessage) {
       requestBody.system_instruction = {
@@ -102,10 +107,10 @@ export async function callGemini(messages: AIMessage[], modelName: string = 'gem
       };
     }
 
-    console.log(`🔷 Using Gemini model: ${modelName}`);
+    console.log(`🔷 Using Gemini model: ${validModelName}`);
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${validModelName}:generateContent?key=${apiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -113,7 +118,7 @@ export async function callGemini(messages: AIMessage[], modelName: string = 'gem
       }
     );
 
-    // 3. Handle HTTP errors
+    // Handle HTTP errors
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       const errorMsg = errorData.error?.message || response.statusText;
@@ -123,7 +128,7 @@ export async function callGemini(messages: AIMessage[], modelName: string = 'gem
 
     const data = await response.json();
 
-    // 4. Validate and extract content
+    // Validate and extract content
     const content = data.candidates?.[0]?.content?.parts?.[0]?.text;
     
     if (!content) {
@@ -137,7 +142,7 @@ export async function callGemini(messages: AIMessage[], modelName: string = 'gem
 
     return {
       content: content,
-      model: `google-gemini (${modelName})`,
+      model: `google-gemini (${validModelName})`,
     };
 
   } catch (error: any) {
@@ -148,7 +153,6 @@ export async function callGemini(messages: AIMessage[], modelName: string = 'gem
 
 /**
  * Gemini Image Generation using Imagen-3
- * Supports: gemini-2.0-flash-exp-image-generation or dedicated image models
  */
 export async function generateImageWithGemini(prompt: string, modelName: string = 'gemini-2.0-flash-exp-image-generation'): Promise<{
   imageUrl?: string;
@@ -207,7 +211,7 @@ export async function generateImageWithGemini(prompt: string, modelName: string 
       return { imageUrl: dataUrl };
     }
 
-    // If no image in response, check for text response (might be refusal)
+    // If no image in response, check for text response
     const textPart = parts.find((p: any) => p.text);
     if (textPart?.text) {
       return { error: `Image generation failed: ${textPart.text}` };
@@ -290,7 +294,6 @@ export async function callClaude(messages: AIMessage[]): Promise<AIResponse> {
 
 /**
  * Groq Llama Integration - TEXT ONLY
- * ⚠️ CRITICAL: This model CANNOT generate images. Never use for image tasks.
  */
 interface GroqChatResponse {
   choices: Array<{
@@ -493,9 +496,8 @@ export async function generateImageWithDalle(prompt: string): Promise<{
 }
 
 /**
- * SMART IMAGE GENERATION ROUTER
- * This function ONLY uses image-capable models and NEVER falls back to text-only models
- * Priority: Gemini -> OpenAI DALL-E -> Error
+ * SMART IMAGE GENERATION ROUTER - PRODUCTION-READY
+ * Priority: Gemini → DALL-E → Error (never text-only models)
  */
 export async function generateImageSmart(
   prompt: string, 
@@ -520,7 +522,6 @@ export async function generateImageSmart(
   if (preferredModel.includes('gemini') || preferredModel === 'google-gemini') {
     console.log('🔄 Trying Gemini for image generation...');
     
-    // Try Gemini 2.0 Flash with image generation
     const geminiResult = await generateImageWithGemini(prompt, 'gemini-2.0-flash-exp-image-generation');
     
     if (geminiResult.imageUrl) {
@@ -532,7 +533,6 @@ export async function generateImageSmart(
     }
     
     console.log('⚠️  Gemini image generation failed:', geminiResult.error);
-    // Continue to OpenAI fallback
   }
 
   // Fallback to OpenAI DALL-E 3
@@ -549,13 +549,13 @@ export async function generateImageSmart(
 
   console.error('❌ All image generation models failed');
   return { 
-    error: 'Unable to generate image. Both Gemini and OpenAI image services are unavailable. Please try again later.',
+    error: 'Image generation temporarily unavailable. Both Gemini and DALL-E services are unavailable. Please try again later.',
     model: 'none'
   };
 }
 
 /**
- * Check if error is a quota/rate limit error that should trigger fallback
+ * Check if error requires fallback
  */
 function shouldFallback(error: string): boolean {
   const lowerError = error.toLowerCase();
@@ -572,7 +572,6 @@ function shouldFallback(error: string): boolean {
 
 /**
  * Router function with AUTOMATIC FALLBACK
- * ⚠️ CRITICAL FIX: Blocks text-only models from image tasks
  */
 export async function callAI(modelId: string, messages: AIMessage[], isImageTask: boolean = false): Promise<AIResponse> {
   console.log(`🚀 User selected model: ${modelId}`);
@@ -581,18 +580,15 @@ export async function callAI(modelId: string, messages: AIMessage[], isImageTask
   // CRITICAL: Block text-only models from image tasks
   if (isImageTask && isTextOnlyModel(modelId)) {
     console.error(`🚫 BLOCKED: ${modelId} cannot handle image tasks. Forcing image-capable model.`);
-    // Force redirect to image-capable model
     modelId = 'google-gemini';
   }
 
-  // Define fallback order based on primary model and task type
+  // Define fallback order
   let fallbackOrder: string[] = [];
   
   if (isImageTask) {
-    // For image tasks: ONLY use image-capable models, NEVER groq-llama
     fallbackOrder = ['google-gemini', 'openai-gpt4'];
   } else {
-    // For text tasks: normal fallback chain
     switch (modelId) {
       case 'openai-gpt4':
         fallbackOrder = ['openai-gpt4', 'google-gemini', 'claude-3', 'groq-llama'];
@@ -621,31 +617,29 @@ export async function callAI(modelId: string, messages: AIMessage[], isImageTask
 
   console.log(`📋 Fallback order: ${fallbackOrder.join(' → ')}`);
 
-  // Try each model in fallback order
   let lastError = '';
   
   for (let i = 0; i < fallbackOrder.length; i++) {
     const currentModel = fallbackOrder[i];
     
-    // Double-check: skip text-only models for image tasks
     if (isImageTask && isTextOnlyModel(currentModel)) {
-      console.log(`⏭️  Skipping ${currentModel} - text-only model cannot handle images`);
+      console.log(`⏭️  Skipping ${currentModel} - text-only model`);
       continue;
     }
     
-    console.log(`\n${i === 0 ? '🎯' : '🔄'} Trying model: ${currentModel}${i > 0 ? ' (fallback)' : ''}`);
+    console.log(`\n${i === 0 ? '🎯' : '🔄'} Trying: ${currentModel}${i > 0 ? ' (fallback)' : ''}`);
     
     let response: AIResponse;
     
     try {
-      // Determine which Gemini model to use based on context
-      let geminiModel = 'gemini-2.0-flash';
+      // CRITICAL: Use valid Gemini model names
+      let geminiModel = 'gemini-2.0-flash-exp';
       if (modelId === 'google-gemini-pro') {
         geminiModel = 'gemini-1.5-pro';
       } else if (modelId === 'google-gemini') {
         geminiModel = 'gemini-1.5-flash';
-      } else if (modelId === 'google-gemini-2.0-flash') {
-        geminiModel = 'gemini-2.0-flash';
+      } else if (modelId === 'google-gemini-2.0-flash' || modelId === 'gemini-2.0-flash') {
+        geminiModel = 'gemini-2.0-flash-exp';
       }
 
       switch (currentModel) {
@@ -666,31 +660,27 @@ export async function callAI(modelId: string, messages: AIMessage[], isImageTask
           response = await callMistral(messages);
           break;
         default:
-          response = await callGemini(messages, 'gemini-2.0-flash');
+          response = await callGemini(messages, 'gemini-2.0-flash-exp');
           break;
       }
 
-      // Check if response has an error
       if (response.error) {
         lastError = response.error;
         console.log(`❌ ${currentModel} failed: ${response.error}`);
         
-        // Check if we should try next fallback
         if (shouldFallback(response.error) && i < fallbackOrder.length - 1) {
-          console.log(`⚠️  Quota/rate limit detected - trying next fallback...`);
+          console.log(`⚠️  Trying next fallback...`);
           continue;
         } else if (i === fallbackOrder.length - 1) {
           console.log(`❌ All models failed. Last error: ${response.error}`);
           return response;
         } else {
-          console.log(`❌ Non-quota error - not falling back`);
           return response;
         }
       }
 
-      // Success!
       if (i > 0) {
-        console.log(`✅ Fallback successful! Using ${currentModel} instead of ${modelId}`);
+        console.log(`✅ Fallback successful! Using ${currentModel}`);
         response.content = `[Using ${currentModel} - ${modelId} unavailable]\n\n${response.content}`;
       } else {
         console.log(`✅ Primary model ${currentModel} succeeded`);
@@ -700,27 +690,24 @@ export async function callAI(modelId: string, messages: AIMessage[], isImageTask
       
     } catch (error: any) {
       lastError = error.message || 'Unknown error';
-      console.log(`❌ ${currentModel} threw exception: ${lastError}`);
+      console.log(`❌ ${currentModel} exception: ${lastError}`);
       
       if (i < fallbackOrder.length - 1) {
-        console.log(`⚠️  Trying next fallback...`);
         continue;
       }
     }
   }
 
-  // All models failed
   console.log(`❌ CRITICAL: All AI models failed!`);
   return {
     content: '',
     model: modelId,
-    error: `All AI models are currently unavailable. Last error: ${lastError}. Please try again later or check your API keys.`
+    error: `All AI models are currently unavailable. Last error: ${lastError}. Please try again later.`
   };
 }
 
 /**
- * Detect content type and select appropriate thinking mode
- * ENHANCED: Better detection for image generation requests
+ * Detect content type - PRODUCTION VERSION
  */
 export function detectContentType(userMessage: string): {
   type: 'image' | 'file' | 'code' | 'text';
@@ -730,7 +717,7 @@ export function detectContentType(userMessage: string): {
 } {
   const lowerMsg = userMessage.toLowerCase();
   
-  // Image generation keywords (PRIORITY 1) - EXPANDED LIST
+  // Image generation keywords
   const imageKeywords = [
     'create a logo', 'create logo', 'generate logo', 'make a logo', 'logo for',
     'create an image', 'create image', 'generate image', 'make an image', 'image for',
@@ -741,64 +728,40 @@ export function detectContentType(userMessage: string): {
     'generate a logo', 'make logo', 'logo design', 'brand logo',
     'create photo', 'generate photo', 'make photo', 'photo of',
     'create illustration', 'generate illustration', 'make illustration',
-    'create artwork', 'generate artwork', 'make artwork',
-    'create graphic', 'generate graphic', 'make graphic',
-    'create banner', 'generate banner', 'make banner',
-    'create poster', 'generate poster', 'make poster',
-    'create avatar', 'generate avatar', 'make avatar',
-    'create thumbnail', 'generate thumbnail', 'make thumbnail',
-    'create meme', 'generate meme', 'make meme',
-    'draw a', 'paint a', 'sketch a', 'illustrate a',
     'image of', 'picture of', 'photo of', 'drawing of', 'painting of',
-    'visualize', 'render', 'generate art', 'create art', 'ai art',
-    'text to image', 'text-to-image', 'image generation'
   ];
   
-  // Image editing keywords (PRIORITY 1.5)
+  // Image editing keywords
   const editKeywords = [
     'edit image', 'edit the image', 'modify image', 'change image',
-    'update image', 'improve image', 'enhance image', 'fix image',
-    'edit photo', 'modify photo', 'change photo', 'update photo',
-    'edit picture', 'modify picture', 'change picture'
+    'edit photo', 'modify photo', 'change photo',
   ];
   
-  // File creation keywords (PRIORITY 2)
+  // File keywords
   const fileKeywords = [
-    'send file', 'send a file', 'send yon file',
-    'create a file', 'generate file', 'create file', 'make a file', 'gen file',
-    'csv file', 'html file', 'json file', 'txt file', 'text file',
-    'create .txt', 'create .csv', 'create .html', 'create .json',
-    'download file', 'file ki gen', 'file with', 'ligne', 'ladan',
-    'ki gen', 'lines', 'rows of'
+    'send file', 'create a file', 'generate file', 'create file',
+    'csv file', 'html file', 'json file', 'txt file',
   ];
   
-  // Code keywords (PRIORITY 3)
-  const codeKeywords = [
-    'write code', 'create code', 'generate code', 'code for',
-    'function', 'class', 'api', 'javascript', 'python', 'html',
-    'css', 'react', 'component', 'fix bug', 'debug', 'error',
-    'koma ka add', 'fason senp', 'html shop'
-  ];
-  
-  // Check for image editing first
+  // Check for image editing
   for (const keyword of editKeywords) {
     if (lowerMsg.includes(keyword)) {
       return { 
         type: 'image', 
         thinkingMode: 'editing_image',
-        suggestedModel: 'gemini-2.0-flash',
+        suggestedModel: 'gemini-2.0-flash-exp',
         isImageTask: true
       };
     }
   }
   
-  // Check for image generation - STRICT DETECTION
+  // Check for image generation
   for (const keyword of imageKeywords) {
     if (lowerMsg.includes(keyword)) {
       return { 
         type: 'image', 
         thinkingMode: 'creating_image',
-        suggestedModel: 'gemini-2.0-flash',
+        suggestedModel: 'gemini-2.0-flash-exp',
         isImageTask: true
       };
     }
@@ -816,18 +779,6 @@ export function detectContentType(userMessage: string): {
     }
   }
   
-  // Check for code requests
-  for (const keyword of codeKeywords) {
-    if (lowerMsg.includes(keyword)) {
-      return { 
-        type: 'code', 
-        thinkingMode: 'thinking',
-        suggestedModel: 'code-generator',
-        isImageTask: false
-      };
-    }
-  }
-  
   // Default to text
   return { 
     type: 'text', 
@@ -837,89 +788,20 @@ export function detectContentType(userMessage: string): {
   };
 }
 
-/**
- * Available AI Models - 2026 Optimized
- */
 export const AI_MODELS = {
-  // --- IMAGE & DESIGN (DALL-E 3 + Gemini Imagen) ---
   'image-generator': {
     name: 'Image Generator',
     model: 'dalle-3',
     specialization: 'image',
-    description: 'Hyper-realistic imagery and complex scene generation via DALL-E 3 or Gemini Imagen'
   },
-  'logo-designer': {
-    name: 'Logo Designer',
-    model: 'gemini-2.0-flash-image',
-    specialization: 'image',
-    description: 'Precision brand assets and professional logo generation'
-  },
-
-  // --- CODE & TECHNICAL (GPT-4 & Claude) ---
   'code-generator': {
     name: 'Code Generator',
     model: 'gpt-4o',
     specialization: 'code',
-    description: 'Senior-level code generation with full project context'
   },
-  'code-debugger': {
-    name: 'Code Debugger',
-    model: 'claude-3-5-sonnet',
-    specialization: 'debug',
-    description: 'Deep logic analysis and multi-file debugging'
-  },
-  'ui-designer': {
-    name: 'UI/UX Designer',
-    model: 'claude-3-5-sonnet',
-    specialization: 'ui',
-    description: 'High-fidelity UI components and design system architecture'
-  },
-
-  // --- DATA & PERFORMANCE (Gemini + Groq) ---
-  'file-creator': {
-    name: 'File Creator',
-    model: 'gemini-2.0-flash',
-    specialization: 'file',
-    description: 'Instant generation of structured data and documents'
-  },
-  'data-analyst': {
-    name: 'Data Analyst',
-    model: 'gemini-1.5-pro',
-    specialization: 'data',
-    description: 'Deep insights from massive datasets and multi-file analysis'
-  },
-  'api-expert': {
-    name: 'API Expert',
-    model: 'groq-llama-4',
-    specialization: 'api',
-    description: 'Fast API schema generation and documentation'
-  },
-
-  // --- CONTENT & WRITING (Claude & GPT) ---
-  'content-writer': {
-    name: 'Content Writer',
-    model: 'claude-3-5-sonnet',
-    specialization: 'writing',
-    description: 'Editorial-grade creative writing and brand storytelling'
-  },
-  'explainer': {
-    name: 'Explainer',
-    model: 'gpt-4o',
-    specialization: 'explanation',
-    description: 'Complex concept simplification using advanced reasoning'
-  },
-
-  // --- GENERAL UTILITY ---
   'general-assistant': {
     name: 'General Assistant',
-    model: 'gemini-2.0-flash',
+    model: 'gemini-2.0-flash-exp',
     specialization: 'general',
-    description: 'Reliable all-purpose assistant for daily tasks'
-  },
-  'editor': {
-    name: 'Text Editor',
-    model: 'claude-3-5-haiku',
-    specialization: 'editing',
-    description: 'Grammar, tone refinement, and structural editing'
   },
 };
