@@ -152,7 +152,67 @@ export async function callGemini(messages: AIMessage[], modelName: string = 'gem
 }
 
 /**
- * Gemini Image Generation using Imagen-3
+ * OnSpace AI Image Generation (PRIMARY METHOD)
+ */
+export async function generateImageWithOnSpaceAI(prompt: string): Promise<{
+  imageUrl?: string;
+  error?: string;
+}> {
+  const apiKey = Deno.env.get('ONSPACE_AI_API_KEY');
+  const baseUrl = Deno.env.get('ONSPACE_AI_BASE_URL');
+  
+  if (!apiKey || !baseUrl) {
+    return { error: 'OnSpace AI not configured' };
+  }
+
+  try {
+    console.log('🎨 Generating image with OnSpace AI (Nano Banana Pro)...');
+
+    const response = await fetch(`${baseUrl}/v1/images/generations`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-3-pro-image-preview', // Nano Banana Pro
+        prompt: prompt,
+        n: 1,
+        size: '1024x1024',
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      const errorMsg = errorData.error?.message || response.statusText;
+      console.error('OnSpace AI Image error:', errorMsg);
+      
+      // Check for quota/credit issues
+      if (errorMsg.includes('Insufficient balance') || errorMsg.includes('quota')) {
+        return { error: '❌ OnSpace AI credit limit reached. Falling back to DALL-E...' };
+      }
+      
+      return { error: `OnSpace AI Image error: ${errorMsg}` };
+    }
+
+    const data = await response.json();
+    const imageUrl = data.data?.[0]?.url;
+    
+    if (imageUrl) {
+      console.log('✅ OnSpace AI image generated successfully');
+      return { imageUrl };
+    }
+
+    return { error: 'No image URL received from OnSpace AI' };
+
+  } catch (error: any) {
+    console.error('OnSpace AI Image Generation Error:', error);
+    return { error: error.message || 'Unknown error during OnSpace AI image generation' };
+  }
+}
+
+/**
+ * Gemini Image Generation using Imagen-3 (FALLBACK)
  */
 export async function generateImageWithGemini(prompt: string, modelName: string = 'gemini-2.0-flash-exp-image-generation'): Promise<{
   imageUrl?: string;
@@ -192,6 +252,12 @@ export async function generateImageWithGemini(prompt: string, modelName: string 
       const errorData = await response.json().catch(() => ({}));
       const errorMsg = errorData.error?.message || response.statusText;
       console.error('Gemini Image API error:', errorMsg);
+      
+      // Check for quota errors
+      if (errorMsg.includes('quota') || errorMsg.includes('exceeded')) {
+        return { error: 'Gemini quota exceeded. Falling back to DALL-E...' };
+      }
+      
       return { error: `Gemini Image error: ${errorMsg}` };
     }
 
@@ -497,7 +563,7 @@ export async function generateImageWithDalle(prompt: string): Promise<{
 
 /**
  * SMART IMAGE GENERATION ROUTER - PRODUCTION-READY
- * Priority: Gemini → DALL-E → Error (never text-only models)
+ * Priority: OnSpace AI (Nano Banana Pro) → Gemini → DALL-E → Error
  */
 export async function generateImageSmart(
   prompt: string, 
@@ -514,12 +580,27 @@ export async function generateImageSmart(
 
   // Validate that preferred model is not text-only
   if (isTextOnlyModel(preferredModel)) {
-    console.warn(`⚠️  Text-only model ${preferredModel} selected for image task. Switching to Gemini.`);
-    preferredModel = 'gemini';
+    console.warn(`⚠️  Text-only model ${preferredModel} selected for image task. Switching to OnSpace AI.`);
+    preferredModel = 'onspace-ai';
   }
 
-  // Try Gemini first (if preferred or as default)
-  if (preferredModel.includes('gemini') || preferredModel === 'google-gemini') {
+  // PRIORITY 1: Try OnSpace AI (Nano Banana Pro) FIRST
+  console.log('🔄 Trying OnSpace AI (Nano Banana Pro) for image generation...');
+  
+  const onspaceResult = await generateImageWithOnSpaceAI(prompt);
+  
+  if (onspaceResult.imageUrl) {
+    return { 
+      imageUrl: onspaceResult.imageUrl, 
+      model: 'nano-banana-pro',
+      revisedPrompt: prompt 
+    };
+  }
+  
+  console.log('⚠️  OnSpace AI image generation failed:', onspaceResult.error);
+
+  // PRIORITY 2: Fallback to Gemini (if preferred or as secondary)
+  if (preferredModel.includes('gemini') || preferredModel === 'google-gemini' || preferredModel === 'onspace-ai') {
     console.log('🔄 Trying Gemini for image generation...');
     
     const geminiResult = await generateImageWithGemini(prompt, 'gemini-2.0-flash-exp-image-generation');
@@ -535,8 +616,8 @@ export async function generateImageSmart(
     console.log('⚠️  Gemini image generation failed:', geminiResult.error);
   }
 
-  // Fallback to OpenAI DALL-E 3
-  console.log('🔄 Falling back to OpenAI DALL-E 3...');
+  // PRIORITY 3: Final fallback to OpenAI DALL-E 3
+  console.log('🔄 Final fallback to OpenAI DALL-E 3...');
   const dalleResult = await generateImageWithDalle(prompt);
   
   if (dalleResult.imageUrl) {
@@ -549,7 +630,7 @@ export async function generateImageSmart(
 
   console.error('❌ All image generation models failed');
   return { 
-    error: 'Image generation temporarily unavailable. Both Gemini and DALL-E services are unavailable. Please try again later.',
+    error: '❌ All image generation services are currently unavailable:\n\n1. OnSpace AI (Nano Banana Pro): ' + (onspaceResult.error || 'Failed') + '\n2. Gemini Imagen: Quota exceeded\n3. DALL-E 3: ' + (dalleResult.error || 'Failed') + '\n\nPlease try again later or contact support if this issue persists.',
     model: 'none'
   };
 }

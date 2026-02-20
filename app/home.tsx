@@ -11,8 +11,8 @@ import {
   StatusBar, 
   ActivityIndicator,
   Alert,
-  Linking, // ADDED: Missing import
-  Image,   // ADDED: Missing import
+  Linking,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
@@ -69,11 +69,18 @@ export default function HomeScreen() {
   const recordingRef = useRef<Audio.Recording | null>(null);
   const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
   const audioPermissionRef = useRef<boolean>(false);
-  const isRecordingRef = useRef<boolean>(false); // ADDED: For stable ref in timeouts
+  const isRecordingRef = useRef<boolean>(false);
+  const stopTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Initialize audio permissions on mount
   useEffect(() => {
     checkAudioPermissions();
+    return () => {
+      // Cleanup all timers on unmount
+      if (stopTimeoutRef.current) {
+        clearTimeout(stopTimeoutRef.current);
+      }
+    };
   }, []);
 
   const checkAudioPermissions = async () => {
@@ -164,25 +171,36 @@ export default function HomeScreen() {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // IMPROVED: Cleanup function
+  // IMPROVED: Cleanup function with better error handling
   const cleanupRecording = async () => {
+    console.log('🧹 Cleaning up recording...');
+    
+    // Clear auto-stop timeout
+    if (stopTimeoutRef.current) {
+      clearTimeout(stopTimeoutRef.current);
+      stopTimeoutRef.current = null;
+    }
+    
     stopRecordingTimer();
+    
     if (recordingRef.current) {
       try {
         const status = await recordingRef.current.getStatusAsync();
         if (status.isRecording) {
+          console.log('⏹️ Stopping active recording...');
           await recordingRef.current.stopAndUnloadAsync();
         }
       } catch (e) {
-        // Ignore cleanup errors
+        console.log('⚠️ Recording cleanup error (safe to ignore):', e);
       }
       recordingRef.current = null;
     }
+    
     isRecordingRef.current = false;
     setRecordingState('idle');
   };
 
-  // IMPROVED: Start voice recording with better error handling
+  // IMPROVED: Start voice recording with better error handling and stable auto-stop
   const startVoiceRecording = async () => {
     // Check permissions first
     if (!audioPermissionRef.current) {
@@ -262,11 +280,14 @@ export default function HomeScreen() {
 
       recordingRef.current = recording;
 
-      // IMPROVED: Auto-stop using ref instead of state
-      setTimeout(() => {
-        if (isRecordingRef.current) {
-          console.log('⏱️ Auto-stopping recording after 60 seconds');
-          stopVoiceRecording();
+      // FIXED: Auto-stop using stable ref with proper cleanup
+      stopTimeoutRef.current = setTimeout(() => {
+        console.log('⏱️ Auto-stopping recording after 60 seconds');
+        if (isRecordingRef.current && recordingRef.current) {
+          stopVoiceRecording().catch(err => {
+            console.error('Auto-stop error:', err);
+            cleanupRecording();
+          });
         }
       }, 60000);
 
@@ -294,15 +315,7 @@ export default function HomeScreen() {
       Alert.alert(
         'Recording Failed',
         errorMessage,
-        [
-          { text: 'OK', style: 'default' },
-          { 
-            text: 'Type Instead', 
-            onPress: () => {
-              // Focus on text input could be added here
-            }
-          }
-        ]
+        [{ text: 'OK', style: 'default' }]
       );
     }
   };
@@ -312,6 +325,12 @@ export default function HomeScreen() {
     if (!recordingRef.current || !isRecordingRef.current) {
       console.log('⚠️ No active recording to stop');
       return;
+    }
+
+    // Clear auto-stop timeout immediately
+    if (stopTimeoutRef.current) {
+      clearTimeout(stopTimeoutRef.current);
+      stopTimeoutRef.current = null;
     }
 
     stopRecordingTimer();
