@@ -149,7 +149,18 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
   };
 
   const sendMessage = async (content: string, imageUrl?: string, base64Image?: string, isImageGeneration: boolean = false, aiModel?: string) => {
-    if (!currentConversation || !user) return;
+    if (!user) return;
+    
+    // Auto-create conversation if none exists
+    let conversationId = currentConversation?.id;
+    if (!conversationId) {
+      console.log('📝 No conversation selected, creating new one...');
+      conversationId = await createConversation();
+      if (!conversationId) {
+        console.error('❌ Failed to create conversation');
+        return;
+      }
+    }
 
     console.log('📨 ConversationContext.sendMessage called');
     console.log('  - Content:', content.slice(0, 50));
@@ -179,7 +190,7 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
     // For image generation, add base64 image data
     const requestBody: any = {
       messages: contextMessages,
-      conversationId: currentConversation.id,
+      conversationId: conversationId,
       aiModel: aiModel || 'google-gemini',
     };
 
@@ -272,13 +283,13 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
         title = content.slice(0, 47) + '...';
       }
       console.log('  📝 Setting conversation title:', title);
-      await updateConversationTitle(currentConversation.id, title);
+      await updateConversationTitle(conversationId, title);
       
       // Add to conversations list on first message
       const newConv: Conversation = {
-        id: currentConversation.id,
+        id: conversationId,
         title: title,
-        createdAt: currentConversation.createdAt,
+        createdAt: currentConversation?.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
       setConversations(prev => {
@@ -289,25 +300,25 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
       await supabase
         .from('conversations')
         .update({ updated_at: new Date().toISOString() })
-        .eq('id', currentConversation.id);
+        .eq('id', conversationId);
       
       // Update in conversations list (move to top)
       setConversations(prev => {
         const updated = prev.map(c => 
-          c.id === currentConversation.id 
+          c.id === conversationId 
             ? { ...c, updatedAt: new Date().toISOString() } 
             : c
         );
         // Move current to top
-        const current = updated.find(c => c.id === currentConversation.id);
-        const others = updated.filter(c => c.id !== currentConversation.id);
+        const current = updated.find(c => c.id === conversationId);
+        const others = updated.filter(c => c.id !== conversationId);
         return current ? [current, ...others] : updated;
       });
     }
 
     // Finally, reload from database to get real IDs
     console.log('  🔄 Reloading messages from database...');
-    await selectConversation(currentConversation.id);
+    await selectConversation(conversationId);
     console.log('  ✅ Message flow complete');
   };
 

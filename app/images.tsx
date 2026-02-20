@@ -205,9 +205,13 @@ export default function ImagesScreen() {
     router.replace('/home');
     
     // Small delay to ensure navigation completes
-    await new Promise(resolve => setTimeout(resolve, 300));
+    await new Promise(resolve => setTimeout(resolve, 500));
     
     // Send message with image and style prompt to conversation
+    // The ConversationContext will handle:
+    // 1. Creating user message immediately (shows photo + prompt)
+    // 2. Calling AI Edge Function (shows thinking state)
+    // 3. Displaying AI response (generated image)
     const messageText = `${style.prompt}`;
     await sendMessage(messageText, imageUri, base64, true); // true = isImageGeneration
   };
@@ -554,4 +558,3 @@ export default function ImagesScreen() {
     </View>
   );
 }
-fix when it go to home page and its must auto create new comversation and real ai thinking you message photo and prompt wait the ai respons add real edg funct
