@@ -598,3 +598,10 @@ export default function VoiceControlScreen() {
     </KeyboardAvoidingView>
   );
 }
+{
+  "eventMessage": "❌ AI response failed: Gemini error: models/gemini-1.5-flash-002 is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.\n",
+  "functionId": "chat",
+  "id": "f48e9322-fa8f-4fd5-a1de-2b00bf96ade6",
+  "logLevel": "ERROR",
+  "timestamp": 1771566261
+} fix this better and message with clavier still same with voice fix both
