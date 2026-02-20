@@ -554,3 +554,4 @@ export default function ImagesScreen() {
     </View>
   );
 }
+fix when it go to home page and its must auto create new comversation and real ai thinking you message photo and prompt wait the ai respons add real edg funct
