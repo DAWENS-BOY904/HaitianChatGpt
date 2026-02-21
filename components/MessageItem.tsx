@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Pressable, Image, Modal } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Pressable, Image, Modal, ActivityIndicator, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
+import * as FileSystem from 'expo-file-system';
+import * as MediaLibrary from 'expo-media-library';
 import { useTheme } from '../hooks/useTheme';
 import { useAuth, useAlert } from '@/template';
 import { router } from 'expo-router';
@@ -32,6 +34,19 @@ interface MessageItemProps {
   isGenerating?: boolean;
 }
 
+// PRODUCTION-READY: Detect if URL is an image
+const isImageUrl = (url: string): boolean => {
+  if (!url) return false;
+  const lowerUrl = url.toLowerCase();
+  return (
+    lowerUrl.match(/\.(jpg|jpeg|png|gif|webp|bmp)(\?|$)/) !== null ||
+    lowerUrl.startsWith('data:image/') ||
+    lowerUrl.includes('openai.com') ||
+    lowerUrl.includes('googleusercontent.com') ||
+    lowerUrl.includes('oaidalleapiprodscus.blob.core.windows.net')
+  );
+};
+
 export function MessageItem({ message, onCancel, onEdit, isGenerating }: MessageItemProps) {
   const { colors } = useTheme();
   const { user } = useAuth();
@@ -47,7 +62,41 @@ export function MessageItem({ message, onCancel, onEdit, isGenerating }: Message
   const [selectedImageUrl, setSelectedImageUrl] = useState('');
   const [fileModalVisible, setFileModalVisible] = useState(false);
   const [fileData, setFileData] = useState({ name: '', content: '', type: '' });
+  const [downloadingImage, setDownloadingImage] = useState(false);
   const supabase = getSupabaseClient();
+
+  // PRODUCTION-READY: Download and save image to device
+  const handleDownloadImage = async (imageUrl: string) => {
+    try {
+      setDownloadingImage(true);
+      
+      // Request permissions
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Please allow access to save images to your library.');
+        return;
+      }
+
+      // Download image
+      const fileUri = FileSystem.documentDirectory + 'temp_image_' + Date.now() + '.jpg';
+      const downloadResult = await FileSystem.downloadAsync(imageUrl, fileUri);
+      
+      if (downloadResult.status !== 200) {
+        throw new Error('Download failed');
+      }
+
+      // Save to media library
+      const asset = await MediaLibrary.createAssetAsync(downloadResult.uri);
+      await MediaLibrary.createAlbumAsync('HaitianChatGPT', asset, false);
+      
+      Alert.alert('Success', 'Image saved to your photo library!');
+    } catch (error) {
+      console.error('Image download error:', error);
+      Alert.alert('Error', 'Failed to save image. Please try again.');
+    } finally {
+      setDownloadingImage(false);
+    }
+  };
 
   const handleLongPress = (event: any) => {
     const { pageX, pageY } = event.nativeEvent;
@@ -71,12 +120,10 @@ export function MessageItem({ message, onCancel, onEdit, isGenerating }: Message
   const handleLike = async (type: 'like' | 'dislike') => {
     if (!user) return;
 
-    // Navigate to detail page
     router.push(`/message-detail?messageId=${message.id}`);
 
     try {
       if (liked === type) {
-        // Remove like
         await supabase
           .from('message_likes')
           .delete()
@@ -84,7 +131,6 @@ export function MessageItem({ message, onCancel, onEdit, isGenerating }: Message
           .eq('user_id', user.id);
         setLiked(null);
       } else {
-        // Add or update like
         await supabase
           .from('message_likes')
           .upsert({
@@ -120,7 +166,6 @@ export function MessageItem({ message, onCancel, onEdit, isGenerating }: Message
 
   const handleApplyImageEdits = async (editPrompt: string) => {
     try {
-      // Call edge function to edit image
       const { data, error } = await supabase.functions.invoke('chat', {
         body: {
           editImageUrl: selectedImageUrl,
@@ -132,7 +177,6 @@ export function MessageItem({ message, onCancel, onEdit, isGenerating }: Message
 
       if (error) throw error;
 
-      // Update the image with edited version
       if (data.imageUrl) {
         setSelectedImageUrl(data.imageUrl);
         showAlert('Success', 'Image edited successfully!');
@@ -150,13 +194,11 @@ export function MessageItem({ message, onCancel, onEdit, isGenerating }: Message
     setFileModalVisible(true);
   };
 
-  // Detect "Download file" links
   const detectFileDownload = (content: string) => {
     const downloadRegex = /Download file la|Download file|👉.*?Download.*?↗/i;
     return downloadRegex.test(content);
   };
 
-  // Extract file info from message
   const extractFileInfo = (content: string): { fileName: string; type: string } | null => {
     const fileMatch = content.match(/File created: ([\w_]+\.(txt|csv|html|json|js))/i);
     if (fileMatch) {
@@ -168,17 +210,14 @@ export function MessageItem({ message, onCancel, onEdit, isGenerating }: Message
     return null;
   };
 
-  // Detect URLs in text
   const urlRegex = /(https?:\/\/[^\s]+)/g;
 
-  // Parse text with clickable links
   const parseTextWithLinks = (text: string) => {
     const parts = [];
     let lastIndex = 0;
     let match;
 
     while ((match = urlRegex.exec(text)) !== null) {
-      // Add text before link
       if (match.index > lastIndex) {
         parts.push({
           type: 'text',
@@ -186,7 +225,6 @@ export function MessageItem({ message, onCancel, onEdit, isGenerating }: Message
         });
       }
 
-      // Add link
       parts.push({
         type: 'link',
         content: match[0],
@@ -196,7 +234,6 @@ export function MessageItem({ message, onCancel, onEdit, isGenerating }: Message
       lastIndex = match.index + match[0].length;
     }
 
-    // Add remaining text
     if (lastIndex < text.length) {
       parts.push({
         type: 'text',
@@ -207,7 +244,6 @@ export function MessageItem({ message, onCancel, onEdit, isGenerating }: Message
     return parts.length > 0 ? parts : [{ type: 'text', content: text }];
   };
 
-  // Parse code blocks from content
   const parseCodeBlocks = (content: string) => {
     const parts = [];
     const codeBlockRegex = /```(\w+)?\n([\s\S]*?)```/g;
@@ -215,7 +251,6 @@ export function MessageItem({ message, onCancel, onEdit, isGenerating }: Message
     let match;
 
     while ((match = codeBlockRegex.exec(content)) !== null) {
-      // Add text before code block
       if (match.index > lastIndex) {
         parts.push({
           type: 'text',
@@ -223,7 +258,6 @@ export function MessageItem({ message, onCancel, onEdit, isGenerating }: Message
         });
       }
 
-      // Add code block
       parts.push({
         type: 'code',
         language: match[1] || 'code',
@@ -233,7 +267,6 @@ export function MessageItem({ message, onCancel, onEdit, isGenerating }: Message
       lastIndex = match.index + match[0].length;
     }
 
-    // Add remaining text
     if (lastIndex < content.length) {
       parts.push({
         type: 'text',
@@ -245,6 +278,7 @@ export function MessageItem({ message, onCancel, onEdit, isGenerating }: Message
   };
 
   const contentParts = parseCodeBlocks(message.content);
+  const hasGeneratedImage = message.image_url && isImageUrl(message.image_url);
 
   const styles = StyleSheet.create({
     container: {
@@ -272,6 +306,30 @@ export function MessageItem({ message, onCancel, onEdit, isGenerating }: Message
       height: 200,
       borderRadius: BorderRadius.sm,
       marginBottom: Spacing.sm,
+    },
+    downloadOverlay: {
+      position: 'absolute',
+      top: 0,
+      right: 0,
+      left: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      borderRadius: BorderRadius.sm,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    downloadIcon: {
+      position: 'absolute',
+      bottom: 8,
+      right: 8,
+      backgroundColor: 'rgba(0, 0, 0, 0.7)',
+      borderRadius: BorderRadius.full,
+      width: 40,
+      height: 40,
+      justifyContent: 'center',
+      alignItems: 'center',
+      borderWidth: 2,
+      borderColor: '#fff',
     },
     fileAttachment: {
       flexDirection: 'row',
@@ -426,10 +484,28 @@ export function MessageItem({ message, onCancel, onEdit, isGenerating }: Message
           message.role === 'user' ? styles.userMessage : styles.assistantMessage,
         ]}
       >
-        {/* Display inline image preview */}
-        {message.image_url && (
-          <TouchableOpacity onPress={() => handleImagePress(message.image_url!)}>
-            <Image source={{ uri: message.image_url }} style={styles.messageImage} />
+        {/* PRODUCTION: Display AI-generated image with download button */}
+        {hasGeneratedImage && (
+          <TouchableOpacity 
+            onPress={() => handleDownloadImage(message.image_url!)}
+            activeOpacity={0.8}
+            disabled={downloadingImage}
+          >
+            <Image 
+              source={{ uri: message.image_url }} 
+              style={styles.messageImage} 
+              resizeMode="cover"
+            />
+            {downloadingImage ? (
+              <View style={styles.downloadOverlay}>
+                <ActivityIndicator color="#fff" size="large" />
+                <Text style={{ color: '#fff', marginTop: 8, fontSize: 12 }}>Saving...</Text>
+              </View>
+            ) : (
+              <View style={styles.downloadIcon}>
+                <Ionicons name="download" size={20} color="#fff" />
+              </View>
+            )}
           </TouchableOpacity>
         )}
         
@@ -468,7 +544,6 @@ export function MessageItem({ message, onCancel, onEdit, isGenerating }: Message
             );
           }
           
-          // Parse text for links
           const textParts = parseTextWithLinks(part.content);
           
           return (
@@ -529,8 +604,6 @@ export function MessageItem({ message, onCancel, onEdit, isGenerating }: Message
                 onPress={() => {
                   const fileInfo = extractFileInfo(message.content);
                   if (fileInfo) {
-                    // In real implementation, we'd have the file content stored
-                    // For now, show a placeholder
                     handleFileDownload(
                       fileInfo.fileName,
                       'File content would be here',
@@ -575,7 +648,6 @@ export function MessageItem({ message, onCancel, onEdit, isGenerating }: Message
         )}
       </Pressable>
 
-      {/* Context Menu Modal */}
       <Modal
         visible={showContextMenu}
         transparent
@@ -610,7 +682,6 @@ export function MessageItem({ message, onCancel, onEdit, isGenerating }: Message
         </Pressable>
       </Modal>
 
-      {/* Link Safety Modal */}
       <LinkSafetyModal
         visible={linkModalVisible}
         url={selectedLink}
@@ -618,14 +689,12 @@ export function MessageItem({ message, onCancel, onEdit, isGenerating }: Message
         onOpenLink={handleOpenLink}
       />
 
-      {/* WebView Modal */}
       <WebViewModal
         visible={webViewVisible}
         url={selectedLink}
         onClose={() => setWebViewVisible(false)}
       />
 
-      {/* Image Viewer Modal */}
       <ImageViewerModal
         visible={imageViewerVisible}
         imageUrl={selectedImageUrl}
@@ -634,7 +703,6 @@ export function MessageItem({ message, onCancel, onEdit, isGenerating }: Message
         title="Image created"
       />
 
-      {/* Image Edit Modal */}
       <ImageEditModal
         visible={imageEditVisible}
         imageUrl={selectedImageUrl}
@@ -642,7 +710,6 @@ export function MessageItem({ message, onCancel, onEdit, isGenerating }: Message
         onApplyEdits={handleApplyImageEdits}
       />
 
-      {/* File Download Modal */}
       <FileDownloadModal
         visible={fileModalVisible}
         fileName={fileData.name}

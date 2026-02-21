@@ -37,13 +37,13 @@ import * as FileSystem from 'expo-file-system';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-// Animated Gradient Colors
+// Premium Animated Gradient Colors (matching Kimi style)
 const GRADIENT_COLORS = [
-  ['#667eea', '#764ba2', '#f093fb'],
-  ['#4facfe', '#00f2fe', '#43e97b'],
-  ['#fa709a', '#fee140', '#30cfd0'],
-  ['#a8edea', '#fed6e3', '#fbc2eb'],
-  ['#ff9a9e', '#fecfef', '#ffecd2'],
+  ['#1e3a8a', '#3b82f6', '#60a5fa'], // Deep blue to light blue
+  ['#581c87', '#7c3aed', '#a78bfa'], // Deep purple to light purple
+  ['#be123c', '#e11d48', '#fb7185'], // Deep rose to light rose
+  ['#065f46', '#059669', '#34d399'], // Deep green to light green
+  ['#7c2d12', '#ea580c', '#fb923c'], // Deep orange to light orange
 ];
 
 type VoiceState = 'idle' | 'listening' | 'processing' | 'speaking';
@@ -231,13 +231,19 @@ export default function VoiceControlScreen() {
     setUserInput('');
     setConversationMessages(prev => [...prev, { role: 'user', content: text }]);
     
-    setVoiceState('speaking');
-    await sendMessage(text, undefined, 'gemini-2.0-flash-exp');
-    
-    setTimeout(() => {
+    try {
+      setVoiceState('speaking');
+      await sendMessage(text, undefined, 'gemini-2.0-flash-exp');
+      
+      setTimeout(() => {
+        setVoiceState('idle');
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      }, 1000);
+    } catch (error) {
+      console.error('Send message error:', error);
       setVoiceState('idle');
-      scrollViewRef.current?.scrollToEnd({ animated: true });
-    }, 1000);
+      showAlert('Error', 'Failed to send message. Please try again.');
+    }
   };
 
   const toggleRecording = () => {
@@ -277,6 +283,7 @@ export default function VoiceControlScreen() {
     },
     gradient: {
       ...StyleSheet.absoluteFillObject,
+      opacity: 0.95,
     },
     content: {
       flex: 1,
@@ -309,9 +316,12 @@ export default function VoiceControlScreen() {
     },
     statusText: {
       fontSize: 16,
-      color: 'rgba(255, 255, 255, 0.80)',
-      fontWeight: '500',
+      color: 'rgba(255, 255, 255, 0.90)',
+      fontWeight: '600',
       marginTop: 16,
+      textShadowColor: 'rgba(0, 0, 0, 0.3)',
+      textShadowOffset: { width: 0, height: 1 },
+      textShadowRadius: 3,
     },
     conversationArea: {
       flex: 1,
@@ -404,16 +414,16 @@ export default function VoiceControlScreen() {
       width: 90,
       height: 90,
       borderRadius: 45,
-      backgroundColor: 'rgba(255, 255, 255, 0.20)',
+      backgroundColor: 'rgba(255, 255, 255, 0.25)',
       alignItems: 'center',
       justifyContent: 'center',
-      borderWidth: 3,
-      borderColor: '#FFF',
-      shadowColor: '#FFF',
-      shadowOffset: { width: 0, height: 8 },
-      shadowOpacity: 0.4,
-      shadowRadius: 16,
-      elevation: 10,
+      borderWidth: 4,
+      borderColor: 'rgba(255, 255, 255, 0.8)',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 12 },
+      shadowOpacity: 0.5,
+      shadowRadius: 20,
+      elevation: 15,
     },
     micButtonActive: {
       backgroundColor: '#FF3B30',
