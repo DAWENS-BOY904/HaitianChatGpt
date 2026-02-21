@@ -41,14 +41,16 @@ interface ToolsModalProps {
   currentModel?: string;
 }
 
-// Glassmorphism colors
+// Premium Glassmorphism Design System
 const GLASS_COLORS = {
-  background: 'rgba(28, 28, 30, 0.95)',
-  surface: 'rgba(44, 44, 46, 0.70)',
-  border: 'rgba(120, 120, 128, 0.20)',
+  background: 'rgba(20, 20, 22, 0.98)',
+  surface: 'rgba(40, 42, 48, 0.85)',
+  surfaceHover: 'rgba(50, 52, 60, 0.90)',
+  border: 'rgba(255, 255, 255, 0.08)',
   text: '#FFFFFF',
-  textSecondary: 'rgba(255, 255, 255, 0.60)',
-  accent: '#0A84FF',
+  textSecondary: 'rgba(255, 255, 255, 0.65)',
+  accent: '#007AFF',
+  accentGlow: 'rgba(0, 122, 255, 0.25)',
 };
 
 export function ToolsModal({
@@ -166,6 +168,7 @@ export function ToolsModal({
       id: 'camera',
       label: 'Camera',
       icon: 'camera-outline',
+      gradient: ['#667eea', '#764ba2'],
       action: () => {
         onOpenCamera?.();
         onClose();
@@ -175,39 +178,43 @@ export function ToolsModal({
       id: 'photos',
       label: 'Photos',
       icon: 'image-outline',
+      gradient: ['#f093fb', '#f5576c'],
       action: handlePickImages,
     },
     {
       id: 'files',
       label: 'Files',
       icon: 'folder-open-outline',
+      gradient: ['#4facfe', '#00f2fe'],
       action: handlePickFile,
     },
     {
-      id: 'wechat-files',
-      label: 'WeChat files',
-      icon: 'chatbubbles-outline',
-      action: () => {
-        // WeChat integration placeholder
-        onSelectTool?.('wechat-files');
-        onClose();
-      },
-    },
-    {
       id: 'call',
-      label: 'Call',
-      icon: 'call-outline',
+      label: 'Voice',
+      icon: 'mic-outline',
+      gradient: ['#43e97b', '#38f9d7'],
       action: () => {
         navigation.navigate('voice-control');
         onClose();
       },
     },
     {
-      id: 'presets',
-      label: 'Presets',
-      icon: 'cube-outline',
+      id: 'code',
+      label: 'Code',
+      icon: 'code-slash-outline',
+      gradient: ['#fa709a', '#fee140'],
       action: () => {
-        onSelectTool?.('presets');
+        navigation.navigate('coding');
+        onClose();
+      },
+    },
+    {
+      id: 'image-gen',
+      label: 'Create Image',
+      icon: 'color-palette-outline',
+      gradient: ['#30cfd0', '#330867'],
+      action: () => {
+        navigation.navigate('images');
         onClose();
       },
     },
@@ -221,20 +228,28 @@ export function ToolsModal({
     return (
       <Animated.View
         key={tool.id}
-        entering={FadeInUp.delay(index * 50).duration(400)}
+        entering={FadeInUp.delay(index * 60).duration(500).springify()}
         style={styles.toolButtonContainer}
       >
         <TouchableOpacity
-          style={styles.toolButton}
+          style={[
+            styles.toolButton,
+            { backgroundColor: GLASS_COLORS.surface }
+          ]}
           onPress={() => handleToolPress(tool.id, tool.action)}
-          activeOpacity={0.7}
+          activeOpacity={0.8}
           disabled={isLoading}
         >
           {isLoading ? (
             <ActivityIndicator size="small" color={GLASS_COLORS.accent} />
           ) : (
             <>
-              <Ionicons name={tool.icon} size={28} color={GLASS_COLORS.text} />
+              <View style={[
+                styles.iconContainer,
+                { backgroundColor: `${tool.gradient[0]}15` }
+              ]}>
+                <Ionicons name={tool.icon} size={26} color={tool.gradient[0]} />
+              </View>
               <Text style={styles.toolLabel}>{tool.label}</Text>
             </>
           )}
@@ -377,38 +392,46 @@ const styles = StyleSheet.create({
     paddingTop: 8,
   },
   
-  // Main Grid - Compact 3-column grid
+  // Premium 2-column grid with larger touch targets
   mainGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'flex-start',
-    gap: 12,
-    marginBottom: 20,
+    justifyContent: 'space-between',
+    gap: 16,
+    marginBottom: 24,
   },
   toolButtonContainer: {
-    width: '30.5%',
+    width: '48%',
   },
   toolButton: {
-    aspectRatio: 1,
     backgroundColor: GLASS_COLORS.surface,
-    borderRadius: 20,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 20,
+    paddingVertical: 28,
+    paddingHorizontal: 20,
     borderWidth: 1,
     borderColor: GLASS_COLORS.border,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 10,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  iconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
   },
   toolLabel: {
-    fontSize: 13,
-    fontWeight: '500',
+    fontSize: 15,
+    fontWeight: '600',
     color: GLASS_COLORS.text,
-    marginTop: 10,
     textAlign: 'center',
+    letterSpacing: 0.3,
   },
   
   // Web Search Row

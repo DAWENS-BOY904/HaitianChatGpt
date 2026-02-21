@@ -78,16 +78,17 @@ export async function callGemini(messages: AIMessage[], modelName: string = 'gem
   const apiKey = Deno.env.get('GOOGLE_AI_API_KEY');
   
   if (!apiKey) {
-    return { content: '', model: 'google-gemini', error: 'Google AI API key not configured' };
+    console.log('⚠️ Google AI API key not configured, using fallback');
+    return { content: '', model: 'google-gemini', error: 'FALLBACK_NEEDED' };
   }
 
   try {
-    // CRITICAL FIX: Map to valid v1beta model names
+    // CRITICAL FIX: Map to valid v1beta model names with proper fallbacks
     let validModelName = modelName;
     
-    // Map all gemini-1.5-flash variations to the correct v1beta name
+    // Map all gemini-1.5-flash variations to the stable v1 name (not v1beta)
     if (modelName.includes('gemini-1.5-flash') || modelName === 'gemini-1.5-flash') {
-      validModelName = 'gemini-1.5-flash-002';
+      validModelName = 'gemini-1.5-flash';
       console.log(`🔄 Corrected: ${modelName} → ${validModelName}`);
     }
     // Map gemini-2.0-flash to experimental version
@@ -97,7 +98,7 @@ export async function callGemini(messages: AIMessage[], modelName: string = 'gem
     }
     // Map gemini-1.5-pro
     else if (modelName.includes('gemini-1.5-pro')) {
-      validModelName = 'gemini-1.5-pro-002';
+      validModelName = 'gemini-1.5-pro';
       console.log(`🔄 Corrected: ${modelName} → ${validModelName}`);
     }
 
@@ -130,11 +131,18 @@ export async function callGemini(messages: AIMessage[], modelName: string = 'gem
       }
     );
 
-    // Handle HTTP errors
+    // Handle HTTP errors with smart fallback
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       const errorMsg = errorData.error?.message || response.statusText;
       console.error('Gemini API error:', errorMsg);
+      
+      // If model not found, trigger fallback instead of showing error to user
+      if (errorMsg.includes('not found') || errorMsg.includes('not supported') || response.status === 404) {
+        console.log('⚠️ Gemini model not available, triggering fallback');
+        return { content: '', model: 'google-gemini', error: 'FALLBACK_NEEDED' };
+      }
+      
       return { content: '', model: 'google-gemini', error: `Gemini error: ${errorMsg}` };
     }
 
@@ -676,7 +684,7 @@ export async function callAI(modelId: string, messages: AIMessage[], isImageTask
     modelId = 'google-gemini';
   }
 
-  // Define fallback order
+  // Define fallback order with proper model availability
   let fallbackOrder: string[] = [];
   
   if (isImageTask) {
@@ -765,12 +773,18 @@ export async function callAI(modelId: string, messages: AIMessage[], isImageTask
         lastError = response.error;
         console.log(`❌ ${currentModel} failed: ${response.error}`);
         
-        if (shouldFallback(response.error) && i < fallbackOrder.length - 1) {
-          console.log(`⚠️  Trying next fallback...`);
+        // Smart fallback: if error is FALLBACK_NEEDED or quota/rate limit, try next model silently
+        if ((response.error === 'FALLBACK_NEEDED' || shouldFallback(response.error)) && i < fallbackOrder.length - 1) {
+          console.log(`⚠️  Trying next fallback silently (no user error)...`);
           continue;
         } else if (i === fallbackOrder.length - 1) {
           console.log(`❌ All models failed. Last error: ${response.error}`);
-          return response;
+          // Don't show technical errors to users - generic message instead
+          return {
+            content: '',
+            model: modelId,
+            error: 'AI service temporarily unavailable. Please try again in a moment.'
+          };
         } else {
           return response;
         }

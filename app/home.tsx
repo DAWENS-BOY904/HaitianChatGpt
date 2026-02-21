@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { 
   View, 
@@ -416,31 +417,58 @@ export default function HomeScreen() {
         },
       });
 
-      // Check for content violation / account suspension
-      if (error?.message?.includes('Content violation')) {
-        Alert.alert(
-          '🚫 Account Suspended',
-          "Don't fucking say that! Your account has been suspended for 10 days due to scam/fraud content. This conversation has been terminated.",
-          [{ text: 'OK', onPress: () => router.push('/suspended') }]
-        );
-        setRecordingState('idle');
-        return;
-      }
+      // Move this try-catch block inside the outer try block, after the supabase invoke call
+      // to ensure `data` and `error` are defined.
+      try { 
+        // Check for content violation / account suspension
+        if (error?.message?.includes('Content violation')) {
+          Alert.alert(
+            '🚫 Account Suspended',
+            "Don't fucking say that! Your account has been suspended for 10 days due to scam/fraud content. This conversation has been terminated.",
+            [{ text: 'OK', onPress: () => router.push('/suspended') }]
+          );
+          setRecordingState('idle');
+          return;
+        }
 
-      if (error) {
-        console.error('Transcription function error:', error);
-        throw new Error(error.message || 'Transcription service error');
-      }
+        if (error) {
+          console.error('Transcription function error:', error);
+          throw new Error(error.message || 'Transcription service error');
+        }
 
-      if (data?.text && data.text.trim()) {
-        console.log('📝 Transcribed:', data.text);
-        setInputText(prev => prev + (prev ? ' ' : '') + data.text.trim());
-        setRecordingState('idle');
-      } else if (data?.text === '') {
-        // Empty transcription - speech not detected
+        if (data?.text && data.text.trim()) {
+          console.log('📝 Transcribed:', data.text);
+          setInputText(prev => prev + (prev ? ' ' : '') + data.text.trim());
+          setRecordingState('idle');
+        } else if (data?.text === '') {
+          // Empty transcription - speech not detected
+          Alert.alert(
+            'No Speech Detected',
+            "We couldn't detect any speech in your recording. Please try speaking louder or closer to the microphone.",
+            [
+              { 
+                text: 'Try Again', 
+                onPress: () => {
+                  setRecordingState('idle');
+                  setTimeout(() => startVoiceRecording(), 300);
+                }
+              },
+              { 
+                text: 'Type Manually', 
+                style: 'cancel',
+                onPress: () => setRecordingState('idle')
+              },
+            ]
+          );
+        } else {
+          throw new Error('No transcription received from service');
+        }
+      } catch (innerError: any) { // Catch block for transcription processing specific errors
+        console.error('Transcription error:', innerError);
+        
         Alert.alert(
-          'No Speech Detected',
-          "We couldn't detect any speech in your recording. Please try speaking louder or closer to the microphone.",
+          'Transcription Failed',
+          innerError.message || 'Could not transcribe your audio. Please try again or type your message.',
           [
             { 
               text: 'Try Again', 
@@ -456,16 +484,12 @@ export default function HomeScreen() {
             },
           ]
         );
-      } else {
-        throw new Error('No transcription received from service');
       }
-
-    } catch (error: any) {
-      console.error('Transcription error:', error);
-      
+    } catch (outerError: any) { // Catch block for initial setup/invoke errors
+      console.error('Transcription initiation error:', outerError);
       Alert.alert(
         'Transcription Failed',
-        error.message || 'Could not transcribe your audio. Please try again or type your message.',
+        outerError.message || 'Could not initiate transcription. Please try again.',
         [
           { 
             text: 'Try Again', 
@@ -483,6 +507,7 @@ export default function HomeScreen() {
       );
     }
   };
+
 
   // Toggle recording
   const toggleRecording = () => {
