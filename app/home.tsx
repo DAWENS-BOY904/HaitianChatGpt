@@ -1030,17 +1030,15 @@ export default function HomeScreen() {
       </View>
 
       <MenuModal visible={menuVisible} onClose={() => setMenuVisible(false)} />
-      // Nan return statement an, asire-w ToolsModal la konsa:
-
-<ToolsModal 
-  visible={toolsVisible} 
-  onClose={() => setToolsVisible(false)}
-  onSelectTool={(tool) => setInputText(`[${tool}] `)}
-  onPickMedia={handleMediaPicked}
-  onSelectAIModel={handleAIModelSelect}
-  onOpenCamera={() => router.push('/camera')}
-  currentModel={currentAIModel}
-/>
+      <ToolsModal 
+        visible={toolsVisible} 
+        onClose={() => setToolsVisible(false)}
+        onSelectTool={(tool) => setInputText(`[${tool}] `)}
+        onPickMedia={handleMediaPicked}
+        onSelectAIModel={handleAIModelSelect}
+        onOpenCamera={() => router.push('/camera')}
+        currentModel={currentAIModel}
+      />
       <ConversationMenuModal
         visible={conversationMenuVisible}
         onClose={() => setConversationMenuVisible(false)}
