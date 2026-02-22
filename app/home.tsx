@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { 
   View, 
@@ -1051,48 +1050,3 @@ export default function HomeScreen() {
     </KeyboardAvoidingView>
   );
 }
-hello if you see this error make the change: ✅ Improved Error + Fix Instruction for AI (Long & Clear)
-{
-  "eventMessage": "ERROR: The AI response did NOT include a real image URL and did NOT include a real downloadable file link.\n\nREQUIRED FIXES:\n1) The AI MUST always return a REAL image URL (https://...) that can be opened in browser and downloaded by the user.\n2) The AI MUST always return a REAL file URL (https://...) that points to an actual file (PNG, JPG, ZIP, PDF, or DOCX) that the user can click and download.\n3) The response must NEVER contain 'No', 'null', 'N/A', base64-only images, placeholders, or fake/demo links.\n4) The API must attach the generated files to storage (Supabase Storage / S3 / local server storage) and return the public URL.\n5) The frontend must render:\n   - Real image preview with a \"Save Image\" button\n   - Real file name as a clickable download link\n\nHOMEPAGE RECORDING FIX:\n- When the user records audio on the homepage, the AI must:\n  a) Generate a REAL image (not emoji, not icon, not placeholder)\n  b) Upload the image to storage\n  c) Return a public image URL\n  d) Show a \"Save to Photos\" / \"Download Image\" button\n  e) If a file is generated (PDF, ZIP, TXT, etc), upload it and return a public download link\n\nSTRICT RULE:\nIf a real image URL and real file URL are not returned, treat the response as FAILED and retry automatically.\n\nEXPECTED FORMAT:\n{\n  \"imageUrl\": \"https://your-storage.com/images/real-image-123.png\",\n  \"file\": {\n    \"name\": \"design-assets.zip\",\n    \"url\": \"https://your-storage.com/files/design-assets.zip\"\n  }\n}"
-}
-🔧 Backend Fix (Example – Supabase / Onspace / Deno)
-
-Your backend must upload files before responding:
-
-if (!imageUrl || !fileUrl) {
-  return new Response(JSON.stringify({
-    error: "AI response invalid: real image or file missing"
-  }), { status: 500 });
-}
-🖥️ Frontend Fix (Clickable Download + Save Image)
-{imageUrl && (
-  <a href={imageUrl} download target="_blank" rel="noreferrer">
-    <img src={imageUrl} alt="Generated" className="rounded-xl cursor-pointer" />
-    <button>Save Image</button>
-  </a>
-)}
-
-{file?.url && (
-  <a href={file.url} download target="_blank" rel="noreferrer" className="text-blue-500 underline">
-    Download {file.name}
-  </a>
-)}
-❌ Replace Your Current Logs With This
-
-Instead of:
-
-"🖼️ Image URL: No"
-"📄 File: No"
-
-Use:
-
-"ERROR: Missing real image URL and real downloadable file URL. This response is invalid and must be regenerated."
-🔥 Final Result You’ll Get
-
-✔ Real image (not emoji, not icon)
-✔ Clickable image download
-✔ Real file link (ZIP / PNG / PDF)
-✔ Homepage recording sends real image
-✔ Save to photos button works
-✔ No demo / no fake URLs
-✔ Auto-retry if missing
