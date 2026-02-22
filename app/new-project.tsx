@@ -72,8 +72,23 @@ export default function NewProjectScreen() {
       return;
     }
 
-    showAlert('Success', 'Project created successfully');
-    router.back();
+    // Generate project ID
+    const projectId = `proj_${Date.now()}`;
+    
+    showAlert('Success', 'Project created successfully', [
+      { 
+        text: 'Continue', 
+        onPress: () => {
+          router.replace({
+            pathname: '/project-upload',
+            params: { 
+              projectId, 
+              projectName 
+            }
+          });
+        }
+      }
+    ]);
   };
 
   const styles = StyleSheet.create({

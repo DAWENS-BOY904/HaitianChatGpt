@@ -20,40 +20,41 @@ import { Spacing, Typography, BorderRadius } from '../constants/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getSupabaseClient } from '@/template';
 import * as ImagePicker from 'expo-image-picker';
+import { useConversation } from '../hooks/useConversation';
 
 const STYLES = [
   {
     id: 'sketch',
     name: 'Sketch',
-    icon: 'brush-outline',
+    image: require('@/assets/models/sketch-style.png'),
     color: '#8E8E93',
     prompt: 'Create a detailed pencil sketch of the person in the uploaded photo. Show them drawing themselves, with realistic shading and pencil texture on white paper.',
   },
   {
     id: 'holiday',
     name: 'Holiday portrait',
-    icon: 'gift-outline',
+    image: require('@/assets/models/holiday-style.png'),
     color: '#FF3B30',
     prompt: 'Create a festive holiday portrait of the person in the uploaded photo with warm lighting, Christmas decorations, and a cozy atmosphere.',
   },
   {
     id: 'dramatic',
     name: 'Dramatic',
-    icon: 'flash-outline',
+    image: require('@/assets/models/dramatic-style.png'),
     color: '#000000',
     prompt: 'Create a dramatic black and white portrait of the person in the uploaded photo with intense contrast, moody lighting, and powerful expression.',
   },
   {
     id: 'plushie',
     name: 'Plushie',
-    icon: 'heart-outline',
+    image: require('@/assets/models/plushie-style.png'),
     color: '#FF9500',
     prompt: 'Transform the person in the uploaded photo into an adorable soft plushie toy with cute features, fabric texture, and gentle colors.',
   },
   {
     id: 'baseball',
     name: 'Baseball bobblehead',
-    icon: 'baseball-outline',
+    image: require('@/assets/models/baseball-style.png'),
     color: '#007AFF',
     prompt: 'Create a fun baseball bobblehead figurine of the person in the uploaded photo wearing team uniform, with exaggerated head and cute proportions.',
   },
@@ -87,10 +88,13 @@ export default function ImagesScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const supabase = getSupabaseClient();
+  const { sendMessage } = useConversation();
 
   const [myImages, setMyImages] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedStyle, setSelectedStyle] = useState<any>(null);
+  const [customDescription, setCustomDescription] = useState('');
+  const [customImage, setCustomImage] = useState<string | null>(null);
 
   useEffect(() => {
     loadMyImages();
@@ -151,7 +155,7 @@ export default function ImagesScreen() {
     }
   };
 
-  const handleChoosePhoto = async (style: any) => {
+  const handleChoosePhoto = async (style?: any) => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
       showAlert('Permission required', 'Please allow access to your photos');
@@ -165,19 +169,17 @@ export default function ImagesScreen() {
     });
 
     if (!result.canceled && result.assets[0].base64) {
-      router.push({
-        pathname: '/image-prompt',
-        params: {
-          image: result.assets[0].uri,
-          base64: result.assets[0].base64,
-          stylePrompt: style.prompt,
-          styleName: style.name,
-        },
-      });
+      if (style) {
+        // Auto-send to home page with photo and prompt
+        await sendImageGenerationToHome(result.assets[0].uri, result.assets[0].base64!, style);
+      } else {
+        // Custom description flow - store image and wait for description
+        setCustomImage(result.assets[0].uri);
+      }
     }
   };
 
-  const handleTakeSelfie = async (style: any) => {
+  const handleTakeSelfie = async (style?: any) => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
       showAlert('Permission required', 'Please allow access to your camera');
@@ -190,16 +192,68 @@ export default function ImagesScreen() {
     });
 
     if (!result.canceled && result.assets[0].base64) {
-      router.push({
-        pathname: '/image-prompt',
-        params: {
-          image: result.assets[0].uri,
-          base64: result.assets[0].base64,
-          stylePrompt: style.prompt,
-          styleName: style.name,
-        },
-      });
+      if (style) {
+        await sendImageGenerationToHome(result.assets[0].uri, result.assets[0].base64!, style);
+      } else {
+        setCustomImage(result.assets[0].uri);
+      }
     }
+  };
+
+  const sendImageGenerationToHome = async (imageUri: string, base64: string, style: any) => {
+    // Navigate to home page first
+    router.replace('/home');
+    
+    // Small delay to ensure navigation completes
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    // Send message with image and style prompt to conversation
+    // The ConversationContext will handle:
+    // 1. Creating user message immediately (shows photo + prompt)
+    // 2. Calling AI Edge Function (shows thinking state)
+    // 3. Displaying AI response (generated image)
+    const messageText = `${style.prompt}`;
+    await sendMessage(messageText, imageUri, base64, true); // true = isImageGeneration
+  };
+
+  const handleCustomImageGeneration = async () => {
+    if (!customDescription.trim()) {
+      showAlert('Description required', 'Please describe the image you want to create');
+      return;
+    }
+
+    if (customImage) {
+      // User uploaded an image with custom description - need to get base64
+      const customStyle = {
+        name: 'Custom',
+        prompt: customDescription,
+      };
+      
+      // Re-pick to get base64 (or use stored customImage if we already have it)
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        showAlert('Permission required', 'Please allow access to your photos');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 1,
+        base64: true,
+      });
+
+      if (!result.canceled && result.assets[0].base64) {
+        await sendImageGenerationToHome(result.assets[0].uri, result.assets[0].base64, customStyle);
+      }
+    } else {
+      // Generate from text only - send to home
+      router.replace('/home');
+      await new Promise(resolve => setTimeout(resolve, 300));
+      await sendMessage(customDescription, undefined, undefined, true);
+    }
+
+    setCustomDescription('');
+    setCustomImage(null);
   };
 
   const handleImagePress = (image: any) => {
@@ -210,6 +264,35 @@ export default function ImagesScreen() {
         imageUrl: image.file_url,
       },
     });
+  };
+
+  const handlePickImageForCustom = () => {
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          title: 'Choose a photo',
+          options: ['Choose from library', 'Take a photo', 'Cancel'],
+          cancelButtonIndex: 2,
+        },
+        (buttonIndex) => {
+          if (buttonIndex === 0) {
+            handleChoosePhoto();
+          } else if (buttonIndex === 1) {
+            handleTakeSelfie();
+          }
+        }
+      );
+    } else {
+      Alert.alert(
+        'Choose a photo',
+        '',
+        [
+          { text: 'Choose from library', onPress: () => handleChoosePhoto() },
+          { text: 'Take a photo', onPress: () => handleTakeSelfie() },
+          { text: 'Cancel', style: 'cancel' },
+        ]
+      );
+    }
   };
 
   const styles = StyleSheet.create({
@@ -266,8 +349,11 @@ export default function ImagesScreen() {
       borderRadius: BorderRadius.lg,
       backgroundColor: colors.surface,
       marginBottom: Spacing.xs,
-      justifyContent: 'center',
-      alignItems: 'center',
+      overflow: 'hidden',
+    },
+    stylePreviewImage: {
+      width: '100%',
+      height: '100%',
     },
     styleName: {
       ...Typography.caption,
@@ -330,6 +416,7 @@ export default function ImagesScreen() {
       }),
       borderTopWidth: 1,
       borderTopColor: colors.border,
+      backgroundColor: colors.background,
     },
     inputContainer: {
       flexDirection: 'row',
@@ -344,9 +431,21 @@ export default function ImagesScreen() {
       flex: 1,
       ...Typography.body,
       color: colors.text,
+      maxHeight: 100,
     },
     iconButton: {
       padding: Spacing.xs,
+    },
+    customImagePreview: {
+      width: 40,
+      height: 40,
+      borderRadius: BorderRadius.sm,
+      overflow: 'hidden',
+      backgroundColor: colors.surface,
+    },
+    customImagePreviewImage: {
+      width: '100%',
+      height: '100%',
     },
   });
 
@@ -369,8 +468,12 @@ export default function ImagesScreen() {
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.stylesScroll}>
             {STYLES.map((style) => (
               <TouchableOpacity key={style.id} style={styles.styleItem} onPress={() => handleStyleSelect(style)}>
-                <View style={[styles.styleImage, { backgroundColor: style.color }]}>
-                  <Ionicons name={style.icon as any} size={64} color="#FFFFFF" />
+                <View style={styles.styleImage}>
+                  <Image 
+                    source={style.image} 
+                    style={styles.stylePreviewImage}
+                    resizeMode="cover"
+                  />
                 </View>
                 <Text style={styles.styleName}>{style.name}</Text>
               </TouchableOpacity>
@@ -415,23 +518,40 @@ export default function ImagesScreen() {
         </View>
       </ScrollView>
 
-      {/* BOTTOM INPUT BAR */}
+      {/* BOTTOM INPUT BAR - NOW FUNCTIONAL */}
       <View style={styles.bottomBar}>
         <View style={styles.inputContainer}>
-          <TouchableOpacity style={styles.iconButton}>
-            <Ionicons name="image-outline" size={24} color={colors.text} />
+          <TouchableOpacity style={styles.iconButton} onPress={handlePickImageForCustom}>
+            {customImage ? (
+              <View style={styles.customImagePreview}>
+                <Image source={{ uri: customImage }} style={styles.customImagePreviewImage} />
+              </View>
+            ) : (
+              <Ionicons name="image-outline" size={24} color={colors.text} />
+            )}
           </TouchableOpacity>
           <TextInput
             style={styles.input}
             placeholder="Describe an image"
             placeholderTextColor={colors.textSecondary}
-            editable={false}
+            value={customDescription}
+            onChangeText={setCustomDescription}
+            multiline
+            maxLength={500}
           />
           <TouchableOpacity style={styles.iconButton}>
             <Ionicons name="mic-outline" size={24} color={colors.text} />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.iconButton}>
-            <Ionicons name="arrow-up-circle" size={32} color={colors.primary} />
+          <TouchableOpacity 
+            style={styles.iconButton} 
+            onPress={handleCustomImageGeneration}
+            disabled={!customDescription.trim()}
+          >
+            <Ionicons 
+              name="arrow-up-circle" 
+              size={32} 
+              color={customDescription.trim() ? colors.primary : colors.textSecondary} 
+            />
           </TouchableOpacity>
         </View>
       </View>

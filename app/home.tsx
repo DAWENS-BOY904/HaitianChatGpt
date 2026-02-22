@@ -1,5 +1,20 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, FlatList, KeyboardAvoidingView, Platform, StatusBar, ActivityIndicator } from 'react-native';
+
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { 
+  View, 
+  Text, 
+  TextInput, 
+  TouchableOpacity, 
+  StyleSheet, 
+  FlatList, 
+  KeyboardAvoidingView, 
+  Platform, 
+  StatusBar, 
+  ActivityIndicator,
+  Alert,
+  Linking,
+  Image,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
 import { useConversation } from '../hooks/useConversation';
@@ -18,6 +33,10 @@ import { decode } from 'base64-arraybuffer';
 import { useRouter } from 'expo-router';
 import { Accelerometer } from 'expo-sensors';
 import { Audio } from 'expo-av';
+import * as FileSystem from 'expo-file-system';
+
+// Recording states
+type RecordingState = 'idle' | 'recording' | 'processing';
 
 export default function HomeScreen() {
   const { colors } = useTheme();
@@ -28,6 +47,8 @@ export default function HomeScreen() {
   const { showAlert } = useAlert();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  
+  // State
   const [inputText, setInputText] = useState('');
   const [menuVisible, setMenuVisible] = useState(false);
   const [toolsVisible, setToolsVisible] = useState(false);
@@ -36,24 +57,65 @@ export default function HomeScreen() {
   const [generating, setGenerating] = useState(false);
   const [selectedMedia, setSelectedMedia] = useState<any[]>([]);
   const [currentAIModel, setCurrentAIModel] = useState(settings.preferredAiModel || 'gemini');
-  const [isRecording, setIsRecording] = useState(false);
-  const [recording, setRecording] = useState<Audio.Recording | null>(null);
+  const [recordingState, setRecordingState] = useState<RecordingState>('idle');
+  const [recordingDuration, setRecordingDuration] = useState(0);
   const [lastShake, setLastShake] = useState(0);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [thinkingMode, setThinkingMode] = useState<'thinking' | 'creating_image' | 'analyzing' | 'editing_image'>('thinking');
   const [showCompletionStatus, setShowCompletionStatus] = useState(false);
+  
+  // Refs
   const flatListRef = useRef<FlatList>(null);
   const supabase = getSupabaseClient();
+  const recordingRef = useRef<Audio.Recording | null>(null);
+  const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const audioPermissionRef = useRef<boolean>(false);
+  const isRecordingRef = useRef<boolean>(false);
+  const stopTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // DO NOT create conversation on mount - only when user sends first message
+  // Initialize audio permissions on mount
   useEffect(() => {
-    // Load existing conversation or prepare for new one
-    if (!currentConversation && conversations.length > 0) {
-      // If conversations exist, don't auto-create
-      // User can click "New Chat" button
-    }
-  }, [conversations]);
+    checkAudioPermissions();
+    return () => {
+      // Cleanup all timers on unmount
+      if (stopTimeoutRef.current) {
+        clearTimeout(stopTimeoutRef.current);
+      }
+    };
+  }, []);
 
+  const checkAudioPermissions = async () => {
+    try {
+      const { status } = await Audio.requestPermissionsAsync();
+      audioPermissionRef.current = status === 'granted';
+      
+      if (status === 'granted') {
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: true,
+          playsInSilentModeIOS: true,
+          staysActiveInBackground: false,
+          shouldDuckAndroid: true,
+          playThroughEarpieceAndroid: false,
+        });
+      }
+    } catch (error) {
+      console.error('Audio permission error:', error);
+      audioPermissionRef.current = false;
+    }
+  };
+
+  // Auto-create conversation when user enters home page
+  useEffect(() => {
+    const initConversation = async () => {
+      if (!currentConversation && user) {
+        console.log('🆕 Auto-creating new conversation on mount');
+        await createConversation();
+      }
+    };
+    initConversation();
+  }, []);
+
+  // Scroll to bottom on new messages
   useEffect(() => {
     if (messages.length > 0) {
       setTimeout(() => {
@@ -62,32 +124,408 @@ export default function HomeScreen() {
     }
   }, [messages]);
 
-  // Shake detection for bug report (less sensitive)
+  // Cleanup recording on unmount
   useEffect(() => {
-    const subscription = Accelerometer.addListener(accelerometerData => {
-      const { x, y, z } = accelerometerData;
-      const acceleration = Math.sqrt(x * x + y * y + z * z);
-      const now = Date.now();
-      
-      // Increased threshold to 3.0 and added 2-second cooldown to prevent accidental triggers
-      if (acceleration > 5.0 && now - lastShake > 1000) {
-        setLastShake(now);
-        router.push('/bugreport');
-      }
-    });
+    return () => {
+      cleanupRecording();
+    };
+  }, []);
 
-    Accelerometer.setUpdateInterval(100);
+  // Shake detection for bug report
+  useEffect(() => {
+    if (Platform.OS === 'ios' || Platform.OS === 'android') {
+      const subscription = Accelerometer.addListener(accelerometerData => {
+        const { x, y, z } = accelerometerData;
+        const acceleration = Math.sqrt(x * x + y * y + z * z);
+        const now = Date.now();
+        
+        if (acceleration > 3.0 && now - lastShake > 1000) {
+          setLastShake(now);
+          router.push('/bugreport');
+        }
+      });
 
-    return () => subscription.remove();
+      Accelerometer.setUpdateInterval(100);
+      return () => subscription.remove();
+    }
+    return () => {};
   }, [lastShake]);
 
+  // Recording timer
+  const startRecordingTimer = () => {
+    setRecordingDuration(0);
+    recordingTimerRef.current = setInterval(() => {
+      setRecordingDuration(prev => prev + 1);
+    }, 1000);
+  };
+
+  const stopRecordingTimer = () => {
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+  };
+
+  const formatDuration = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // IMPROVED: Cleanup function with better error handling
+  const cleanupRecording = async () => {
+    console.log('🧹 Cleaning up recording...');
+    
+    // Clear auto-stop timeout
+    if (stopTimeoutRef.current) {
+      clearTimeout(stopTimeoutRef.current);
+      stopTimeoutRef.current = null;
+    }
+    
+    stopRecordingTimer();
+    
+    if (recordingRef.current) {
+      try {
+        const status = await recordingRef.current.getStatusAsync();
+        if (status.isRecording) {
+          console.log('⏹️ Stopping active recording...');
+          await recordingRef.current.stopAndUnloadAsync();
+        }
+      } catch (e) {
+        console.log('⚠️ Recording cleanup error (safe to ignore):', e);
+      }
+      recordingRef.current = null;
+    }
+    
+    isRecordingRef.current = false;
+    setRecordingState('idle');
+  };
+
+  // IMPROVED: Start voice recording with better error handling and stable auto-stop
+  const startVoiceRecording = async () => {
+    // Check permissions first
+    if (!audioPermissionRef.current) {
+      try {
+        const { status } = await Audio.requestPermissionsAsync();
+        audioPermissionRef.current = status === 'granted';
+        
+        if (status !== 'granted') {
+          Alert.alert(
+            'Microphone Access Required',
+            'Please enable microphone access in Settings to use voice recording.',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { 
+                text: 'Open Settings', 
+                onPress: () => {
+                  if (Platform.OS === 'ios') {
+                    Linking.openURL('app-settings:');
+                  } else {
+                    Linking.openSettings();
+                  }
+                }
+              }
+            ]
+          );
+          return;
+        }
+      } catch (permError) {
+        console.error('Permission request failed:', permError);
+        showAlert('Error', 'Unable to request microphone permissions. Please check your device settings.');
+        return;
+      }
+    }
+
+    try {
+      // Clean up any existing recording first
+      await cleanupRecording();
+
+      // Set audio mode explicitly before recording
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+        shouldDuckAndroid: true,
+        playThroughEarpieceAndroid: false,
+      });
+
+      setRecordingState('recording');
+      isRecordingRef.current = true;
+      startRecordingTimer();
+
+      // Create recording with specific options for better compatibility
+      const { recording } = await Audio.Recording.createAsync({
+        android: {
+          extension: '.m4a',
+          outputFormat: Audio.AndroidOutputFormat.MPEG_4,
+          audioEncoder: Audio.AndroidAudioEncoder.AAC,
+          sampleRate: 44100,
+          numberOfChannels: 2,
+          bitRate: 128000,
+        },
+        ios: {
+          extension: '.m4a',
+          audioQuality: Audio.IOSAudioQuality.HIGH,
+          sampleRate: 44100,
+          numberOfChannels: 1,
+          bitRate: 128000,
+          linearPCMBitDepth: 16,
+          linearPCMIsBigEndian: false,
+          linearPCMIsFloat: false,
+        },
+        web: {
+          mimeType: 'audio/webm',
+          bitsPerSecond: 128000,
+        },
+      });
+
+      recordingRef.current = recording;
+
+      // FIXED: Auto-stop using stable ref with proper cleanup
+      stopTimeoutRef.current = setTimeout(() => {
+        console.log('⏱️ Auto-stopping recording after 60 seconds');
+        if (isRecordingRef.current && recordingRef.current) {
+          stopVoiceRecording().catch(err => {
+            console.error('Auto-stop error:', err);
+            cleanupRecording();
+          });
+        }
+      }, 60000);
+
+      console.log('🎤 Recording started successfully');
+
+    } catch (error: any) {
+      console.error('Failed to start recording:', error);
+      await cleanupRecording();
+      
+      // Better error messages based on error type
+      let errorMessage = 'Unable to start recording. ';
+      
+      if (error.message?.includes('E_AUDIO_NODATA')) {
+        errorMessage += 'No audio data received. Please check your microphone.';
+      } else if (error.message?.includes('E_AUDIO_PERMISSIONS')) {
+        errorMessage += 'Microphone permission denied. Please enable it in Settings.';
+      } else if (error.message?.includes('E_AUDIO_BUSY')) {
+        errorMessage += 'Another app is using the microphone. Please close other apps and try again.';
+      } else if (error.message?.includes('E_AUDIO_RECORDING')) {
+        errorMessage += 'Recording is already in progress.';
+      } else {
+        errorMessage += 'Please try again or type your message manually.';
+      }
+      
+      Alert.alert(
+        'Recording Failed',
+        errorMessage,
+        [{ text: 'OK', style: 'default' }]
+      );
+    }
+  };
+
+  // IMPROVED: Stop voice recording with better error handling
+  const stopVoiceRecording = async () => {
+    if (!recordingRef.current || !isRecordingRef.current) {
+      console.log('⚠️ No active recording to stop');
+      return;
+    }
+
+    // Clear auto-stop timeout immediately
+    if (stopTimeoutRef.current) {
+      clearTimeout(stopTimeoutRef.current);
+      stopTimeoutRef.current = null;
+    }
+
+    stopRecordingTimer();
+    setRecordingState('processing');
+    isRecordingRef.current = false;
+
+    try {
+      // Stop recording
+      await recordingRef.current.stopAndUnloadAsync();
+      const uri = recordingRef.current.getURI();
+      
+      if (!uri) {
+        throw new Error('Recording completed but no file URI available');
+      }
+
+      // Get file info
+      const info = await FileSystem.getInfoAsync(uri);
+      if (!info.exists) {
+        throw new Error('Recording file not found after saving');
+      }
+
+      // Validate file size (max 25MB for most transcription services)
+      const maxSize = 25 * 1024 * 1024; // 25MB
+      if (info.size && info.size > maxSize) {
+        throw new Error('Recording is too large. Please record a shorter message.');
+      }
+
+      console.log('🎤 Recording saved:', uri, 'Size:', info.size);
+
+      // Read file as base64
+      const base64Audio = await FileSystem.readAsStringAsync(uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+
+      if (!base64Audio || base64Audio.length === 0) {
+        throw new Error('Recording file is empty');
+      }
+
+      // Send to speech-to-text
+      await transcribeAudio(base64Audio);
+
+    } catch (error: any) {
+      console.error('Recording processing error:', error);
+      
+      Alert.alert(
+        'Processing Failed',
+        error.message || 'Failed to process your recording. Please try again.',
+        [
+          { 
+            text: 'Try Again', 
+            onPress: () => {
+              setRecordingState('idle');
+              setTimeout(() => startVoiceRecording(), 300);
+            }
+          },
+          { 
+            text: 'Type Manually', 
+            style: 'cancel',
+            onPress: () => setRecordingState('idle')
+          },
+        ]
+      );
+      
+      setRecordingState('idle');
+    } finally {
+      recordingRef.current = null;
+    }
+  };
+
+  // IMPROVED: Transcribe audio with better error handling
+  const transcribeAudio = async (base64Audio: string) => {
+    try {
+      // Validate audio data
+      if (!base64Audio || base64Audio.length < 100) {
+        throw new Error('Audio data is too short or invalid');
+      }
+
+      const { data, error } = await supabase.functions.invoke('transcribe-audio', {
+        body: {
+          audio: base64Audio,
+          userId: user?.id,
+          conversationId: currentConversation?.id,
+        },
+      });
+
+      // Move this try-catch block inside the outer try block, after the supabase invoke call
+      // to ensure `data` and `error` are defined.
+      try { 
+        // Check for content violation / account suspension
+        if (error?.message?.includes('Content violation')) {
+          Alert.alert(
+            '🚫 Account Suspended',
+            "Don't fucking say that! Your account has been suspended for 10 days due to scam/fraud content. This conversation has been terminated.",
+            [{ text: 'OK', onPress: () => router.push('/suspended') }]
+          );
+          setRecordingState('idle');
+          return;
+        }
+
+        if (error) {
+          console.error('Transcription function error:', error);
+          throw new Error(error.message || 'Transcription service error');
+        }
+
+        if (data?.text && data.text.trim()) {
+          console.log('📝 Transcribed:', data.text);
+          setInputText(prev => prev + (prev ? ' ' : '') + data.text.trim());
+          setRecordingState('idle');
+        } else if (data?.text === '') {
+          // Empty transcription - speech not detected
+          Alert.alert(
+            'No Speech Detected',
+            "We couldn't detect any speech in your recording. Please try speaking louder or closer to the microphone.",
+            [
+              { 
+                text: 'Try Again', 
+                onPress: () => {
+                  setRecordingState('idle');
+                  setTimeout(() => startVoiceRecording(), 300);
+                }
+              },
+              { 
+                text: 'Type Manually', 
+                style: 'cancel',
+                onPress: () => setRecordingState('idle')
+              },
+            ]
+          );
+        } else {
+          throw new Error('No transcription received from service');
+        }
+      } catch (innerError: any) { // Catch block for transcription processing specific errors
+        console.error('Transcription error:', innerError);
+        
+        Alert.alert(
+          'Transcription Failed',
+          innerError.message || 'Could not transcribe your audio. Please try again or type your message.',
+          [
+            { 
+              text: 'Try Again', 
+              onPress: () => {
+                setRecordingState('idle');
+                setTimeout(() => startVoiceRecording(), 300);
+              }
+            },
+            { 
+              text: 'Type Manually', 
+              style: 'cancel',
+              onPress: () => setRecordingState('idle')
+            },
+          ]
+        );
+      }
+    } catch (outerError: any) { // Catch block for initial setup/invoke errors
+      console.error('Transcription initiation error:', outerError);
+      Alert.alert(
+        'Transcription Failed',
+        outerError.message || 'Could not initiate transcription. Please try again.',
+        [
+          { 
+            text: 'Try Again', 
+            onPress: () => {
+              setRecordingState('idle');
+              setTimeout(() => startVoiceRecording(), 300);
+            }
+          },
+          { 
+            text: 'Type Manually', 
+            style: 'cancel',
+            onPress: () => setRecordingState('idle')
+          },
+        ]
+      );
+    }
+  };
+
+
+  // Toggle recording
+  const toggleRecording = () => {
+    if (recordingState === 'idle') {
+      startVoiceRecording();
+    } else if (recordingState === 'recording') {
+      stopVoiceRecording();
+    }
+  };
+
+  // Handle send message
   const handleSend = async () => {
     if ((!inputText.trim() && selectedMedia.length === 0) || sending) return;
 
-    if (!canSendMessage() && !editingMessageId) {
+    if (!editingMessageId && !canSendMessage()) {
       showAlert(
         'Login Required',
-        `You have reached your limit of 2 messages. Please log in to continue chatting.`,
+        `You have used your 2 free messages. Please log in to continue chatting.`,
         [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Log In', onPress: () => router.push('/login') },
@@ -96,9 +534,9 @@ export default function HomeScreen() {
       return;
     }
 
-    // Create conversation if it doesn't exist (first message)
     let conversationId = currentConversation?.id;
     if (!conversationId) {
+      console.log('📝 Creating new conversation for first message');
       conversationId = await createConversation();
       if (!conversationId) {
         showAlert('Error', 'Failed to create conversation');
@@ -112,16 +550,12 @@ export default function HomeScreen() {
     const media = selectedMedia;
     const editingId = editingMessageId;
     
-    // Clear input immediately for better UX
     setInputText('');
     setSelectedMedia([]);
     setEditingMessageId(null);
-    
-    // Set default thinking mode
     setThinkingMode('thinking');
 
     try {
-      // If editing an existing message
       if (editingId) {
         console.log('🔄 Editing message:', editingId);
         await updateMessageAndRegenerate(editingId, text, currentAIModel);
@@ -130,10 +564,8 @@ export default function HomeScreen() {
         return;
       }
 
-      // NEW MESSAGE FLOW
       console.log('📤 Sending new message with model:', currentAIModel);
       
-      // Upload media if any
       let imageUrl: string | undefined;
       if (media.length > 0) {
         const firstMedia = media[0];
@@ -156,21 +588,19 @@ export default function HomeScreen() {
         }
       }
 
-      // Use ConversationContext's sendMessage which handles everything
       await sendMessage(text || '[Image]', imageUrl, currentAIModel);
       
-      // Show completion status briefly after AI response
       setShowCompletionStatus(true);
       setTimeout(() => {
         setShowCompletionStatus(false);
       }, 2000);
       
-      // Increment guest message count
       await incrementMessageCount();
       
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Send error:', error);
-      showAlert('Error', editingId ? 'Failed to update message' : 'Failed to send message');
+      const errorMsg = error?.message || (editingId ? 'Failed to update message' : 'Failed to send message');
+      showAlert('Error', errorMsg);
     } finally {
       setSending(false);
       setGenerating(false);
@@ -203,45 +633,7 @@ export default function HomeScreen() {
     showAlert('Model Updated', `Now using ${model === 'gemini' ? 'Gemini' : model === 'openai' ? 'OpenAI' : model === 'claude' ? 'Claude' : 'Llama'} for all responses`);
   };
 
-  const handleStartRecording = async () => {
-    try {
-      const { status } = await Audio.requestPermissionsAsync();
-      if (status !== 'granted') return;
-
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-      });
-
-      const { recording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
-      );
-
-      setRecording(recording);
-      setIsRecording(true);
-    } catch (error) {
-      console.error('Recording error:', error);
-    }
-  };
-
-  const handleStopRecording = async () => {
-    if (!recording) return;
-
-    setIsRecording(false);
-    
-    try {
-      await recording.stopAndUnloadAsync();
-      const uri = recording.getURI();
-      
-      // In a real app, you would send this audio to a speech-to-text service
-      showAlert('Voice Input', 'Voice recording feature coming soon');
-    } catch (error) {
-      console.error('Stop recording error:', error);
-    }
-    
-    setRecording(null);
-  };
-
+  // Styles
   const styles = StyleSheet.create({
     container: {
       flex: 1,
@@ -298,15 +690,44 @@ export default function HomeScreen() {
       gap: Spacing.sm,
       backgroundColor: colors.background,
     },
-    input: {
+    inputWrapper: {
       flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
       backgroundColor: colors.inputBackground,
       borderRadius: BorderRadius.lg,
       paddingHorizontal: Spacing.md,
-      paddingVertical: Spacing.sm,
+      minHeight: 44,
+      maxHeight: 120,
+    },
+    input: {
+      flex: 1,
       ...Typography.body,
       color: colors.text,
+      paddingVertical: Spacing.sm,
       maxHeight: 100,
+    },
+    recordingIndicator: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flex: 1,
+      gap: Spacing.sm,
+    },
+    recordingDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: '#FF3B30',
+    },
+    recordingText: {
+      ...Typography.body,
+      color: '#FF3B30',
+      fontWeight: '600',
+    },
+    recordingDuration: {
+      ...Typography.caption,
+      color: colors.textSecondary,
+      marginLeft: 'auto',
     },
     iconButton: {
       padding: Spacing.xs,
@@ -321,6 +742,9 @@ export default function HomeScreen() {
     },
     recordingButton: {
       backgroundColor: '#FF3B30',
+    },
+    processingButton: {
+      backgroundColor: colors.textSecondary,
     },
     emptyState: {
       flex: 1,
@@ -357,6 +781,11 @@ export default function HomeScreen() {
       borderRadius: BorderRadius.sm,
       backgroundColor: colors.surface,
       position: 'relative',
+      overflow: 'hidden',
+    },
+    mediaImage: {
+      width: '100%',
+      height: '100%',
     },
     removeMediaButton: {
       position: 'absolute',
@@ -392,6 +821,7 @@ export default function HomeScreen() {
       onCancel={handleCancelGeneration}
       onEdit={(messageId, content) => handleEditMessage(messageId, content)}
       isGenerating={generating && index === messages.length - 1}
+      streaming={generating && index === messages.length - 1}
     />
   );
 
@@ -399,6 +829,11 @@ export default function HomeScreen() {
     : currentAIModel === 'openai' ? 'OpenAI' 
     : currentAIModel === 'claude' ? 'Claude'
     : 'Llama';
+
+  // Determine send button state
+  const showSendButton = inputText.trim() || selectedMedia.length > 0;
+  const isRecording = recordingState === 'recording';
+  const isProcessing = recordingState === 'processing';
 
   return (
     <KeyboardAvoidingView 
@@ -476,7 +911,11 @@ export default function HomeScreen() {
         <View style={styles.selectedMediaPreview}>
           {selectedMedia.map((media, index) => (
             <View key={index} style={styles.mediaPreviewItem}>
-              <Ionicons name="image" size={32} color={colors.textSecondary} />
+              {media.type === 'image' ? (
+                <Image source={{ uri: media.uri }} style={styles.mediaImage} resizeMode="cover" />
+              ) : (
+                <Ionicons name="document" size={32} color={colors.textSecondary} style={{ margin: 14 }} />
+              )}
               <TouchableOpacity
                 style={styles.removeMediaButton}
                 onPress={() => setSelectedMedia(prev => prev.filter((_, i) => i !== index))}
@@ -499,26 +938,51 @@ export default function HomeScreen() {
       )}
 
       <View style={styles.inputContainer}>
-        <TouchableOpacity style={styles.iconButton} onPress={() => setToolsVisible(true)} disabled={editingMessageId !== null}>
-          <Ionicons name="add-circle-outline" size={24} color={editingMessageId ? colors.textSecondary : colors.text} />
+        <TouchableOpacity 
+          style={styles.iconButton} 
+          onPress={() => setToolsVisible(true)} 
+          disabled={editingMessageId !== null || isRecording}
+        >
+          <Ionicons 
+            name="add-circle-outline" 
+            size={24} 
+            color={editingMessageId || isRecording ? colors.textSecondary : colors.text} 
+          />
         </TouchableOpacity>
 
-        <TextInput
-          style={styles.input}
-          placeholder={editingMessageId ? "Edit message..." : "Message..."}
-          placeholderTextColor={colors.textSecondary}
-          value={inputText}
-          onChangeText={setInputText}
-          multiline
-          editable={!sending}
-        />
-
+        <View style={styles.inputWrapper}>
+          {isRecording ? (
+            <View style={styles.recordingIndicator}>
+              <View style={styles.recordingDot} />
+              <Text style={styles.recordingText}>Recording...</Text>
+              <Text style={styles.recordingDuration}>{formatDuration(recordingDuration)}</Text>
+            </View>
+          ) : isProcessing ? (
+            <View style={styles.recordingIndicator}>
+              <ActivityIndicator size="small" color={colors.primary} />
+              <Text style={{ ...Typography.body, color: colors.text, marginLeft: Spacing.sm }}>
+                Transcribing...
+              </Text>
+            </View>
+          ) : (
+            <TextInput
+              style={styles.input}
+              placeholder={editingMessageId ? "Edit message..." : "Message..."}
+              placeholderTextColor={colors.textSecondary}
+              value={inputText}
+              onChangeText={setInputText}
+              multiline
+              editable={!sending && !isRecording && !isProcessing}
+            />
+          )}
+        </View>
+        
         <TouchableOpacity 
           style={styles.iconButton} 
           onPress={() => router.push('/voice-control')}
           disabled={editingMessageId !== null}
         >
-          <Ionicons name="mic-outline" size={24} color={editingMessageId ? colors.textSecondary : colors.text} />
+          <Ionicons name="call-outline" size={24} color={editingMessageId ? colors.textSecondary : colors.text} />
         </TouchableOpacity>
 
         {editingMessageId && (
@@ -530,11 +994,11 @@ export default function HomeScreen() {
           </TouchableOpacity>
         )}
 
-        {inputText.trim() || selectedMedia.length > 0 ? (
+        {showSendButton ? (
           <TouchableOpacity 
             style={styles.sendButton} 
             onPress={handleSend}
-            disabled={sending}
+            disabled={sending || isRecording || isProcessing}
           >
             {sending ? (
               <ActivityIndicator size="small" color="#FFFFFF" />
@@ -544,29 +1008,39 @@ export default function HomeScreen() {
           </TouchableOpacity>
         ) : (
           <TouchableOpacity 
-            style={[styles.sendButton, isRecording && styles.recordingButton]} 
-            onPress={isRecording ? handleStopRecording : handleStartRecording}
-            disabled={editingMessageId !== null}
+            style={[
+              styles.sendButton, 
+              isRecording && styles.recordingButton,
+              isProcessing && styles.processingButton
+            ]} 
+            onPress={toggleRecording}
+            disabled={editingMessageId !== null || isProcessing}
           >
-            <Ionicons 
-              name={isRecording ? "stop" : "mic"} 
-              size={20} 
-              color="#FFFFFF" 
-            />
+            {isProcessing ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Ionicons 
+                name={isRecording ? "stop" : "mic"} 
+                size={20} 
+                color="#FFFFFF" 
+              />
+            )}
           </TouchableOpacity>
         )}
       </View>
 
       <MenuModal visible={menuVisible} onClose={() => setMenuVisible(false)} />
-      <ToolsModal 
-        visible={toolsVisible} 
-        onClose={() => setToolsVisible(false)}
-        onSelectTool={(tool) => setInputText(`[${tool}] `)}
-        onPickMedia={handleMediaPicked}
-        onSelectAIModel={handleAIModelSelect}
-        onOpenCamera={() => router.push('/camera')}
-        currentModel={currentAIModel}
-      />
+      // Nan return statement an, asire-w ToolsModal la konsa:
+
+<ToolsModal 
+  visible={toolsVisible} 
+  onClose={() => setToolsVisible(false)}
+  onSelectTool={(tool) => setInputText(`[${tool}] `)}
+  onPickMedia={handleMediaPicked}
+  onSelectAIModel={handleAIModelSelect}
+  onOpenCamera={() => router.push('/camera')}
+  currentModel={currentAIModel}
+/>
       <ConversationMenuModal
         visible={conversationMenuVisible}
         onClose={() => setConversationMenuVisible(false)}
