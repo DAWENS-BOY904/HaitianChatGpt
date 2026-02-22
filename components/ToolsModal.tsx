@@ -242,7 +242,7 @@ export function ToolsModal({
                 styles.iconContainer,
                 { backgroundColor: `${tool.gradient[0]}20` }
               ]}>
-                <Ionicons name={tool.icon} size={24} color={tool.gradient[0]} />
+                <Ionicons name={tool.icon} size={28} color={tool.gradient[0]} />
               </View>
               <Text style={styles.toolLabel}>{tool.label}</Text>
             </>
@@ -362,7 +362,7 @@ const styles = StyleSheet.create({
     backgroundColor: GLASS_COLORS.background,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    maxHeight: SCREEN_HEIGHT * 0.65,
+    maxHeight: SCREEN_HEIGHT * 0.75,
     paddingBottom: Platform.OS === 'ios' ? 34 : 20,
     borderTopWidth: 1,
     borderColor: GLASS_COLORS.border,
@@ -380,7 +380,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    padding: 16,
+    padding: 20,
     paddingTop: 8,
   },
   // 3x2 Grid - 3 columns, 2 rows
@@ -389,19 +389,20 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     justifyContent: 'space-between',
     marginBottom: 20,
-    paddingHorizontal: 4,
+    gap: 12,
   },
   toolButtonContainer: {
-    width: '31%', // 3 columns with gap
-    marginBottom: 16,
+    width: SCREEN_WIDTH < 375 ? '47%' : '30.5%', // 2 columns for small screens, 3 for larger
+    minWidth: 100,
   },
   toolButton: {
     backgroundColor: GLASS_COLORS.surface,
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 20,
-    paddingHorizontal: 8,
+    paddingVertical: 24,
+    paddingHorizontal: 12,
+    minHeight: 120,
     borderWidth: 1,
     borderColor: GLASS_COLORS.border,
     shadowColor: '#000',
@@ -411,19 +412,19 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   iconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 10,
+    marginBottom: 12,
   },
   toolLabel: {
-    fontSize: 13,
-    fontWeight: '500',
+    fontSize: 14,
+    fontWeight: '600',
     color: GLASS_COLORS.text,
     textAlign: 'center',
-    letterSpacing: 0.2,
+    letterSpacing: 0.3,
   },
   // Web Search Row
   webSearchRow: {
@@ -488,5 +489,3 @@ const styles = StyleSheet.create({
     color: GLASS_COLORS.textSecondary,
   },
 });
-
-make this better for mobile i cant see it
