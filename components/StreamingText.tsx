@@ -63,4 +63,3 @@ export function StreamingText({
 
   return <Text style={style}>{displayedText}</Text>;
 }
-MAKE THIS BETTER AND FIX HOME PAGE TOOL FOR MOBILE
