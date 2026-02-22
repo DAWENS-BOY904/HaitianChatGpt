@@ -938,7 +938,6 @@ export default function HomeScreen() {
       )}
 
       <View style={styles.inputContainer}>
-        // Nan inputContainer a, ranplase bouton "call-outline" ak sa a:
 
 <TouchableOpacity 
   style={styles.iconButton} 
@@ -980,7 +979,7 @@ export default function HomeScreen() {
           )}
         </View>
         
-        // RETIRE SA A TOUT BON:
+       
 <TouchableOpacity 
   style={styles.iconButton} 
   onPress={() => router.push('/voice-control')}
