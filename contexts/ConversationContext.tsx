@@ -526,4 +526,3 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
     </ConversationContext.Provider>
   );
 }
-remove this never show this:[Using groq-llama - google-gemini unavailable] and fix all eror
