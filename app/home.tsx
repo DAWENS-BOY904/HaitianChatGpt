@@ -1030,7 +1030,7 @@ export default function HomeScreen() {
       </View>
 
       <MenuModal visible={menuVisible} onClose={() => setMenuVisible(false)} />
-      <ToolsModal 
+     <ToolsModal 
         visible={toolsVisible} 
         onClose={() => setToolsVisible(false)}
         onSelectTool={(tool) => setInputText(`[${tool}] `)}
