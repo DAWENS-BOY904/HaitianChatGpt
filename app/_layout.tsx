@@ -101,6 +101,7 @@ export default function RootLayout() {
                   </ConversationProvider>
                 </SocialProvider>
               </GuestLimitsProvider>
+              </GestureHandlerRootView>
             </SubscriptionProvider>
           </ThemeProvider>
         </SettingsProvider>
