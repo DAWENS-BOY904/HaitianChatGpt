@@ -489,3 +489,4 @@ const styles = StyleSheet.create({
   },
 });
 
+make this better for mobile i cant see it
