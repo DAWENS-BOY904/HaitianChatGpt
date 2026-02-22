@@ -80,7 +80,6 @@ export function MenuModal({ visible, onClose }: MenuModalProps) {
   };
 
   const handleNewChat = async () => {
-    // Create a new conversation (will be saved to history when first message is sent)
     await createConversation();
     onClose();
   };

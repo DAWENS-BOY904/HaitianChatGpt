@@ -1,16 +1,12 @@
-import React, { useState, memo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Pressable, Image, Modal, ActivityIndicator, Alert } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Pressable, Image, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
-import * as FileSystem from 'expo-file-system';
-import * as MediaLibrary from 'expo-media-library';
 import { useTheme } from '../hooks/useTheme';
 import { useAuth, useAlert } from '@/template';
 import { router } from 'expo-router';
 import { Spacing, Typography, BorderRadius } from '../constants/theme';
-import { StreamingCodeBlock } from './StreamingCodeBlock';
-import { StreamingText } from './StreamingText';
-import { MessageActionsModal } from './MessageActionsModal';
+import { CodeBlock } from './CodeBlock';
 import { LinkSafetyModal } from './LinkSafetyModal';
 import { WebViewModal } from './WebViewModal';
 import { ImageViewerModal } from './ImageViewerModal';
@@ -34,29 +30,14 @@ interface MessageItemProps {
   onCancel?: () => void;
   onEdit?: (messageId: string, content: string) => void;
   isGenerating?: boolean;
-  streaming?: boolean; // NEW: Enable real-time typing
 }
 
-// PRODUCTION-READY: Detect if URL is an image
-const isImageUrl = (url: string): boolean => {
-  if (!url) return false;
-  const lowerUrl = url.toLowerCase();
-  return (
-    lowerUrl.match(/\.(jpg|jpeg|png|gif|webp|bmp)(\?|$)/) !== null ||
-    lowerUrl.startsWith('data:image/') ||
-    lowerUrl.includes('openai.com') ||
-    lowerUrl.includes('googleusercontent.com') ||
-    lowerUrl.includes('oaidalleapiprodscus.blob.core.windows.net')
-  );
-};
-
-export const MessageItem = memo(function MessageItem({ message, onCancel, onEdit, isGenerating, streaming = false }: MessageItemProps) {
+export function MessageItem({ message, onCancel, onEdit, isGenerating }: MessageItemProps) {
   const { colors } = useTheme();
   const { user } = useAuth();
   const { showAlert } = useAlert();
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [liked, setLiked] = useState<'like' | 'dislike' | null>(null);
-  const [showActionsModal, setShowActionsModal] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
   const [linkModalVisible, setLinkModalVisible] = useState(false);
   const [selectedLink, setSelectedLink] = useState('');
@@ -66,41 +47,7 @@ export const MessageItem = memo(function MessageItem({ message, onCancel, onEdit
   const [selectedImageUrl, setSelectedImageUrl] = useState('');
   const [fileModalVisible, setFileModalVisible] = useState(false);
   const [fileData, setFileData] = useState({ name: '', content: '', type: '' });
-  const [downloadingImage, setDownloadingImage] = useState(false);
   const supabase = getSupabaseClient();
-
-  // PRODUCTION-READY: Download and save image to device
-  const handleDownloadImage = async (imageUrl: string) => {
-    try {
-      setDownloadingImage(true);
-      
-      // Request permissions
-      const { status } = await MediaLibrary.requestPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission Required', 'Please allow access to save images to your library.');
-        return;
-      }
-
-      // Download image
-      const fileUri = FileSystem.documentDirectory + 'temp_image_' + Date.now() + '.jpg';
-      const downloadResult = await FileSystem.downloadAsync(imageUrl, fileUri);
-      
-      if (downloadResult.status !== 200) {
-        throw new Error('Download failed');
-      }
-
-      // Save to media library
-      const asset = await MediaLibrary.createAssetAsync(downloadResult.uri);
-      await MediaLibrary.createAlbumAsync('HaitianChatGPT', asset, false);
-      
-      Alert.alert('Success', 'Image saved to your photo library!');
-    } catch (error) {
-      console.error('Image download error:', error);
-      Alert.alert('Error', 'Failed to save image. Please try again.');
-    } finally {
-      setDownloadingImage(false);
-    }
-  };
 
   const handleLongPress = (event: any) => {
     const { pageX, pageY } = event.nativeEvent;
@@ -124,10 +71,12 @@ export const MessageItem = memo(function MessageItem({ message, onCancel, onEdit
   const handleLike = async (type: 'like' | 'dislike') => {
     if (!user) return;
 
+    // Navigate to detail page
     router.push(`/message-detail?messageId=${message.id}`);
 
     try {
       if (liked === type) {
+        // Remove like
         await supabase
           .from('message_likes')
           .delete()
@@ -135,6 +84,7 @@ export const MessageItem = memo(function MessageItem({ message, onCancel, onEdit
           .eq('user_id', user.id);
         setLiked(null);
       } else {
+        // Add or update like
         await supabase
           .from('message_likes')
           .upsert({
@@ -170,6 +120,7 @@ export const MessageItem = memo(function MessageItem({ message, onCancel, onEdit
 
   const handleApplyImageEdits = async (editPrompt: string) => {
     try {
+      // Call edge function to edit image
       const { data, error } = await supabase.functions.invoke('chat', {
         body: {
           editImageUrl: selectedImageUrl,
@@ -181,6 +132,7 @@ export const MessageItem = memo(function MessageItem({ message, onCancel, onEdit
 
       if (error) throw error;
 
+      // Update the image with edited version
       if (data.imageUrl) {
         setSelectedImageUrl(data.imageUrl);
         showAlert('Success', 'Image edited successfully!');
@@ -198,11 +150,13 @@ export const MessageItem = memo(function MessageItem({ message, onCancel, onEdit
     setFileModalVisible(true);
   };
 
+  // Detect "Download file" links
   const detectFileDownload = (content: string) => {
     const downloadRegex = /Download file la|Download file|👉.*?Download.*?↗/i;
     return downloadRegex.test(content);
   };
 
+  // Extract file info from message
   const extractFileInfo = (content: string): { fileName: string; type: string } | null => {
     const fileMatch = content.match(/File created: ([\w_]+\.(txt|csv|html|json|js))/i);
     if (fileMatch) {
@@ -214,14 +168,17 @@ export const MessageItem = memo(function MessageItem({ message, onCancel, onEdit
     return null;
   };
 
+  // Detect URLs in text
   const urlRegex = /(https?:\/\/[^\s]+)/g;
 
+  // Parse text with clickable links
   const parseTextWithLinks = (text: string) => {
     const parts = [];
     let lastIndex = 0;
     let match;
 
     while ((match = urlRegex.exec(text)) !== null) {
+      // Add text before link
       if (match.index > lastIndex) {
         parts.push({
           type: 'text',
@@ -229,6 +186,7 @@ export const MessageItem = memo(function MessageItem({ message, onCancel, onEdit
         });
       }
 
+      // Add link
       parts.push({
         type: 'link',
         content: match[0],
@@ -238,6 +196,7 @@ export const MessageItem = memo(function MessageItem({ message, onCancel, onEdit
       lastIndex = match.index + match[0].length;
     }
 
+    // Add remaining text
     if (lastIndex < text.length) {
       parts.push({
         type: 'text',
@@ -248,6 +207,7 @@ export const MessageItem = memo(function MessageItem({ message, onCancel, onEdit
     return parts.length > 0 ? parts : [{ type: 'text', content: text }];
   };
 
+  // Parse code blocks from content
   const parseCodeBlocks = (content: string) => {
     const parts = [];
     const codeBlockRegex = /```(\w+)?\n([\s\S]*?)```/g;
@@ -255,6 +215,7 @@ export const MessageItem = memo(function MessageItem({ message, onCancel, onEdit
     let match;
 
     while ((match = codeBlockRegex.exec(content)) !== null) {
+      // Add text before code block
       if (match.index > lastIndex) {
         parts.push({
           type: 'text',
@@ -262,6 +223,7 @@ export const MessageItem = memo(function MessageItem({ message, onCancel, onEdit
         });
       }
 
+      // Add code block
       parts.push({
         type: 'code',
         language: match[1] || 'code',
@@ -271,6 +233,7 @@ export const MessageItem = memo(function MessageItem({ message, onCancel, onEdit
       lastIndex = match.index + match[0].length;
     }
 
+    // Add remaining text
     if (lastIndex < content.length) {
       parts.push({
         type: 'text',
@@ -282,7 +245,6 @@ export const MessageItem = memo(function MessageItem({ message, onCancel, onEdit
   };
 
   const contentParts = parseCodeBlocks(message.content);
-  const hasGeneratedImage = message.image_url && isImageUrl(message.image_url);
 
   const styles = StyleSheet.create({
     container: {
@@ -310,30 +272,6 @@ export const MessageItem = memo(function MessageItem({ message, onCancel, onEdit
       height: 200,
       borderRadius: BorderRadius.sm,
       marginBottom: Spacing.sm,
-    },
-    downloadOverlay: {
-      position: 'absolute',
-      top: 0,
-      right: 0,
-      left: 0,
-      bottom: 0,
-      backgroundColor: 'rgba(0, 0, 0, 0.5)',
-      borderRadius: BorderRadius.sm,
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
-    downloadIcon: {
-      position: 'absolute',
-      bottom: 8,
-      right: 8,
-      backgroundColor: 'rgba(0, 0, 0, 0.7)',
-      borderRadius: BorderRadius.full,
-      width: 40,
-      height: 40,
-      justifyContent: 'center',
-      alignItems: 'center',
-      borderWidth: 2,
-      borderColor: '#fff',
     },
     fileAttachment: {
       flexDirection: 'row',
@@ -487,30 +425,11 @@ export const MessageItem = memo(function MessageItem({ message, onCancel, onEdit
           styles.container,
           message.role === 'user' ? styles.userMessage : styles.assistantMessage,
         ]}
-        onLongPress={message.role === 'assistant' ? () => setShowActionsModal(true) : handleLongPress}
       >
-        {/* PRODUCTION: Display AI-generated image with download button */}
-        {hasGeneratedImage && (
-          <TouchableOpacity 
-            onPress={() => handleDownloadImage(message.image_url!)}
-            activeOpacity={0.8}
-            disabled={downloadingImage}
-          >
-            <Image 
-              source={{ uri: message.image_url }} 
-              style={styles.messageImage} 
-              resizeMode="cover"
-            />
-            {downloadingImage ? (
-              <View style={styles.downloadOverlay}>
-                <ActivityIndicator color="#fff" size="large" />
-                <Text style={{ color: '#fff', marginTop: 8, fontSize: 12 }}>Saving...</Text>
-              </View>
-            ) : (
-              <View style={styles.downloadIcon}>
-                <Ionicons name="download" size={20} color="#fff" />
-              </View>
-            )}
+        {/* Display inline image preview */}
+        {message.image_url && (
+          <TouchableOpacity onPress={() => handleImagePress(message.image_url!)}>
+            <Image source={{ uri: message.image_url }} style={styles.messageImage} />
           </TouchableOpacity>
         )}
         
@@ -541,15 +460,15 @@ export const MessageItem = memo(function MessageItem({ message, onCancel, onEdit
           if (part.type === 'code') {
             return (
               <View key={index} style={{ marginVertical: 0 }}>
-                <StreamingCodeBlock
+                <CodeBlock
                   code={part.content}
                   language={part.language}
-                  streaming={streaming && index === contentParts.length - 1}
                 />
               </View>
             );
           }
           
+          // Parse text for links
           const textParts = parseTextWithLinks(part.content);
           
           return (
@@ -572,17 +491,6 @@ export const MessageItem = memo(function MessageItem({ message, onCancel, onEdit
                     >
                       {textPart.content}
                     </Text>
-                  );
-                }
-                // Use streaming text for AI messages during generation
-                if (message.role === 'assistant' && streaming && textIndex === textParts.length - 1) {
-                  return (
-                    <StreamingText
-                      key={textIndex}
-                      text={textPart.content}
-                      speed={3} // Fast but visible
-                      style={styles.assistantMessageText}
-                    />
                   );
                 }
                 return (
@@ -621,6 +529,8 @@ export const MessageItem = memo(function MessageItem({ message, onCancel, onEdit
                 onPress={() => {
                   const fileInfo = extractFileInfo(message.content);
                   if (fileInfo) {
+                    // In real implementation, we'd have the file content stored
+                    // For now, show a placeholder
                     handleFileDownload(
                       fileInfo.fileName,
                       'File content would be here',
@@ -665,6 +575,7 @@ export const MessageItem = memo(function MessageItem({ message, onCancel, onEdit
         )}
       </Pressable>
 
+      {/* Context Menu Modal */}
       <Modal
         visible={showContextMenu}
         transparent
@@ -699,6 +610,7 @@ export const MessageItem = memo(function MessageItem({ message, onCancel, onEdit
         </Pressable>
       </Modal>
 
+      {/* Link Safety Modal */}
       <LinkSafetyModal
         visible={linkModalVisible}
         url={selectedLink}
@@ -706,12 +618,14 @@ export const MessageItem = memo(function MessageItem({ message, onCancel, onEdit
         onOpenLink={handleOpenLink}
       />
 
+      {/* WebView Modal */}
       <WebViewModal
         visible={webViewVisible}
         url={selectedLink}
         onClose={() => setWebViewVisible(false)}
       />
 
+      {/* Image Viewer Modal */}
       <ImageViewerModal
         visible={imageViewerVisible}
         imageUrl={selectedImageUrl}
@@ -720,6 +634,7 @@ export const MessageItem = memo(function MessageItem({ message, onCancel, onEdit
         title="Image created"
       />
 
+      {/* Image Edit Modal */}
       <ImageEditModal
         visible={imageEditVisible}
         imageUrl={selectedImageUrl}
@@ -727,6 +642,7 @@ export const MessageItem = memo(function MessageItem({ message, onCancel, onEdit
         onApplyEdits={handleApplyImageEdits}
       />
 
+      {/* File Download Modal */}
       <FileDownloadModal
         visible={fileModalVisible}
         fileName={fileData.name}
@@ -734,16 +650,6 @@ export const MessageItem = memo(function MessageItem({ message, onCancel, onEdit
         fileType={fileData.type}
         onClose={() => setFileModalVisible(false)}
       />
-
-      {/* NEW: Message Actions Modal */}
-      {message.role === 'assistant' && (
-        <MessageActionsModal
-          visible={showActionsModal}
-          onClose={() => setShowActionsModal(false)}
-          message={message}
-          onLike={handleLike}
-        />
-      )}
     </>
   );
-});
+}

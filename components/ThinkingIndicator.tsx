@@ -1,5 +1,5 @@
 // ThinkingIndicator.tsx
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { View, Text, StyleSheet, Animated } from 'react-native';
 import { useTheme } from '../hooks/useTheme';
 import { Spacing, Typography, BorderRadius } from '../constants/theme';
@@ -7,7 +7,17 @@ import { Spacing, Typography, BorderRadius } from '../constants/theme';
 /* ======================================================
    TYPES
 ====================================================== */
-type IntentType = 'message' | 'image' | 'file' | 'web_search';
+type IntentType =
+  | 'file'
+  | 'image'
+  | 'edit_image'
+  | 'web_search'
+  | 'message';
+
+interface ThinkingModel {
+  model: string;
+  text: string;
+}
 
 interface ThinkingIndicatorProps {
   userMessage?: string;
@@ -15,86 +25,82 @@ interface ThinkingIndicatorProps {
 }
 
 /* ======================================================
-   INTENT DETECTION
+   AUTO INTENT DETECTION
 ====================================================== */
 function detectIntent(message?: string): IntentType {
   if (!message) return 'message';
   const msg = message.toLowerCase();
 
-  if (
-    msg.includes('logo') ||
-    msg.includes('image') ||
-    msg.includes('img') ||
-    msg.includes('design')
-  ) {
+  if (msg.includes('edit') && (msg.includes('image') || msg.includes('photo')))
+    return 'edit_image';
+
+  if (msg.includes('image') || msg.includes('photo') || msg.includes('img'))
     return 'image';
-  }
 
   if (
     msg.includes('file') ||
+    msg.includes('document') ||
     msg.includes('pdf') ||
-    msg.includes('document')
-  ) {
+    msg.includes('upload')
+  )
     return 'file';
-  }
 
   if (
     msg.includes('search') ||
     msg.includes('find') ||
-    msg.includes('link') ||
-    msg.includes('website')
-  ) {
+    msg.includes('example') ||
+    msg.includes('internet') ||
+    msg.includes('google')
+  )
     return 'web_search';
-  }
 
   return 'message';
 }
 
 /* ======================================================
-   THINKING / COMPLETED TEXT
+   THINKING STEPS (5 MODELS EACH)
 ====================================================== */
-function getStatusText(
-  intent: IntentType,
-  message?: string,
-  completed?: boolean
-) {
-  if (completed) {
-    switch (intent) {
-      case 'image':
-        return message?.toLowerCase().includes('logo')
-          ? 'Logo created'
-          : 'Image created';
+const THINKING_MAP: Record<IntentType, ThinkingModel[]> = {
+  message: [
+    { model: 'Chat-A', text: 'Understanding message intent' },
+    { model: 'Chat-B', text: 'Thinking about response' },
+    { model: 'Chat-C', text: 'Structuring reply' },
+    { model: 'Chat-D', text: 'Optimizing clarity' },
+    { model: 'Chat-E', text: 'Finalizing answer' },
+  ],
 
-      case 'file':
-        return 'File ready';
+  image: [
+    { model: 'Vision-A', text: 'Analyzing image concept' },
+    { model: 'Vision-B', text: 'Designing visual layout' },
+    { model: 'Vision-C', text: 'Generating image assets' },
+    { model: 'Vision-D', text: 'Rendering image details' },
+    { model: 'Vision-E', text: 'Finalizing image quality' },
+  ],
 
-      case 'web_search':
-        return 'Search completed';
+  edit_image: [
+    { model: 'Edit-A', text: 'Analyzing existing image' },
+    { model: 'Edit-B', text: 'Detecting edit zones' },
+    { model: 'Edit-C', text: 'Applying modifications' },
+    { model: 'Edit-D', text: 'Optimizing edits' },
+    { model: 'Edit-E', text: 'Rendering final image' },
+  ],
 
-      default:
-        return 'Done';
-    }
-  }
+  file: [
+    { model: 'File-A', text: 'Reading file content' },
+    { model: 'File-B', text: 'Analyzing file structure' },
+    { model: 'File-C', text: 'Extracting key data' },
+    { model: 'File-D', text: 'Validating information' },
+    { model: 'File-E', text: 'Preparing final file' },
+  ],
 
-  // LOADING STATE
-  switch (intent) {
-    case 'image':
-      return 'Creating image…';
-
-    case 'file':
-      return 'Creating file…';
-
-    case 'web_search': {
-      const keyword = message
-        ?.replace(/search|find|link|website/gi, '')
-        .trim();
-      return `Searching web${keyword ? `: ${keyword}` : '…'}`;
-    }
-
-    default:
-      return 'Thinking…';
-  }
-}
+  web_search: [
+    { model: 'Web-A', text: 'Searching the web' },
+    { model: 'Web-B', text: 'Scanning online examples' },
+    { model: 'Web-C', text: 'Filtering best results' },
+    { model: 'Web-D', text: 'Summarizing findings' },
+    { model: 'Web-E', text: 'Preparing web response' },
+  ],
+};
 
 /* ======================================================
    MAIN COMPONENT
@@ -105,60 +111,61 @@ export function ThinkingIndicator({
 }: ThinkingIndicatorProps) {
   const { colors } = useTheme();
   const intent = detectIntent(userMessage);
-  const text = getStatusText(intent, userMessage, completed);
+  const steps = THINKING_MAP[intent];
+
+  const [stepIndex, setStepIndex] = useState(0);
+
+  useEffect(() => {
+    setStepIndex(0);
+
+    const interval = setInterval(() => {
+      setStepIndex(prev => {
+        if (prev >= steps.length - 1) {
+          clearInterval(interval);
+          return prev;
+        }
+        return prev + 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [userMessage]);
+
+  const current = steps[stepIndex];
 
   return (
     <View style={styles.container}>
       <ThinkingRow
-        text={text}
+        model={current.model}
+        text={completed ? 'Done' : current.text}
         color={completed ? '#34C759' : colors.primary}
-        animate={!completed}
       />
     </View>
   );
 }
 
 /* ======================================================
-   SINGLE ROW
+   SINGLE ROW (EDIT MODE)
 ====================================================== */
 function ThinkingRow({
+  model,
   text,
   color,
-  animate,
 }: {
+  model: string;
   text: string;
   color: string;
-  animate: boolean;
 }) {
   const dot = useRef(new Animated.Value(0)).current;
-  const animation = useRef<Animated.CompositeAnimation | null>(null);
 
   useEffect(() => {
-    if (!animate) {
-      dot.setValue(1);
-      animation.current?.stop();
-      return;
-    }
-
-    animation.current = Animated.loop(
+    Animated.loop(
       Animated.sequence([
-        Animated.timing(dot, {
-          toValue: 1,
-          duration: 500,
-          useNativeDriver: true,
-        }),
-        Animated.timing(dot, {
-          toValue: 0,
-          duration: 500,
-          useNativeDriver: true,
-        }),
+        Animated.timing(dot, { toValue: 1, duration: 400, useNativeDriver: true }),
+        Animated.timing(dot, { toValue: 0, duration: 400, useNativeDriver: true }),
       ])
-    );
-
-    animation.current.start();
-
-    return () => animation.current?.stop();
-  }, [animate]);
+    ).start();
+  }, []);
 
   return (
     <View style={styles.row}>
@@ -174,6 +181,10 @@ function ThinkingRow({
           },
         ]}
       />
+
+      <View style={[styles.badge, { backgroundColor: `${color}20` }]}>
+        <Text style={[styles.badgeText, { color }]}>{model}</Text>
+      </View>
     </View>
   );
 }
@@ -201,6 +212,16 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: BorderRadius.full,
-    marginLeft: Spacing.sm,
+    marginHorizontal: Spacing.sm,
+  },
+  badge: {
+    paddingHorizontal: Spacing.xs,
+    paddingVertical: 2,
+    borderRadius: BorderRadius.sm,
+  },
+  badgeText: {
+    ...Typography.small,
+    fontSize: 10,
+    fontWeight: '600',
   },
 });

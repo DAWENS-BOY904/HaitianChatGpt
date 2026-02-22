@@ -104,39 +104,13 @@ export default function SubscriptionScreen() {
       return;
     }
 
-    // Get Stripe price ID based on plan
-    let priceId = '';
-    let amount = '';
-    
-    switch (planId) {
-      case 'premium_monthly':
-        priceId = 'price_1SjmtpE0VkO7z1Vn1lpvP0PC';
-        amount = '10';
-        break;
-      case 'premium_yearly':
-        priceId = 'price_1SjmtrE0VkO7z1Vn5IXRKlsN';
-        amount = '20';
-        break;
-      case 'lifetime':
-        priceId = 'price_1SjmttE0VkO7z1VnGElDFXCT';
-        amount = '80';
-        break;
-      default:
-        showAlert('Error', 'Invalid plan selected');
-        return;
+    const { error } = await upgradeSubscription(planId);
+    if (error) {
+      showAlert('Error', error);
+    } else {
+      showAlert('Success', `Successfully upgraded to ${plans.find(p => p.id === planId)?.name}`);
+      router.back();
     }
-
-    const plan = plans.find(p => p.id === planId);
-    
-    // Navigate to Stripe checkout
-    router.push({
-      pathname: '/stripe-checkout',
-      params: {
-        priceId,
-        planName: plan?.name || '',
-        amount,
-      },
-    });
   };
 
   const handleRestore = async () => {

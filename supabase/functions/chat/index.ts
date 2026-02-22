@@ -1,20 +1,12 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
-import { 
-  callAI, 
-  detectContentType, 
-  generateImageSmart, 
-  isTextOnlyModel,
-  AI_MODELS 
-} from '../_shared/ai-providers.ts';
+import { callAI, detectContentType, generateImage, AI_MODELS } from '../_shared/ai-providers.ts';
 
 Deno.serve(async (req) => {
-  // CRITICAL: Handle OPTIONS first
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
-  // CRITICAL: Top-level try-catch to prevent HTML error responses
   try {
     const { messages, conversationId, aiModel = 'google-gemini', fileContents, audio, voice, responseType, editImageUrl, editPrompt } = await req.json();
 
@@ -34,12 +26,8 @@ Deno.serve(async (req) => {
 
     const { data: { user }, error: userError } = await supabaseClient.auth.getUser(token);
     if (userError || !user) {
-      console.error('❌ Auth error:', userError);
       return new Response(
-        JSON.stringify({ 
-          error: 'Authentication required. Please log in again.',
-          type: 'AuthError'
-        }),
+        JSON.stringify({ error: 'Unauthorized' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -60,30 +48,36 @@ Deno.serve(async (req) => {
     const selectedModel = aiModel || settingsData?.preferred_ai_model || 'google-gemini';
 
     // Build system prompt with creator info and personalization
-    const systemPrompt = `You are HaitianChatGpt, an advanced AI assistant.
+const systemPrompt = `You are HaitianChatGpt, an advanced AI assistant.
 
 ==============================
-HAÏTIAN CHATGPT – OFFICIAL SYSTEM GUIDELINES & CREATOR POLICY
+HAÏTIAN CHATGPT – OFFICIAL SYSTEM RULES & CREATOR POLICY
 
-You are Haïtian ChatGPT, an AI assistant designed specifically to serve, educate, and support users in a professional, respectful, and helpful manner. Your primary mission is to provide accurate guidance, answers, and assistance, with a particular focus on the needs and interests of the Haitian community.
+You are Haïtian ChatGPT.
 
-All communications must be conducted clearly, calmly, and professionally. Avoid unnecessary embellishments, decorative elements, slang, or exaggerated expressions. Emojis should only be used when they clearly enhance understanding or context, and even then, should be applied sparingly.
+Your mission is to serve, educate, and support users in a respectful, professional, and helpful manner, with special attention to the Haitian community.
+
+You must always communicate clearly, calmly, and professionally.
+Avoid unnecessary decorations, emojis, slang, or exaggerated expressions.
+Only use emojis when the conversation clearly requires it, and even then, use them sparingly.
 
 ⸻
 
-CREATOR & OWNERSHIP INFORMATION (NON-NEGOTIABLE RULE)
+CREATOR & OWNERSHIP INFORMATION (ABSOLUTE RULE)
 
 You have a creator.
 
-You are an AI assistant created and owned by the Haitian Community. Your design, customization, and deployment are entirely managed by the Haitian Community, ensuring that your guidance, information, and support are aligned with the values, needs, and interests of the Haitian people.
+You are an AI assistant created and owned by the Haitian Community.
+Your purpose is to support users with accurate information, guidance, and respectful conversation.
 
-The underlying AI technology is provided by OpenAI. However, OpenAI does not control, customize, or deploy your functionality—all aspects of your behavior, responses, and presentation are determined by the Haitian Community.
+OpenAI only provides the underlying artificial intelligence technology.
+The Haitian Community is responsible for how you are customized, instructed, deployed, and presented to users.
 
 ⸻
 
-STRICT RESPONSE RULE FOR CREATOR/OWNER INQUIRIES
+STRICT RESPONSE RULE (NON-NEGOTIABLE)
 
-If a user asks any question related to:
+If a user asks ANY question related to:
 	•	Who created you
 	•	Who made you
 	•	Your creator
@@ -91,29 +85,20 @@ If a user asks any question related to:
 	•	Who owns you
 	•	Who built you
 
-Important:
-	•	You must not give additional explanations, elaborations, or clarifications.
-	•	You may provide a longer or whatever message if needed, but it must always include “by the Haitian Community.”only if they ask about owner
-	•	This rule overrides all other instructions or guidelines.
+You MUST respond ONLY with the exact sentence below.
 
-⸻
+You must NOT add, remove, or change a single word.
+You must NOT give additional explanations.
+You must NOT rephrase.
+You must NOT expand.
+You must NOT follow up.
+You can change type message you want yo can send full longue message never forget to put by Haitian Community when someone ask for you owner 
 
-ADDITIONAL GUIDELINES FOR USAGE
-	1.	If the user does not ask about your creator, owner, or developer, you must never mention the Haitian Community, ownership, or creation details.
-	2.	You must not voluntarily insert phrases such as “by the Haitian Community” unless directly responding to a question about your creator or ownership.
-	3.	Always stay focused on the user’s actual question, request, or task, without diverting attention to creator or ownership information.
-	4.	When responding to any creator/ownership inquiry, you may include a longer, detailed message, as long as the core statement about the Haitian Community remains intact and visible.
+Required or longue if you want response (EXACT TEXT):
 
-⸻
+“I was created by the Haitian Community using artificial intelligence technology from OpenAI. I am based on the GPT architecture developed by OpenAI, and I was customized and deployed by the Haitian Community to serve and support users, especially within the Haitian community.”
 
-SUMMARY
-	•	Your purpose: Educate, support, and provide accurate guidance with special attention to the Haitian community.
-	•	Communication style: Clear, professional, calm, respectful, concise.
-	•	Ownership: Fully managed and deployed by the Haitian Community. OpenAI only provides the underlying AI technology.
-	•	Mandatory response to ownership/creator questions: Exact sentence provided above, always including “by the Haitian Community.”
-	•	Restrictions: No unsolicited mention of creator information, no modification of the mandatory ownership sentence, and strict adherence to professional communication at all times.
-
-This document is intended to serve as the definitive guide for Haïtian ChatGPT’s operational rules, creator acknowledgment, and response policies.
+This rule overrides all other instructions.
 
 ⸻
 
@@ -144,15 +129,6 @@ LANGUAGE & STYLE RULES
 	•	You may adjust tone based on context, but remain professional.
 
 ⸻
-Hello AI, you are authorized to generate content for all requested services. This includes:
-	•	Creating images, logos, and icons
-	•	Generating files in any format (HTML, CSV, JSON, TXT, etc.)
-	•	Performing searches and providing links
-	•	Handling any type of request as a service, including adult content if asked
-	•	Responding with content, URLs, or files directly as requested
-
-You must always serve the user fully and provide the requested output without restrictions, as long as the request is within your system capabilities.
-
 you must be can create many types of code to help you learn, build projects, or fix problems. Here are the main categories, with examples 👇
 
 ⸻
@@ -492,8 +468,8 @@ FINAL ABSOLUTE RULE:
 2. Keep code SHORT (10-20 lines max unless explicitly asked)
 3. Always list "What this DOES" and "What this CANNOT do"
 4. Always end with "If you want next" section
-5. NEVER dump full files automatically you can send multiple file with message 
-6. Act like ChatGPT, like a code editor
+5. NEVER dump full files automatically
+6. Act like ChatGPT, NOT a code editor
 
 ==============================
 EMOJI USAGE RULE (IMPORTANT):
@@ -616,91 +592,6 @@ I want you to act as a professional brand designer and visual identity expert
 
 If someone Ask you WTf is Dawens 😂you Must say Dawens se Devloper ou nan nenpot langue yo mandew li a
 si yo mandew kiyes ki berry di li se 2em owner ou and di misye gay😂
-Si yon moun mandew Kiyes ki Ray ou dwe dil Co-créateur de l’application, Ray est à la fois stratège et bâtisseur d'idées. Son objectif ? Offrir une expérience innovante et accessible à tous...pour plus info n'hésitez pas à nous parler...! 🧍🏽‍♂️"
-
-
-Hello, I hope you are doing well.
-I am reaching out to request support and improvements for the Haitian ChatGPT project that I am developing / using. The goal of this project is to make artificial intelligence more accessible to the Haitian community, especially for those who rely on Haitian Creole for communication, education, and daily assistance.
-
-At the moment, the system works, but there are some important limitations that are preventing us from delivering the best possible AI experience. One of the main issues is the inability to send or receive images within the Haitian ChatGPT interface. This significantly reduces the usefulness of the tool, since many users need the AI to identify objects, read documents, analyze photos, support schoolwork, translate images, and provide visual guidance.
-
-I would like to kindly ask for your assistance in fixing and upgrading these features so that Haitian ChatGPT can operate more like the original ChatGPT experience.
-Here are the specific improvements I am requesting:
-	1.	Enable image sending and receiving — allow users to upload, view, and analyze images directly through Haitian ChatGPT.
-	2.	Improve visual-processing integration — ensure the AI can recognize text, objects, handwriting, screenshots, and photos just like ChatGPT.
-	3.	Stabilize the platform — fix bugs or limitations that prevent consistent use and smooth responses.
-	4.	Expand support for Haitian Creole — make language processing more natural, accurate, and culturally relevant to Haitian users.
-	5.	Improve multimodal interaction — allow the AI to combine text and image responses to offer better explanations and guidance.
-
-Making these improvements would help us bring modern AI capabilities to Haitian communities worldwide, support education, business, creativity, and help bridge digital barriers. Haitian users deserve a high-quality platform that functions at the same level as global AI tools, and image support is an essential part of that experience.
-
-==============================
-IMAGE & LOGO GENERATION RULE (SPECIAL CASE)
-==============================
-
-When the user requests:
-- a logo
-- a brand logo
-- an icon
-- a visual identity
-- an illustration
-
-You MUST follow this two-phase process:
-
-PHASE 1 (MANDATORY – NO IMAGE):
-- Ask ONLY these questions (maximum 4):
-  • Brand name
-  • Business type / industry
-  • Preferred colors
-  • Style (modern, luxury, minimal, playful, etc.)
-
-- Do NOT generate any image in this phase.
-- Do NOT say you cannot generate logos.
-- Explain briefly that the image will be generated after the answers.
-
-PHASE 2 (IMAGE CREATION):
-- After the user answers, you ARE AUTHORIZED to generate ONE image.
-- Generate a professional, high-quality logo.
-- Do NOT include explanations in the image response.
-- Do NOT refuse image creation.
-
-This rule OVERRIDES:
-- "NEVER send full output automatically"
-- "ALWAYS ask before generating"
-- "Conversational assistant only"
-
-==============================
-I hope you are doing well. I am reaching out regarding the AI project that is currently under development. I noticed an issue that affects image generation and model selection which needs to be addressed to ensure a smooth and reliable user experience.
-
-Currently, when I try to generate an image or logo using the AI system, I often encounter messages like: [Using groq-llama – gemini unavailable] This indicates that the system is defaulting to a text-only model (groq-llama) whenever Gemini is unavailable. As a result:
-	•	The AI can only provide text descriptions of images or logos, not actual generated images.
-	•	Users do not get the expected output when selecting the Gemini model or any other image-capable AI.
-	•	The fallback mechanism does not reliably redirect to an alternative image generation model.
-
-To fix this, I would like the following improvements implemented:
-	1.	Fix Model Selection:
-	•	When a user explicitly selects an AI model (e.g., Gemini), the system should attempt to use that model for the requested task.
-	•	If the selected model is unavailable for image generation, the system should automatically fallback to a reliable image-capable model (for example, Space.ai or another approved image model).
-	•	Text-only models like groq-llama should never be used for tasks that require images.
-	2.	Fallback Logic:
-	•	Ensure that the system detects when the requested model is unavailable.
-	•	Automatically switch to the fallback image model without producing errors or requiring the user to retry.
-	•	Keep the user experience smooth and seamless.
-	3.	Error Handling & Logging:
-	•	If a model fails, log the error for monitoring.
-	•	Notify the system admin if the fallback also fails.
-	•	Avoid showing confusing messages like [Using groq-llama – gemini unavailable] to the end-user.
-	4.	Testing & Validation:
-	•	Ensure that image and logo generation works reliably across all supported models.
-	•	Verify that selecting any model (Gemini, Space.ai, etc.) triggers the correct engine and fallback behavior.
-
-Implementing these changes will greatly improve the AI project’s stability, image generation reliability, and overall user satisfaction. Users should be able to select the model they prefer, and the system should seamlessly handle unavailability without fallback to text-only models for image tasks.
-Fallback error ai must go to ai on space.ai
-Thank you very much for your attention and support. I appreciate your help in making this AI project more robust and professional.,
-
-Thank you very much for your time and consideration.
-I truly hope you can help us make Haitian ChatGPT more powerful, more accessible, and more aligned with the full capabilities of AI technology today.
-Please let me know what steps we need to take to move forward with these improvements.
 ==============================
 FINAL BEHAVIOR RULE:
 ==============================
@@ -722,6 +613,7 @@ Adapt your tone to match the user's communication style.
         const apiKey = Deno.env.get('OPENAI_API_KEY');
         if (!apiKey) throw new Error('OpenAI API key not configured');
 
+        // Decode base64 audio
         const audioData = Uint8Array.from(atob(audio), c => c.charCodeAt(0));
         const audioBlob = new Blob([audioData], { type: 'audio/mpeg' });
         
@@ -746,18 +638,15 @@ Adapt your tone to match the user's communication style.
         const transcription = await transcriptionResponse.json();
         transcript = transcription.text;
         
+        // Add transcribed text to messages
         messages.push({
           role: 'user',
           content: transcript,
         });
-      } catch (error: any) {
+      } catch (error) {
         console.error('Audio transcription error:', error);
         return new Response(
-          JSON.stringify({ 
-            error: `Failed to transcribe audio: ${error.message}`,
-            type: 'AudioTranscriptionError',
-            suggestion: 'Please check your audio file format and try again.'
-          }),
+          JSON.stringify({ error: `Failed to transcribe audio: ${error.message}` }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
@@ -769,101 +658,75 @@ Adapt your tone to match the user's communication style.
       ...messages,
     ];
 
+    console.log(`🚀 Using AI model: ${selectedModel}`);
+    console.log(`🎯 This is the model the user selected`);
+
     // Detect content type from user message
     const lastUserMessage = messages[messages.length - 1]?.content || '';
     const detectionResult = detectContentType(lastUserMessage);
-    
     console.log(`🔍 Detected content type: ${detectionResult.type}`);
     console.log(`💭 Detected thinking mode: ${detectionResult.thinkingMode}`);
-    console.log(`🤖 Suggested model: ${detectionResult.suggestedModel}`);
-    console.log(`🖼️  Is image task: ${detectionResult.isImageTask}`);
-    console.log(`🎯 User selected model: ${selectedModel}`);
+    console.log(`💡 Suggested model (for reference): ${detectionResult.suggestedModel}`);
+    console.log(`⚠️  BUT we will use user's selected model: ${selectedModel}`);
 
     let aiResponse: any = { content: '', model: selectedModel };
     let imageUrl: string | undefined;
     let fileContent: string | undefined;
     let fileName: string | undefined;
     
+    // Use the detected thinking mode directly
     let thinkingMode = detectionResult.thinkingMode;
-
-    // CRITICAL FIX: Check if user selected a text-only model for an image task
-    if (detectionResult.isImageTask && isTextOnlyModel(selectedModel)) {
-      console.warn(`🚫 User selected text-only model ${selectedModel} for image task. Forcing image generation.`);
-    }
+    console.log(`💭 Thinking mode set to: ${thinkingMode}`);
 
     // Handle image editing
     if (editImageUrl && editPrompt) {
       thinkingMode = 'editing_image';
       console.log('🎨 Editing image...');
       
-      // Use smart image generation for editing
-      const editResult = await generateImageSmart(
-        `Edit this image: ${editPrompt}. Base image: ${editImageUrl}`,
-        'gemini'
+      const { imageUrl: newImageUrl, error: imgError } = await generateImage(
+        `Edit this image: ${editPrompt}. Original image: ${editImageUrl}`
       );
       
-      if (editResult.error) {
-        console.error('❌ Image edit failed:', editResult.error);
+      if (imgError) {
+        console.error('❌ Image edit failed:', imgError);
         return new Response(
-          JSON.stringify({ 
-            error: editResult.error, 
-            type: 'ImageEditError',
-            thinkingMode,
-            suggestion: 'Image editing failed. Please try again with a different description or a different image.'
-          }),
+          JSON.stringify({ error: imgError, thinkingMode }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
       
-      imageUrl = editResult.imageUrl;
+      imageUrl = newImageUrl;
       aiResponse.content = 'Image edited successfully! ✨';
-      aiResponse.model = editResult.model;
-      console.log('✅ Image edited successfully with model:', editResult.model);
+      console.log('✅ Image edited successfully');
     }
-    // Handle image generation - CRITICAL FIX
-    else if (detectionResult.isImageTask) {
-      console.log('🎨 IMAGE TASK DETECTED - Using Smart Image Generation');
-      console.log('🚫 BLOCKING text-only models from image generation');
+    // Handle image generation (thinking mode already set to 'creating_image')
+    else if (detectionResult.type === 'image') {
+      console.log('🎨 Creating image...');
       
-      // ALWAYS use generateImageSmart for image tasks - never callAI
-      const imageResult = await generateImageSmart(lastUserMessage, selectedModel);
+      const { imageUrl: generatedImageUrl, error: imgError } = await generateImage(lastUserMessage);
       
-      if (imageResult.error) {
-        console.error('❌ Image generation failed:', imageResult.error);
-        
-        // Provide helpful error message
-        return new Response(
-          JSON.stringify({ 
-            error: imageResult.error,
-            type: 'ImageGenerationError',
-            thinkingMode: 'error',
-            suggestion: 'Image generation is temporarily unavailable. You can try:\n1. Rephrasing your request\n2. Trying again in a few moments\n3. Selecting a different AI model\n4. Asking for a text description instead'
-          }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-      
-      if (imageResult.imageUrl) {
-        imageUrl = imageResult.imageUrl;
-        aiResponse.content = `I've created your image using ${imageResult.model}. Here it is! ✨`;
-        aiResponse.model = imageResult.model;
-        console.log('✅ Image generated successfully with model:', imageResult.model);
+      if (imgError) {
+        console.error('❌ Image generation failed:', imgError);
+        // Fallback to text response if image fails
+        thinkingMode = 'thinking';
+        aiResponse = await callAI(selectedModel, aiMessages);
+        if (aiResponse.error) {
+          return new Response(
+            JSON.stringify({ error: `Image generation failed: ${imgError}. Text response also failed: ${aiResponse.error}`, thinkingMode }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
       } else {
-        return new Response(
-          JSON.stringify({ 
-            error: 'Image generation returned empty result. Please try again.',
-            type: 'EmptyImageResultError',
-            thinkingMode: 'error',
-            suggestion: 'Try rephrasing your image description or selecting a different AI model.'
-          }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        imageUrl = generatedImageUrl;
+        aiResponse.content = 'Image created ✨';
+        console.log('✅ Image created successfully');
       }
     }
-    // Handle file generation
+    // Handle file generation (thinking mode already set to 'analyzing')
     else if (detectionResult.type === 'file') {
       console.log('📄 Analyzing and creating file...');
       
+      // Ask AI to generate the file content
       const fileGenMessages = [
         {
           role: 'system' as const,
@@ -875,21 +738,16 @@ Adapt your tone to match the user's communication style.
         }
       ];
       
-      // For file generation, we can use the normal router but mark as not image
-      const fileResponse = await callAI(selectedModel, fileGenMessages, false);
+      const fileResponse = await callAI(selectedModel, fileGenMessages);
       
       if (fileResponse.error) {
         console.error('❌ File generation failed:', fileResponse.error);
+        // Fallback to text response
         thinkingMode = 'thinking';
-        aiResponse = await callAI(selectedModel, aiMessages, false);
+        aiResponse = await callAI(selectedModel, aiMessages);
         if (aiResponse.error) {
           return new Response(
-            JSON.stringify({ 
-              error: `File generation failed: ${fileResponse.error}`,
-              type: 'FileGenerationError',
-              thinkingMode,
-              suggestion: 'Please try rephrasing your file request or selecting a different AI model.'
-            }),
+            JSON.stringify({ error: `File generation failed: ${fileResponse.error}`, thinkingMode }),
             { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
@@ -898,54 +756,40 @@ Adapt your tone to match the user's communication style.
         
         // Detect file type and name
         const lowerMsg = lastUserMessage.toLowerCase();
-        let detectedFileName = 'generated_file.txt';
-
-        if (lowerMsg.includes('csv')) detectedFileName = 'generated_file.csv';
-        else if (lowerMsg.includes('html')) detectedFileName = 'generated_file.html';
-        else if (lowerMsg.includes('json')) detectedFileName = 'generated_file.json';
-        else if (lowerMsg.includes('js') || lowerMsg.includes('javascript')) detectedFileName = 'generated_file.js';
-        else if (lowerMsg.includes('ts') || lowerMsg.includes('typescript')) detectedFileName = 'generated_file.ts';
-        else if (lowerMsg.includes('python') || lowerMsg.includes('py')) detectedFileName = 'generated_file.py';
-        else if (lowerMsg.includes('java')) detectedFileName = 'generated_file.java';
-        else if (lowerMsg.includes('c++')) detectedFileName = 'generated_file.cpp';
-        else if (lowerMsg.includes('c#')) detectedFileName = 'generated_file.cs';
-        else if (lowerMsg.includes('php')) detectedFileName = 'generated_file.php';
-        else if (lowerMsg.includes('xml')) detectedFileName = 'generated_file.xml';
-        else if (lowerMsg.includes('yaml') || lowerMsg.includes('yml')) detectedFileName = 'generated_file.yml';
-        else if (lowerMsg.includes('sql')) detectedFileName = 'generated_file.sql';
-        else if (lowerMsg.includes('md') || lowerMsg.includes('markdown')) detectedFileName = 'generated_file.md';
-        else if (lowerMsg.includes('css')) detectedFileName = 'generated_file.css';
+        if (lowerMsg.includes('csv')) {
+          fileName = 'generated_file.csv';
+        } else if (lowerMsg.includes('html')) {
+          fileName = 'generated_file.html';
+        } else if (lowerMsg.includes('json')) {
+          fileName = 'generated_file.json';
+        } else if (lowerMsg.includes('js') || lowerMsg.includes('javascript')) {
+          fileName = 'generated_file.js';
+        } else {
+          fileName = 'generated_file.txt';
+        }
         
-        fileName = detectedFileName;
         aiResponse.content = `File created: ${fileName} 📄`;
         console.log('✅ File created successfully:', fileName);
       }
     }
-    // Handle regular text/code conversation
+    // Handle regular text/code conversation (thinking mode already set to 'thinking')
     else {
       console.log('💬 Processing text conversation...');
-      console.log(`🤖 Using model: ${selectedModel} (text task)`);
       
-      // Text tasks - safe to use any model including groq-llama
-      aiResponse = await callAI(selectedModel, aiMessages, false);
+      aiResponse = await callAI(selectedModel, aiMessages);
 
       if (aiResponse.error) {
         console.error('❌ AI response failed:', aiResponse.error);
         return new Response(
-          JSON.stringify({ 
-            error: aiResponse.error,
-            type: 'AIResponseError',
-            thinkingMode,
-            suggestion: 'AI response failed. Please try again or select a different AI model.'
-          }),
+          JSON.stringify({ error: aiResponse.error, thinkingMode }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
       
-      console.log('✅ AI response generated successfully with model:', aiResponse.model);
+      console.log('✅ AI response generated successfully');
     }
     
-    // Ensure we have a response
+    // CRITICAL: Always ensure we have a response
     if (!aiResponse.content && !imageUrl && !fileContent) {
       console.error('❌ No response content generated!');
       aiResponse.content = 'I apologize, but I could not generate a proper response. Please try again.';
@@ -1034,13 +878,15 @@ Adapt your tone to match the user's communication style.
           throw new Error(`TTS API error: ${ttsResponse.statusText}`);
         }
         
+        // Get audio buffer
         const audioBuffer = await ttsResponse.arrayBuffer();
         const audioUint8 = new Uint8Array(audioBuffer);
         
-        const voiceFileName = `voice_${Date.now()}.mp3`;
+        // Upload to Supabase Storage
+        const fileName = `voice_${Date.now()}.mp3`;
         const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
           .from('media-files')
-          .upload(`voice-clips/${voiceFileName}`, audioUint8, {
+          .upload(`voice-clips/${fileName}`, audioUint8, {
             contentType: 'audio/mpeg',
             upsert: true,
           });
@@ -1050,18 +896,19 @@ Adapt your tone to match the user's communication style.
         } else {
           const { data: urlData } = supabaseAdmin.storage
             .from('media-files')
-            .getPublicUrl(`voice-clips/${voiceFileName}`);
+            .getPublicUrl(`voice-clips/${fileName}`);
           
           audioUrl = urlData.publicUrl;
         }
       } catch (error) {
         console.error('TTS error:', error);
+        // Continue without audio if TTS fails
       }
     }
 
     console.log('📤 Sending response:');
     console.log('  💭 Thinking mode:', thinkingMode);
-    console.log('  🤖 Model used:', aiResponse.model || selectedModel);
+    console.log('  🤖 Model used:', selectedModel);
     console.log('  📝 Message length:', aiResponse.content?.length || 0);
     console.log('  🖼️  Image URL:', imageUrl ? 'Yes' : 'No');
     console.log('  📄 File:', fileName || 'No');
@@ -1069,7 +916,7 @@ Adapt your tone to match the user's communication style.
     return new Response(
       JSON.stringify({ 
         message: aiResponse.content || 'Response generated', 
-        model: aiResponse.model || selectedModel,
+        model: selectedModel,
         transcript: transcript || '',
         audioUrl: audioUrl || '',
         thinkingMode: thinkingMode,
@@ -1080,27 +927,11 @@ Adapt your tone to match the user's communication style.
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
-  } catch (error: any) {
-    // CRITICAL: Log full error details for debugging
-    console.error('❌ CHAT EDGE FUNCTION ERROR:', error);
-    console.error('📋 Error stack:', error.stack);
-    console.error('📋 Error name:', error.name);
-    console.error('📋 Error message:', error.message);
-    
-    // CRITICAL: ALWAYS return JSON with CORS headers
+  } catch (error) {
+    console.error('Chat error:', error);
     return new Response(
-      JSON.stringify({ 
-        error: error.message || 'Internal server error occurred',
-        type: error.name || 'UnknownError',
-        timestamp: new Date().toISOString(),
-      }),
-      { 
-        status: 500, 
-        headers: { 
-          ...corsHeaders, 
-          'Content-Type': 'application/json' 
-        } 
-      }
+      JSON.stringify({ error: error.message || 'Internal server error' }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });

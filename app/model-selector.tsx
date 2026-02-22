@@ -35,8 +35,6 @@ interface AIModel {
 const modelImages: Record<string, any> = {
   'openai-gpt4': require('../assets/models/IMG_0834.jpeg'),
   'google-gemini': require('../assets/models/IMG_0835.png'),
-  'google-gemini-2.0-flash': require('../assets/models/IMG_0835.png'), // Using same Google icon
-  'google-gemini-pro': require('../assets/models/IMG_0835.png'), // Using same Google icon
   'claude-3': require('../assets/models/IMG_0836.png'),
   'groq-llama': require('../assets/models/IMG_0837.png'),
   'mistral-large': require('../assets/models/IMG_0838.png'),
@@ -70,16 +68,6 @@ export default function ModelSelectorScreen() {
       color: '#4285F4',
       speed: 'Fast',
       bestFor: 'Quick responses, multimodal tasks',
-    },
-    'google-gemini-2.0-flash': {
-      color: '#4285F4',
-      speed: 'Very Fast',
-      bestFor: 'Latest model, multimodal AI, image/audio understanding',
-    },
-    'google-gemini-pro': {
-      color: '#1A73E8',
-      speed: 'Moderate',
-      bestFor: 'Complex analysis, detailed responses',
     },
     'claude-3': {
       color: '#D97757',

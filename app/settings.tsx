@@ -1,16 +1,5 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { 
-  View, 
-  Text, 
-  TouchableOpacity, 
-  StyleSheet, 
-  ScrollView, 
-  Switch, 
-  Platform, 
-  Image,
-  Alert,
-  Linking,
-} from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Switch, Platform, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
 import { useSettings } from '../hooks/useSettings';
@@ -20,19 +9,6 @@ import { useRouter } from 'expo-router';
 import { Spacing, Typography, BorderRadius } from '../constants/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getSupabaseClient } from '@/template';
-import Constants from 'expo-constants';
-
-// App Store configuration
-const APP_STORE_ID = 'YOUR_APP_STORE_ID'; // Replace with your actual App Store ID
-const APP_STORE_LINK = `https://apps.apple.com/app/id${APP_STORE_ID}`;
-const ITUNES_LOOKUP_URL = `https://itunes.apple.com/lookup?id=${APP_STORE_ID}`;
-
-// Get current app version from app.json or Constants
-const getCurrentVersion = (): string => {
-  // Try to get from Constants (Expo)
-  const version = Constants.expoConfig?.version || Constants.manifest?.version;
-  return version || '1.0.0';
-};
 
 export default function SettingsScreen() {
   const { colors } = useTheme();
@@ -47,21 +23,16 @@ export default function SettingsScreen() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [profilePhoto, setProfilePhoto] = useState('');
   const [username, setUsername] = useState('');
-  
-  // Version check state
-  const [currentVersion, setCurrentVersion] = useState<string>('1.0.0');
-  const [latestVersion, setLatestVersion] = useState<string | null>(null);
-  const [isCheckingVersion, setIsCheckingVersion] = useState(false);
 
   useEffect(() => {
     checkAdminAccess();
     loadProfile();
-    setCurrentVersion(getCurrentVersion());
   }, [user]);
 
   const checkAdminAccess = async () => {
     if (!user) return;
     
+    // Check if email is admin
     const adminEmails = ['berryxoe@gmail.com', 'newdawens@gmail.com'];
     setIsAdmin(adminEmails.includes(user.email || ''));
   };
@@ -80,75 +51,6 @@ export default function SettingsScreen() {
       setProfilePhoto(data.profile_photo_url || '');
     }
   };
-
-  // Version check function
-  const checkForUpdates = useCallback(async () => {
-    if (isCheckingVersion) return;
-    
-    setIsCheckingVersion(true);
-    
-    try {
-      // Fetch latest version from App Store
-      const response = await fetch(ITUNES_LOOKUP_URL);
-      const data = await response.json();
-      
-      if (data.resultCount > 0) {
-        const appStoreVersion = data.results[0].version;
-        setLatestVersion(appStoreVersion);
-        
-        const current = currentVersion.split('.').map(Number);
-        const latest = appStoreVersion.split('.').map(Number);
-        
-        // Compare versions
-        let isUpdateAvailable = false;
-        for (let i = 0; i < Math.max(current.length, latest.length); i++) {
-          const currentPart = current[i] || 0;
-          const latestPart = latest[i] || 0;
-          
-          if (latestPart > currentPart) {
-            isUpdateAvailable = true;
-            break;
-          } else if (latestPart < currentPart) {
-            break;
-          }
-        }
-        
-        if (isUpdateAvailable) {
-          Alert.alert(
-            'Update Available',
-            `A new version (${appStoreVersion}) is available. You are currently on version ${currentVersion}.`,
-            [
-              {
-                text: 'Later',
-                style: 'cancel',
-              },
-              {
-                text: 'Update Now',
-                onPress: () => Linking.openURL(APP_STORE_LINK),
-              },
-            ]
-          );
-        } else {
-          Alert.alert(
-            'Up to Date',
-            `You already have the latest version (${currentVersion}).`,
-            [{ text: 'OK' }]
-          );
-        }
-      } else {
-        throw new Error('App not found in App Store');
-      }
-    } catch (error) {
-      console.error('Version check error:', error);
-      Alert.alert(
-        'Check Failed',
-        'Unable to check for updates. Please try again later.',
-        [{ text: 'OK' }]
-      );
-    } finally {
-      setIsCheckingVersion(false);
-    }
-  }, [currentVersion, isCheckingVersion]);
 
   const handleLogout = async () => {
     showAlert('Confirm', 'Are you sure you want to log out?', [
@@ -356,27 +258,6 @@ export default function SettingsScreen() {
       marginVertical: Spacing.lg,
       fontSize: 12,
     },
-    // Version check specific styles
-    versionContainer: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: Spacing.sm,
-    },
-    latestVersionBadge: {
-      backgroundColor: colors.primary,
-      paddingHorizontal: 6,
-      paddingVertical: 2,
-      borderRadius: BorderRadius.sm,
-    },
-    latestVersionText: {
-      ...Typography.caption,
-      color: '#FFFFFF',
-      fontSize: 10,
-      fontWeight: '600',
-    },
-    checkIcon: {
-      marginRight: Spacing.sm,
-    },
   });
 
   const SettingRow = ({ 
@@ -385,8 +266,7 @@ export default function SettingsScreen() {
     subtitle, 
     value, 
     onPress, 
-    rightElement,
-    isLoading,
+    rightElement 
   }: { 
     icon: string; 
     title: string; 
@@ -394,13 +274,11 @@ export default function SettingsScreen() {
     value?: string; 
     onPress?: () => void;
     rightElement?: React.ReactNode;
-    isLoading?: boolean;
   }) => (
     <TouchableOpacity 
       style={styles.settingItem} 
       onPress={onPress}
-      disabled={!onPress && !rightElement || isLoading}
-      activeOpacity={0.7}
+      disabled={!onPress && !rightElement}
     >
       <View style={styles.settingLeft}>
         <View style={styles.settingIcon}>
@@ -411,9 +289,7 @@ export default function SettingsScreen() {
           {subtitle && <Text style={styles.settingSubtitle}>{subtitle}</Text>}
         </View>
       </View>
-      {isLoading ? (
-        <ActivityIndicator size="small" color={colors.primary} style={styles.checkIcon} />
-      ) : rightElement || (
+      {rightElement || (
         <>
           {value && <Text style={styles.settingValue}>{value}</Text>}
           {onPress && <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />}
@@ -422,32 +298,7 @@ export default function SettingsScreen() {
     </TouchableOpacity>
   );
 
-  // Version check row component
-  const VersionCheckRow = () => {
-    const displayValue = latestVersion && latestVersion !== currentVersion
-      ? `${currentVersion} → ${latestVersion}`
-      : currentVersion;
-
-    return (
-      <SettingRow 
-        icon="arrow-up-circle-outline" 
-        title="Check for updates" 
-        value={displayValue}
-        onPress={checkForUpdates}
-        isLoading={isCheckingVersion}
-      />
-    );
-  };
-
   const appearanceOptions: Array<'System' | 'Light' | 'Dark'> = ['System', 'Light', 'Dark'];
-
-  // Real theme switching based on appearance setting
-  useEffect(() => {
-    // This effect runs when appearance setting changes
-    // The ThemeContext already handles the theme switching logic
-    // based on settings.appearance value in contexts/ThemeContext.tsx
-  }, [settings.appearance]);
-
   const accentColors = ['#10A37F', '#0084FF', '#FF3B30', '#FF9500', '#5856D6'];
 
   const tierNames: Record<string, string> = {
@@ -727,8 +578,6 @@ export default function SettingsScreen() {
         {/* ABOUT SECTION */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>ABOUT</Text>
-        
-          
           <SettingRow 
             icon="bug-outline" 
             title="Report bug" 
@@ -742,19 +591,21 @@ export default function SettingsScreen() {
           <SettingRow 
             icon="document-text-outline" 
             title="Terms of Use" 
-            onPress={() => router.push('/terms-of-use')}
+            onPress={() => router.push('/content-viewer?type=terms_of_use')}
           />
           <SettingRow 
             icon="shield-checkmark-outline" 
             title="Privacy Policy" 
-            onPress={() => router.push('/privacy-policy')}
+            onPress={() => router.push('/content-viewer?type=privacy_policy')}
+          />
+          <SettingRow 
+            icon="help-circle-outline" 
+            title="FAQ" 
+            onPress={() => router.push('/content-viewer?type=faq')}
           />
         </View>
 
-        {/* VERSION CHECK ROW */}
-          <VersionCheckRow />
-
-        <Text style={styles.versionText}>HaitianChatGpt for iOS – v{currentVersion}</Text>
+        <Text style={styles.versionText}>HaitianChatGpt for iOS – v1.0.0</Text>
 
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
           <Text style={styles.logoutText}>Log Out</Text>

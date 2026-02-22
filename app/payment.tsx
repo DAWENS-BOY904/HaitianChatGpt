@@ -375,16 +375,6 @@ export default function PaymentMethodsScreen() {
       </View>
 
       <ScrollView style={styles.content}>
-        <TouchableOpacity
-          style={styles.addButton}
-          onPress={() => router.push('/billing')}
-          disabled={loading}
-        >
-          <Ionicons name="document-text" size={24} color={colors.text} />
-          <Text style={styles.addButtonText}>Billing Information</Text>
-          <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
-        </TouchableOpacity>
-
         <Text style={styles.sectionTitle}>Add Payment Method</Text>
 
         <TouchableOpacity

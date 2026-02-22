@@ -1,7 +1,6 @@
 import React, { createContext, ReactNode, useState, useEffect } from 'react';
 import { useAuth } from '../template';
 import { getSupabaseClient } from '../template';
-import { FunctionsHttpError } from '@supabase/supabase-js';
 
 interface Message {
   id: string;
@@ -30,7 +29,7 @@ interface ConversationContextType {
   loading: boolean;
   createConversation: () => Promise<string | null>;
   selectConversation: (id: string) => Promise<void>;
-  sendMessage: (content: string, imageUrl?: string, base64Image?: string, isImageGeneration?: boolean, aiModel?: string) => Promise<void>;
+  sendMessage: (content: string, imageUrl?: string, aiModel?: string) => Promise<void>;
   updateMessage: (messageId: string, newContent: string) => Promise<void>;
   updateMessageAndRegenerate: (messageId: string, newContent: string, aiModel?: string) => Promise<void>;
   deleteConversation: (id: string) => Promise<void>;
@@ -58,8 +57,6 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
   const loadConversations = async () => {
     if (!user) return;
 
-    console.log('🔄 Loading conversations for user:', user.id);
-
     // Only load conversations that have at least one message
     const { data: conversationsWithMessages, error } = await supabase
       .from('conversations')
@@ -68,22 +65,14 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
         title,
         created_at,
         updated_at,
-        messages!inner (id)
+        messages (count)
       `)
-      .eq('user_id', user.id)
       .order('updated_at', { ascending: false });
 
     if (!error && conversationsWithMessages) {
-      console.log('📊 Raw conversations:', conversationsWithMessages.length);
-      
       // Filter out conversations with 0 messages
       const validConversations = conversationsWithMessages
-        .filter((c: any) => {
-          // Use inner join result - if messages exist, c.messages will be an array
-          const hasMessages = Array.isArray(c.messages) && c.messages.length > 0;
-          console.log(`  - ${c.id}: ${c.title} - Messages: ${hasMessages ? c.messages.length : 0}`);
-          return hasMessages;
-        })
+        .filter((c: any) => c.messages && c.messages.length > 0)
         .map(c => ({
           id: c.id,
           title: c.title,
@@ -91,17 +80,12 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
           updatedAt: c.updated_at,
         }));
       
-      console.log('✅ Valid conversations:', validConversations.length);
       setConversations(validConversations);
-    } else if (error) {
-      console.error('❌ Error loading conversations:', error);
     }
   };
 
   const createConversation = async (): Promise<string | null> => {
     if (!user) return null;
-
-    console.log('📝 Creating new conversation...');
 
     const { data, error } = await supabase
       .from('conversations')
@@ -109,12 +93,7 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
       .select()
       .single();
 
-    if (error || !data) {
-      console.error('❌ Failed to create conversation:', error);
-      return null;
-    }
-
-    console.log('✅ Conversation created:', data.id);
+    if (error || !data) return null;
 
     const newConv: Conversation = {
       id: data.id,
@@ -148,19 +127,8 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
     setLoading(false);
   };
 
-  const sendMessage = async (content: string, imageUrl?: string, base64Image?: string, isImageGeneration: boolean = false, aiModel?: string) => {
-    if (!user) return;
-    
-    // Auto-create conversation if none exists
-    let conversationId = currentConversation?.id;
-    if (!conversationId) {
-      console.log('📝 No conversation selected, creating new one...');
-      conversationId = await createConversation();
-      if (!conversationId) {
-        console.error('❌ Failed to create conversation');
-        return;
-      }
-    }
+  const sendMessage = async (content: string, imageUrl?: string, aiModel?: string) => {
+    if (!currentConversation || !user) return;
 
     console.log('📨 ConversationContext.sendMessage called');
     console.log('  - Content:', content.slice(0, 50));
@@ -180,18 +148,6 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
       return [...prev, tempUserMessage];
     });
 
-    // For image generation, add a "Generating..." placeholder
-    let tempAIPlaceholder: Message | null = null;
-    if (isImageGeneration) {
-      tempAIPlaceholder = {
-        id: `temp-ai-generating-${Date.now()}`,
-        role: 'assistant',
-        content: '🎨 Generating your image...',
-        created_at: new Date().toISOString(),
-      };
-      setMessages(prev => [...prev, tempAIPlaceholder!]);
-    }
-
     // Build context messages for AI (include the new user message)
     const contextMessages = [...messages, tempUserMessage].map(m => ({
       role: m.role,
@@ -199,92 +155,39 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
       image_url: m.image_url,
     }));
 
-    // For image generation, add base64 image data
-    const requestBody: any = {
-      messages: contextMessages,
-      conversationId: conversationId,
-      aiModel: aiModel || 'google-gemini',
-    };
-
-    if (isImageGeneration && base64Image) {
-      requestBody.base64Image = base64Image;
-      requestBody.isImageGeneration = true;
-    }
-
     console.log('  🤖 Calling AI Edge Function...');
     console.log('  📊 Context messages count:', contextMessages.length);
 
     // Call AI Edge Function
     const { data: aiResponse, error: aiError } = await supabase.functions.invoke('chat', {
-      body: requestBody,
+      body: {
+        messages: contextMessages,
+        conversationId: currentConversation.id,
+        aiModel: aiModel || 'google-gemini',
+      },
     });
 
     if (aiError) {
       console.error('❌ AI error:', aiError);
-      
-      // Extract detailed error message
-      let errorMessage = 'Failed to send message';
-      if (aiError instanceof FunctionsHttpError) {
-        try {
-          const statusCode = aiError.context?.status ?? 500;
-          const textContent = await aiError.context?.text();
-          
-          // Check if it's a JSON error response
-          try {
-            const jsonError = JSON.parse(textContent || '{}');
-            if (jsonError.error) {
-              // Handle OnSpace AI errors
-              if (typeof jsonError.error === 'string' && jsonError.error.includes('Insufficient balance')) {
-                errorMessage = '❌ OnSpace AI credit limit reached. Please upgrade your plan or use your own API key.';
-              } else if (typeof jsonError.error === 'string') {
-                errorMessage = jsonError.error;
-              } else {
-                errorMessage = jsonError.error.message || JSON.stringify(jsonError.error);
-              }
-            } else {
-              errorMessage = `[Code: ${statusCode}] ${textContent || aiError.message || 'Unknown error'}`;
-            }
-          } catch (parseError) {
-            // Not JSON, use raw text
-            errorMessage = `[Code: ${statusCode}] ${textContent || aiError.message || 'Unknown error'}`;
-          }
-          
-          console.error('📋 Detailed error:', errorMessage);
-        } catch (e) {
-          errorMessage = aiError.message || 'Failed to read error response';
-          console.error('📋 Error message:', errorMessage);
-        }
-      } else {
-        errorMessage = aiError.message || 'Unknown error occurred';
-        console.error('📋 Error message:', errorMessage);
-      }
-      
       // Remove temp message on error
       setMessages(prev => prev.filter(m => m.id !== tempUserMessage.id));
-      
-      // Throw with detailed message
-      throw new Error(errorMessage);
+      throw aiError;
     }
 
     console.log('  ✅ AI response received');
     console.log('  📝 AI message:', aiResponse.message?.slice(0, 50));
     console.log('  💭 Thinking mode:', aiResponse.thinkingMode);
-    console.log('  🖼️  Image URL:', aiResponse.imageUrl || 'No image');
 
-    // Add AI response to local state immediately (with image if generated)
+    // Add AI response to local state immediately
     const tempAIMessage: Message = {
       id: `temp-ai-${Date.now()}`,
       role: 'assistant',
       content: aiResponse.message || 'Response generated',
-      image_url: aiResponse.imageUrl || undefined,
       created_at: new Date().toISOString(),
     };
     setMessages(prev => {
-      // Remove temp user message and AI placeholder (if image generation)
-      const withoutTemp = prev.filter(m => 
-        m.id !== tempUserMessage.id && 
-        (tempAIPlaceholder ? m.id !== tempAIPlaceholder.id : true)
-      );
+      // Replace temp user message with real one, add AI message
+      const withoutTemp = prev.filter(m => m.id !== tempUserMessage.id);
       return [...withoutTemp, tempUserMessage, tempAIMessage];
     });
 
@@ -300,13 +203,13 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
         title = content.slice(0, 47) + '...';
       }
       console.log('  📝 Setting conversation title:', title);
-      await updateConversationTitle(conversationId, title);
+      await updateConversationTitle(currentConversation.id, title);
       
       // Add to conversations list on first message
       const newConv: Conversation = {
-        id: conversationId,
+        id: currentConversation.id,
         title: title,
-        createdAt: currentConversation?.createdAt || new Date().toISOString(),
+        createdAt: currentConversation.createdAt,
         updatedAt: new Date().toISOString(),
       };
       setConversations(prev => {
@@ -317,25 +220,25 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
       await supabase
         .from('conversations')
         .update({ updated_at: new Date().toISOString() })
-        .eq('id', conversationId);
+        .eq('id', currentConversation.id);
       
       // Update in conversations list (move to top)
       setConversations(prev => {
         const updated = prev.map(c => 
-          c.id === conversationId 
+          c.id === currentConversation.id 
             ? { ...c, updatedAt: new Date().toISOString() } 
             : c
         );
         // Move current to top
-        const current = updated.find(c => c.id === conversationId);
-        const others = updated.filter(c => c.id !== conversationId);
+        const current = updated.find(c => c.id === currentConversation.id);
+        const others = updated.filter(c => c.id !== currentConversation.id);
         return current ? [current, ...others] : updated;
       });
     }
 
     // Finally, reload from database to get real IDs
     console.log('  🔄 Reloading messages from database...');
-    await selectConversation(conversationId);
+    await selectConversation(currentConversation.id);
     console.log('  ✅ Message flow complete');
   };
 
@@ -479,16 +382,6 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
 
     if (aiError) {
       console.error('AI regeneration error:', aiError);
-      
-      // Extract detailed error for regeneration
-      if (aiError instanceof FunctionsHttpError) {
-        try {
-          const textContent = await aiError.context?.text();
-          console.error('📋 Regeneration error details:', textContent);
-        } catch (e) {
-          console.error('📋 Could not read error details');
-        }
-      }
       return;
     }
 
