@@ -938,17 +938,20 @@ export default function HomeScreen() {
       )}
 
       <View style={styles.inputContainer}>
-        <TouchableOpacity 
-          style={styles.iconButton} 
-          onPress={() => setToolsVisible(true)} 
-          disabled={editingMessageId !== null || isRecording}
-        >
-          <Ionicons 
-            name="add-circle-outline" 
-            size={24} 
-            color={editingMessageId || isRecording ? colors.textSecondary : colors.text} 
-          />
-        </TouchableOpacity>
+        // Nan inputContainer a, ranplase bouton "call-outline" ak sa a:
+
+<TouchableOpacity 
+  style={styles.iconButton} 
+  onPress={() => setToolsVisible(true)} 
+  disabled={editingMessageId !== null || isRecording || isProcessing}
+>
+  <Ionicons 
+    name="add-circle-outline" 
+    size={28} 
+    color={editingMessageId || isRecording || isProcessing ? colors.textSecondary : colors.text} 
+  />
+</TouchableOpacity>
+
 
         <View style={styles.inputWrapper}>
           {isRecording ? (
@@ -977,13 +980,15 @@ export default function HomeScreen() {
           )}
         </View>
         
-        <TouchableOpacity 
-          style={styles.iconButton} 
-          onPress={() => router.push('/voice-control')}
-          disabled={editingMessageId !== null}
-        >
-          <Ionicons name="call-outline" size={24} color={editingMessageId ? colors.textSecondary : colors.text} />
-        </TouchableOpacity>
+        // RETIRE SA A TOUT BON:
+<TouchableOpacity 
+  style={styles.iconButton} 
+  onPress={() => router.push('/voice-control')}
+  disabled={editingMessageId !== null}
+>
+  <Ionicons name="call-outline" size={24} color={editingMessageId ? colors.textSecondary : colors.text} />
+</TouchableOpacity>
+
 
         {editingMessageId && (
           <TouchableOpacity 
