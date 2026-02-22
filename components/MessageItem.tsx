@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, memo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Pressable, Image, Modal, ActivityIndicator, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
@@ -8,7 +8,9 @@ import { useTheme } from '../hooks/useTheme';
 import { useAuth, useAlert } from '@/template';
 import { router } from 'expo-router';
 import { Spacing, Typography, BorderRadius } from '../constants/theme';
-import { CodeBlock } from './CodeBlock';
+import { StreamingCodeBlock } from './StreamingCodeBlock';
+import { StreamingText } from './StreamingText';
+import { MessageActionsModal } from './MessageActionsModal';
 import { LinkSafetyModal } from './LinkSafetyModal';
 import { WebViewModal } from './WebViewModal';
 import { ImageViewerModal } from './ImageViewerModal';
@@ -32,6 +34,7 @@ interface MessageItemProps {
   onCancel?: () => void;
   onEdit?: (messageId: string, content: string) => void;
   isGenerating?: boolean;
+  streaming?: boolean; // NEW: Enable real-time typing
 }
 
 // PRODUCTION-READY: Detect if URL is an image
@@ -47,12 +50,13 @@ const isImageUrl = (url: string): boolean => {
   );
 };
 
-export function MessageItem({ message, onCancel, onEdit, isGenerating }: MessageItemProps) {
+export const MessageItem = memo(function MessageItem({ message, onCancel, onEdit, isGenerating, streaming = false }: MessageItemProps) {
   const { colors } = useTheme();
   const { user } = useAuth();
   const { showAlert } = useAlert();
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [liked, setLiked] = useState<'like' | 'dislike' | null>(null);
+  const [showActionsModal, setShowActionsModal] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
   const [linkModalVisible, setLinkModalVisible] = useState(false);
   const [selectedLink, setSelectedLink] = useState('');
@@ -483,6 +487,7 @@ export function MessageItem({ message, onCancel, onEdit, isGenerating }: Message
           styles.container,
           message.role === 'user' ? styles.userMessage : styles.assistantMessage,
         ]}
+        onLongPress={message.role === 'assistant' ? () => setShowActionsModal(true) : handleLongPress}
       >
         {/* PRODUCTION: Display AI-generated image with download button */}
         {hasGeneratedImage && (
@@ -536,9 +541,10 @@ export function MessageItem({ message, onCancel, onEdit, isGenerating }: Message
           if (part.type === 'code') {
             return (
               <View key={index} style={{ marginVertical: 0 }}>
-                <CodeBlock
+                <StreamingCodeBlock
                   code={part.content}
                   language={part.language}
+                  streaming={streaming && index === contentParts.length - 1}
                 />
               </View>
             );
@@ -566,6 +572,17 @@ export function MessageItem({ message, onCancel, onEdit, isGenerating }: Message
                     >
                       {textPart.content}
                     </Text>
+                  );
+                }
+                // Use streaming text for AI messages during generation
+                if (message.role === 'assistant' && streaming && textIndex === textParts.length - 1) {
+                  return (
+                    <StreamingText
+                      key={textIndex}
+                      text={textPart.content}
+                      speed={3} // Fast but visible
+                      style={styles.assistantMessageText}
+                    />
                   );
                 }
                 return (
@@ -717,6 +734,16 @@ export function MessageItem({ message, onCancel, onEdit, isGenerating }: Message
         fileType={fileData.type}
         onClose={() => setFileModalVisible(false)}
       />
+
+      {/* NEW: Message Actions Modal */}
+      {message.role === 'assistant' && (
+        <MessageActionsModal
+          visible={showActionsModal}
+          onClose={() => setShowActionsModal(false)}
+          message={message}
+          onLike={handleLike}
+        />
+      )}
     </>
   );
-}
+});

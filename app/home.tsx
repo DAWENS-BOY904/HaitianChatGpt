@@ -821,6 +821,7 @@ export default function HomeScreen() {
       onCancel={handleCancelGeneration}
       onEdit={(messageId, content) => handleEditMessage(messageId, content)}
       isGenerating={generating && index === messages.length - 1}
+      streaming={generating && index === messages.length - 1}
     />
   );
 
