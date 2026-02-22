@@ -526,3 +526,16 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
     </ConversationContext.Provider>
   );
 }
+make sure the ai create real photo and real fichier i can click in file name to go download it {
+  "eventMessage": "  🖼️  Image URL: No\n",
+  "functionId": "chat",
+  "id": "cbe98380-cc48-464d-b79a-a38aae8bf8ff",
+  "logLevel": "INFO",
+  "timestamp": 1771772051
+} and {
+  "eventMessage": "  📄 File: No\n",
+  "functionId": "chat",
+  "id": "cbe98380-cc48-464d-b79a-a38aae8bf8ff",
+  "logLevel": "INFO",
+  "timestamp": 1771772051
+} and fix recording home page
