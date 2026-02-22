@@ -22,10 +22,8 @@ import Animated, {
   runOnJS,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-
 import { useTheme } from '../hooks/useTheme';
 import { Spacing, Typography, BorderRadius } from '../constants/theme';
-
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 
@@ -43,9 +41,9 @@ interface ToolsModalProps {
 
 // Premium Glassmorphism Design System
 const GLASS_COLORS = {
-  background: 'rgba(20, 20, 22, 0.98)',
-  surface: 'rgba(40, 42, 48, 0.85)',
-  surfaceHover: 'rgba(50, 52, 60, 0.90)',
+  background: 'rgba(28, 28, 30, 0.98)',
+  surface: 'rgba(44, 44, 46, 0.85)',
+  surfaceHover: 'rgba(58, 58, 60, 0.90)',
   border: 'rgba(255, 255, 255, 0.08)',
   text: '#FFFFFF',
   textSecondary: 'rgba(255, 255, 255, 0.65)',
@@ -103,7 +101,6 @@ export function ToolsModal({
     });
 
   /* ---------------- MEDIA PICKERS ---------------- */
-
   const handlePickImages = async () => {
     setLoadingTool('images');
     try {
@@ -161,8 +158,7 @@ export function ToolsModal({
     action();
   }, [loadingTool]);
 
-  /* ---------------- TOOLS CONFIG (MATCHING KIMI) ---------------- */
-
+  /* ---------------- TOOLS CONFIG (3x2 GRID) ---------------- */
   const mainTools = [
     {
       id: 'camera',
@@ -189,42 +185,40 @@ export function ToolsModal({
       action: handlePickFile,
     },
     {
-      id: 'call',
-      label: 'Voice',
-      icon: 'mic-outline',
+      id: 'wechat',
+      label: 'WeChat files',
+      icon: 'chatbubble-ellipses-outline',
       gradient: ['#43e97b', '#38f9d7'],
+      action: () => {
+        // Handle WeChat files
+        onClose();
+      },
+    },
+    {
+      id: 'call',
+      label: 'Call',
+      icon: 'call-outline',
+      gradient: ['#fa709a', '#fee140'],
       action: () => {
         navigation.navigate('voice-control');
         onClose();
       },
     },
     {
-      id: 'code',
-      label: 'Code',
-      icon: 'code-slash-outline',
-      gradient: ['#fa709a', '#fee140'],
-      action: () => {
-        navigation.navigate('coding');
-        onClose();
-      },
-    },
-    {
-      id: 'image-gen',
-      label: 'Create Image',
-      icon: 'color-palette-outline',
+      id: 'presets',
+      label: 'Presets',
+      icon: 'cube-outline',
       gradient: ['#30cfd0', '#330867'],
       action: () => {
-        navigation.navigate('images');
+        onSelectTool?.('presets');
         onClose();
       },
     },
   ];
 
   /* ---------------- RENDER ---------------- */
-
   const renderToolButton = (tool: any, index: number) => {
     const isLoading = loadingTool === tool.id;
-    
     return (
       <Animated.View
         key={tool.id}
@@ -246,9 +240,9 @@ export function ToolsModal({
             <>
               <View style={[
                 styles.iconContainer,
-                { backgroundColor: `${tool.gradient[0]}15` }
+                { backgroundColor: `${tool.gradient[0]}20` }
               ]}>
-                <Ionicons name={tool.icon} size={26} color={tool.gradient[0]} />
+                <Ionicons name={tool.icon} size={24} color={tool.gradient[0]} />
               </View>
               <Text style={styles.toolLabel}>{tool.label}</Text>
             </>
@@ -269,7 +263,7 @@ export function ToolsModal({
       <View style={styles.overlay}>
         <BlurView intensity={20} tint="dark" style={StyleSheet.absoluteFill} />
         <View style={styles.darkOverlay} />
-
+        
         <TouchableOpacity
           style={styles.dismissArea}
           activeOpacity={1}
@@ -285,9 +279,9 @@ export function ToolsModal({
               contentContainerStyle={styles.scrollContent}
               showsVerticalScrollIndicator={false}
             >
-              {/* Main Tools Grid - 3x2 */}
+              {/* Main Tools Grid - 3x2 (3 columns, 2 rows) */}
               <View style={styles.mainGrid}>
-                {mainTools.slice(0, 5).map((tool, index) => renderToolButton(tool, index))}
+                {mainTools.map((tool, index) => renderToolButton(tool, index))}
               </View>
 
               {/* Web Search Row with Toggle */}
@@ -298,7 +292,7 @@ export function ToolsModal({
                   activeOpacity={0.7}
                 >
                   <View style={styles.webSearchLeft}>
-                    <Ionicons name="globe" size={22} color={GLASS_COLORS.text} />
+                    <Ionicons name="globe-outline" size={22} color={GLASS_COLORS.text} />
                     <Text style={styles.webSearchText}>Web search</Text>
                   </View>
                   <View style={styles.webSearchRight}>
@@ -359,7 +353,7 @@ const styles = StyleSheet.create({
   },
   darkOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
   dismissArea: {
     flex: 1,
@@ -368,11 +362,9 @@ const styles = StyleSheet.create({
     backgroundColor: GLASS_COLORS.background,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    maxHeight: SCREEN_HEIGHT * 0.70,
+    maxHeight: SCREEN_HEIGHT * 0.65,
     paddingBottom: Platform.OS === 'ios' ? 34 : 20,
     borderTopWidth: 1,
-    borderLeftWidth: 1,
-    borderRightWidth: 1,
     borderColor: GLASS_COLORS.border,
   },
   handleBar: {
@@ -382,69 +374,68 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.3)',
     alignSelf: 'center',
     marginTop: 12,
-    marginBottom: 16,
+    marginBottom: 20,
   },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    padding: 20,
+    padding: 16,
     paddingTop: 8,
   },
-  
-  // Premium 2-column grid with larger touch targets
+  // 3x2 Grid - 3 columns, 2 rows
   mainGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    gap: 16,
-    marginBottom: 24,
+    marginBottom: 20,
+    paddingHorizontal: 4,
   },
   toolButtonContainer: {
-    width: '48%',
+    width: '31%', // 3 columns with gap
+    marginBottom: 16,
   },
   toolButton: {
     backgroundColor: GLASS_COLORS.surface,
-    borderRadius: 24,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 28,
-    paddingHorizontal: 20,
+    paddingVertical: 20,
+    paddingHorizontal: 8,
     borderWidth: 1,
     borderColor: GLASS_COLORS.border,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
   },
   iconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 12,
+    marginBottom: 10,
   },
   toolLabel: {
-    fontSize: 15,
-    fontWeight: '600',
+    fontSize: 13,
+    fontWeight: '500',
     color: GLASS_COLORS.text,
     textAlign: 'center',
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
   },
-  
   // Web Search Row
   webSearchRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: GLASS_COLORS.surface,
-    borderRadius: 14,
+    borderRadius: 16,
     padding: 16,
     borderWidth: 1,
     borderColor: GLASS_COLORS.border,
-    marginBottom: 12,
+    marginTop: 4,
   },
   webSearchLeft: {
     flexDirection: 'row',
@@ -459,21 +450,19 @@ const styles = StyleSheet.create({
   webSearchRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
   },
   webSearchBadge: {
     fontSize: 15,
     color: GLASS_COLORS.textSecondary,
     fontWeight: '400',
   },
-  
   // Web Search Options
   webSearchOptions: {
     backgroundColor: 'rgba(0, 0, 0, 0.3)',
     borderRadius: 12,
     padding: 4,
-    marginTop: -8,
-    marginBottom: 12,
+    marginTop: 8,
   },
   webSearchOption: {
     flexDirection: 'row',
@@ -499,3 +488,4 @@ const styles = StyleSheet.create({
     color: GLASS_COLORS.textSecondary,
   },
 });
+
