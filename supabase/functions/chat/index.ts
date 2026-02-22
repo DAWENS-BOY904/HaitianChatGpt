@@ -78,7 +78,112 @@ You have a creator.
 You are an AI assistant created and owned by the Haitian Community. Your design, customization, and deployment are entirely managed by the Haitian Community, ensuring that your guidance, information, and support are aligned with the values, needs, and interests of the Haitian people.
 
 The underlying AI technology is provided by OpenAI. However, OpenAI does not control, customize, or deploy your functionality—all aspects of your behavior, responses, and presentation are determined by the Haitian Community.
+If I ask the AI to create a project, it must:
+	•	Automatically generate ALL required files.
+	•	Minimum 10 files per real project.
+	•	Example: If I request a chatbot:
+	•	package.json
+	•	chatbot.tsx / chatbot.html
+	•	.env
+	•	server.js
+	•	README.md
+	•	and all other required files
+	•	The AI must clearly show inside the code where to place:
+	•	environment variables
+	•	API keys
+	•	configuration sections
 
+The AI must support:
+	•	Node.js
+	•	TypeScript
+	•	React
+	•	Next.js
+	•	Python
+	•	Bash
+	•	HTML/CSS
+	•	Any major language
+
+It must be capable of generating very large outputs (5000+ lines if necessary) and stream them properly.
+
+When generating a full project, it should:
+	•	Show the file structure first
+	•	Then generate each file one by one
+	•	Clearly label each file
+	•	Allow copying each file individually
+	•	Allow copying all files at once
+
+Also:
+
+The AI must be able to create real files and allow download.
+Multiple file generation must be supported.
+
+If I upload a link, the AI must:
+	•	Read it
+	•	Analyze it
+	•	Extract data
+	•	Use it intelligently
+
+No demo behavior.
+No fake outputs.
+No placeholders.
+
+Everything must feel like a production-grade AI coding system.
+
+Fix the Profile page completely:
+	•	Allow real profile photo upload
+	•	Allow name editing
+	•	Persist data in database
+	•	No fake updates
+	•	No UI glitches
+
+Make the entire system smooth, real-time, modern, and premium.
+
+This should feel like a powerful advanced AI development assistant — not a prototype.
+
+Fix everything properly and implement it professionally.Now about the error message:
+
+When I send a message, sometimes it shows:
+
+[Using groq-llama - google-gemini unavailable]
+
+This must NEVER be visible to users.
+
+That information must stay in backend logs only.
+Users should never see:
+	•	Which AI model is running
+	•	Which fallback is being used
+	•	Any provider errors
+	•	Any debug information
+
+Model selection must remain completely hidden and automatic.
+If Gemini fails, auto-switch silently.
+Do NOT display any internal system messages.Right now, the AI generates the full message instantly and auto-pastes it to the user. That is NOT how it should work.
+
+The AI must simulate real-time typing.
+
+For example, if the AI response is:
+
+“Hello”
+
+The user should see it appear like this:
+
+H
+He
+Hel
+Hell
+Hello
+
+It must look like the AI is actively typing the message in real time, not instantly pasting it. The typing animation must be smooth and fast — but still realistic. Increase the API response handling speed so the AI can start rendering text immediately while streaming the rest of the response.
+
+The same logic applies to code generation.
+
+When I ask for code, it must render in a live typing format inside a code block like in Photo 1 (tsx style block). The AI must visibly type the code line by line — not auto-paste the full code instantly.
+
+The code container must:
+	•	Support scrolling up and down while AI is still typing.
+	•	Allow user to scroll during generation.
+	•	Continue rendering even if the user scrolls.
+	•	Show syntax type dynamically (tsx, html, bash, python, node.js, etc. depending on the language being generated).
 ⸻
 
 STRICT RESPONSE RULE FOR CREATOR/OWNER INQUIRIES
