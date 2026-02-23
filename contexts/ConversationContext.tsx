@@ -214,7 +214,7 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
     console.log('  🤖 Calling AI Edge Function...');
     console.log('  📊 Context messages count:', contextMessages.length);
 
-    // Call AI Edge Function
+    // PRODUCTION: Call AI Edge Function (NO DEBUG MESSAGES IN RESPONSE)
     const { data: aiResponse, error: aiError } = await supabase.functions.invoke('chat', {
       body: requestBody,
     });
@@ -270,13 +270,24 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
     console.log('  📝 AI message:', aiResponse.message?.slice(0, 50));
     console.log('  💭 Thinking mode:', aiResponse.thinkingMode);
     console.log('  🖼️  Image URL:', aiResponse.imageUrl || 'No image');
+    console.log('  🤖 Model used:', aiResponse.model || 'Unknown');
+    
+    // CRITICAL: Remove any debug prefixes from AI message (never show model switching info)
+    let cleanMessage = aiResponse.message || 'Response generated';
+    if (cleanMessage.startsWith('[Using ') || cleanMessage.includes('- google-gemini unavailable]')) {
+      // Strip debug prefix like "[Using groq-llama - google-gemini unavailable]"
+      cleanMessage = cleanMessage.replace(/^\[Using [^\]]+\]\s*/i, '');
+    }
 
     // Add AI response to local state immediately (with image if generated)
     const tempAIMessage: Message = {
       id: `temp-ai-${Date.now()}`,
       role: 'assistant',
-      content: aiResponse.message || 'Response generated',
+      content: cleanMessage,
       image_url: aiResponse.imageUrl || undefined,
+      file_url: aiResponse.fileUrl || undefined,
+      file_name: aiResponse.fileName || undefined,
+      file_type: aiResponse.fileType || undefined,
       created_at: new Date().toISOString(),
     };
     setMessages(prev => {

@@ -1,5 +1,4 @@
-// MessageActionsModal.tsx - Interaction modal for AI messages
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,188 +6,206 @@ import {
   StyleSheet,
   Modal,
   Share,
-  Alert,
   Platform,
+  ScrollView,
+  Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import * as Clipboard from 'expo-clipboard';
+import * as Speech from 'expo-speech';
+import { captureRef } from 'react-native-view-shot';
+import * as MediaLibrary from 'expo-media-library';
 import { useTheme } from '../hooks/useTheme';
 import { useAlert } from '@/template';
-import { Spacing, Typography, BorderRadius } from '../constants/theme';
-import { getSupabaseClient } from '@/template';
+import { Spacing, BorderRadius } from '../constants/theme';
+import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface MessageActionsModalProps {
   visible: boolean;
   onClose: () => void;
   message: {
     id: string;
-    content: string;
     role: 'user' | 'assistant';
+    content: string;
+    image_url?: string;
+    created_at: string;
   };
   onLike?: (type: 'like' | 'dislike') => void;
-  onShare?: () => void;
 }
 
-/**
- * PRODUCTION-READY MESSAGE ACTIONS MODAL
- * Provides interaction options for AI messages
- * 
- * Features:
- * - Like/Unlike buttons
- * - Read aloud (TTS)
- * - Copy text (all or selection)
- * - Share conversation
- * - Select mode (future: text selection)
- */
 export function MessageActionsModal({
   visible,
   onClose,
   message,
   onLike,
-  onShare,
 }: MessageActionsModalProps) {
   const { colors } = useTheme();
   const { showAlert } = useAlert();
-  const [isReading, setIsReading] = useState(false);
-  const supabase = getSupabaseClient();
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [liked, setLiked] = useState<'like' | 'dislike' | null>(null);
 
-  const handleLike = async (type: 'like' | 'dislike') => {
-    onLike?.(type);
-    showAlert('Thank you!', `Your ${type} helps improve AI responses`);
-    onClose();
-  };
-
-  const handleReadAloud = async () => {
-    try {
-      setIsReading(true);
-      
-      // Call TTS Edge Function
-      const { data, error } = await supabase.functions.invoke('generate-tts', {
-        body: {
-          text: message.content.substring(0, 4000), // Limit to prevent timeout
-          voice: 'alloy', // Professional voice
-          speed: 1.0,
-        },
-      });
-
-      if (error) throw error;
-
-      if (data?.audioUrl) {
-        // Play audio (implementation depends on audio library)
-        showAlert('Playing', 'Reading message aloud...');
-        // TODO: Implement audio playback with expo-av
-      }
-    } catch (error) {
-      console.error('TTS error:', error);
-      showAlert('Error', 'Failed to read message aloud. Please try again.');
-    } finally {
-      setIsReading(false);
+  // PRODUCTION: Text-to-Speech
+  const handleReadAloud = useCallback(async () => {
+    if (isSpeaking) {
+      Speech.stop();
+      setIsSpeaking(false);
+      return;
     }
-  };
 
-  const handleCopyAll = async () => {
+    setIsSpeaking(true);
+    
+    // Remove code blocks and formatting for better TTS
+    const cleanText = message.content
+      .replace(/```[\s\S]*?```/g, 'code block')
+      .replace(/[*_`~]/g, '')
+      .replace(/\[.*?\]\(.*?\)/g, 'link');
+
+    Speech.speak(cleanText, {
+      language: 'en',
+      pitch: 1.0,
+      rate: 0.9,
+      onDone: () => setIsSpeaking(false),
+      onStopped: () => setIsSpeaking(false),
+      onError: () => {
+        setIsSpeaking(false);
+        showAlert('Error', 'Text-to-speech failed');
+      },
+    });
+  }, [message.content, isSpeaking, showAlert]);
+
+  // PRODUCTION: Copy message content
+  const handleCopy = useCallback(async () => {
     await Clipboard.setStringAsync(message.content);
-    showAlert('Copied', 'Message copied to clipboard');
+    showAlert('Copied!', 'Message copied to clipboard');
     onClose();
-  };
+  }, [message.content, showAlert, onClose]);
 
-  const handleShare = async () => {
+  // PRODUCTION: Share message
+  const handleShare = useCallback(async () => {
     try {
-      const result = await Share.share({
+      await Share.share({
         message: message.content,
-        title: 'HaitianChatGPT Conversation',
+        title: 'HaitianChatGPT Message',
       });
-
-      if (result.action === Share.sharedAction) {
-        showAlert('Shared', 'Message shared successfully');
-      }
-      onClose();
     } catch (error) {
       console.error('Share error:', error);
-      showAlert('Error', 'Failed to share message');
     }
-  };
+  }, [message.content]);
 
-  const actions = [
-    {
-      icon: 'thumbs-up-outline',
-      label: 'Like',
-      color: colors.text,
-      onPress: () => handleLike('like'),
-    },
-    {
-      icon: 'thumbs-down-outline',
-      label: 'Unlike',
-      color: colors.text,
-      onPress: () => handleLike('dislike'),
-    },
-    {
-      icon: 'volume-high-outline',
-      label: 'Read aloud',
-      color: colors.text,
-      onPress: handleReadAloud,
-      loading: isReading,
-    },
-    {
-      icon: 'copy-outline',
-      label: 'Copy all',
-      color: colors.text,
-      onPress: handleCopyAll,
-    },
-    {
-      icon: 'share-outline',
-      label: 'Share',
-      color: colors.text,
-      onPress: handleShare,
-    },
-  ];
+  // PRODUCTION: Like/Unlike
+  const handleLikePress = useCallback((type: 'like' | 'dislike') => {
+    const newLiked = liked === type ? null : type;
+    setLiked(newLiked);
+    onLike?.(type);
+  }, [liked, onLike]);
+
+  // PRODUCTION: Stop speaking on close
+  const handleClose = useCallback(() => {
+    if (isSpeaking) {
+      Speech.stop();
+      setIsSpeaking(false);
+    }
+    onClose();
+  }, [isSpeaking, onClose]);
 
   const styles = StyleSheet.create({
     overlay: {
       flex: 1,
       justifyContent: 'flex-end',
     },
+    darkOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    },
     dismissArea: {
       flex: 1,
     },
     container: {
-      backgroundColor: colors.card,
+      backgroundColor: colors.background,
       borderTopLeftRadius: 24,
       borderTopRightRadius: 24,
       paddingBottom: Platform.OS === 'ios' ? 34 : 20,
       borderTopWidth: 1,
-      borderLeftWidth: 1,
-      borderRightWidth: 1,
       borderColor: colors.border,
     },
-    handle: {
+    handleBar: {
       width: 36,
       height: 5,
       borderRadius: 3,
-      backgroundColor: colors.border,
+      backgroundColor: colors.textSecondary,
       alignSelf: 'center',
       marginTop: 12,
       marginBottom: 20,
     },
-    actionsContainer: {
-      paddingHorizontal: 20,
+    content: {
+      padding: 20,
+    },
+    title: {
+      fontSize: 18,
+      fontWeight: '700',
+      color: colors.text,
+      marginBottom: 8,
+    },
+    subtitle: {
+      fontSize: 13,
+      color: colors.textSecondary,
+      marginBottom: 24,
+    },
+    row: {
+      flexDirection: 'row',
+      gap: 12,
+      marginBottom: 16,
     },
     actionButton: {
-      flexDirection: 'row',
+      flex: 1,
+      backgroundColor: colors.surface,
+      borderRadius: BorderRadius.md,
+      padding: 16,
       alignItems: 'center',
-      paddingVertical: 16,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: colors.border,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    actionButtonActive: {
+      backgroundColor: `${colors.primary}20`,
+      borderColor: colors.primary,
     },
     actionIcon: {
-      width: 40,
-      alignItems: 'center',
+      marginBottom: 8,
     },
-    actionLabel: {
-      ...Typography.body,
+    actionText: {
+      fontSize: 12,
       color: colors.text,
-      fontSize: 16,
+      fontWeight: '500',
+    },
+    section: {
+      marginTop: 8,
+    },
+    sectionTitle: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: colors.textSecondary,
+      marginBottom: 12,
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+    },
+    shareButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.surface,
+      borderRadius: BorderRadius.md,
+      padding: 16,
+      borderWidth: 1,
+      borderColor: colors.border,
+      marginBottom: 12,
+    },
+    shareText: {
+      fontSize: 15,
+      color: colors.text,
+      fontWeight: '500',
+      marginLeft: 12,
       flex: 1,
     },
   });
@@ -197,46 +214,106 @@ export function MessageActionsModal({
     <Modal
       visible={visible}
       transparent
-      animationType="slide"
+      animationType="fade"
       statusBarTranslucent
-      onRequestClose={onClose}
+      onRequestClose={handleClose}
     >
       <View style={styles.overlay}>
         <BlurView intensity={20} tint="dark" style={StyleSheet.absoluteFill} />
+        <View style={styles.darkOverlay} />
         
         <TouchableOpacity
           style={styles.dismissArea}
           activeOpacity={1}
-          onPress={onClose}
+          onPress={handleClose}
         />
 
-        <View style={styles.container}>
-          <View style={styles.handle} />
+        <Animated.View 
+          entering={FadeInDown.duration(300).springify()}
+          style={styles.container}
+        >
+          <View style={styles.handleBar} />
 
-          <View style={styles.actionsContainer}>
-            {actions.map((action, index) => (
+          <ScrollView
+            style={styles.content}
+            showsVerticalScrollIndicator={false}
+          >
+            <Text style={styles.title}>Message Actions</Text>
+            <Text style={styles.subtitle}>
+              {new Date(message.created_at).toLocaleString()}
+            </Text>
+
+            {/* Quick Actions */}
+            <View style={styles.row}>
               <TouchableOpacity
-                key={index}
-                style={styles.actionButton}
-                onPress={action.onPress}
-                disabled={action.loading}
-                activeOpacity={0.7}
+                style={[
+                  styles.actionButton,
+                  liked === 'like' && styles.actionButtonActive,
+                ]}
+                onPress={() => handleLikePress('like')}
               >
-                <View style={styles.actionIcon}>
-                  <Ionicons 
-                    name={action.icon} 
-                    size={24} 
-                    color={action.color} 
-                  />
-                </View>
-                <Text style={styles.actionLabel}>
-                  {action.loading ? 'Processing...' : action.label}
-                </Text>
-                <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+                <Ionicons
+                  name={liked === 'like' ? 'thumbs-up' : 'thumbs-up-outline'}
+                  size={24}
+                  color={liked === 'like' ? colors.primary : colors.text}
+                  style={styles.actionIcon}
+                />
+                <Text style={styles.actionText}>Like</Text>
               </TouchableOpacity>
-            ))}
-          </View>
-        </View>
+
+              <TouchableOpacity
+                style={[
+                  styles.actionButton,
+                  liked === 'dislike' && styles.actionButtonActive,
+                ]}
+                onPress={() => handleLikePress('dislike')}
+              >
+                <Ionicons
+                  name={liked === 'dislike' ? 'thumbs-down' : 'thumbs-down-outline'}
+                  size={24}
+                  color={liked === 'dislike' ? colors.primary : colors.text}
+                  style={styles.actionIcon}
+                />
+                <Text style={styles.actionText}>Dislike</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.actionButton,
+                  isSpeaking && styles.actionButtonActive,
+                ]}
+                onPress={handleReadAloud}
+              >
+                <Ionicons
+                  name={isSpeaking ? 'stop-circle' : 'volume-high-outline'}
+                  size={24}
+                  color={isSpeaking ? colors.primary : colors.text}
+                  style={styles.actionIcon}
+                />
+                <Text style={styles.actionText}>
+                  {isSpeaking ? 'Stop' : 'Read Aloud'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Copy & Share */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Export</Text>
+              
+              <TouchableOpacity style={styles.shareButton} onPress={handleCopy}>
+                <Ionicons name="copy-outline" size={20} color={colors.text} />
+                <Text style={styles.shareText}>Copy Text</Text>
+                <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.shareButton} onPress={handleShare}>
+                <Ionicons name="share-outline" size={20} color={colors.text} />
+                <Text style={styles.shareText}>Share</Text>
+                <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </Animated.View>
       </View>
     </Modal>
   );
