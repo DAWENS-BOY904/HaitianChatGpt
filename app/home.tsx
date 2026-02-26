@@ -1119,5 +1119,3 @@ blurSubtext: {
     </KeyboardAvoidingView>
   );
 }
-
-fix some error white screen dont skip this message please.,
