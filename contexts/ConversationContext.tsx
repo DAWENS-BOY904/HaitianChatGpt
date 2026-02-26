@@ -618,187 +618,158 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
   // ==================== MESSAGING ====================
 
   const sendMessage = async (
-  content: string, 
-  imageUrl?: string, 
-  base64Image?: string,  // Paramèt sa a te manke nan apèl la!
-  isImageGeneration: boolean = false, 
-  aiModel?: string
-) => {
-  if (!user) return;
-  
-  // Tcheke sispansyon anvan voye mesaj
-  if (accountStatus.isSuspended) {
-    throw new Error(`Account suspended: ${accountStatus.reason || 'Contact support'}`);
-  }
-
-  // Verifye kontni an pou vyolasyon
-  const contentCheck = await checkContentViolation(content);
-  if (contentCheck.isViolation) {
-    await handleContentViolation('TEXT_CONTENT_VIOLATION', contentCheck.severity || 'medium', contentCheck.reason);
-    throw new Error('Message blocked: Content violates usage policies.');
-  }
-
-  let conversationId = currentConversation?.id;
-  if (!conversationId) {
-    conversationId = await createConversation();
-    if (!conversationId) {
-      throw new Error('Failed to create conversation');
+    content: string, 
+    imageUrl?: string, 
+    base64Image?: string, 
+    isImageGeneration: boolean = false, 
+    aiModel?: string
+  ) => {
+    if (!user) return;
+    
+    // Tcheke sispansyon anvan voye mesaj
+    if (accountStatus.isSuspended) {
+      throw new Error(`Account suspended: ${accountStatus.reason || 'Contact support'}`);
     }
-  }
 
-  // Optimistic UI
-  const tempUserMessage: Message = {
-    id: `temp-user-${Date.now()}`,
-    role: 'user',
-    content,
-    image_url: imageUrl,
-    created_at: new Date().toISOString(),
-  };
-  setMessages(prev => [...prev, tempUserMessage]);
+    // Verifye kontni an pou vyolasyon
+    const contentCheck = await checkContentViolation(content);
+    if (contentCheck.isViolation) {
+      await handleContentViolation('TEXT_CONTENT_VIOLATION', contentCheck.severity || 'medium', contentCheck.reason);
+      throw new Error('Message blocked: Content violates usage policies.');
+    }
 
-  // Placeholder pou jenerasyon imaj
-  let tempAIPlaceholder: Message | null = null;
-  if (isImageGeneration) {
-    tempAIPlaceholder = {
-      id: `temp-ai-generating-${Date.now()}`,
-      role: 'assistant',
-      content: '🎨 Generating your image...',
+    let conversationId = currentConversation?.id;
+    if (!conversationId) {
+      conversationId = await createConversation();
+      if (!conversationId) {
+        throw new Error('Failed to create conversation');
+      }
+    }
+
+    // Optimistic UI
+    const tempUserMessage: Message = {
+      id: `temp-user-${Date.now()}`,
+      role: 'user',
+      content,
+      image_url: imageUrl,
       created_at: new Date().toISOString(),
     };
-    setMessages(prev => [...prev, tempAIPlaceholder!]);
-  }
+    setMessages(prev => [...prev, tempUserMessage]);
 
-  try {
-    // KONSTRUI MESAJ YO POU AI - FORMAT KORÈK POU IMaj
-    const contextMessages = [...messages, tempUserMessage].map(m => {
-      // Si gen imaj, fòmat li kòrèkteman pou AI a ka wè li
-      if (m.image_url || m.role === 'user') {
-        return {
-          role: m.role,
-          content: m.content,
-          // Ajoute imaj si genyen
-          ...(m.image_url && {
-            image_url: m.image_url
-          })
-        };
-      }
-      return {
+    // Placeholder pou jenerasyon imaj
+    let tempAIPlaceholder: Message | null = null;
+    if (isImageGeneration) {
+      tempAIPlaceholder = {
+        id: `temp-ai-generating-${Date.now()}`,
+        role: 'assistant',
+        content: '🎨 Generating your image...',
+        created_at: new Date().toISOString(),
+      };
+      setMessages(prev => [...prev, tempAIPlaceholder!]);
+    }
+
+    try {
+      const contextMessages = [...messages, tempUserMessage].map(m => ({
         role: m.role,
         content: m.content,
+        image_url: m.image_url,
+      }));
+
+      const requestBody: any = {
+        messages: contextMessages,
+        conversationId: conversationId,
+        aiModel: aiModel || 'google-gemini',
       };
-    });
 
-    const requestBody: any = {
-      messages: contextMessages,
-      conversationId: conversationId,
-      aiModel: aiModel || 'google-gemini',
-    };
+      if (isImageGeneration && base64Image) {
+        requestBody.base64Image = base64Image;
+        requestBody.isImageGeneration = true;
+      }
 
-    // SI GEN BASE64 IMaj, AJOUTE LI
-    if (base64Image) {
-      requestBody.base64Image = base64Image;
-      console.log('📸 Sending with base64 image, length:', base64Image.length);
-    }
+      const { data: aiResponse, error: aiError } = await supabase.functions.invoke('chat', {
+        body: requestBody,
+      });
 
-    if (isImageGeneration && base64Image) {
-      requestBody.isImageGeneration = true;
-    }
+      if (aiError) {
+        throw aiError;
+      }
 
-    console.log('📤 Sending message with model:', aiModel || 'google-gemini');
-    console.log('📸 Image included:', !!base64Image || !!imageUrl);
+      // Netwaye mesaj AI a
+      let cleanMessage = aiResponse.message || 'Response generated';
+      cleanMessage = cleanMessage.replace(/^\[Using [^\]]+\]\s*/i, '');
 
-    const { data: aiResponse, error: aiError } = await supabase.functions.invoke('chat', {
-      body: requestBody,
-    });
+      const tempAIMessage: Message = {
+        id: `temp-ai-${Date.now()}`,
+        role: 'assistant',
+        content: cleanMessage,
+        image_url: aiResponse.imageUrl || undefined,
+        file_url: aiResponse.fileUrl || undefined,
+        file_name: aiResponse.fileName || undefined,
+        file_type: aiResponse.fileType || undefined,
+        created_at: new Date().toISOString(),
+      };
 
-    if (aiError) {
-      throw aiError;
-    }
+      setMessages(prev => {
+        const withoutTemp = prev.filter(m => 
+          m.id !== tempUserMessage.id && 
+          (tempAIPlaceholder ? m.id !== tempAIPlaceholder.id : true)
+        );
+        return [...withoutTemp, tempUserMessage, tempAIMessage];
+      });
 
-    // RETIRE TOUT DEBUG PREFIX YO - NETWAYE MESAJ LA
-    let cleanMessage = aiResponse.message || 'Response generated';
-    
-    // Retire tout "[Using ...]" patterns
-    cleanMessage = cleanMessage.replace(/\[Using [^\]]+\]\s*/gi, '');
-    cleanMessage = cleanMessage.replace(/\[Model:[^\]]+\]\s*/gi, '');
-    cleanMessage = cleanMessage.replace(/\[Fallback:[^\]]+\]\s*/gi, '');
-    
-    // Retire lòt debug messages
-    cleanMessage = cleanMessage.replace(/google-gemini unavailable/gi, '');
-    cleanMessage = cleanMessage.replace(/groq-llama/gi, '');
-    cleanMessage = cleanMessage.trim();
+      // Mete ajou tit
+      if (messages.length === 0) {
+        let title = content.slice(0, 50);
+        if (aiResponse.imageUrl) {
+          title = content.includes('logo') ? '🎨 Logo Design' : '🖼️ Image Generation';
+        } else if (aiResponse.fileName) {
+          title = `📄 File: ${aiResponse.fileName}`;
+        } else if (content.length > 50) {
+          title = content.slice(0, 47) + '...';
+        }
+        
+        await updateConversationTitle(conversationId, title);
+        
+        const newConv: Conversation = {
+          id: conversationId,
+          title: title,
+          createdAt: currentConversation?.createdAt || new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        setConversations(prev => [newConv, ...prev]);
+      } else {
+        await supabase
+          .from('conversations')
+          .update({ updated_at: new Date().toISOString() })
+          .eq('id', conversationId);
+        
+        setConversations(prev => {
+          const updated = prev.map(c => 
+            c.id === conversationId 
+              ? { ...c, updatedAt: new Date().toISOString() } 
+              : c
+          );
+          const current = updated.find(c => c.id === conversationId);
+          const others = updated.filter(c => c.id !== conversationId);
+          return current ? [current, ...others] : updated;
+        });
+      }
 
-    const tempAIMessage: Message = {
-      id: `temp-ai-${Date.now()}`,
-      role: 'assistant',
-      content: cleanMessage,
-      image_url: aiResponse.imageUrl || undefined,
-      file_url: aiResponse.fileUrl || undefined,
-      file_name: aiResponse.fileName || undefined,
-      file_type: aiResponse.fileType || undefined,
-      created_at: new Date().toISOString(),
-    };
-
-    setMessages(prev => {
-      const withoutTemp = prev.filter(m => 
-        m.id !== tempUserMessage.id && 
-        (tempAIPlaceholder ? m.id !== tempAIPlaceholder.id : true)
-      );
-      return [...withoutTemp, tempUserMessage, tempAIMessage];
-    });
-
-    // Mete ajou tit konvèsasyon an...
-    if (messages.length === 0) {
-      let title = content.slice(0, 50);
-      if (aiResponse.imageUrl) {
-        title = content.includes('logo') ? '🎨 Logo Design' : '🖼️ Image Generation';
-      } else if (aiResponse.fileName) {
-        title = `📄 File: ${aiResponse.fileName}`;
-      } else if (content.length > 50) {
-        title = content.slice(0, 47) + '...';
+      // Reload final messages
+      await selectConversation(conversationId);
+      
+    } catch (error: any) {
+      // Retire mesaj tanporè a si gen erè
+      setMessages(prev => prev.filter(m => m.id !== tempUserMessage.id && m.id !== tempAIPlaceholder?.id));
+      
+      // Tcheke si se erè vyolasyon
+      if (error.message?.includes('violation') || error.message?.includes('suspended')) {
+        await handleContentViolation('AI_RESPONSE_VIOLATION', 'high', error.message);
       }
       
-      await updateConversationTitle(conversationId, title);
-      
-      const newConv: Conversation = {
-        id: conversationId,
-        title: title,
-        createdAt: currentConversation?.createdAt || new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      setConversations(prev => [newConv, ...prev]);
-    } else {
-      await supabase
-        .from('conversations')
-        .update({ updated_at: new Date().toISOString() })
-        .eq('id', conversationId);
-      
-      setConversations(prev => {
-        const updated = prev.map(c => 
-          c.id === conversationId 
-            ? { ...c, updatedAt: new Date().toISOString() } 
-            : c
-        );
-        const current = updated.find(c => c.id === conversationId);
-        const others = updated.filter(c => c.id !== conversationId);
-        return current ? [current, ...others] : updated;
-      });
+      throw error;
     }
-
-    // Reload final messages
-    await selectConversation(conversationId);
-    
-  } catch (error: any) {
-    setMessages(prev => prev.filter(m => m.id !== tempUserMessage.id && m.id !== tempAIPlaceholder?.id));
-    
-    if (error.message?.includes('violation') || error.message?.includes('suspended')) {
-      await handleContentViolation('AI_RESPONSE_VIOLATION', 'high', error.message);
-    }
-    
-    throw error;
-  }
-};
-
+  };
 
   const sendAudioMessage = async (audioBase64: string, duration: number, transcription?: string): Promise<void> => {
     if (!user) return;
