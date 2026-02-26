@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
   Alert,
   Linking,
+  AppState,
   Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -32,12 +33,16 @@ import { decode } from 'base64-arraybuffer';
 import { useRouter } from 'expo-router';
 import { Accelerometer } from 'expo-sensors';
 import { Audio } from 'expo-av';
+import { useFocusEffect } from '@react-navigation/native';
+import { BlurView } from 'expo-blur';
 import * as FileSystem from 'expo-file-system';
 
 // Recording states
 type RecordingState = 'idle' | 'recording' | 'processing';
 
 export default function HomeScreen() {
+  const [isAppActive, setIsAppActive] = useState(true);
+  const [showBlurOverlay, setShowBlurOverlay] = useState(false);
   const { colors } = useTheme();
   const { settings, updateSetting } = useSettings();
   const { user } = useAuth();
@@ -122,6 +127,31 @@ export default function HomeScreen() {
       }, 100);
     }
   }, [messages]);
+
+  useEffect(() => {
+  const subscription = AppState.addEventListener('change', (nextAppState) => {
+    if (nextAppState === 'background' || nextAppState === 'inactive') {
+      setIsAppActive(false);
+      setShowBlurOverlay(true);
+    } else if (nextAppState === 'active') {
+      setIsAppActive(true);
+      setTimeout(() => setShowBlurOverlay(false), 300);
+    }
+  });
+
+  return () => subscription.remove();
+}, []);
+
+// Gère focus navigation
+useFocusEffect(
+  useCallback(() => {
+    setIsAppActive(true);
+    setShowBlurOverlay(false);
+    return () => {
+      // Optional: setShowBlurOverlay(true);
+    };
+  }, [])
+);
 
   // Cleanup recording on unmount
   useEffect(() => {
@@ -661,6 +691,34 @@ export default function HomeScreen() {
       flex: 1,
       marginLeft: Spacing.sm,
     },
+    // ============ AJOUTE NAN STYLE YO ============
+
+blurOverlayContainer: {
+  ...StyleSheet.absoluteFillObject,
+  zIndex: 9999,
+  justifyContent: 'center',
+  alignItems: 'center',
+},
+blurView: {
+  ...StyleSheet.absoluteFillObject,
+  justifyContent: 'center',
+  alignItems: 'center',
+},
+blurContent: {
+  alignItems: 'center',
+  justifyContent: 'center',
+},
+blurText: {
+  fontSize: 24,
+  fontWeight: 'bold',
+  color: 'white',
+  marginTop: 16,
+},
+blurSubtext: {
+  fontSize: 14,
+  color: 'rgba(255,255,255,0.7)',
+  marginTop: 8,
+},
     modelButton: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -1047,6 +1105,17 @@ export default function HomeScreen() {
           }
         }}
       />
+      {showBlurOverlay && (
+  <View style={styles.blurOverlayContainer}>
+    <BlurView intensity={80} tint="dark" style={styles.blurView}>
+      <View style={styles.blurContent}>
+        <Ionicons name="lock-closed" size={40} color="rgba(255,255,255,0.8)" />
+        <Text style={styles.blurText}>HaitianChatGpt</Text>
+        <Text style={styles.blurSubtext}>App locked for privacy</Text>
+      </View>
+    </BlurView>
+  </View>
+)}
     </KeyboardAvoidingView>
   );
 }
