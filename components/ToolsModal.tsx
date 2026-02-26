@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   Dimensions,
   Platform,
   ActivityIndicator,
+  BackHandler,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -20,6 +21,8 @@ import Animated, {
   withTiming,
   FadeInUp,
   runOnJS,
+  interpolate,
+  Extrapolate,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useTheme } from '../hooks/useTheme';
@@ -65,47 +68,102 @@ export function ToolsModal({
   const [showWebSearchOptions, setShowWebSearchOptions] = useState(false);
   const [webSearchMode, setWebSearchMode] = useState<'auto' | 'off'>('auto');
   const [loadingTool, setLoadingTool] = useState<string | null>(null);
+  const [isRendered, setIsRendered] = useState(false);
 
-  const translateY = useSharedValue(0);
+  // Animation values
+  const translateY = useSharedValue(SCREEN_HEIGHT);
   const opacity = useSharedValue(0);
+  const scale = useSharedValue(0.95);
 
-  const modalAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: translateY.value }],
-    opacity: opacity.value,
-  }));
-
-  React.useEffect(() => {
+  // Handle visibility changes with proper animation
+  useEffect(() => {
     if (visible) {
-      translateY.value = withSpring(0, { damping: 25, stiffness: 300 });
-      opacity.value = withTiming(1, { duration: 200 });
+      setIsRendered(true);
+      // Animate in
+      translateY.value = withSpring(0, { 
+        damping: 25, 
+        stiffness: 300,
+        mass: 0.8,
+      });
+      opacity.value = withTiming(1, { duration: 250 });
+      scale.value = withSpring(1, { damping: 25, stiffness: 300 });
     } else {
-      translateY.value = withSpring(SCREEN_HEIGHT, { damping: 25, stiffness: 300 });
-      opacity.value = withTiming(0, { duration: 150 });
+      // Animate out
+      translateY.value = withSpring(SCREEN_HEIGHT, { 
+        damping: 25, 
+        stiffness: 300 
+      });
+      opacity.value = withTiming(0, { duration: 200 });
+      scale.value = withSpring(0.95, { damping: 25, stiffness: 300 });
+      
+      // Delay unmounting to allow animation to complete
+      const timer = setTimeout(() => {
+        setIsRendered(false);
+        setShowWebSearchOptions(false);
+      }, 300);
+      
+      return () => clearTimeout(timer);
     }
   }, [visible]);
 
+  // Handle back button on Android
+  useEffect(() => {
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (visible) {
+        onClose();
+        return true;
+      }
+      return false;
+    });
+
+    return () => backHandler.remove();
+  }, [visible, onClose]);
+
+  const modalAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateY: translateY.value },
+      { scale: scale.value }
+    ],
+    opacity: opacity.value,
+  }));
+
+  const backdropAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(
+      opacity.value,
+      [0, 1],
+      [0, 1],
+      Extrapolate.CLAMP
+    ),
+  }));
+
+  // Pan gesture for swipe down to close
   const panGesture = Gesture.Pan()
     .onUpdate((e) => {
       if (e.translationY > 0) {
         translateY.value = e.translationY;
-        opacity.value = 1 - e.translationY / (SCREEN_HEIGHT * 0.5);
+        opacity.value = 1 - (e.translationY / (SCREEN_HEIGHT * 0.5));
+        scale.value = 1 - (e.translationY / (SCREEN_HEIGHT * 2));
       }
     })
     .onEnd((e) => {
       if (e.translationY > 100 || e.velocityY > 500) {
         runOnJS(onClose)();
       } else {
-        translateY.value = withSpring(0);
-        opacity.value = withTiming(1);
+        translateY.value = withSpring(0, { damping: 25, stiffness: 300 });
+        opacity.value = withTiming(1, { duration: 200 });
+        scale.value = withSpring(1, { damping: 25, stiffness: 300 });
       }
     });
 
   /* ---------------- MEDIA PICKERS ---------------- */
   const handlePickImages = async () => {
-    setLoadingTool('images');
+    setLoadingTool('photos');
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') return;
+      if (status !== 'granted') {
+        alert('Permission to access media library is required!');
+        return;
+      }
 
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -124,20 +182,22 @@ export function ToolsModal({
         );
         onClose();
       }
+    } catch (error) {
+      console.error('Error picking images:', error);
     } finally {
       setLoadingTool(null);
     }
   };
 
   const handlePickFile = async () => {
-    setLoadingTool('file');
+    setLoadingTool('files');
     try {
       const result = await DocumentPicker.getDocumentAsync({
         type: '*/*',
         copyToCacheDirectory: true,
       });
 
-      if (!result.canceled && result.assets[0]) {
+      if (!result.canceled && result.assets && result.assets[0]) {
         onPickMedia([
           {
             type: 'file',
@@ -148,6 +208,8 @@ export function ToolsModal({
         ]);
         onClose();
       }
+    } catch (error) {
+      console.error('Error picking file:', error);
     } finally {
       setLoadingTool(null);
     }
@@ -222,7 +284,7 @@ export function ToolsModal({
     return (
       <Animated.View
         key={tool.id}
-        entering={FadeInUp.delay(index * 60).duration(500).springify()}
+        entering={FadeInUp.delay(index * 60).duration(400).springify()}
         style={styles.toolButtonContainer}
       >
         <TouchableOpacity
@@ -231,7 +293,7 @@ export function ToolsModal({
             { backgroundColor: GLASS_COLORS.surface }
           ]}
           onPress={() => handleToolPress(tool.id, tool.action)}
-          activeOpacity={0.8}
+          activeOpacity={0.7}
           disabled={isLoading}
         >
           {isLoading ? (
@@ -242,7 +304,7 @@ export function ToolsModal({
                 styles.iconContainer,
                 { backgroundColor: `${tool.gradient[0]}20` }
               ]}>
-                <Ionicons name={tool.icon} size={28} color={tool.gradient[0]} />
+                <Ionicons name={tool.icon} size={26} color={tool.gradient[0]} />
               </View>
               <Text style={styles.toolLabel}>{tool.label}</Text>
             </>
@@ -252,34 +314,262 @@ export function ToolsModal({
     );
   };
 
+  // Don't render if not visible and not rendered yet
+  if (!visible && !isRendered) return null;
+
   return (
     <Modal
       visible={visible}
       transparent
-      animationType="fade"
+      animationType="none" // We handle animation manually with Reanimated
       statusBarTranslucent
       onRequestClose={onClose}
+      presentationStyle="overFullScreen"
     >
       <View style={styles.overlay}>
-        <BlurView intensity={20} tint="dark" style={StyleSheet.absoluteFill} />
-        <View style={styles.darkOverlay} />
-        
-        <TouchableOpacity
-          style={styles.dismissArea}
-          activeOpacity={1}
-          onPress={onClose}
-        />
+        {/* Animated Backdrop */}
+        <Animated.View style={[styles.backdrop, backdropAnimatedStyle]}>
+          <BlurView 
+            intensity={30} 
+            tint="dark" 
+            style={StyleSheet.absoluteFill} 
+          />
+          <TouchableOpacity
+            style={styles.dismissArea}
+            activeOpacity={1}
+            onPress={onClose}
+          />
+        </Animated.View>
 
+        {/* Modal Content */}
         <GestureDetector gesture={panGesture}>
           <Animated.View style={[styles.container, modalAnimatedStyle]}>
-            <View style={styles.handleBar} />
+            {/* Handle Bar */}
+            <View style={styles.handleBarContainer}>
+              <View style={styles.handleBar} />
+            </View>
 
             <ScrollView
               style={styles.scrollView}
               contentContainerStyle={styles.scrollContent}
               showsVerticalScrollIndicator={false}
+              bounces={false}
             >
-              {/* Main Tools Grid - 3x2 (3 columns, 2 rows) */}
+              {/* Main Tools Grid - 3 columns, 2 rows */}
+              <View style (e.translationY / (SCREEN_HEIGHT * 2));
+      }
+    })
+    .onEnd((e) => {
+      if (e.translationY > 100 || e.velocityY > 500) {
+        runOnJS(onClose)();
+      } else {
+        translateY.value = withSpring(0, { damping: 25, stiffness: 300 });
+        opacity.value = withTiming(1, { duration: 200 });
+        scale.value = withSpring(1, { damping: 25, stiffness: 300 });
+      }
+    });
+
+  /* ---------------- MEDIA PICKERS ---------------- */
+  const handlePickImages = async () => {
+    setLoadingTool('photos');
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        alert('Permission to access media library is required!');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsMultipleSelection: true,
+        quality: 0.8,
+        base64: true,
+      });
+
+      if (!result.canceled && result.assets.length > 0) {
+        onPickMedia(
+          result.assets.map(asset => ({
+            type: 'image',
+            uri: asset.uri,
+            base64: asset.base64,
+          })),
+        );
+        onClose();
+      }
+    } catch (error) {
+      console.error('Error picking images:', error);
+    } finally {
+      setLoadingTool(null);
+    }
+  };
+
+  const handlePickFile = async () => {
+    setLoadingTool('files');
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: '*/*',
+        copyToCacheDirectory: true,
+      });
+
+      if (!result.canceled && result.assets && result.assets[0]) {
+        onPickMedia([
+          {
+            type: 'file',
+            uri: result.assets[0].uri,
+            name: result.assets[0].name,
+            mimeType: result.assets[0].mimeType,
+          },
+        ]);
+        onClose();
+      }
+    } catch (error) {
+      console.error('Error picking file:', error);
+    } finally {
+      setLoadingTool(null);
+    }
+  };
+
+  const handleToolPress = useCallback((toolId: string, action: () => void) => {
+    if (loadingTool) return;
+    action();
+  }, [loadingTool]);
+
+  /* ---------------- TOOLS CONFIG (3x2 GRID) ---------------- */
+  const mainTools = [
+    {
+      id: 'camera',
+      label: 'Camera',
+      icon: 'camera-outline',
+      gradient: ['#667eea', '#764ba2'],
+      action: () => {
+        onOpenCamera?.();
+        onClose();
+      },
+    },
+    {
+      id: 'photos',
+      label: 'Photos',
+      icon: 'image-outline',
+      gradient: ['#f093fb', '#f5576c'],
+      action: handlePickImages,
+    },
+    {
+      id: 'files',
+      label: 'Files',
+      icon: 'folder-open-outline',
+      gradient: ['#4facfe', '#00f2fe'],
+      action: handlePickFile,
+    },
+    {
+      id: 'wechat',
+      label: 'WeChat files',
+      icon: 'chatbubble-ellipses-outline',
+      gradient: ['#43e97b', '#38f9d7'],
+      action: () => {
+        // Handle WeChat files
+        onClose();
+      },
+    },
+    {
+      id: 'call',
+      label: 'Call',
+      icon: 'call-outline',
+      gradient: ['#fa709a', '#fee140'],
+      action: () => {
+        navigation.navigate('voice-control');
+        onClose();
+      },
+    },
+    {
+      id: 'presets',
+      label: 'Presets',
+      icon: 'cube-outline',
+      gradient: ['#30cfd0', '#330867'],
+      action: () => {
+        onSelectTool?.('presets');
+        onClose();
+      },
+    },
+  ];
+
+  /* ---------------- RENDER ---------------- */
+  const renderToolButton = (tool: any, index: number) => {
+    const isLoading = loadingTool === tool.id;
+    return (
+      <Animated.View
+        key={tool.id}
+        entering={FadeInUp.delay(index * 60).duration(400).springify()}
+        style={styles.toolButtonContainer}
+      >
+        <TouchableOpacity
+          style={[
+            styles.toolButton,
+            { backgroundColor: GLASS_COLORS.surface }
+          ]}
+          onPress={() => handleToolPress(tool.id, tool.action)}
+          activeOpacity={0.7}
+          disabled={isLoading}
+        >
+          {isLoading ? (
+            <ActivityIndicator size="small" color={GLASS_COLORS.accent} />
+          ) : (
+            <>
+              <View style={[
+                styles.iconContainer,
+                { backgroundColor: `${tool.gradient[0]}20` }
+              ]}>
+                <Ionicons name={tool.icon} size={26} color={tool.gradient[0]} />
+              </View>
+              <Text style={styles.toolLabel}>{tool.label}</Text>
+            </>
+          )}
+        </TouchableOpacity>
+      </Animated.View>
+    );
+  };
+
+  // Don't render if not visible and not rendered yet
+  if (!visible && !isRendered) return null;
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="none" // We handle animation manually with Reanimated
+      statusBarTranslucent
+      onRequestClose={onClose}
+      presentationStyle="overFullScreen"
+    >
+      <View style={styles.overlay}>
+        {/* Animated Backdrop */}
+        <Animated.View style={[styles.backdrop, backdropAnimatedStyle]}>
+          <BlurView 
+            intensity={30} 
+            tint="dark" 
+            style={StyleSheet.absoluteFill} 
+          />
+          <TouchableOpacity
+            style={styles.dismissArea}
+            activeOpacity={1}
+            onPress={onClose}
+          />
+        </Animated.View>
+
+        {/* Modal Content */}
+        <GestureDetector gesture={panGesture}>
+          <Animated.View style={[styles.container, modalAnimatedStyle]}>
+            {/* Handle Bar */}
+            <View style={styles.handleBarContainer}>
+              <View style={styles.handleBar} />
+            </View>
+
+            <ScrollView
+              style={styles.scrollView}
+              contentContainerStyle={styles.scrollContent}
+              showsVerticalScrollIndicator={false}
+              bounces={false}
+            >
+              {/* Main Tools Grid - 3 columns, 2 rows */}
               <View style={styles.mainGrid}>
                 {mainTools.map((tool, index) => renderToolButton(tool, index))}
               </View>
@@ -292,7 +582,9 @@ export function ToolsModal({
                   activeOpacity={0.7}
                 >
                   <View style={styles.webSearchLeft}>
-                    <Ionicons name="globe-outline" size={22} color={GLASS_COLORS.text} />
+                    <View style={[styles.webSearchIconContainer, { backgroundColor: 'rgba(0, 122, 255, 0.15)' }]}>
+                      <Ionicons name="globe-outline" size={22} color={GLASS_COLORS.accent} />
+                    </View>
                     <Text style={styles.webSearchText}>Web search</Text>
                   </View>
                   <View style={styles.webSearchRight}>
@@ -351,9 +643,9 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'flex-end',
   },
-  darkOverlay: {
+  backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
   },
   dismissArea: {
     flex: 1,
@@ -362,26 +654,346 @@ const styles = StyleSheet.create({
     backgroundColor: GLASS_COLORS.background,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    maxHeight: SCREEN_HEIGHT * 0.75,
+    maxHeight: SCREEN_HEIGHT * 0.7,
     paddingBottom: Platform.OS === 'ios' ? 34 : 20,
     borderTopWidth: 1,
     borderColor: GLASS_COLORS.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 20,
+  },
+  handleBarContainer: {
+    alignItems: 'center',
+    paddingTop: 12,
+    paddingBottom: 8,
+  },
+  handleBar: (e.translationY / (SCREEN_HEIGHT * 2));
+      }
+    })
+    .onEnd((e) => {
+      if (e.translationY > 100 || e.velocityY > 500) {
+        runOnJS(onClose)();
+      } else {
+        translateY.value = withSpring(0, { damping: 25, stiffness: 300 });
+        opacity.value = withTiming(1, { duration: 200 });
+        scale.value = withSpring(1, { damping: 25, stiffness: 300 });
+      }
+    });
+
+  /* ---------------- MEDIA PICKERS ---------------- */
+  const handlePickImages = async () => {
+    setLoadingTool('photos');
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        alert('Permission to access media library is required!');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsMultipleSelection: true,
+        quality: 0.8,
+        base64: true,
+      });
+
+      if (!result.canceled && result.assets.length > 0) {
+        onPickMedia(
+          result.assets.map(asset => ({
+            type: 'image',
+            uri: asset.uri,
+            base64: asset.base64,
+          })),
+        );
+        onClose();
+      }
+    } catch (error) {
+      console.error('Error picking images:', error);
+    } finally {
+      setLoadingTool(null);
+    }
+  };
+
+  const handlePickFile = async () => {
+    setLoadingTool('files');
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: '*/*',
+        copyToCacheDirectory: true,
+      });
+
+      if (!result.canceled && result.assets && result.assets[0]) {
+        onPickMedia([
+          {
+            type: 'file',
+            uri: result.assets[0].uri,
+            name: result.assets[0].name,
+            mimeType: result.assets[0].mimeType,
+          },
+        ]);
+        onClose();
+      }
+    } catch (error) {
+      console.error('Error picking file:', error);
+    } finally {
+      setLoadingTool(null);
+    }
+  };
+
+  const handleToolPress = useCallback((toolId: string, action: () => void) => {
+    if (loadingTool) return;
+    action();
+  }, [loadingTool]);
+
+  /* ---------------- TOOLS CONFIG (3x2 GRID) ---------------- */
+  const mainTools = [
+    {
+      id: 'camera',
+      label: 'Camera',
+      icon: 'camera-outline',
+      gradient: ['#667eea', '#764ba2'],
+      action: () => {
+        onOpenCamera?.();
+        onClose();
+      },
+    },
+    {
+      id: 'photos',
+      label: 'Photos',
+      icon: 'image-outline',
+      gradient: ['#f093fb', '#f5576c'],
+      action: handlePickImages,
+    },
+    {
+      id: 'files',
+      label: 'Files',
+      icon: 'folder-open-outline',
+      gradient: ['#4facfe', '#00f2fe'],
+      action: handlePickFile,
+    },
+    {
+      id: 'wechat',
+      label: 'WeChat files',
+      icon: 'chatbubble-ellipses-outline',
+      gradient: ['#43e97b', '#38f9d7'],
+      action: () => {
+        // Handle WeChat files
+        onClose();
+      },
+    },
+    {
+      id: 'call',
+      label: 'Call',
+      icon: 'call-outline',
+      gradient: ['#fa709a', '#fee140'],
+      action: () => {
+        navigation.navigate('voice-control');
+        onClose();
+      },
+    },
+    {
+      id: 'presets',
+      label: 'Presets',
+      icon: 'cube-outline',
+      gradient: ['#30cfd0', '#330867'],
+      action: () => {
+        onSelectTool?.('presets');
+        onClose();
+      },
+    },
+  ];
+
+  /* ---------------- RENDER ---------------- */
+  const renderToolButton = (tool: any, index: number) => {
+    const isLoading = loadingTool === tool.id;
+    return (
+      <Animated.View
+        key={tool.id}
+        entering={FadeInUp.delay(index * 60).duration(400).springify()}
+        style={styles.toolButtonContainer}
+      >
+        <TouchableOpacity
+          style={[
+            styles.toolButton,
+            { backgroundColor: GLASS_COLORS.surface }
+          ]}
+          onPress={() => handleToolPress(tool.id, tool.action)}
+          activeOpacity={0.7}
+          disabled={isLoading}
+        >
+          {isLoading ? (
+            <ActivityIndicator size="small" color={GLASS_COLORS.accent} />
+          ) : (
+            <>
+              <View style={[
+                styles.iconContainer,
+                { backgroundColor: `${tool.gradient[0]}20` }
+              ]}>
+                <Ionicons name={tool.icon} size={26} color={tool.gradient[0]} />
+              </View>
+              <Text style={styles.toolLabel}>{tool.label}</Text>
+            </>
+          )}
+        </TouchableOpacity>
+      </Animated.View>
+    );
+  };
+
+  // Don't render if not visible and not rendered yet
+  if (!visible && !isRendered) return null;
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="none" // We handle animation manually with Reanimated
+      statusBarTranslucent
+      onRequestClose={onClose}
+      presentationStyle="overFullScreen"
+    >
+      <View style={styles.overlay}>
+        {/* Animated Backdrop */}
+        <Animated.View style={[styles.backdrop, backdropAnimatedStyle]}>
+          <BlurView 
+            intensity={30} 
+            tint="dark" 
+            style={StyleSheet.absoluteFill} 
+          />
+          <TouchableOpacity
+            style={styles.dismissArea}
+            activeOpacity={1}
+            onPress={onClose}
+          />
+        </Animated.View>
+
+        {/* Modal Content */}
+        <GestureDetector gesture={panGesture}>
+          <Animated.View style={[styles.container, modalAnimatedStyle]}>
+            {/* Handle Bar */}
+            <View style={styles.handleBarContainer}>
+              <View style={styles.handleBar} />
+            </View>
+
+            <ScrollView
+              style={styles.scrollView}
+              contentContainerStyle={styles.scrollContent}
+              showsVerticalScrollIndicator={false}
+              bounces={false}
+            >
+              {/* Main Tools Grid - 3 columns, 2 rows */}
+              <View style={styles.mainGrid}>
+                {mainTools.map((tool, index) => renderToolButton(tool, index))}
+              </View>
+
+              {/* Web Search Row with Toggle */}
+              <Animated.View entering={FadeInUp.delay(400).duration(400)}>
+                <TouchableOpacity
+                  style={styles.webSearchRow}
+                  onPress={() => setShowWebSearchOptions(!showWebSearchOptions)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.webSearchLeft}>
+                    <View style={[styles.webSearchIconContainer, { backgroundColor: 'rgba(0, 122, 255, 0.15)' }]}>
+                      <Ionicons name="globe-outline" size={22} color={GLASS_COLORS.accent} />
+                    </View>
+                    <Text style={styles.webSearchText}>Web search</Text>
+                  </View>
+                  <View style={styles.webSearchRight}>
+                    <Text style={styles.webSearchBadge}>{webSearchMode === 'auto' ? 'Auto' : 'Off'}</Text>
+                    <Ionicons name="chevron-forward" size={18} color={GLASS_COLORS.textSecondary} />
+                  </View>
+                </TouchableOpacity>
+
+                {/* Web Search Options */}
+                {showWebSearchOptions && (
+                  <View style={styles.webSearchOptions}>
+                    <TouchableOpacity
+                      style={[styles.webSearchOption, webSearchMode === 'auto' && styles.webSearchOptionActive]}
+                      onPress={() => {
+                        setWebSearchMode('auto');
+                        setTimeout(() => setShowWebSearchOptions(false), 300);
+                      }}
+                    >
+                      <View style={styles.webSearchOptionContent}>
+                        <Text style={styles.webSearchOptionTitle}>Auto</Text>
+                        <Text style={styles.webSearchOptionDesc}>Browses the web when needed</Text>
+                      </View>
+                      {webSearchMode === 'auto' && (
+                        <Ionicons name="checkmark" size={20} color={GLASS_COLORS.accent} />
+                      )}
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.webSearchOption, webSearchMode === 'off' && styles.webSearchOptionActive]}
+                      onPress={() => {
+                        setWebSearchMode('off');
+                        setTimeout(() => setShowWebSearchOptions(false), 300);
+                      }}
+                    >
+                      <View style={styles.webSearchOptionContent}>
+                        <Text style={styles.webSearchOptionTitle}>Off</Text>
+                        <Text style={styles.webSearchOptionDesc}>No web access</Text>
+                      </View>
+                      {webSearchMode === 'off' && (
+                        <Ionicons name="checkmark" size={20} color={GLASS_COLORS.accent} />
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </Animated.View>
+            </ScrollView>
+          </Animated.View>
+        </GestureDetector>
+      </View>
+    </Modal>
+  );
+}
+
+const styles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+  },
+  dismissArea: {
+    flex: 1,
+  },
+  container: {
+    backgroundColor: GLASS_COLORS.background,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: SCREEN_HEIGHT * 0.7,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 20,
+    borderTopWidth: 1,
+    borderColor: GLASS_COLORS.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 20,
+  },
+  handleBarContainer: {
+    alignItems: 'center',
+    paddingTop: 12,
+    paddingBottom: 8,
   },
   handleBar: {
     width: 36,
     height: 5,
     borderRadius: 3,
     backgroundColor: 'rgba(255, 255, 255, 0.3)',
-    alignSelf: 'center',
-    marginTop: 12,
-    marginBottom: 20,
   },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
     padding: 20,
-    paddingTop: 8,
+    paddingTop: 12,
   },
   // 3x2 Grid - 3 columns, 2 rows
   mainGrid: {
@@ -392,35 +1004,35 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   toolButtonContainer: {
-    width: SCREEN_WIDTH < 375 ? '47%' : '30.5%', // 2 columns for small screens, 3 for larger
-    minWidth: 100,
+    width: (SCREEN_WIDTH - 64) / 3, // 3 columns with padding
+    maxWidth: 120,
   },
   toolButton: {
     backgroundColor: GLASS_COLORS.surface,
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 24,
-    paddingHorizontal: 12,
-    minHeight: 120,
+    paddingVertical: 20,
+    paddingHorizontal: 8,
+    minHeight: 110,
     borderWidth: 1,
     borderColor: GLASS_COLORS.border,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.15,
     shadowRadius: 8,
     elevation: 4,
   },
   iconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 12,
+    marginBottom: 10,
   },
   toolLabel: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
     color: GLASS_COLORS.text,
     textAlign: 'center',
@@ -443,9 +1055,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
   },
+  webSearchIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   webSearchText: {
     fontSize: 16,
-    fontWeight: '500',
+    fontWeight: '600',
     color: GLASS_COLORS.text,
   },
   webSearchRight: {
@@ -456,11 +1075,11 @@ const styles = StyleSheet.create({
   webSearchBadge: {
     fontSize: 15,
     color: GLASS_COLORS.textSecondary,
-    fontWeight: '400',
+    fontWeight: '500',
   },
   // Web Search Options
   webSearchOptions: {
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    backgroundColor: 'rgba(0, 0, 0, 0.2)',
     borderRadius: 12,
     padding: 4,
     marginTop: 8,
@@ -489,3 +1108,4 @@ const styles = StyleSheet.create({
     color: GLASS_COLORS.textSecondary,
   },
 });
+
