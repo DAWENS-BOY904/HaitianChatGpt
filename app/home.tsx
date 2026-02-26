@@ -596,6 +596,7 @@ useFocusEffect(
       console.log('📤 Sending new message with model:', currentAIModel);
       
       let imageUrl: string | undefined;
+      let base64Image: string | undefined;
       if (media.length > 0) {
         const firstMedia = media[0];
         if (firstMedia.type === 'image' && firstMedia.base64) {
@@ -617,7 +618,7 @@ useFocusEffect(
         }
       }
 
-      await sendMessage(text || '[Image]', imageUrl, currentAIModel);
+      await sendMessage(text || '[Image]', imageUrl, base64Image, currentAIModel);
       
       setShowCompletionStatus(true);
       setTimeout(() => {
