@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+fix some error white screen  React, { useState, useRef, useEffect, useCallback } from 'react';
 import { 
   View, 
   Text, 
