@@ -617,7 +617,7 @@ useFocusEffect(
         }
       }
 
-      await sendMessage(text || '[Image]', imageUrl, base64Image, currentAIModel);
+      await sendMessage(text || '[Image]', imageUrl, currentAIModel);
       
       setShowCompletionStatus(true);
       setTimeout(() => {
