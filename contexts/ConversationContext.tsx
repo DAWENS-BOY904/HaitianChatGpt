@@ -620,7 +620,7 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
   const sendMessage = async (
   content: string, 
   imageUrl?: string, 
-  base64Image?: string,  // Paramèt sa a te manke nan apèl la!
+  base64Image?: string,
   isImageGeneration: boolean = false, 
   aiModel?: string
 ) => {
@@ -646,7 +646,7 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  // Optimistic UI
+  // Optimistic UI - NO AUTO-PLACEHOLDER for AI responses
   const tempUserMessage: Message = {
     id: `temp-user-${Date.now()}`,
     role: 'user',
@@ -656,17 +656,8 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
   };
   setMessages(prev => [...prev, tempUserMessage]);
 
-  // Placeholder pou jenerasyon imaj
-  let tempAIPlaceholder: Message | null = null;
-  if (isImageGeneration) {
-    tempAIPlaceholder = {
-      id: `temp-ai-generating-${Date.now()}`,
-      role: 'assistant',
-      content: '🎨 Generating your image...',
-      created_at: new Date().toISOString(),
-    };
-    setMessages(prev => [...prev, tempAIPlaceholder!]);
-  }
+  // REMOVED: No auto-placeholder for AI generating messages
+  // User will see thinking indicator instead (controlled by app/home.tsx)
 
   try {
     // KONSTRUI MESAJ YO POU AI - FORMAT KORÈK POU IMaj
@@ -715,18 +706,29 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
       throw aiError;
     }
 
-    // RETIRE TOUT DEBUG PREFIX YO - NETWAYE MESAJ LA
+    // CRITICAL FIX: COMPLETELY REMOVE ALL DEBUG MESSAGES
+    // Backend should already clean these, but double-check here
     let cleanMessage = aiResponse.message || 'Response generated';
     
-    // Retire tout "[Using ...]" patterns
+    // Remove ALL possible debug patterns (comprehensive cleaning)
     cleanMessage = cleanMessage.replace(/\[Using [^\]]+\]\s*/gi, '');
     cleanMessage = cleanMessage.replace(/\[Model:[^\]]+\]\s*/gi, '');
     cleanMessage = cleanMessage.replace(/\[Fallback:[^\]]+\]\s*/gi, '');
-    
-    // Retire lòt debug messages
+    cleanMessage = cleanMessage.replace(/\[.*?unavailable.*?\]\s*/gi, '');
     cleanMessage = cleanMessage.replace(/google-gemini unavailable/gi, '');
     cleanMessage = cleanMessage.replace(/groq-llama/gi, '');
+    cleanMessage = cleanMessage.replace(/claude unavailable/gi, '');
+    cleanMessage = cleanMessage.replace(/openai unavailable/gi, '');
+    cleanMessage = cleanMessage.replace(/gemini unavailable/gi, '');
+    cleanMessage = cleanMessage.replace(/using [a-z-]+ -/gi, '');
+    cleanMessage = cleanMessage.replace(/\(fallback\)/gi, '');
     cleanMessage = cleanMessage.trim();
+    
+    // PARANOID CHECK: If debug text still exists, remove everything before first real sentence
+    if (cleanMessage.match(/\[Using|unavailable|fallback|groq|claude/i)) {
+      const sentences = cleanMessage.split(/\n\n/);
+      cleanMessage = sentences.find(s => !s.match(/\[Using|unavailable|fallback|groq|claude/i)) || cleanMessage;
+    }
 
     const tempAIMessage: Message = {
       id: `temp-ai-${Date.now()}`,

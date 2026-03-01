@@ -108,16 +108,9 @@ export default function HomeScreen() {
     }
   };
 
-  // Auto-create conversation when user enters home page
-  useEffect(() => {
-    const initConversation = async () => {
-      if (!currentConversation && user) {
-        console.log('🆕 Auto-creating new conversation on mount');
-        await createConversation();
-      }
-    };
-    initConversation();
-  }, []);
+  // REMOVED: No auto-create conversation on mount
+  // Conversation will be created when user sends first message
+  // This prevents auto-greeting and keeps UI clean
 
   // Scroll to bottom on new messages
   useEffect(() => {

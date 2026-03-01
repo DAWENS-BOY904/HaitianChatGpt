@@ -16,12 +16,13 @@ interface StreamingTextProps {
  * Features:
  * - Smooth character-by-character animation
  * - Configurable speed
- * - Instant display for short text
+ * - Real typing effect (not instant)
  * - No flicker or lag
+ * - ALWAYS streams (no instant display)
  */
 export function StreamingText({ 
   text, 
-  speed = 2, // 2 chars per frame = ~120 chars/sec (fast but visible)
+  speed = 3, // INCREASED: 3 chars per frame = ~180 chars/sec (fast and smooth)
   onComplete,
   style 
 }: StreamingTextProps) {
@@ -34,12 +35,8 @@ export function StreamingText({
     currentIndex.current = 0;
     setDisplayedText('');
 
-    // Instant display for very short text (< 20 chars)
-    if (text.length < 20) {
-      setDisplayedText(text);
-      onComplete?.();
-      return;
-    }
+    // CRITICAL FIX: ALWAYS animate, even for short text
+    // Remove instant display logic - user requested real typing effect
 
     const animate = () => {
       if (currentIndex.current < text.length) {

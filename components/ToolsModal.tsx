@@ -440,7 +440,9 @@ const styles = StyleSheet.create({
     backgroundColor: GLASS_COLORS.background,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    maxHeight: SCREEN_HEIGHT * 0.7,
+    // CRITICAL FIX: Use flexible height instead of maxHeight
+    minHeight: SCREEN_HEIGHT * 0.4,
+    maxHeight: SCREEN_HEIGHT * 0.85, // Increased from 0.7
     paddingBottom: Platform.OS === 'ios' ? 34 : 20,
     borderTopWidth: 1,
     borderColor: GLASS_COLORS.border,
@@ -449,6 +451,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 20,
     elevation: 20,
+    // CRITICAL: Ensure modal is always visible
+    position: 'relative',
   },
   handleBarContainer: {
     alignItems: 'center',
@@ -463,10 +467,13 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
+    // CRITICAL FIX: Ensure scroll works properly
   },
   scrollContent: {
     padding: 20,
     paddingTop: 12,
+    // CRITICAL FIX: Add bottom padding for safe scrolling
+    paddingBottom: 40,
   },
   // 3x2 Grid - 3 columns, 2 rows
   mainGrid: {

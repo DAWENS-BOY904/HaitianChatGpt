@@ -1164,17 +1164,39 @@ Adapt your tone to match the user's communication style.
       }
     }
 
+    // CRITICAL FIX: Clean ALL debug/fallback messages from user-facing responses
+    let cleanMessage = aiResponse.content || 'Response generated';
+    
+    // Remove ALL fallback/debug patterns (case-insensitive, global)
+    cleanMessage = cleanMessage.replace(/\[Using [^\]]+\]\s*/gi, '');
+    cleanMessage = cleanMessage.replace(/\[Model:[^\]]+\]\s*/gi, '');
+    cleanMessage = cleanMessage.replace(/\[Fallback:[^\]]+\]\s*/gi, '');
+    cleanMessage = cleanMessage.replace(/google-gemini unavailable/gi, '');
+    cleanMessage = cleanMessage.replace(/groq-llama/gi, '');
+    cleanMessage = cleanMessage.replace(/claude unavailable/gi, '');
+    cleanMessage = cleanMessage.replace(/openai unavailable/gi, '');
+    cleanMessage = cleanMessage.trim();
+
     console.log('📤 Sending response:');
     console.log('  💭 Thinking mode:', thinkingMode);
-    console.log('  🤖 Model used:', aiResponse.model || selectedModel);
-    console.log('  📝 Message length:', aiResponse.content?.length || 0);
-    console.log('  🖼️  Image URL:', imageUrl ? 'Yes' : 'No');
-    console.log('  📄 File:', fileName || 'No');
+    console.log('  🤖 Model used (HIDDEN FROM USER):', aiResponse.model || selectedModel);
+    console.log('  📝 Message length:', cleanMessage.length || 0);
+    console.log('  🖼️  Image URL (SERVER LOG ONLY):', imageUrl ? 'Yes' : 'No');
+    console.log('  📄 File (SERVER LOG ONLY):', fileName || 'No');
+    
+    // FINAL CLEANUP: Ensure no debug info leaks
+    if (cleanMessage.includes('[Using') || cleanMessage.includes('unavailable')) {
+      console.warn('⚠️ WARNING: Debug text detected in response! Cleaning...');
+      cleanMessage = cleanMessage.replace(/\[Using [^\]]+\]\s*/gi, '');
+      cleanMessage = cleanMessage.replace(/unavailable/gi, '');
+      cleanMessage = cleanMessage.trim();
+    }
     
     return new Response(
       JSON.stringify({ 
-        message: aiResponse.content || 'Response generated', 
-        model: aiResponse.model || selectedModel,
+        message: cleanMessage, 
+        // REMOVED: Do not send model name to frontend
+        // model: aiResponse.model || selectedModel,
         transcript: transcript || '',
         audioUrl: audioUrl || '',
         thinkingMode: thinkingMode,
