@@ -57,44 +57,20 @@ export default function ModelSelectorScreen() {
     settings.preferredAiModel || 'google-gemini'
   );
 
+  // RECOMMENDED MODELS ONLY - PRODUCTION READY
   const modelMetadata: Record<
     string,
     { color: string; speed: string; bestFor: string }
   > = {
-    'openai-gpt4': {
-      color: '#10A37F',
-      speed: 'Moderate',
-      bestFor: 'Complex reasoning, creative writing',
-    },
     'google-gemini': {
       color: '#4285F4',
       speed: 'Fast',
-      bestFor: 'Quick responses, multimodal tasks',
+      bestFor: 'Best all-around AI - Fast responses, images, code, multilingual',
     },
     'google-gemini-2.0-flash': {
       color: '#4285F4',
       speed: 'Very Fast',
-      bestFor: 'Latest model, multimodal AI, image/audio understanding',
-    },
-    'google-gemini-pro': {
-      color: '#1A73E8',
-      speed: 'Moderate',
-      bestFor: 'Complex analysis, detailed responses',
-    },
-    'claude-3': {
-      color: '#D97757',
-      speed: 'Moderate',
-      bestFor: 'Safe content, long explanations',
-    },
-    'groq-llama': {
-      color: '#F55036',
-      speed: 'Ultra Fast',
-      bestFor: 'Instant chat, real-time answers',
-    },
-    'mistral-large': {
-      color: '#FF7000',
-      speed: 'Fast',
-      bestFor: 'Code & technical tasks',
+      bestFor: 'Latest Gemini - Image generation, multimodal AI, advanced reasoning',
     },
   };
 
