@@ -1112,3 +1112,4 @@ blurSubtext: {
     </KeyboardAvoidingView>
   );
 }
+fix transcribe voice error real and fix white screen
