@@ -742,10 +742,7 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
     };
 
     setMessages(prev => {
-      const withoutTemp = prev.filter(m => 
-        m.id !== tempUserMessage.id && 
-        (tempAIPlaceholder ? m.id !== tempAIPlaceholder.id : true)
-      );
+      const withoutTemp = prev.filter(m => m.id !== tempUserMessage.id);
       return [...withoutTemp, tempUserMessage, tempAIMessage];
     });
 
