@@ -24,6 +24,7 @@ import { useAlert, useAuth } from '@/template';
 import { Spacing, Typography, BorderRadius } from '../constants/theme';
 import { MenuModal } from '../components/MenuModal';
 import { ToolsModal } from '../components/ToolsModal';
+import { StreamingText } from '../components/StreamingText';
 import { ConversationMenuModal } from '../components/ConversationMenuModal';
 import { MessageItem } from '../components/MessageItem';
 import { ThinkingIndicator } from '../components/ThinkingIndicator';
