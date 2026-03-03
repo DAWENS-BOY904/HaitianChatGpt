@@ -89,7 +89,7 @@ export default function RootLayout() {
                     <Stack.Screen name="image-viewer" />
                     <Stack.Screen name="share-chat" />
                     <Stack.Screen name="admin-verify" />
-                    <Stack.Screen name="get-project" />
+                    <Stack.Screen name="project-get" />
                     <Stack.Screen name="admin-team" />
                     <Stack.Screen name="admin-activity-logs" />
                     <Stack.Screen name="admin-api-keys" />
