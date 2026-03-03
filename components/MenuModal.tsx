@@ -294,7 +294,7 @@ export function MenuModal({ visible, onClose }: MenuModalProps) {
           router.push('/images');
         } else if (tab === 'GetProject') {
           onClose();
-          router.push('/get-project');
+          router.push('/project-get');
         } else {
           setActiveTab(tab);
         }
