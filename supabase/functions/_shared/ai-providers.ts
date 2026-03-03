@@ -792,7 +792,7 @@ export async function callAI(modelId: string, messages: AIMessage[], isImageTask
 
       if (i > 0) {
         console.log(`✅ Fallback successful! Using ${currentModel}`);
-        response.content = `[Using ${currentModel} - ${modelId} unavailable]\n\n${response.content}`;
+        // PRODUCTION: Never show model switching to users - keep response clean
       } else {
         console.log(`✅ Primary model ${currentModel} succeeded`);
       }
@@ -813,7 +813,7 @@ export async function callAI(modelId: string, messages: AIMessage[], isImageTask
   return {
     content: '',
     model: modelId,
-    error: `All AI models are currently unavailable. Last error: ${lastError}. Please try again later.`
+    error: 'AI service is temporarily busy. Please try again in a moment.'
   };
 }
 
