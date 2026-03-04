@@ -866,15 +866,19 @@ blurSubtext: {
     },
   });
 
-  const renderMessage = ({ item, index }: { item: any; index: number }) => (
+const renderMessage = ({ item, index }: { item: any; index: number }) => {
+  const isStreaming = streamingMessageId === item.id;
+  
+  return (
     <MessageItem
       message={item}
       onCancel={handleCancelGeneration}
-      onEdit={(messageId, content) => handleEditMessage(messageId, content)}
-      isGenerating={generating && index === messages.length - 1}
-      streaming={generating && index === messages.length - 1}
+      onEdit={handleEditMessage}
+      isGenerating={isStreaming}
+      streaming={isStreaming} // Only true for the specific streaming message
     />
   );
+};
 
   const modelName = currentAIModel === 'gemini' ? 'Gemini' 
     : currentAIModel === 'openai' ? 'OpenAI' 
