@@ -481,170 +481,176 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
     setMessages([]);
   };
 
-  // ==================== FIXED SEND MESSAGE ====================
-  const sendMessage = async (
-    content: string, 
-    imageUrl?: string, 
-    base64Image?: string,
-    isImageGeneration: boolean = false, 
-    aiModel?: string
-  ) => {
-    if (!user) return;
-    if (accountStatus.isSuspended) {
-      throw new Error(`Account suspended: ${accountStatus.reason || 'Contact support'}`);
+ // ==================== FIXED SEND MESSAGE ====================
+const sendMessage = async (
+  content: string, 
+  imageUrl?: string, 
+  base64Image?: string,
+  isImageGeneration: boolean = false, 
+  aiModel?: string
+) => {
+  if (!user) return;
+  if (accountStatus.isSuspended) {
+    throw new Error(`Account suspended: ${accountStatus.reason || 'Contact support'}`);
+  }
+
+  const contentCheck = await checkContentViolation(content);
+  if (contentCheck.isViolation) {
+    await handleContentViolation('TEXT_CONTENT_VIOLATION', contentCheck.severity || 'medium', contentCheck.reason);
+    throw new Error('Message blocked: Content violates usage policies.');
+  }
+
+  let conversationId = currentConversation?.id;
+  if (!conversationId) {
+    conversationId = await createConversation();
+    if (!conversationId) throw new Error('Failed to create conversation');
+  }
+
+  const userMessageId = `temp-user-${Date.now()}`;
+  const aiMessageId = `temp-ai-${Date.now() + 1}`;
+
+  const tempUserMessage: Message = {
+    id: userMessageId,
+    role: 'user',
+    content,
+    image_url: imageUrl,
+    created_at: new Date().toISOString(),
+  };
+
+  // Add user message immediately
+  setMessages(prev => [...prev, tempUserMessage]);
+
+  try {
+    const contextMessages = [...messages, tempUserMessage].map(m => {
+      if (m.image_url || m.role === 'user') {
+        return {
+          role: m.role,
+          content: m.content,
+          ...(m.image_url && { image_url: m.image_url })
+        };
+      }
+      return { role: m.role, content: m.content };
+    });
+
+    const requestBody: any = {
+      messages: contextMessages,
+      conversationId: conversationId,
+      aiModel: aiModel || 'google-gemini',
+    };
+
+    if (base64Image) {
+      requestBody.base64Image = base64Image;
+      console.log('📸 Sending with base64 image, length:', base64Image.length);
+    }
+    if (isImageGeneration && base64Image) requestBody.isImageGeneration = true;
+
+    console.log('📤 Sending message with model:', aiModel || 'google-gemini');
+
+    const { data: aiResponse, error: aiError } = await supabase.functions.invoke('chat', {
+      body: requestBody,
+    });
+
+    if (aiError) throw aiError;
+
+    // Clean message
+    let cleanMessage = aiResponse.message || 'Response generated';
+    cleanMessage = cleanMessage.replace(/\[Using [^\]]+\]\s*/gi, '');
+    cleanMessage = cleanMessage.replace(/\[Model:[^\]]+\]\s*/gi, '');
+    cleanMessage = cleanMessage.replace(/\[Fallback:[^\]]+\]\s*/gi, '');
+    cleanMessage = cleanMessage.replace(/\[.*?unavailable.*?\]\s*/gi, '');
+    cleanMessage = cleanMessage.replace(/google-gemini unavailable/gi, '');
+    cleanMessage = cleanMessage.replace(/groq-llama/gi, '');
+    cleanMessage = cleanMessage.replace(/claude unavailable/gi, '');
+    cleanMessage = cleanMessage.replace(/openai unavailable/gi, '');
+    cleanMessage = cleanMessage.replace(/gemini unavailable/gi, '');
+    cleanMessage = cleanMessage.replace(/using [a-z-]+ -/gi, '');
+    cleanMessage = cleanMessage.replace(/\(fallback\)/gi, '');
+    cleanMessage = cleanMessage.trim();
+
+    if (cleanMessage.match(/\[Using|unavailable|fallback|groq|claude/i)) {
+      const sentences = cleanMessage.split(/\n\n/);
+      cleanMessage = sentences.find(s => !s.match(/\[Using|unavailable|fallback|groq|claude/i)) || cleanMessage;
     }
 
-    const contentCheck = await checkContentViolation(content);
-    if (contentCheck.isViolation) {
-      await handleContentViolation('TEXT_CONTENT_VIOLATION', contentCheck.severity || 'medium', contentCheck.reason);
-      throw new Error('Message blocked: Content violates usage policies.');
-    }
-
-    let conversationId = currentConversation?.id;
-    if (!conversationId) {
-      conversationId = await createConversation();
-      if (!conversationId) throw new Error('Failed to create conversation');
-    }
-
-    const userMessageId = `temp-user-${Date.now()}`;
-    const aiMessageId = `temp-ai-${Date.now() + 1}`;
-
-    const tempUserMessage: Message = {
-      id: userMessageId,
-      role: 'user',
-      content,
-      image_url: imageUrl,
+    const tempAIMessage: Message = {
+      id: aiMessageId,
+      role: 'assistant',
+      content: cleanMessage,
+      image_url: aiResponse.imageUrl || undefined,
+      file_url: aiResponse.fileUrl || undefined,
+      file_name: aiResponse.fileName || undefined,
+      file_type: aiResponse.fileType || undefined,
       created_at: new Date().toISOString(),
     };
 
-    // Add user message immediately
-    setMessages(prev => [...prev, tempUserMessage]);
+    // CRITICAL FIX: Set streaming ID to enable animation
+    setStreamingMessageId(aiMessageId);
 
-    try {
-      const contextMessages = [...messages, tempUserMessage].map(m => {
-        if (m.image_url || m.role === 'user') {
-          return {
-            role: m.role,
-            content: m.content,
-            ...(m.image_url && { image_url: m.image_url })
-          };
-        }
-        return { role: m.role, content: m.content };
-      });
+    // Update messages - KONSERVE tout mesaj yo kòrèkteman
+    setMessages(prev => {
+      // Retire sèlman mesaj temp ki pa fini
+      const withoutTemp = prev.filter(m => 
+        m.id !== userMessageId && 
+        !m.id.startsWith('temp-ai-') // Retire ansyen temp AI mesaj yo
+      );
+      // Ajoute mesaj itilizatè a ak nouvo mesaj AI a
+      return [...withoutTemp, tempUserMessage, tempAIMessage];
+    });
 
-      const requestBody: any = {
-        messages: contextMessages,
-        conversationId: conversationId,
-        aiModel: aiModel || 'google-gemini',
-      };
-
-      if (base64Image) {
-        requestBody.base64Image = base64Image;
-        console.log('📸 Sending with base64 image, length:', base64Image.length);
+    // Update title if first message
+    if (messages.length === 0) {
+      let title = content.slice(0, 50);
+      if (aiResponse.imageUrl) {
+        title = content.includes('logo') ? '🎨 Logo Design' : '🖼️ Image Generation';
+      } else if (aiResponse.fileName) {
+        title = `📄 File: ${aiResponse.fileName}`;
+      } else if (content.length > 50) {
+        title = content.slice(0, 47) + '...';
       }
-      if (isImageGeneration && base64Image) requestBody.isImageGeneration = true;
-
-      console.log('📤 Sending message with model:', aiModel || 'google-gemini');
-
-      const { data: aiResponse, error: aiError } = await supabase.functions.invoke('chat', {
-        body: requestBody,
-      });
-
-      if (aiError) throw aiError;
-
-      // Clean message
-      let cleanMessage = aiResponse.message || 'Response generated';
-      cleanMessage = cleanMessage.replace(/\[Using [^\]]+\]\s*/gi, '');
-      cleanMessage = cleanMessage.replace(/\[Model:[^\]]+\]\s*/gi, '');
-      cleanMessage = cleanMessage.replace(/\[Fallback:[^\]]+\]\s*/gi, '');
-      cleanMessage = cleanMessage.replace(/\[.*?unavailable.*?\]\s*/gi, '');
-      cleanMessage = cleanMessage.replace(/google-gemini unavailable/gi, '');
-      cleanMessage = cleanMessage.replace(/groq-llama/gi, '');
-      cleanMessage = cleanMessage.replace(/claude unavailable/gi, '');
-      cleanMessage = cleanMessage.replace(/openai unavailable/gi, '');
-      cleanMessage = cleanMessage.replace(/gemini unavailable/gi, '');
-      cleanMessage = cleanMessage.replace(/using [a-z-]+ -/gi, '');
-      cleanMessage = cleanMessage.replace(/\(fallback\)/gi, '');
-      cleanMessage = cleanMessage.trim();
-
-      if (cleanMessage.match(/\[Using|unavailable|fallback|groq|claude/i)) {
-        const sentences = cleanMessage.split(/\n\n/);
-        cleanMessage = sentences.find(s => !s.match(/\[Using|unavailable|fallback|groq|claude/i)) || cleanMessage;
-      }
-
-      const tempAIMessage: Message = {
-        id: aiMessageId,
-        role: 'assistant',
-        content: cleanMessage,
-        image_url: aiResponse.imageUrl || undefined,
-        file_url: aiResponse.fileUrl || undefined,
-        file_name: aiResponse.fileName || undefined,
-        file_type: aiResponse.fileType || undefined,
-        created_at: new Date().toISOString(),
-      };
-
-      // CRITICAL FIX: Set streaming ID to enable animation
-      setStreamingMessageId(aiMessageId);
-
-      // Update messages without removing temp messages first (prevents flicker)
-      setMessages(prev => {
-        const filtered = prev.filter(m => m.id !== userMessageId && !m.id.startsWith('temp-ai-'));
-        return [...filtered, tempUserMessage, tempAIMessage];
-      });
-
-      // Update title if first message
-      if (messages.length === 0) {
-        let title = content.slice(0, 50);
-        if (aiResponse.imageUrl) {
-          title = content.includes('logo') ? '🎨 Logo Design' : '🖼️ Image Generation';
-        } else if (aiResponse.fileName) {
-          title = `📄 File: ${aiResponse.fileName}`;
-        } else if (content.length > 50) {
-          title = content.slice(0, 47) + '...';
-        }
-        
-        await updateConversationTitle(conversationId, title);
-        
-        const newConv: Conversation = {
-          id: conversationId,
-          title: title,
-          createdAt: currentConversation?.createdAt || new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-        setConversations(prev => [newConv, ...prev]);
-      } else {
-        await supabase
-          .from('conversations')
-          .update({ updated_at: new Date().toISOString() })
-          .eq('id', conversationId);
-        
-        setConversations(prev => {
-          const updated = prev.map(c => 
-            c.id === conversationId ? { ...c, updatedAt: new Date().toISOString() } : c
-          );
-          const current = updated.find(c => c.id === conversationId);
-          const others = updated.filter(c => c.id !== conversationId);
-          return current ? [current, ...others] : updated;
-        });
-      }
-
-      // CRITICAL FIX: Clear streaming ID after animation completes (2 seconds)
-      setTimeout(() => {
-        setStreamingMessageId(null);
-      }, 2000);
-
-      // REMOVED: await selectConversation(conversationId); 
-      // This was causing the streaming restart!
-
-    } catch (error: any) {
-      setMessages(prev => prev.filter(m => m.id !== userMessageId && !m.id.startsWith('temp-ai-')));
       
-      if (error.message?.includes('violation') || error.message?.includes('suspended')) {
-        await handleContentViolation('AI_RESPONSE_VIOLATION', 'high', error.message);
-      }
-      throw error;
+      await updateConversationTitle(conversationId, title);
+      
+      const newConv: Conversation = {
+        id: conversationId,
+        title: title,
+        createdAt: currentConversation?.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      setConversations(prev => [newConv, ...prev]);
+    } else {
+      await supabase
+        .from('conversations')
+        .update({ updated_at: new Date().toISOString() })
+        .eq('id', conversationId);
+      
+      setConversations(prev => {
+        const updated = prev.map(c => 
+          c.id === conversationId ? { ...c, updatedAt: new Date().toISOString() } : c
+        );
+        const current = updated.find(c => c.id === conversationId);
+        const others = updated.filter(c => c.id !== conversationId);
+        return current ? [current, ...others] : updated;
+      });
     }
-  };
+
+    // CRITICAL FIX: Clear streaming ID after animation completes
+    setTimeout(() => {
+      setStreamingMessageId(null);
+    }, 2000);
+
+  } catch (error: any) {
+    // CRITICAL FIX: Sèlman retire mesaj temp yo, pa tout mesaj yo
+    setMessages(prev => prev.filter(m => 
+      m.id !== userMessageId && 
+      !m.id.startsWith('temp-ai-')
+    ));
+    
+    if (error.message?.includes('violation') || error.message?.includes('suspended')) {
+      await handleContentViolation('AI_RESPONSE_VIOLATION', 'high', error.message);
+    }
+    throw error;
+  }
+};
 
   const sendAudioMessage = async (audioBase64: string, duration: number, transcription?: string): Promise<void> => {
     if (!user) return;
