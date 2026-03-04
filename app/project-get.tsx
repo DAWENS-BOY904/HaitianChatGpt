@@ -1,4 +1,10 @@
-import React, { useState, useEffect } from 'react';
+/**
+ * PRODUCTION AI CODING SYSTEM
+ * Professional project generation with real code, streaming, and voice support
+ * Designed to match Kimi AI interface standards
+ */
+
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -11,6 +17,7 @@ import {
   Modal,
   KeyboardAvoidingView,
   Alert,
+  Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
@@ -19,12 +26,53 @@ import { useRouter } from 'expo-router';
 import { Spacing, Typography, BorderRadius } from '../constants/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getSupabaseClient } from '@/template';
+import { StreamingText } from '../components/StreamingText';
+import { CodeBlock } from '../components/CodeBlock';
+import * as Speech from 'expo-speech';
+import * as ImagePicker from 'expo-image-picker';
 
-interface APIKey {
-  key: string;
-  value: string;
-  required: boolean;
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+// ==================== TYPES ====================
+
+type AIMode = 'instant' | 'deep_thinking' | 'agent';
+type AgentCapability = 'research' | 'slides' | 'website' | 'docs' | 'sheets';
+type ProjectLanguage = 'html' | 'typescript' | 'javascript' | 'python' | 'php' | 'java' | 'node';
+type GenerationMode = 'demo' | 'real';
+
+interface ProjectFile {
+  path: string;
+  content: string;
+  language: string;
+  isEdited?: boolean;
 }
+
+interface ProjectGeneration {
+  id: string;
+  title: string;
+  description: string;
+  language: ProjectLanguage;
+  mode: GenerationMode;
+  files: ProjectFile[];
+  environmentVars: Record<string, string>;
+  instructions: string[];
+  createdAt: string;
+  status: 'generating' | 'completed' | 'error';
+  logs: string[];
+  previewable: boolean;
+  requiresPro: boolean;
+}
+
+interface Tool {
+  id: string;
+  icon: string;
+  label: string;
+  description: string;
+  action: () => void;
+  badge?: string;
+}
+
+// ==================== MAIN COMPONENT ====================
 
 export default function ProjectGetScreen() {
   const { colors } = useTheme();
@@ -32,512 +80,944 @@ export default function ProjectGetScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const supabase = getSupabaseClient();
+  
+  // Core State
+  const [inputValue, setInputValue] = useState('');
+  const [currentMode, setCurrentMode] = useState<AIMode>('instant');
+  const [generationMode, setGenerationMode] = useState<GenerationMode>('real');
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [currentProject, setCurrentProject] = useState<ProjectGeneration | null>(null);
+  const [streamingContent, setStreamingContent] = useState('');
+  const [currentLog, setCurrentLog] = useState('');
+  
+  // Modal States
+  const [showModeSelector, setShowModeSelector] = useState(false);
+  const [showToolsModal, setShowToolsModal] = useState(false);
+  const [showFileExplorer, setShowFileExplorer] = useState(false);
+  const [showModeToggle, setShowModeToggle] = useState(false);
+  
+  // Image Upload State
+  const [uploadedImages, setUploadedImages] = useState<string[]>([]);
+  const [dailyImageCount, setDailyImageCount] = useState(0);
+  const IMAGE_LIMIT = 10;
+  
+  // Voice State
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [lastAIMessage, setLastAIMessage] = useState('');
+  
+  // Refs
+  const scrollViewRef = useRef<ScrollView>(null);
+  const streamControllerRef = useRef<AbortController | null>(null);
 
-  const [projectDescription, setProjectDescription] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [requiredKeys, setRequiredKeys] = useState<APIKey[]>([]);
-  const [showKeysModal, setShowKeysModal] = useState(false);
-  const [coins, setCoins] = useState(0);
-  const [dailyCoins, setDailyCoins] = useState(1000);
-  const [monthlyCoins, setMonthlyCoins] = useState(0);
-  const [resetTime, setResetTime] = useState<string>('');
+  // ==================== USER DATA ====================
+  
+  const [userCoins, setUserCoins] = useState(0);
   const [isPro, setIsPro] = useState(false);
 
   useEffect(() => {
-    loadUserCoins();
+    loadUserData();
+    loadDailyImageCount();
   }, [user]);
 
-  const loadUserCoins = async () => {
-    if (!user) {
-      setCoins(dailyCoins);
+  const loadUserData = async () => {
+    if (!user) return;
+
+    try {
+      const { data } = await supabase
+        .from('user_profiles')
+        .select('subscription_tier, daily_coins_used, monthly_coins_used')
+        .eq('id', user.id)
+        .single();
+
+      if (data) {
+        const isProUser = data.subscription_tier === 'pro' || data.subscription_tier === 'premium';
+        setIsPro(isProUser);
+        setUserCoins(isProUser ? (9000 - (data.monthly_coins_used || 0)) : (1000 - (data.daily_coins_used || 0)));
+      }
+    } catch (error) {
+      console.error('Error loading user data:', error);
+    }
+  };
+
+  const loadDailyImageCount = async () => {
+    if (!user) return;
+
+    try {
+      // Load from local storage or database
+      const today = new Date().toDateString();
+      const storedData = localStorage.getItem('daily_image_upload');
+      if (storedData) {
+        const parsed = JSON.parse(storedData);
+        if (parsed.date === today) {
+          setDailyImageCount(parsed.count || 0);
+        } else {
+          setDailyImageCount(0);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading image count:', error);
+    }
+  };
+
+  // ==================== TOOLS CONFIGURATION ====================
+
+  const tools: Tool[] = useMemo(() => [
+    {
+      id: 'upload_image',
+      icon: 'image',
+      label: 'Upload Image',
+      description: 'Analyze and use images in your project',
+      badge: `${dailyImageCount}/${IMAGE_LIMIT}`,
+      action: handleImageUpload,
+    },
+    {
+      id: 'fetch_link',
+      icon: 'link',
+      label: 'Fetch Link',
+      description: 'Analyze content from any URL',
+      action: handleFetchLink,
+    },
+    {
+      id: 'agent_research',
+      icon: 'search',
+      label: 'Research',
+      description: 'Deep research on any topic',
+      action: () => switchToAgent('research'),
+    },
+    {
+      id: 'agent_slides',
+      icon: 'easel',
+      label: 'Create Slides',
+      description: 'Generate presentation slides',
+      action: () => switchToAgent('slides'),
+    },
+    {
+      id: 'agent_website',
+      icon: 'globe',
+      label: 'Build Website',
+      description: 'Create a full website',
+      action: () => switchToAgent('website'),
+    },
+    {
+      id: 'agent_docs',
+      icon: 'document-text',
+      label: 'Write Docs',
+      description: 'Generate documentation',
+      action: () => switchToAgent('docs'),
+    },
+    {
+      id: 'agent_sheets',
+      icon: 'grid',
+      label: 'Create Sheets',
+      description: 'Build spreadsheets',
+      action: () => switchToAgent('sheets'),
+    },
+  ], [dailyImageCount]);
+
+  // ==================== HANDLERS ====================
+
+  async function handleImageUpload() {
+    if (dailyImageCount >= IMAGE_LIMIT) {
+      Alert.alert('Limit Reached', `You can only upload ${IMAGE_LIMIT} images per day. Try again tomorrow.`);
       return;
     }
 
     try {
-      const { data: profile } = await supabase
-        .from('user_profiles')
-        .select('subscription_tier, daily_coins_used, last_coin_reset, monthly_coins_used')
-        .eq('id', user.id)
-        .single();
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: false,
+        quality: 1,
+        base64: true,
+      });
 
-      if (profile) {
-        const isProUser = profile.subscription_tier === 'pro' || profile.subscription_tier === 'premium';
-        setIsPro(isProUser);
-
-        // Check if daily reset is needed
-        const now = new Date();
-        const lastReset = profile.last_coin_reset ? new Date(profile.last_coin_reset) : new Date(0);
-        const shouldReset = now.getTime() - lastReset.getTime() > 24 * 60 * 60 * 1000;
-
-        if (shouldReset) {
-          await supabase
-            .from('user_profiles')
-            .update({
-              daily_coins_used: 0,
-              last_coin_reset: now.toISOString(),
-            })
-            .eq('id', user.id);
+      if (!result.canceled && result.assets[0]) {
+        const base64 = result.assets[0].base64;
+        if (base64) {
+          setUploadedImages(prev => [...prev, base64]);
+          setDailyImageCount(prev => prev + 1);
           
-          setCoins(isProUser ? 9000 : 1000);
-        } else {
-          const remainingDaily = 1000 - (profile.daily_coins_used || 0);
-          const remainingMonthly = isProUser ? (9000 - (profile.monthly_coins_used || 0)) : 0;
-          setCoins(isProUser ? remainingMonthly : remainingDaily);
+          // Save count
+          const today = new Date().toDateString();
+          localStorage.setItem('daily_image_upload', JSON.stringify({ date: today, count: dailyImageCount + 1 }));
+          
+          setShowToolsModal(false);
         }
-
-        // Calculate reset time
-        const nextReset = new Date(lastReset.getTime() + 24 * 60 * 60 * 1000);
-        const hoursLeft = Math.max(0, Math.floor((nextReset.getTime() - now.getTime()) / (1000 * 60 * 60)));
-        setResetTime(`${hoursLeft}h`);
       }
     } catch (error) {
-      console.error('Error loading coins:', error);
+      console.error('Image upload error:', error);
+      Alert.alert('Error', 'Failed to upload image');
     }
-  };
+  }
 
-  const estimateCoins = (description: string): number => {
-    const words = description.toLowerCase().split(' ');
-    const complexity = {
-      small: ['button', 'form', 'input', 'simple', 'basic', 'single'],
-      medium: ['page', 'component', 'feature', 'dashboard', 'api', 'database'],
-      large: ['app', 'system', 'platform', 'full', 'complete', 'project', 'website'],
-    };
+  async function handleFetchLink() {
+    Alert.prompt(
+      'Fetch Link',
+      'Enter the URL to analyze:',
+      async (url: string) => {
+        if (!url.trim()) return;
+        
+        setShowToolsModal(false);
+        setCurrentLog('🔄 Fetching link content...');
+        
+        try {
+          const { data, error } = await supabase.functions.invoke('fetch-url', {
+            body: { url },
+          });
 
-    let hasSmall = words.some(w => complexity.small.includes(w));
-    let hasMedium = words.some(w => complexity.medium.includes(w));
-    let hasLarge = words.some(w => complexity.large.includes(w));
+          if (error) throw error;
 
-    if (hasLarge) return Math.floor(Math.random() * 11) + 20; // 20-30 coins
-    if (hasMedium) return Math.floor(Math.random() * 11) + 10; // 10-20 coins
-    if (hasSmall) return Math.floor(Math.random() * 6) + 1; // 1-6 coins
-    
-    return Math.floor(Math.random() * 11) + 10; // Default 10-20 coins
-  };
+          // Add fetched content to input
+          setInputValue(prev => `${prev}\n\nAnalyze this content from ${url}:\n${data.content}`);
+          setCurrentLog('');
+        } catch (error) {
+          console.error('Fetch link error:', error);
+          Alert.alert('Error', 'Failed to fetch link content');
+          setCurrentLog('');
+        }
+      }
+    );
+  }
 
-  const detectRequiredKeys = (description: string): APIKey[] => {
-    const keys: APIKey[] = [];
-    const lowerDesc = description.toLowerCase();
+  function switchToAgent(capability: AgentCapability) {
+    setCurrentMode('agent');
+    setShowToolsModal(false);
+    setInputValue(`Create a ${capability} about: `);
+  }
 
-    if (lowerDesc.includes('ai') || lowerDesc.includes('chatbot') || lowerDesc.includes('openai')) {
-      keys.push({
-        key: 'OPENAI_API_KEY',
-        value: '',
-        required: true,
-      });
-    }
+  function handleModeChange(mode: AIMode) {
+    setCurrentMode(mode);
+    setShowModeSelector(false);
+  }
 
-    if (lowerDesc.includes('payment') || lowerDesc.includes('stripe') || lowerDesc.includes('checkout')) {
-      keys.push({
-        key: 'STRIPE_SECRET_KEY',
-        value: '',
-        required: true,
-      });
-      keys.push({
-        key: 'STRIPE_PUBLIC_KEY',
-        value: '',
-        required: true,
-      });
-    }
+  function toggleGenerationMode() {
+    setGenerationMode(prev => prev === 'demo' ? 'real' : 'demo');
+    setShowModeToggle(false);
+  }
 
-    if (lowerDesc.includes('email') || lowerDesc.includes('sendgrid') || lowerDesc.includes('mail')) {
-      keys.push({
-        key: 'SENDGRID_API_KEY',
-        value: '',
-        required: false,
-      });
-    }
+  async function handleVoiceRead() {
+    if (!lastAIMessage) return;
 
-    if (lowerDesc.includes('database') || lowerDesc.includes('supabase')) {
-      keys.push({
-        key: 'SUPABASE_URL',
-        value: '',
-        required: true,
-      });
-      keys.push({
-        key: 'SUPABASE_ANON_KEY',
-        value: '',
-        required: true,
-      });
+    if (isSpeaking) {
+      Speech.stop();
+      setIsSpeaking(false);
+      return;
     }
 
-    return keys;
-  };
+    setIsSpeaking(true);
+    Speech.speak(lastAIMessage, {
+      language: 'en-US',
+      pitch: 1.0,
+      rate: 0.9,
+      onDone: () => setIsSpeaking(false),
+      onStopped: () => setIsSpeaking(false),
+      onError: () => setIsSpeaking(false),
+    });
+  }
 
-  const handleGenerateProject = async () => {
-    if (!projectDescription.trim()) {
+  // ==================== PROJECT GENERATION ====================
+
+  async function generateProject() {
+    if (!inputValue.trim()) {
       Alert.alert('Error', 'Please describe your project');
       return;
     }
 
-    const coinsNeeded = estimateCoins(projectDescription);
-    
-    if (coins < coinsNeeded) {
-      Alert.alert(
-        'Insufficient Coins',
-        `This project needs ${coinsNeeded} coins, but you only have ${coins} coins remaining.`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Upgrade to Pro', onPress: () => router.push('/subscription') },
-        ]
-      );
+    const projectId = `proj_${Date.now()}`;
+    const newProject: ProjectGeneration = {
+      id: projectId,
+      title: inputValue.slice(0, 50),
+      description: inputValue,
+      language: detectLanguage(inputValue),
+      mode: generationMode,
+      files: [],
+      environmentVars: {},
+      instructions: [],
+      createdAt: new Date().toISOString(),
+      status: 'generating',
+      logs: [],
+      previewable: false,
+      requiresPro: false,
+    };
+
+    setCurrentProject(newProject);
+    setIsGenerating(true);
+    setStreamingContent('');
+    setLastAIMessage('');
+
+    // Estimate coins
+    const coinsNeeded = estimateProjectCost(inputValue);
+    if (userCoins < coinsNeeded) {
+      Alert.alert('Insufficient Coins', `This project needs ${coinsNeeded} coins.`);
+      setIsGenerating(false);
       return;
     }
 
-    const detectedKeys = detectRequiredKeys(projectDescription);
-    
-    if (detectedKeys.length > 0) {
-      setRequiredKeys(detectedKeys);
-      setShowKeysModal(true);
-    } else {
-      await startProjectGeneration(coinsNeeded, []);
-    }
-  };
+    try {
+      // Create abort controller for streaming
+      streamControllerRef.current = new AbortController();
 
-  const startProjectGeneration = async (coinsNeeded: number, apiKeys: APIKey[]) => {
-    setLoading(true);
-    setShowKeysModal(false);
+      // Stream the generation
+      await streamProjectGeneration(newProject, streamControllerRef.current.signal);
+
+      // Deduct coins
+      await deductCoins(coinsNeeded);
+
+      setIsGenerating(false);
+    } catch (error: any) {
+      console.error('Generation error:', error);
+      if (error.name !== 'AbortError') {
+        Alert.alert('Error', error.message || 'Failed to generate project');
+      }
+      setIsGenerating(false);
+    }
+  }
+
+  async function streamProjectGeneration(project: ProjectGeneration, signal: AbortSignal) {
+    try {
+      const response = await fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/generate-code-project`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({
+          description: project.description,
+          language: project.language,
+          mode: project.mode,
+          aiMode: currentMode,
+          images: uploadedImages,
+          userId: user?.id,
+        }),
+        signal,
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error('No response body');
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (!line.trim()) continue;
+
+          try {
+            const event = JSON.parse(line);
+            
+            switch (event.type) {
+              case 'log':
+                setCurrentLog(event.data);
+                setCurrentProject(prev => prev ? {
+                  ...prev,
+                  logs: [...prev.logs, event.data],
+                } : null);
+                break;
+
+              case 'content':
+                setStreamingContent(prev => prev + event.data);
+                break;
+
+              case 'file_created':
+                setCurrentProject(prev => prev ? {
+                  ...prev,
+                  files: [...prev.files, event.data],
+                } : null);
+                break;
+
+              case 'env_var':
+                setCurrentProject(prev => prev ? {
+                  ...prev,
+                  environmentVars: { ...prev.environmentVars, [event.data.key]: event.data.value },
+                } : null);
+                break;
+
+              case 'instruction':
+                setCurrentProject(prev => prev ? {
+                  ...prev,
+                  instructions: [...prev.instructions, event.data],
+                } : null);
+                break;
+
+              case 'completed':
+                setCurrentProject(prev => prev ? {
+                  ...prev,
+                  status: 'completed',
+                  previewable: event.data.previewable,
+                  requiresPro: event.data.requiresPro,
+                } : null);
+                setLastAIMessage(streamingContent);
+                break;
+
+              case 'error':
+                throw new Error(event.data);
+            }
+          } catch (parseError) {
+            console.error('Parse error:', parseError);
+          }
+        }
+      }
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        console.log('Generation cancelled');
+      } else {
+        throw error;
+      }
+    }
+  }
+
+  function stopGeneration() {
+    if (streamControllerRef.current) {
+      streamControllerRef.current.abort();
+      streamControllerRef.current = null;
+    }
+    setIsGenerating(false);
+    setCurrentLog('');
+  }
+
+  async function deductCoins(amount: number) {
+    if (!user) return;
 
     try {
-      // Deduct coins
-      if (user) {
-        const { data: profile } = await supabase
+      const { data } = await supabase
+        .from('user_profiles')
+        .select('daily_coins_used, monthly_coins_used')
+        .eq('id', user.id)
+        .single();
+
+      if (data) {
+        await supabase
           .from('user_profiles')
-          .select('daily_coins_used, monthly_coins_used')
-          .eq('id', user.id)
-          .single();
+          .update({
+            daily_coins_used: (data.daily_coins_used || 0) + amount,
+            monthly_coins_used: (data.monthly_coins_used || 0) + amount,
+          })
+          .eq('id', user.id);
 
-        if (profile) {
-          await supabase
-            .from('user_profiles')
-            .update({
-              daily_coins_used: (profile.daily_coins_used || 0) + coinsNeeded,
-              monthly_coins_used: (profile.monthly_coins_used || 0) + coinsNeeded,
-            })
-            .eq('id', user.id);
-        }
+        setUserCoins(prev => prev - amount);
       }
-
-      // Save API keys to database
-      if (apiKeys.length > 0 && user) {
-        for (const key of apiKeys.filter(k => k.value)) {
-          await supabase
-            .from('user_api_keys')
-            .upsert({
-              user_id: user.id,
-              key_name: key.key,
-              key_value: key.value,
-              created_at: new Date().toISOString(),
-            });
-        }
-      }
-
-      // Call AI to generate project
-      const { data, error } = await supabase.functions.invoke('generate-project', {
-        body: {
-          description: projectDescription,
-          apiKeys: apiKeys.reduce((acc, k) => {
-            if (k.value) acc[k.key] = k.value;
-            return acc;
-          }, {} as Record<string, string>),
-          userId: user?.id,
-        },
-      });
-
-      if (error) throw error;
-
-      // Navigate to preview screen with project data
-      router.push({
-        pathname: '/preview',
-        params: {
-          projectData: JSON.stringify(data),
-        },
-      });
-
-      // Reload coins
-      await loadUserCoins();
-
-    } catch (error: any) {
-      console.error('Project generation error:', error);
-      Alert.alert('Error', error.message || 'Failed to generate project');
-    } finally {
-      setLoading(false);
+    } catch (error) {
+      console.error('Deduct coins error:', error);
     }
-  };
+  }
+
+  // ==================== PREVIEW ====================
+
+  async function handlePreview() {
+    if (!currentProject || !currentProject.previewable) return;
+
+    if (currentProject.requiresPro && !isPro) {
+      Alert.alert('Pro Required', 'TypeScript preview requires Pro Plan. Upgrade to preview this project.', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Upgrade', onPress: () => router.push('/subscription') },
+      ]);
+      return;
+    }
+
+    router.push({
+      pathname: '/preview',
+      params: {
+        projectId: currentProject.id,
+        files: JSON.stringify(currentProject.files),
+        language: currentProject.language,
+      },
+    });
+  }
+
+  function handleCopyProject() {
+    if (!currentProject) return;
+
+    const allCode = currentProject.files
+      .map(file => `// ${file.path}\n${file.content}`)
+      .join('\n\n');
+
+    // Copy to clipboard (web platform)
+    if (Platform.OS === 'web') {
+      navigator.clipboard.writeText(allCode);
+      Alert.alert('Copied', 'All project code copied to clipboard');
+    }
+  }
+
+  // ==================== UTILITIES ====================
+
+  function detectLanguage(description: string): ProjectLanguage {
+    const lower = description.toLowerCase();
+    if (lower.includes('typescript') || lower.includes('tsx') || lower.includes('react native')) return 'typescript';
+    if (lower.includes('python') || lower.includes('django') || lower.includes('flask')) return 'python';
+    if (lower.includes('php') || lower.includes('laravel')) return 'php';
+    if (lower.includes('java') || lower.includes('spring')) return 'java';
+    if (lower.includes('node') || lower.includes('express')) return 'node';
+    if (lower.includes('html') || lower.includes('css') || lower.includes('webpage')) return 'html';
+    return 'javascript';
+  }
+
+  function estimateProjectCost(description: string): number {
+    const words = description.split(' ').length;
+    const hasComplex = description.toLowerCase().match(/api|database|backend|server|full|complete|system/);
+    
+    if (words > 100 || hasComplex) return 30;
+    if (words > 50) return 15;
+    return 5;
+  }
+
+  // ==================== STYLES ====================
 
   const styles = StyleSheet.create({
     container: {
       flex: 1,
       backgroundColor: colors.background,
-      paddingTop: Platform.select({ ios: insets.top, android: insets.top }),
     },
     header: {
       flexDirection: 'row',
       alignItems: 'center',
-      padding: Spacing.md,
+      paddingHorizontal: Spacing.md,
+      paddingTop: insets.top + Spacing.sm,
+      paddingBottom: Spacing.sm,
       borderBottomWidth: 1,
       borderBottomColor: colors.border,
     },
-    headerTitle: {
-      ...Typography.heading,
-      fontSize: 20,
-      marginLeft: Spacing.sm,
-      flex: 1,
+    menuButton: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      backgroundColor: colors.surface,
+      justifyContent: 'center',
+      alignItems: 'center',
     },
-    coinButton: {
+    headerCenter: {
+      flex: 1,
+      marginLeft: Spacing.md,
+    },
+    modeSelectorButton: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: colors.surface,
-      paddingHorizontal: Spacing.md,
-      paddingVertical: Spacing.sm,
-      borderRadius: BorderRadius.full,
       gap: Spacing.xs,
     },
-    coinText: {
+    modeText: {
       ...Typography.body,
       fontWeight: '600',
-      color: colors.primary,
+      fontSize: 16,
+    },
+    headerRight: {
+      flexDirection: 'row',
+      gap: Spacing.sm,
+    },
+    iconButton: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      justifyContent: 'center',
+      alignItems: 'center',
     },
     content: {
       flex: 1,
-      padding: Spacing.lg,
     },
-    label: {
+    conversationArea: {
+      flex: 1,
+      padding: Spacing.md,
+    },
+    projectCard: {
+      backgroundColor: colors.surface,
+      borderRadius: BorderRadius.lg,
+      padding: Spacing.md,
+      marginBottom: Spacing.md,
+    },
+    projectHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: Spacing.sm,
+    },
+    projectTitle: {
+      ...Typography.heading,
+      fontSize: 18,
+      flex: 1,
+    },
+    statusBadge: {
+      paddingHorizontal: Spacing.sm,
+      paddingVertical: Spacing.xs,
+      borderRadius: BorderRadius.sm,
+      backgroundColor: colors.primary,
+    },
+    statusText: {
+      ...Typography.caption,
+      color: '#FFFFFF',
+      fontWeight: '600',
+    },
+    logText: {
+      ...Typography.caption,
+      color: colors.primary,
+      fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
+    },
+    streamingContainer: {
+      marginTop: Spacing.md,
+    },
+    filesSection: {
+      marginTop: Spacing.md,
+    },
+    sectionTitle: {
       ...Typography.body,
       fontWeight: '600',
       marginBottom: Spacing.sm,
     },
-    input: {
-      backgroundColor: colors.surface,
-      borderRadius: BorderRadius.md,
+    fileItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: Spacing.sm,
+      paddingVertical: Spacing.xs,
+    },
+    fileName: {
+      ...Typography.caption,
+      color: colors.textSecondary,
+    },
+    projectActions: {
+      flexDirection: 'row',
+      gap: Spacing.sm,
+      marginTop: Spacing.md,
+    },
+    actionButton: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: Spacing.xs,
       padding: Spacing.md,
-      ...Typography.body,
-      color: colors.text,
-      minHeight: 120,
-      textAlignVertical: 'top',
+      borderRadius: BorderRadius.md,
+      backgroundColor: colors.primary,
+    },
+    actionButtonSecondary: {
+      backgroundColor: colors.surface,
       borderWidth: 1,
       borderColor: colors.border,
     },
-    helperText: {
-      ...Typography.caption,
-      color: colors.textSecondary,
-      marginTop: Spacing.sm,
-    },
-    generateButton: {
-      backgroundColor: colors.primary,
-      borderRadius: BorderRadius.md,
-      padding: Spacing.md,
-      alignItems: 'center',
-      marginTop: Spacing.lg,
-    },
-    generateButtonDisabled: {
-      backgroundColor: colors.textSecondary,
-    },
-    generateButtonText: {
+    actionButtonText: {
       ...Typography.body,
-      color: '#FFFFFF',
       fontWeight: '600',
+      color: '#FFFFFF',
+    },
+    actionButtonTextSecondary: {
+      color: colors.text,
+    },
+    inputContainer: {
+      borderTopWidth: 1,
+      borderTopColor: colors.border,
+      paddingHorizontal: Spacing.md,
+      paddingTop: Spacing.md,
+      paddingBottom: Math.max(insets.bottom, Spacing.md),
+      backgroundColor: colors.background,
+    },
+    inputRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-end',
+      gap: Spacing.sm,
+    },
+    input: {
+      flex: 1,
+      minHeight: 44,
+      maxHeight: 120,
+      backgroundColor: colors.surface,
+      borderRadius: BorderRadius.lg,
+      paddingHorizontal: Spacing.md,
+      paddingTop: Spacing.sm,
+      paddingBottom: Spacing.sm,
+      ...Typography.body,
+      color: colors.text,
+    },
+    sendButton: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      backgroundColor: colors.primary,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    plusButton: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      backgroundColor: colors.surface,
+      justifyContent: 'center',
+      alignItems: 'center',
     },
     modalOverlay: {
       flex: 1,
       backgroundColor: 'rgba(0, 0, 0, 0.5)',
-      justifyContent: 'center',
-      alignItems: 'center',
+      justifyContent: 'flex-end',
     },
     modalContent: {
       backgroundColor: colors.background,
-      borderRadius: BorderRadius.lg,
-      padding: Spacing.lg,
-      width: '90%',
+      borderTopLeftRadius: BorderRadius.xl,
+      borderTopRightRadius: BorderRadius.xl,
+      paddingTop: Spacing.md,
+      paddingBottom: Math.max(insets.bottom, Spacing.md),
       maxHeight: '80%',
+    },
+    modalHandle: {
+      width: 40,
+      height: 4,
+      backgroundColor: colors.border,
+      borderRadius: 2,
+      alignSelf: 'center',
+      marginBottom: Spacing.md,
     },
     modalTitle: {
       ...Typography.heading,
       fontSize: 20,
       marginBottom: Spacing.md,
+      paddingHorizontal: Spacing.md,
     },
-    keyInput: {
+    toolsList: {
+      paddingHorizontal: Spacing.md,
+    },
+    toolItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: Spacing.md,
       backgroundColor: colors.surface,
       borderRadius: BorderRadius.md,
-      padding: Spacing.md,
+      marginBottom: Spacing.sm,
+    },
+    toolIcon: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      backgroundColor: colors.primary + '20',
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginRight: Spacing.md,
+    },
+    toolInfo: {
+      flex: 1,
+    },
+    toolLabel: {
       ...Typography.body,
-      color: colors.text,
-      marginBottom: Spacing.md,
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    keyLabel: {
-      ...Typography.caption,
       fontWeight: '600',
-      marginBottom: Spacing.xs,
     },
-    requiredBadge: {
-      color: '#FF3B30',
+    toolDescription: {
+      ...Typography.caption,
+      color: colors.textSecondary,
+    },
+    toolBadge: {
+      paddingHorizontal: Spacing.sm,
+      paddingVertical: Spacing.xs,
+      backgroundColor: colors.primary,
+      borderRadius: BorderRadius.sm,
+    },
+    toolBadgeText: {
+      ...Typography.caption,
+      color: '#FFFFFF',
       fontSize: 10,
     },
-    modalButtons: {
-      flexDirection: 'row',
-      gap: Spacing.sm,
-      marginTop: Spacing.lg,
-    },
-    modalButton: {
-      flex: 1,
+    modeOption: {
       padding: Spacing.md,
-      borderRadius: BorderRadius.md,
-      alignItems: 'center',
-    },
-    cancelButton: {
-      backgroundColor: colors.surface,
-    },
-    saveButton: {
-      backgroundColor: colors.primary,
-    },
-    modalButtonText: {
-      ...Typography.body,
-      fontWeight: '600',
-    },
-    coinInfoModal: {
-      backgroundColor: colors.background,
-      borderRadius: BorderRadius.lg,
-      padding: Spacing.xl,
-      width: '80%',
-    },
-    coinInfoTitle: {
-      ...Typography.heading,
-      fontSize: 22,
-      marginBottom: Spacing.md,
-      textAlign: 'center',
-    },
-    coinInfoRow: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      paddingVertical: Spacing.sm,
       borderBottomWidth: 1,
       borderBottomColor: colors.border,
     },
-    coinInfoLabel: {
+    modeOptionTitle: {
       ...Typography.body,
+      fontWeight: '600',
+      marginBottom: Spacing.xs,
+    },
+    modeOptionDescription: {
+      ...Typography.caption,
       color: colors.textSecondary,
-    },
-    coinInfoValue: {
-      ...Typography.body,
-      fontWeight: '600',
-    },
-    upgradeButton: {
-      backgroundColor: colors.primary,
-      borderRadius: BorderRadius.md,
-      padding: Spacing.md,
-      alignItems: 'center',
-      marginTop: Spacing.lg,
-    },
-    upgradeButtonText: {
-      ...Typography.body,
-      color: '#FFFFFF',
-      fontWeight: '600',
     },
   });
 
+  // ==================== RENDER ====================
+
   return (
     <View style={styles.container}>
+      {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={24} color={colors.text} />
+        <TouchableOpacity style={styles.menuButton} onPress={() => router.push('/home')}>
+          <Ionicons name="menu" size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Create Project</Text>
-        <TouchableOpacity style={styles.coinButton} onPress={() => setShowKeysModal(true)}>
-          <Ionicons name="cash-outline" size={20} color={colors.primary} />
-          <Text style={styles.coinText}>{coins}</Text>
-        </TouchableOpacity>
+
+        <View style={styles.headerCenter}>
+          <TouchableOpacity style={styles.modeSelectorButton} onPress={() => setShowModeSelector(true)}>
+            <Text style={styles.modeText}>
+              {currentMode === 'instant' && 'K2.5 Instant'}
+              {currentMode === 'deep_thinking' && 'K2.5 Deep'}
+              {currentMode === 'agent' && 'K2.5 Agent'}
+            </Text>
+            <Ionicons name="chevron-down" size={16} color={colors.text} />
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.headerRight}>
+          <TouchableOpacity style={styles.iconButton} onPress={handleVoiceRead}>
+            <Ionicons name={isSpeaking ? 'volume-high' : 'volume-mute-outline'} size={24} color={colors.text} />
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.iconButton} onPress={() => router.push('/settings')}>
+            <Ionicons name="person-circle-outline" size={24} color={colors.text} />
+          </TouchableOpacity>
+        </View>
       </View>
 
-      <ScrollView style={styles.content}>
-        <Text style={styles.label}>What do you want to build?</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="E.g., Create a chatbot with React and OpenAI..."
-          placeholderTextColor={colors.textSecondary}
-          value={projectDescription}
-          onChangeText={setProjectDescription}
-          multiline
-          editable={!loading}
-        />
-        <Text style={styles.helperText}>
-          Describe your project in detail. The AI will generate all required files, structure, and code.
-        </Text>
+      {/* Content */}
+      <ScrollView ref={scrollViewRef} style={styles.content} contentContainerStyle={styles.conversationArea}>
+        {currentProject && (
+          <View style={styles.projectCard}>
+            <View style={styles.projectHeader}>
+              <Text style={styles.projectTitle}>{currentProject.title}</Text>
+              {isGenerating && (
+                <View style={styles.statusBadge}>
+                  <Text style={styles.statusText}>Generating...</Text>
+                </View>
+              )}
+            </View>
 
-        <TouchableOpacity
-          style={[
-            styles.generateButton,
-            (!projectDescription.trim() || loading) && styles.generateButtonDisabled,
-          ]}
-          onPress={handleGenerateProject}
-          disabled={!projectDescription.trim() || loading}
-        >
-          {loading ? (
-            <ActivityIndicator color="#FFFFFF" />
-          ) : (
-            <Text style={styles.generateButtonText}>Generate Project</Text>
-          )}
-        </TouchableOpacity>
+            {currentLog && (
+              <Text style={styles.logText}>{currentLog}</Text>
+            )}
+
+            {streamingContent && (
+              <View style={styles.streamingContainer}>
+                <StreamingText content={streamingContent} speed={isPro ? 50 : 30} />
+              </View>
+            )}
+
+            {currentProject.files.length > 0 && (
+              <View style={styles.filesSection}>
+                <Text style={styles.sectionTitle}>Files ({currentProject.files.length})</Text>
+                {currentProject.files.map((file, idx) => (
+                  <View key={idx} style={styles.fileItem}>
+                    <Ionicons name="document-text" size={16} color={colors.primary} />
+                    <Text style={styles.fileName}>{file.path}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {currentProject.status === 'completed' && (
+              <View style={styles.projectActions}>
+                {currentProject.previewable && (
+                  <TouchableOpacity style={styles.actionButton} onPress={handlePreview}>
+                    <Ionicons name="eye" size={20} color="#FFFFFF" />
+                    <Text style={styles.actionButtonText}>Preview</Text>
+                  </TouchableOpacity>
+                )}
+
+                <TouchableOpacity 
+                  style={[styles.actionButton, styles.actionButtonSecondary]} 
+                  onPress={handleCopyProject}
+                >
+                  <Ionicons name="copy" size={20} color={colors.text} />
+                  <Text style={[styles.actionButtonText, styles.actionButtonTextSecondary]}>Copy</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={[styles.actionButton, styles.actionButtonSecondary]} 
+                  onPress={() => setShowFileExplorer(true)}
+                >
+                  <Ionicons name="folder-open" size={20} color={colors.text} />
+                  <Text style={[styles.actionButtonText, styles.actionButtonTextSecondary]}>Files</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        )}
       </ScrollView>
 
-      {/* API Keys Modal */}
-      <Modal
-        visible={showKeysModal && requiredKeys.length > 0}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowKeysModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            style={styles.modalContent}
-          >
-            <ScrollView>
-              <Text style={styles.modalTitle}>Required API Keys</Text>
-              {requiredKeys.map((key, index) => (
-                <View key={index}>
-                  <Text style={styles.keyLabel}>
-                    {key.key} {key.required && <Text style={styles.requiredBadge}>*</Text>}
-                  </Text>
-                  <TextInput
-                    style={styles.keyInput}
-                    placeholder={`Enter ${key.key}`}
-                    placeholderTextColor={colors.textSecondary}
-                    value={key.value}
-                    onChangeText={(text) => {
-                      setRequiredKeys(prev =>
-                        prev.map((k, i) => (i === index ? { ...k, value: text } : k))
-                      );
-                    }}
-                    secureTextEntry
-                  />
-                </View>
+      {/* Input Bar */}
+      <View style={styles.inputContainer}>
+        <View style={styles.inputRow}>
+          <TouchableOpacity style={styles.plusButton} onPress={() => setShowToolsModal(true)}>
+            <Ionicons name="add" size={28} color={colors.primary} />
+          </TouchableOpacity>
+
+          <TextInput
+            style={styles.input}
+            placeholder="Ask away. Pics work too."
+            placeholderTextColor={colors.textSecondary}
+            value={inputValue}
+            onChangeText={setInputValue}
+            multiline
+            editable={!isGenerating}
+          />
+
+          {isGenerating ? (
+            <TouchableOpacity style={styles.sendButton} onPress={stopGeneration}>
+              <Ionicons name="stop" size={24} color="#FFFFFF" />
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity 
+              style={styles.sendButton} 
+              onPress={generateProject}
+              disabled={!inputValue.trim()}
+            >
+              <Ionicons name="arrow-up" size={24} color="#FFFFFF" />
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+
+      {/* Tools Modal */}
+      <Modal visible={showToolsModal} transparent animationType="slide" onRequestClose={() => setShowToolsModal(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowToolsModal(false)}>
+          <View style={styles.modalContent} onStartShouldSetResponder={() => true}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>Tools</Text>
+            
+            <ScrollView style={styles.toolsList}>
+              {tools.map(tool => (
+                <TouchableOpacity key={tool.id} style={styles.toolItem} onPress={tool.action}>
+                  <View style={styles.toolIcon}>
+                    <Ionicons name={tool.icon as any} size={24} color={colors.primary} />
+                  </View>
+                  <View style={styles.toolInfo}>
+                    <Text style={styles.toolLabel}>{tool.label}</Text>
+                    <Text style={styles.toolDescription}>{tool.description}</Text>
+                  </View>
+                  {tool.badge && (
+                    <View style={styles.toolBadge}>
+                      <Text style={styles.toolBadgeText}>{tool.badge}</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
               ))}
             </ScrollView>
-            
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.cancelButton]}
-                onPress={() => setShowKeysModal(false)}
-              >
-                <Text style={[styles.modalButtonText, { color: colors.text }]}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.saveButton]}
-                onPress={() => {
-                  const missingRequired = requiredKeys.filter(k => k.required && !k.value);
-                  if (missingRequired.length > 0) {
-                    Alert.alert('Error', 'Please fill in all required API keys');
-                    return;
-                  }
-                  startProjectGeneration(estimateCoins(projectDescription), requiredKeys);
-                }}
-              >
-                <Text style={[styles.modalButtonText, { color: '#FFFFFF' }]}>Save & Generate</Text>
-              </TouchableOpacity>
-            </View>
-          </KeyboardAvoidingView>
-        </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Mode Selector Modal */}
+      <Modal visible={showModeSelector} transparent animationType="fade" onRequestClose={() => setShowModeSelector(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowModeSelector(false)}>
+          <View style={styles.modalContent} onStartShouldSetResponder={() => true}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>AI Mode</Text>
+
+            <TouchableOpacity style={styles.modeOption} onPress={() => handleModeChange('instant')}>
+              <Text style={styles.modeOptionTitle}>Instant Mode</Text>
+              <Text style={styles.modeOptionDescription}>Fast answers for quick questions</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.modeOption} onPress={() => handleModeChange('deep_thinking')}>
+              <Text style={styles.modeOptionTitle}>Deep Thinking Mode</Text>
+              <Text style={styles.modeOptionDescription}>Complex reasoning and analysis</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.modeOption} onPress={() => handleModeChange('agent')}>
+              <Text style={styles.modeOptionTitle}>Agent Mode</Text>
+              <Text style={styles.modeOptionDescription}>Research, slides, websites, docs, sheets</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
       </Modal>
     </View>
   );
