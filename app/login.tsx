@@ -22,10 +22,29 @@ export default function LoginScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
+  const handleEmailChange = (text: string) => {
+  setEmail(text);
+
+  if (text.includes('@')) {
+    setShowSuggestions(false);
+    return;
+  }
+
+  if (text.length > 0) {
+    const newSuggestions = emailDomains.map(domain => text + domain);
+    setSuggestions(newSuggestions);
+    setShowSuggestions(true);
+  } else {
+    setShowSuggestions(false);
+  }
+};
+  
   const handleEmailContinue = async () => {
     if (!email.trim()) {
       showAlert('Error', 'Please enter your email address');
@@ -48,6 +67,15 @@ export default function LoginScreen() {
     }
   };
 
+  const emailDomains = [
+  '@gmail.com',
+  '@icloud.com',
+  '@yahoo.com',
+  '@outlook.com',
+  '@hotmail.com',
+  '@proton.me'
+];
+
   const handleGoogleSignIn = async () => {
     const { error } = await signInWithGoogle();
     if (error) {
@@ -61,6 +89,7 @@ const handlePhoneLogin = () => {
     // Apple Sign In will be implemented when keys are provided
     showAlert('Coming Soon', 'Apple Sign In will be available soon');
   };
+
 
   const styles = StyleSheet.create({
     container: {
@@ -199,12 +228,39 @@ const handlePhoneLogin = () => {
             placeholder=""
             placeholderTextColor={colors.textSecondary}
             value={email}
-            onChangeText={setEmail}
+            onChangeText={handleEmailChange}
             autoCapitalize="none"
             keyboardType="email-address"
             editable={!operationLoading}
           />
         </View>
+
+        {showSuggestions && (
+  <View style={{
+    backgroundColor: colors.surface,
+    borderRadius: 10,
+    marginTop: 6,
+    borderWidth: 1,
+    borderColor: colors.border
+  }}>
+    {suggestions.map((item, index) => (
+      <TouchableOpacity
+        key={index}
+        style={{
+          padding: 12,
+          borderBottomWidth: index !== suggestions.length - 1 ? 1 : 0,
+          borderColor: colors.border
+        }}
+        onPress={() => {
+          setEmail(item);
+          setShowSuggestions(false);
+        }}
+      >
+        <Text style={{ color: colors.text }}>{item}</Text>
+      </TouchableOpacity>
+    ))}
+  </View>
+)}
 
         <TouchableOpacity
           style={[styles.continueButton, !email.trim() && styles.continueButtonDisabled]}
