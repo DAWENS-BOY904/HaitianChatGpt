@@ -509,11 +509,38 @@ const sendMessage = async (
   const userMessageId = `temp-user-${Date.now()}`;
   const aiMessageId = `temp-ai-${Date.now() + 1}`;
 
+  // CRITICAL FIX: Create user message with BOTH imageUrl and base64Image
+  let finalImageUrl = imageUrl;
+  
+  // If we have base64 but no URL, upload it first
+  if (base64Image && !imageUrl) {
+    try {
+      const fileName = `${Date.now()}.jpg`;
+      const filePath = `${conversationId}/${fileName}`;
+      
+      const { error: uploadError } = await supabase.storage
+        .from('chat-images')
+        .upload(filePath, decode(base64Image), {
+          contentType: 'image/jpeg',
+        });
+
+      if (!uploadError) {
+        const { data: urlData } = supabase.storage
+          .from('chat-images')
+          .getPublicUrl(filePath);
+        finalImageUrl = urlData.publicUrl;
+        console.log('📸 Image uploaded to storage:', finalImageUrl);
+      }
+    } catch (uploadErr) {
+      console.error('Image upload error:', uploadErr);
+    }
+  }
+
   const tempUserMessage: Message = {
     id: userMessageId,
     role: 'user',
     content,
-    image_url: imageUrl,
+    image_url: finalImageUrl, // CRITICAL: Use finalImageUrl which is either uploaded or provided
     created_at: new Date().toISOString(),
   };
 
@@ -536,6 +563,7 @@ const sendMessage = async (
       messages: contextMessages,
       conversationId: conversationId,
       aiModel: aiModel || 'google-gemini',
+      userImageUrl: finalImageUrl, // CRITICAL: Send image URL to backend
     };
 
     if (base64Image) {
@@ -586,6 +614,41 @@ const sendMessage = async (
     // CRITICAL FIX: Set streaming ID to enable animation
     setStreamingMessageId(aiMessageId);
 
+    // CRITICAL FIX: Save user message to database FIRST
+    const { data: savedUserMessage, error: saveUserError } = await supabase
+      .from('messages')
+      .insert({
+        conversation_id: conversationId,
+        role: 'user',
+        content,
+        image_url: finalImageUrl || null,
+      })
+      .select()
+      .single();
+
+    if (saveUserError) {
+      console.error('Failed to save user message:', saveUserError);
+    }
+
+    // CRITICAL FIX: Save AI message to database
+    const { data: savedAIMessage, error: saveAIError } = await supabase
+      .from('messages')
+      .insert({
+        conversation_id: conversationId,
+        role: 'assistant',
+        content: cleanMessage,
+        image_url: aiResponse.imageUrl || undefined,
+        file_url: aiResponse.fileUrl || undefined,
+        file_name: aiResponse.fileName || undefined,
+        file_type: aiResponse.fileType || undefined,
+      })
+      .select()
+      .single();
+
+    if (saveAIError) {
+      console.error('Failed to save AI message:', saveAIError);
+    }
+
     // Update messages - KONSERVE tout mesaj yo kòrèkteman
     setMessages(prev => {
       // Retire sèlman mesaj temp ki pa fini
@@ -593,8 +656,13 @@ const sendMessage = async (
         m.id !== userMessageId && 
         !m.id.startsWith('temp-ai-') // Retire ansyen temp AI mesaj yo
       );
+      
+      // Use saved messages with real IDs if available
+      const finalUserMessage = savedUserMessage || tempUserMessage;
+      const finalAIMessage = savedAIMessage || tempAIMessage;
+      
       // Ajoute mesaj itilizatè a ak nouvo mesaj AI a
-      return [...withoutTemp, tempUserMessage, tempAIMessage];
+      return [...withoutTemp, finalUserMessage, finalAIMessage];
     });
 
     // Update title if first message
