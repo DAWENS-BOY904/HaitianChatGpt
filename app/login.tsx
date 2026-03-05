@@ -54,7 +54,9 @@ export default function LoginScreen() {
       showAlert('Error', error);
     }
   };
-
+const handlePhoneLogin = () => {
+  router.push('/verify-code');
+};
   const handleAppleSignIn = async () => {
     // Apple Sign In will be implemented when keys are provided
     showAlert('Coming Soon', 'Apple Sign In will be available soon');
@@ -230,13 +232,10 @@ export default function LoginScreen() {
           <Text style={styles.oauthButtonText}>Continue with Apple</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity 
-          style={styles.oauthButton} 
-          onPress={() => showAlert('Coming Soon', 'Phone authentication will be available soon')}
-        >
-          <Ionicons name="call" size={20} color={colors.text} />
-          <Text style={styles.oauthButtonText}>Continue with phone</Text>
-        </TouchableOpacity>
+        <TouchableOpacity style={styles.oauthButton} onPress={handlePhoneLogin}>
+  <Ionicons name="call" size={20} color={colors.text} />
+  <Text style={styles.oauthButtonText}>Continue with phone</Text>
+</TouchableOpacity>
       </View>
     </View>
   );
