@@ -14,6 +14,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { BlurView } from 'expo-blur';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -159,6 +160,16 @@ export function ToolsModal({
   const handlePickImages = async () => {
     setLoadingTool('photos');
     try {
+      // Check daily photo upload limit
+      const today = new Date().toDateString();
+      const uploadedToday = await AsyncStorage.getItem(`photo_uploads_${today}`);
+      const uploadCount = uploadedToday ? parseInt(uploadedToday) : 0;
+
+      if (uploadCount >= 10) {
+        alert('You have reached the daily limit of 10 photo uploads. Please try again tomorrow.');
+        return;
+      }
+
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
         alert('Permission to access media library is required!');
@@ -173,6 +184,16 @@ export function ToolsModal({
       });
 
       if (!result.canceled && result.assets.length > 0) {
+        // Check if this would exceed the limit
+        const newCount = uploadCount + result.assets.length;
+        if (newCount > 10) {
+          alert(`You can only upload ${10 - uploadCount} more photos today.`);
+          return;
+        }
+
+        // Update upload count
+        await AsyncStorage.setItem(`photo_uploads_${today}`, newCount.toString());
+
         onPickMedia(
           result.assets.map(asset => ({
             type: 'image',
