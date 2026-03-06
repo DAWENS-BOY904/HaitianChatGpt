@@ -650,7 +650,7 @@ export async function generateImageSmart(
 
   console.error('❌ All image generation models failed');
   return { 
-    error: '❌ All image generation services are currently unavailable:\n\n1. OnSpace AI (Nano Banana Pro): ' + (onspaceResult.error || 'Failed') + '\n2. Gemini Imagen: Quota exceeded\n3. DALL-E 3: ' + (dalleResult.error || 'Failed') + '\n\nPlease try again later or contact support if this issue persists.',
+    error: '❌ All image generation services are currently unavailable. Please check that API keys are configured for OnSpace AI, Google Gemini, and OpenAI DALL-E. Contact support if the issue persists.',
     model: 'none'
   };
 }
@@ -821,25 +821,28 @@ export async function callAI(modelId: string, messages: AIMessage[], isImageTask
  * Detect content type - PRODUCTION VERSION
  */
 export function detectContentType(userMessage: string): {
-  type: 'image' | 'file' | 'code' | 'text';
+  type: 'image' | 'file' | 'both' | 'code' | 'text';
   thinkingMode: 'thinking' | 'creating_image' | 'analyzing' | 'editing_image';
   suggestedModel: string;
   isImageTask: boolean;
+  hasImageKeywords: boolean;
+  hasFileKeywords: boolean;
 } {
   const lowerMsg = userMessage.toLowerCase();
   
-  // Image generation keywords
+  // Image generation keywords - SPECIFIC to creation requests only
   const imageKeywords = [
-    'create a logo', 'create logo', 'generate logo', 'make a logo', 'logo for',
-    'create an image', 'create image', 'generate image', 'make an image', 'image for',
-    'design a logo', 'design logo', 'design an image', 'design image',
-    'draw', 'paint', 'illustrate', 'sketch',
-    'create a picture', 'generate a picture', 'design an icon', 'icon for',
-    'kreye yon logo', 'kreye logo', 'fe yon logo', 'fe logo',
+    'create a logo', 'create logo', 'generate logo', 'make a logo', 'design a logo',
+    'create an image', 'create image', 'generate image', 'make an image', 'design an image',
+    'draw a', 'draw me', 'paint a', 'paint me', 'illustrate a', 'illustrate me', 'sketch a', 'sketch me',
+    'create a picture', 'generate a picture', 'make a picture', 'design an icon',
+    'kreye yon logo', 'kreye logo', 'fe yon logo', 'fe logo', 'desine logo',
     'generate a logo', 'make logo', 'logo design', 'brand logo',
-    'create photo', 'generate photo', 'make photo', 'photo of',
-    'create illustration', 'generate illustration', 'make illustration',
-    'image of', 'picture of', 'photo of', 'drawing of', 'painting of',
+    'create photo', 'generate photo', 'make photo', 'design photo',
+    'create illustration', 'generate illustration', 'make illustration', 'design illustration',
+    'foto', 'imaj', 'kreye foto', 'kreye imaj', 'fe foto', 'fe imaj', 'desine foto', 'desine imaj',
+    'generate foto', 'generate imaj', 'make foto', 'make imaj',
+    'create a', 'generate a', 'make a', 'design a', 'draw', 'paint', 'illustrate', 'sketch',
   ];
   
   // Image editing keywords
@@ -848,46 +851,66 @@ export function detectContentType(userMessage: string): {
     'edit photo', 'modify photo', 'change photo',
   ];
   
-  // File keywords
+  // File keywords - SPECIFIC to creation requests only
   const fileKeywords = [
-    'send file', 'create a file', 'generate file', 'create file',
-    'csv file', 'html file', 'json file', 'txt file',
+    'create a file', 'generate file', 'make a file', 'create file', 'build file',
+    'csv file', 'html file', 'json file', 'txt file', 'code file',
+    'fichye', 'dosye', 'kreye fichye', 'kreye dosye', 'fe fichye', 'fe dosye',
+    'generate fichye', 'generate dosye', 'make fichye', 'make dosye',
+    'create csv', 'create html', 'create json', 'create txt',
+    'generate csv', 'generate html', 'generate json', 'generate txt',
   ];
   
+  const hasImageKeywords = imageKeywords.some(keyword => lowerMsg.includes(keyword));
+  const hasFileKeywords = fileKeywords.some(keyword => lowerMsg.includes(keyword));
+  const hasEditKeywords = editKeywords.some(keyword => lowerMsg.includes(keyword));
+  
   // Check for image editing
-  for (const keyword of editKeywords) {
-    if (lowerMsg.includes(keyword)) {
-      return { 
-        type: 'image', 
-        thinkingMode: 'editing_image',
-        suggestedModel: 'gemini-2.0-flash-exp',
-        isImageTask: true
-      };
-    }
+  if (hasEditKeywords) {
+    return { 
+      type: 'image', 
+      thinkingMode: 'editing_image',
+      suggestedModel: 'gemini-2.0-flash-exp',
+      isImageTask: true,
+      hasImageKeywords: true,
+      hasFileKeywords: false
+    };
+  }
+  
+  // Check for both image and file
+  if (hasImageKeywords && hasFileKeywords) {
+    return {
+      type: 'both',
+      thinkingMode: 'creating_image',
+      suggestedModel: 'gemini-2.0-flash-exp',
+      isImageTask: true,
+      hasImageKeywords: true,
+      hasFileKeywords: true
+    };
   }
   
   // Check for image generation
-  for (const keyword of imageKeywords) {
-    if (lowerMsg.includes(keyword)) {
-      return { 
-        type: 'image', 
-        thinkingMode: 'creating_image',
-        suggestedModel: 'gemini-2.0-flash-exp',
-        isImageTask: true
-      };
-    }
+  if (hasImageKeywords) {
+    return { 
+      type: 'image', 
+      thinkingMode: 'creating_image',
+      suggestedModel: 'gemini-2.0-flash-exp',
+      isImageTask: true,
+      hasImageKeywords: true,
+      hasFileKeywords: false
+    };
   }
   
   // Check for file requests
-  for (const keyword of fileKeywords) {
-    if (lowerMsg.includes(keyword)) {
-      return { 
-        type: 'file', 
-        thinkingMode: 'analyzing',
-        suggestedModel: 'file-creator',
-        isImageTask: false
-      };
-    }
+  if (hasFileKeywords) {
+    return { 
+      type: 'file', 
+      thinkingMode: 'analyzing',
+      suggestedModel: 'file-creator',
+      isImageTask: false,
+      hasImageKeywords: false,
+      hasFileKeywords: true
+    };
   }
   
   // Default to text
@@ -895,7 +918,9 @@ export function detectContentType(userMessage: string): {
     type: 'text', 
     thinkingMode: 'thinking',
     suggestedModel: 'general-assistant',
-    isImageTask: false
+    isImageTask: false,
+    hasImageKeywords: false,
+    hasFileKeywords: false
   };
 }
 
