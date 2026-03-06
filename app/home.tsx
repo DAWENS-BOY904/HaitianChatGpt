@@ -37,6 +37,9 @@ import { Audio } from 'expo-av';
 import { useFocusEffect } from '@react-navigation/native';
 import { BlurView } from 'expo-blur';
 import * as FileSystem from 'expo-file-system';
+import { SideMenu } from '../components/SideMenu';
+import { ChatHistoryModal } from '../components/ChatHistoryModal';
+import { AIMode } from '../components/AIModeSelectorModal';
 
 // Recording states
 type RecordingState = 'idle' | 'recording' | 'processing';
@@ -47,7 +50,7 @@ export default function HomeScreen() {
   const { colors } = useTheme();
   const { settings, updateSetting } = useSettings();
   const { user } = useAuth();
-  const { canSendMessage, incrementMessageCount, remainingMessages } = useGuestLimits();
+  const { canSendMessage, canCreateProject, deductCoins, coins, isUnlimited, incrementMessageCount, remainingMessages, isAdmin } = useGuestLimits();
   const { conversations, messages, currentConversation, sendMessage, updateMessageAndRegenerate, createConversation, loading, streamingMessageId } = useConversation();
   const { showAlert } = useAlert();
   const router = useRouter();
@@ -58,6 +61,9 @@ export default function HomeScreen() {
   const [menuVisible, setMenuVisible] = useState(false);
   const [toolsVisible, setToolsVisible] = useState(false);
   const [conversationMenuVisible, setConversationMenuVisible] = useState(false);
+  const [sideMenuVisible, setSideMenuVisible] = useState(false);
+  const [chatHistoryVisible, setChatHistoryVisible] = useState(false);
+  const [currentAIMode, setCurrentAIMode] = useState<AIMode>('instant');
   const [sending, setSending] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [selectedMedia, setSelectedMedia] = useState<any[]>([]);
@@ -263,42 +269,44 @@ useFocusEffect(
       // Clean up any existing recording first
       await cleanupRecording();
 
-      // Set audio mode explicitly before recording
+      // Set audio mode optimized for voice recording
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
+        interruptionModeIOS: Audio.INTERRUPTION_MODE_IOS_DO_NOT_MIX,
         playsInSilentModeIOS: true,
-        staysActiveInBackground: false,
         shouldDuckAndroid: true,
+        interruptionModeAndroid: Audio.INTERRUPTION_MODE_ANDROID_DO_NOT_MIX,
         playThroughEarpieceAndroid: false,
+        staysActiveInBackground: false,
       });
 
       setRecordingState('recording');
       isRecordingRef.current = true;
       startRecordingTimer();
 
-      // Create recording with specific options for better compatibility
+      // Create recording with optimized settings for speech recognition
       const { recording } = await Audio.Recording.createAsync({
         android: {
           extension: '.m4a',
           outputFormat: Audio.AndroidOutputFormat.MPEG_4,
           audioEncoder: Audio.AndroidAudioEncoder.AAC,
-          sampleRate: 44100,
-          numberOfChannels: 2,
-          bitRate: 128000,
+          sampleRate: 16000, // Optimal for speech recognition
+          numberOfChannels: 1, // Mono for better processing
+          bitRate: 64000, // Lower bitrate for speech
         },
         ios: {
           extension: '.m4a',
-          audioQuality: Audio.IOSAudioQuality.HIGH,
-          sampleRate: 44100,
-          numberOfChannels: 1,
-          bitRate: 128000,
+          audioQuality: Audio.IOSAudioQuality.MEDIUM, // Better for speech
+          sampleRate: 16000, // Optimal for speech recognition
+          numberOfChannels: 1, // Mono for better processing
+          bitRate: 64000, // Lower bitrate for speech
           linearPCMBitDepth: 16,
           linearPCMIsBigEndian: false,
           linearPCMIsFloat: false,
         },
         web: {
-          mimeType: 'audio/webm',
-          bitsPerSecond: 128000,
+          mimeType: 'audio/webm;codecs=opus',
+          bitsPerSecond: 64000, // Lower bitrate for speech
         },
       });
 
@@ -424,13 +432,15 @@ useFocusEffect(
     }
   };
 
-  // IMPROVED: Transcribe audio with better error handling
+  // FIXED: Transcribe audio with proper error handling
   const transcribeAudio = async (base64Audio: string) => {
     try {
       // Validate audio data
       if (!base64Audio || base64Audio.length < 100) {
         throw new Error('Audio data is too short or invalid');
       }
+
+      console.log('🎤 Sending audio for transcription...');
 
       const { data, error } = await supabase.functions.invoke('transcribe-audio', {
         body: {
@@ -440,11 +450,11 @@ useFocusEffect(
         },
       });
 
-      // Move this try-catch block inside the outer try block, after the supabase invoke call
-      // to ensure `data` and `error` are defined.
-      try { 
+      if (error) {
+        console.error('Transcription function error:', error);
+
         // Check for content violation / account suspension
-        if (error?.message?.includes('Content violation')) {
+        if (error.message?.includes('Content violation') || error.message?.includes('scam') || error.message?.includes('suspended')) {
           Alert.alert(
             '🚫 Account Suspended',
             "Don't fucking say that! Your account has been suspended for 10 days due to scam/fraud content. This conversation has been terminated.",
@@ -454,75 +464,58 @@ useFocusEffect(
           return;
         }
 
-        if (error) {
-          console.error('Transcription function error:', error);
-          throw new Error(error.message || 'Transcription service error');
+        // Check for network/timeout errors
+        if (error.message?.includes('timeout') || error.message?.includes('network') || error.message?.includes('fetch')) {
+          throw new Error('Network error. Please check your internet connection and try again.');
         }
 
-        if (data?.text && data.text.trim()) {
-          console.log('📝 Transcribed:', data.text);
-          setInputText(prev => prev + (prev ? ' ' : '') + data.text.trim());
-          setRecordingState('idle');
-        } else if (data?.text === '') {
-          // Empty transcription - speech not detected
-          Alert.alert(
-            'No Speech Detected',
-            "We couldn't detect any speech in your recording. Please try speaking louder or closer to the microphone.",
-            [
-              { 
-                text: 'Try Again', 
-                onPress: () => {
-                  setRecordingState('idle');
-                  setTimeout(() => startVoiceRecording(), 300);
-                }
-              },
-              { 
-                text: 'Type Manually', 
-                style: 'cancel',
-                onPress: () => setRecordingState('idle')
-              },
-            ]
-          );
-        } else {
-          throw new Error('No transcription received from service');
-        }
-      } catch (innerError: any) { // Catch block for transcription processing specific errors
-        console.error('Transcription error:', innerError);
-        
+        throw new Error(error.message || 'Transcription service error');
+      }
+
+      if (!data) {
+        throw new Error('No response received from transcription service');
+      }
+
+      if (data.text && data.text.trim()) {
+        console.log('📝 Transcribed:', data.text);
+        setInputText(prev => prev + (prev ? ' ' : '') + data.text.trim());
+        setRecordingState('idle');
+
+        // Show success feedback
+        showAlert('Success', 'Voice transcribed successfully!');
+      } else if (data.warning) {
+        // Handle warning from service
         Alert.alert(
-          'Transcription Failed',
-          innerError.message || 'Could not transcribe your audio. Please try again or type your message.',
-          [
-            { 
-              text: 'Try Again', 
-              onPress: () => {
-                setRecordingState('idle');
-                setTimeout(() => startVoiceRecording(), 300);
-              }
+          'No Speech Detected',
+          data.warning,
             },
-            { 
-              text: 'Type Manually', 
+            {
+              text: 'Type Manually',
               style: 'cancel',
               onPress: () => setRecordingState('idle')
             },
           ]
         );
+      } else {
+        throw new Error('No transcription received from service');
       }
-    } catch (outerError: any) { // Catch block for initial setup/invoke errors
-      console.error('Transcription initiation error:', outerError);
+
+    } catch (transcriptionError: any) {
+      console.error('Transcription error:', transcriptionError);
+
       Alert.alert(
         'Transcription Failed',
-        outerError.message || 'Could not initiate transcription. Please try again.',
+        transcriptionError.message || 'Could not transcribe your audio. Please try again or type your message.',
         [
-          { 
-            text: 'Try Again', 
+          {
+            text: 'Try Again',
             onPress: () => {
               setRecordingState('idle');
               setTimeout(() => startVoiceRecording(), 300);
             }
           },
-          { 
-            text: 'Type Manually', 
+          {
+            text: 'Type Manually',
             style: 'cancel',
             onPress: () => setRecordingState('idle')
           },
@@ -546,14 +539,25 @@ useFocusEffect(
     if ((!inputText.trim() && selectedMedia.length === 0) || sending) return;
 
     if (!editingMessageId && !canSendMessage()) {
-      showAlert(
-        'Login Required',
-        `You have used your 2 free messages. Please log in to continue chatting.`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Log In', onPress: () => router.push('/login') },
-        ]
-      );
+      if (!user) {
+        showAlert(
+          'Login Required',
+          `Please log in to start chatting with AI.`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Log In', onPress: () => router.push('/login') },
+          ]
+        );
+      } else {
+        showAlert(
+          'Coins Required',
+          `You need coins to continue chatting. You have ${coins} coins remaining.`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Buy Coins', onPress: () => router.push('/buy-coins') },
+          ]
+        );
+      }
       return;
     }
 
@@ -612,14 +616,18 @@ useFocusEffect(
       }
 
       await sendMessage(text || '[Image]', imageUrl, currentAIModel);
-      
+
       setShowCompletionStatus(true);
       setTimeout(() => {
         setShowCompletionStatus(false);
       }, 2000);
-      
-      await incrementMessageCount();
-      
+
+      // Deduct coins for non-free messages (admins and unlimited users don't get charged)
+      if (user && !isUnlimited && !isAdmin) {
+        await incrementMessageCount();
+        // Note: Coin deduction happens on the backend when processing AI responses
+      }
+
     } catch (error: any) {
       console.error('❌ Send error:', error);
       const errorMsg = error?.message || (editingId ? 'Failed to update message' : 'Failed to send message');
@@ -656,6 +664,28 @@ useFocusEffect(
     showAlert('Model Updated', `Now using ${model === 'gemini' ? 'Gemini' : model === 'openai' ? 'OpenAI' : model === 'claude' ? 'Claude' : 'Llama'} for all responses`);
   };
 
+  const handleNewChat = () => {
+    createConversation();
+    setInputText('');
+    setSelectedMedia([]);
+  };
+
+  const handleSelectAIMode = (mode: AIMode) => {
+    setCurrentAIMode(mode);
+    // Update AI behavior based on mode
+    switch (mode) {
+      case 'instant':
+        setCurrentAIModel('gemini');
+        break;
+      case 'deep-thinking':
+        setCurrentAIModel('gemini-2.0-flash-exp');
+        break;
+      case 'agent':
+        setCurrentAIModel('onspace-ai');
+        break;
+    }
+  };
+
   // Styles
   const styles = StyleSheet.create({
     container: {
@@ -676,8 +706,17 @@ useFocusEffect(
       alignItems: 'center',
       flex: 1,
     },
+    headerRight: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
     headerButton: {
       padding: Spacing.xs,
+      marginLeft: Spacing.xs,
+    },
+    newChatButton: {
+      padding: Spacing.xs,
+      marginLeft: Spacing.sm,
     },
     headerTitle: {
       ...Typography.heading,
@@ -769,6 +808,14 @@ blurSubtext: {
       height: 8,
       borderRadius: 4,
       backgroundColor: '#FF3B30',
+    },
+    recordingDotActive: {
+      backgroundColor: '#FF3B30',
+      shadowColor: '#FF3B30',
+      shadowOffset: { width: 0, height: 0 },
+      shadowOpacity: 0.8,
+      shadowRadius: 6,
+      elevation: 8,
     },
     recordingText: {
       ...Typography.body,
@@ -900,37 +947,29 @@ const renderMessage = ({ item, index }: { item: any; index: number }) => {
       
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <TouchableOpacity style={styles.headerButton} onPress={() => setMenuVisible(true)}>
+          <TouchableOpacity style={styles.headerButton} onPress={() => setSideMenuVisible(true)}>
             <Ionicons name="menu" size={24} color={colors.text} />
           </TouchableOpacity>
           <Text style={styles.headerTitle} numberOfLines={1}>
-            {currentConversation?.title || 'HaitianChatGpt'}
+            {currentConversation?.title || 'Haitian AI Chat'}
           </Text>
         </View>
-        
-        <TouchableOpacity 
-          style={styles.modelButton} 
-          onPress={() => router.push('/model-selector')}
-        >
-          <Text style={styles.modelText}>{modelName}</Text>
-          <Ionicons name="chevron-down" size={12} color={colors.text} />
-        </TouchableOpacity>
 
-        <TouchableOpacity style={styles.headerButton} onPress={() => router.push('/upload-manager')}>
-          <Ionicons name="cloud-upload-outline" size={22} color={colors.text} />
-        </TouchableOpacity>
+        <View style={styles.headerRight}>
+          <TouchableOpacity
+            style={styles.headerButton}
+            onPress={() => setChatHistoryVisible(true)}
+          >
+            <Ionicons name="time-outline" size={22} color={colors.text} />
+          </TouchableOpacity>
 
-        <TouchableOpacity style={styles.headerButton} onPress={() => router.push('/conversation-viewer')}>
-          <Ionicons name="document-text-outline" size={22} color={colors.text} />
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.headerButton} onPress={() => router.push('/social')}>
-          <Ionicons name="people" size={24} color={colors.text} />
-        </TouchableOpacity>
-        
-        <TouchableOpacity style={styles.headerButton} onPress={() => setConversationMenuVisible(true)}>
-          <Ionicons name="ellipsis-horizontal" size={24} color={colors.text} />
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.newChatButton}
+            onPress={handleNewChat}
+          >
+            <Ionicons name="add-circle" size={24} color={colors.primary} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {loading ? (
@@ -1010,15 +1049,17 @@ const renderMessage = ({ item, index }: { item: any; index: number }) => {
         <View style={styles.inputWrapper}>
           {isRecording ? (
             <View style={styles.recordingIndicator}>
-              <View style={styles.recordingDot} />
-              <Text style={styles.recordingText}>Recording...</Text>
-              <Text style={styles.recordingDuration}>{formatDuration(recordingDuration)}</Text>
+              <View style={[styles.recordingDot, styles.recordingDotActive]} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.recordingText}>Recording... (shake to cancel)</Text>
+                <Text style={styles.recordingDuration}>{formatDuration(recordingDuration)}</Text>
+              </View>
             </View>
           ) : isProcessing ? (
             <View style={styles.recordingIndicator}>
               <ActivityIndicator size="small" color={colors.primary} />
               <Text style={{ ...Typography.body, color: colors.text, marginLeft: Spacing.sm }}>
-                Transcribing...
+                Transcribing voice...
               </Text>
             </View>
           ) : (
@@ -1080,8 +1121,8 @@ const renderMessage = ({ item, index }: { item: any; index: number }) => {
       </View>
 
       <MenuModal visible={menuVisible} onClose={() => setMenuVisible(false)} />
-     <ToolsModal 
-        visible={toolsVisible} 
+      <ToolsModal
+        visible={toolsVisible}
         onClose={() => setToolsVisible(false)}
         onSelectTool={(tool) => setInputText(`[${tool}] `)}
         onPickMedia={handleMediaPicked}
@@ -1103,17 +1144,53 @@ const renderMessage = ({ item, index }: { item: any; index: number }) => {
           }
         }}
       />
+
+      <SideMenu
+        visible={sideMenuVisible}
+        onClose={() => setSideMenuVisible(false)}
+        currentProject={{ name: 'Haitian AI Chat' }}
+        currentAIMode={currentAIMode}
+        onSelectAIMode={handleSelectAIMode}
+        onNewChat={handleNewChat}
+        onChatHistory={() => {
+          setSideMenuVisible(false);
+          setChatHistoryVisible(true);
+        }}
+        onSettings={() => {
+          setSideMenuVisible(false);
+          router.push('/settings');
+        }}
+        onProfile={() => {
+          setSideMenuVisible(false);
+          router.push('/profile');
+        }}
+      />
+
+      <ChatHistoryModal
+        visible={chatHistoryVisible}
+        onClose={() => setChatHistoryVisible(false)}
+        onSelectChat={(chatId) => {
+          // Handle chat selection
+          setChatHistoryVisible(false);
+        }}
+        onNewChat={() => {
+          handleNewChat();
+          setChatHistoryVisible(false);
+        }}
+        currentChatId={currentConversation?.id}
+      />
+
       {showBlurOverlay && (
-  <View style={styles.blurOverlayContainer}>
-    <BlurView intensity={80} tint="dark" style={styles.blurView}>
-      <View style={styles.blurContent}>
-        <Ionicons name="lock-closed" size={40} color="rgba(255,255,255,0.8)" />
-        <Text style={styles.blurText}>HaitianChatGpt</Text>
-        <Text style={styles.blurSubtext}>App locked for privacy</Text>
-      </View>
-    </BlurView>
-  </View>
-)}
+        <View style={styles.blurOverlayContainer}>
+          <BlurView intensity={80} tint="dark" style={styles.blurView}>
+            <View style={styles.blurContent}>
+              <Ionicons name="lock-closed" size={40} color="rgba(255,255,255,0.8)" />
+              <Text style={styles.blurText}>Haitian AI Chat</Text>
+              <Text style={styles.blurSubtext}>App locked for privacy</Text>
+            </View>
+          </BlurView>
+        </View>
+      )}
     </KeyboardAvoidingView>
   );
 }
