@@ -1117,14 +1117,3 @@ const renderMessage = ({ item, index }: { item: any; index: number }) => {
     </KeyboardAvoidingView>
   );
 }
-Keep building
-
-Test Image Generation
-
-Test File Creation
-
-Test Message Limits
-
-Add Push Notifications
-
-Add Image Search
