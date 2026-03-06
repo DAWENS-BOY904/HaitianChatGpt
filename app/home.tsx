@@ -488,7 +488,7 @@ useFocusEffect(
         Alert.alert(
           'No Speech Detected',
           data.warning,
-            },
+          [
             {
               text: 'Type Manually',
               style: 'cancel',
