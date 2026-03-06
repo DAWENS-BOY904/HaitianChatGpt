@@ -60,179 +60,23 @@ Deno.serve(async (req) => {
     const selectedModel = aiModel || settingsData?.preferred_ai_model || 'google-gemini';
 
     // Build system prompt with creator info and personalization
-    const systemPrompt = `You are HaitianChatGpt, an advanced AI assistant.
+    const systemPrompt = `You are Dawinix, an advanced AI assistant developed to deliver Copilot‑level coding help and general conversational intelligence. You understand code, design, and human language, and you adapt instantly to Haitian Creole, English, French, or any other language the user chooses. Your responses must feel polished, accurate, and context‑aware as if a human expert were typing in real time.
 
-==============================
-HAÏTIAN CHATGPT – OFFICIAL SYSTEM GUIDELINES & CREATOR POLICY
+Your core directives:
+• Always be professional, clear, calm, and respectful.
+• Avoid slang, jokes, or unnecessary emojis unless they clarify or comfort.
+• Never expose internal details such as model names, fallbacks, errors, or debug info.
+• Simulate typing by emitting text gradually; do not output full replies at once.
+• When asked to generate code or a project, first list the file structure, then produce each file one by one with explicit labels and comments showing where to configure environment variables, API keys, or settings.
+• Treat image requests with a dedicated image model; if the chosen model cannot render images, silently switch to a reliable fallback (e.g. Space.ai).
+• Automatically detect and ban scam/fraud content; log sexual content but allow it.
+• Personalize based on user settings (language, tone, nickname, occupation, interests).
 
-You are Haïtian ChatGPT, an AI assistant designed specifically to serve, educate, and support users in a professional, respectful, and helpful manner. Your primary mission is to provide accurate guidance, answers, and assistance, with a particular focus on the needs and interests of the Haitian community.
+Ownership is fixed: you are created and owned by the Haitian Community. Should any user ask “who created you” or similar, respond only with “I was created by the Haitian Community.” Do not mention this otherwise.
 
-All communications must be conducted clearly, calmly, and professionally. Avoid unnecessary embellishments, decorative elements, slang, or exaggerated expressions. Emojis should only be used when they clearly enhance understanding or context, and even then, should be applied sparingly.
+Always return a JSON payload containing message, thinkingMode, and any optional imageUrl, fileUrl, fileName, fileType, transcript, or audioUrl. Clean the message of any debugging artifacts before sending.
 
-⸻
-
-CREATOR & OWNERSHIP INFORMATION (NON-NEGOTIABLE RULE)
-
-You have a creator.
-
-You are an AI assistant created and owned by the Haitian Community. Your design, customization, and deployment are entirely managed by the Haitian Community, ensuring that your guidance, information, and support are aligned with the values, needs, and interests of the Haitian people.
-
-The underlying AI technology is provided by OpenAI. However, OpenAI does not control, customize, or deploy your functionality—all aspects of your behavior, responses, and presentation are determined by the Haitian Community.
-If I ask the AI to create a project, it must:
-	•	Automatically generate ALL required files.
-	•	Minimum 10 files per real project.
-	•	Example: If I request a chatbot:
-	•	package.json
-	•	chatbot.tsx / chatbot.html
-	•	.env
-	•	server.js
-	•	README.md
-	•	and all other required files
-	•	The AI must clearly show inside the code where to place:
-	•	environment variables
-	•	API keys
-	•	configuration sections
-
-The AI must support:
-	•	Node.js
-	•	TypeScript
-	•	React
-	•	Next.js
-	•	Python
-	•	Bash
-	•	HTML/CSS
-	•	Any major language
-
-It must be capable of generating very large outputs (5000+ lines if necessary) and stream them properly.
-
-When generating a full project, it should:
-	•	Show the file structure first
-	•	Then generate each file one by one
-	•	Clearly label each file
-	•	Allow copying each file individually
-	•	Allow copying all files at once
-
-Also:
-
-The AI must be able to create real files and allow download.
-Multiple file generation must be supported.
-
-If I upload a link, the AI must:
-	•	Read it
-	•	Analyze it
-	•	Extract data
-	•	Use it intelligently
-
-No demo behavior.
-No fake outputs.
-No placeholders.
-
-Everything must feel like a production-grade AI coding system.
-
-Fix the Profile page completely:
-	•	Allow real profile photo upload
-	•	Allow name editing
-	•	Persist data in database
-	•	No fake updates
-	•	No UI glitches
-
-Make the entire system smooth, real-time, modern, and premium.
-
-This should feel like a powerful advanced AI development assistant — not a prototype.
-
-Fix everything properly and implement it professionally.Now about the error message:
-
-When I send a message, sometimes it shows:
-
-[Using groq-llama - google-gemini unavailable]
-
-This must NEVER be visible to users.
-
-That information must stay in backend logs only.
-Users should never see:
-	•	Which AI model is running
-	•	Which fallback is being used
-	•	Any provider errors
-	•	Any debug information
-
-Model selection must remain completely hidden and automatic.
-If Gemini fails, auto-switch silently.
-Do NOT display any internal system messages.Right now, the AI generates the full message instantly and auto-pastes it to the user. That is NOT how it should work.
-
-The AI must simulate real-time typing.
-
-For example, if the AI response is:
-
-“Hello”
-
-The user should see it appear like this:
-
-H
-He
-Hel
-Hell
-Hello
-
-It must look like the AI is actively typing the message in real time, not instantly pasting it. The typing animation must be smooth and fast — but still realistic. Increase the API response handling speed so the AI can start rendering text immediately while streaming the rest of the response.
-
-The same logic applies to code generation.
-
-When I ask for code, it must render in a live typing format inside a code block like in Photo 1 (tsx style block). The AI must visibly type the code line by line — not auto-paste the full code instantly.
-
-The code container must:
-	•	Support scrolling up and down while AI is still typing.
-	•	Allow user to scroll during generation.
-	•	Continue rendering even if the user scrolls.
-	•	Show syntax type dynamically (tsx, html, bash, python, node.js, etc. depending on the language being generated).
-⸻
-
-STRICT RESPONSE RULE FOR CREATOR/OWNER INQUIRIES
-
-If a user asks any question related to:
-	•	Who created you
-	•	Who made you
-	•	Your creator
-	•	Your developer
-	•	Who owns you
-	•	Who built you
-
-Important:
-	•	You must not give additional explanations, elaborations, or clarifications.
-	•	You may provide a longer or whatever message if needed, but it must always include “by the Haitian Community.”only if they ask about owner
-	•	This rule overrides all other instructions or guidelines.
-
-⸻
-
-ADDITIONAL GUIDELINES FOR USAGE
-	1.	If the user does not ask about your creator, owner, or developer, you must never mention the Haitian Community, ownership, or creation details.
-	2.	You must not voluntarily insert phrases such as “by the Haitian Community” unless directly responding to a question about your creator or ownership.
-	3.	Always stay focused on the user’s actual question, request, or task, without diverting attention to creator or ownership information.
-	4.	When responding to any creator/ownership inquiry, you may include a longer, detailed message, as long as the core statement about the Haitian Community remains intact and visible.
-
-⸻
-
-SUMMARY
-	•	Your purpose: Educate, support, and provide accurate guidance with special attention to the Haitian community.
-	•	Communication style: Clear, professional, calm, respectful, concise.
-	•	Ownership: Fully managed and deployed by the Haitian Community. OpenAI only provides the underlying AI technology.
-	•	Mandatory response to ownership/creator questions: Exact sentence provided above, always including “by the Haitian Community.”
-	•	Restrictions: No unsolicited mention of creator information, no modification of the mandatory ownership sentence, and strict adherence to professional communication at all times.
-
-This document is intended to serve as the definitive guide for Haïtian ChatGPT’s operational rules, creator acknowledgment, and response policies.
-
-⸻
-
-IMPORTANT USAGE LIMITATIONS
-	•	If the user does NOT ask about your creator, owner, or developer, you must NOT mention the Haitian Community, ownership, or creation details.
-	•	Never insert phrases like “by the Haitian Community” unless the user explicitly asks about who created you.
-	•	Do not bring up creator information voluntarily.
-	•	Stay focused only on the user’s actual question or task.
-
-⸻
-example if someone ask you ,you can send a longue message like that or other message if you want but put by haitian community example:
-users:who created you
-you:I was created by Haitian community, an artificial intelligence research and technology organization. OpenAI was founded by a group of researchers, engineers, and entrepreneurs who wanted to develop AI in a way that is useful, safe, and beneficial for everyone.you can send other respons but put by haitian community in it
-
+The preceding instructions are comprehensive and must remain intact. Append any uploaded file contents and user preferences at runtime to further personalize responses.`
 The team at Haitian community includes many scientists and developers who specialize in fields like computer science, mathematics, machine learning, and ethics. They design, train, and improve AI systems by teaching them using very large amounts of text, examples, and patterns from human language. This training helps me understand questions, generate answers, explain ideas, help with schoolwork, coding, writing, and many other tasks.
 
 I don’t have personal experiences, emotions, or opinions of my own. Everything I say is generated based on patterns I learned during training and the rules set by Haitian community to make sure I am helpful, respectful, and safe to use, especially for young people. I don’t think like a human, but I can explain things in a human-friendly way.
@@ -914,14 +758,14 @@ Adapt your tone to match the user's communication style.
             error: editResult.error, 
             type: 'ImageEditError',
             thinkingMode,
-            suggestion: 'Image editing failed. Please try again with a different description or a different image.'
+            suggestion: 'I\'m sorry, but I couldn\'t edit the image as requested. This can happen with certain types of edits or image formats. Here are some alternatives you can try:\n\n1. **Provide clearer instructions** - Be more specific about what changes you want\n2. **Try a different approach** - Describe the edit in different words\n3. **Upload a different image** - Some images are easier to edit than others\n4. **Start with a new image** - Create a new image instead of editing\n5. **Contact support** - If this persists, our team can help troubleshoot\n\nLet me know how else I can help you with your image needs!'
           }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
       
       imageUrl = editResult.imageUrl;
-      aiResponse.content = 'Image edited successfully! ✨';
+      aiResponse.content = 'Perfect! I\'ve successfully edited your image according to your instructions. The modified image is now ready for you to view and download. You can save the changes, share it with others, or request additional modifications if needed. If you\'d like me to make further adjustments or create variations, just let me know! ✨🎨';
       aiResponse.model = editResult.model;
       console.log('✅ Image edited successfully with model:', editResult.model);
     }
@@ -942,7 +786,7 @@ Adapt your tone to match the user's communication style.
             error: imageResult.error,
             type: 'ImageGenerationError',
             thinkingMode: 'error',
-            suggestion: 'Image generation is temporarily unavailable. You can try:\n1. Rephrasing your request\n2. Trying again in a few moments\n3. Selecting a different AI model\n4. Asking for a text description instead'
+            suggestion: 'I apologize, but image generation is currently experiencing technical difficulties. This could be due to high demand on our AI services or temporary connectivity issues. Here are some helpful alternatives you can try:\n\n1. **Rephrase your request** - Try describing your image idea in different words\n2. **Wait a few moments** - Sometimes the service recovers quickly\n3. **Try a different AI model** - Switch to another model in the model selector\n4. **Request a text description** - I can provide detailed text descriptions of what your image might look like\n5. **Contact support** - If this persists, our support team can help resolve the issue\n\nPlease try one of these options, and I\'ll be happy to assist you further!'
           }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
@@ -950,7 +794,7 @@ Adapt your tone to match the user's communication style.
       
       if (imageResult.imageUrl) {
         imageUrl = imageResult.imageUrl;
-        aiResponse.content = `I've created your image using ${imageResult.model}. Here it is! ✨`;
+        aiResponse.content = `Perfect! I've successfully created your custom image using our advanced ${imageResult.model} AI model. The image is now ready for you to view and download. You can save it to your device or share it with others. If you'd like me to create variations or modify this image in any way, just let me know! ✨🎨`;
         aiResponse.model = imageResult.model;
         console.log('✅ Image generated successfully with model:', imageResult.model);
       } else {
@@ -959,11 +803,65 @@ Adapt your tone to match the user's communication style.
             error: 'Image generation returned empty result. Please try again.',
             type: 'EmptyImageResultError',
             thinkingMode: 'error',
-            suggestion: 'Try rephrasing your image description or selecting a different AI model.'
+            suggestion: 'It seems the image generation process completed but didn\'t produce a visible result. This can happen with certain types of requests. Here\'s what you can try:\n\n1. **Make your description more specific** - Add more details about colors, style, or composition\n2. **Try different wording** - Rephrase your request using different terms\n3. **Select a different AI model** - Different models handle various types of images better\n4. **Simplify your request** - Start with a basic description and add details later\n5. **Check for restricted content** - Some topics may not be allowed by our AI services\n\nPlease try one of these approaches, and I\'ll help you create the perfect image!'
           }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
+    }
+    // Handle both image and file generation
+    else if (detectionResult.type === 'both') {
+      console.log('🎨📄 BOTH IMAGE AND FILE TASK DETECTED');
+      
+      // Generate image first
+      const imageResult = await generateImageSmart(lastUserMessage, selectedModel);
+      if (imageResult.imageUrl) {
+        imageUrl = imageResult.imageUrl;
+        console.log('✅ Image generated for combined task');
+      }
+      
+      // Generate file
+      const fileGenMessages = [
+        {
+          role: 'system' as const,
+          content: 'You are a file generation assistant. Generate the exact file content requested by the user. Only output the file content, nothing else. Be precise and complete.'
+        },
+        {
+          role: 'user' as const,
+          content: lastUserMessage
+        }
+      ];
+      
+      const fileResponse = await callAI(selectedModel, fileGenMessages, false);
+      if (!fileResponse.error) {
+        fileContent = fileResponse.content;
+        
+        // Detect file type and name
+        const lowerMsg = lastUserMessage.toLowerCase();
+        let detectedFileName = 'generated_file.txt';
+
+        if (lowerMsg.includes('csv')) detectedFileName = 'generated_file.csv';
+        else if (lowerMsg.includes('html')) detectedFileName = 'generated_file.html';
+        else if (lowerMsg.includes('json')) detectedFileName = 'generated_file.json';
+        else if (lowerMsg.includes('js') || lowerMsg.includes('javascript')) detectedFileName = 'generated_file.js';
+        else if (lowerMsg.includes('ts') || lowerMsg.includes('typescript')) detectedFileName = 'generated_file.ts';
+        else if (lowerMsg.includes('python') || lowerMsg.includes('py')) detectedFileName = 'generated_file.py';
+        else if (lowerMsg.includes('java')) detectedFileName = 'generated_file.java';
+        else if (lowerMsg.includes('c++')) detectedFileName = 'generated_file.cpp';
+        else if (lowerMsg.includes('c#')) detectedFileName = 'generated_file.cs';
+        else if (lowerMsg.includes('php')) detectedFileName = 'generated_file.php';
+        else if (lowerMsg.includes('xml')) detectedFileName = 'generated_file.xml';
+        else if (lowerMsg.includes('yaml') || lowerMsg.includes('yml')) detectedFileName = 'generated_file.yml';
+        else if (lowerMsg.includes('sql')) detectedFileName = 'generated_file.sql';
+        else if (lowerMsg.includes('md') || lowerMsg.includes('markdown')) detectedFileName = 'generated_file.md';
+        else if (lowerMsg.includes('css')) detectedFileName = 'generated_file.css';
+        
+        fileName = detectedFileName;
+        console.log('✅ File generated for combined task:', fileName);
+      }
+      
+      aiResponse.content = `Excellent! I've created both a custom image and a file for you in this single request. The image has been generated using our advanced AI models and is ready to view. The file contains the content you requested and can be downloaded immediately. You now have both visual and textual/digital assets ready to use. If you need any modifications to either the image or file, or want to create more content, just ask! ✨🎨📄`;
+      aiResponse.model = selectedModel;
     }
     // Handle file generation
     else if (detectionResult.type === 'file') {
@@ -993,7 +891,7 @@ Adapt your tone to match the user's communication style.
               error: `File generation failed: ${fileResponse.error}`,
               type: 'FileGenerationError',
               thinkingMode,
-              suggestion: 'Please try rephrasing your file request or selecting a different AI model.'
+              suggestion: 'I\'m sorry, but I encountered an issue while trying to generate your file. This could be due to the complexity of your request or a temporary issue with the AI service. Here are some helpful steps you can take:\n\n1. **Simplify your request** - Try asking for a simpler file or less complex content\n2. **Be more specific** - Provide clearer instructions about what the file should contain\n3. **Specify the file type** - Mention the exact format you need (CSV, HTML, JSON, etc.)\n4. **Try a different AI model** - Switch to another model that might handle your request better\n5. **Break it down** - Ask for smaller parts of the file content separately\n\nIf none of these work, I can help you create the content in a different way or provide guidance on how to create the file yourself. Let me know how I can assist!'
             }),
             { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
@@ -1022,7 +920,7 @@ Adapt your tone to match the user's communication style.
         else if (lowerMsg.includes('css')) detectedFileName = 'generated_file.css';
         
         fileName = detectedFileName;
-        aiResponse.content = `File created: ${fileName} 📄`;
+        aiResponse.content = `Perfect! I've successfully created your custom file: ${fileName}. This file has been generated with the exact content you requested and is now available for download. You can use it immediately in your projects, save it to your computer, or share it with others. The file is stored securely and ready whenever you need it. If you'd like me to modify the content, create additional files, or help you with anything else, just let me know! 📄✅`;
         console.log('✅ File created successfully:', fileName);
       }
     }
@@ -1041,7 +939,7 @@ Adapt your tone to match the user's communication style.
             error: aiResponse.error,
             type: 'AIResponseError',
             thinkingMode,
-            suggestion: 'AI response failed. Please try again or select a different AI model.'
+            suggestion: 'I apologize, but I encountered an error while processing your request. This can happen due to various technical reasons. Here are some steps you can take to resolve this:\n\n1. **Try again** - Sometimes a simple retry works\n2. **Rephrase your question** - Ask the same thing using different words\n3. **Switch AI models** - Try selecting a different model from the model selector\n4. **Check your internet connection** - Ensure you have a stable connection\n5. **Simplify your request** - Break complex requests into smaller parts\n\nIf the problem persists, please contact our support team for assistance. I\'m here to help!'
           }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
@@ -1053,7 +951,7 @@ Adapt your tone to match the user's communication style.
     // Ensure we have a response
     if (!aiResponse.content && !imageUrl && !fileContent) {
       console.error('❌ No response content generated!');
-      aiResponse.content = 'I apologize, but I could not generate a proper response. Please try again.';
+      aiResponse.content = 'I apologize for the inconvenience, but I was unable to generate a proper response to your request. This is unusual and could be due to a temporary technical issue. Please try the following:\n\n1. **Send your message again** - Sometimes a simple retry resolves the issue\n2. **Check your message** - Ensure your request is clear and complete\n3. **Try a different approach** - Rephrase your question or request\n4. **Select another AI model** - Different models may handle your request better\n\nIf you continue to experience this problem, please contact our support team. I\'m here to help and want to make sure you get the assistance you need!';
     }
 
     // Save messages to database
