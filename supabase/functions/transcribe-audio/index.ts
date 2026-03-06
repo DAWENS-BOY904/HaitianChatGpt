@@ -134,6 +134,19 @@ serve(async (req) => {
       if (decodedAudio.length === 0) {
         throw new Error('Empty audio after decoding')
       }
+      
+      // Check minimum audio size (roughly 0.5 seconds at 16kHz mono)
+      const minAudioSize = 16000 // 16kHz * 1 channel * 1 second * minimum 0.5 seconds
+      if (decodedAudio.length < minAudioSize) {
+        return new Response(
+          JSON.stringify({ 
+            error: 'Audio recording is too short. Please record for at least 1 second.',
+            type: 'AudioTooShort'
+          }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+      
       audioBuffer = Uint8Array.from(decodedAudio, c => c.charCodeAt(0))
       console.log('✅ [transcribe-audio] Audio decoded successfully:', audioBuffer.length, 'bytes')
       
@@ -150,11 +163,18 @@ serve(async (req) => {
       )
     }
 
-    // Create FormData
+    // Create FormData with proper audio format
     const formData = new FormData()
-    formData.append('file', new Blob([audioBuffer], { type: 'audio/m4a' }), 'recording.m4a')
+    
+    // Convert audio buffer to proper format for Whisper API
+    const audioBlob = new Blob([audioBuffer], { 
+      type: 'audio/mpeg' // Changed from audio/m4a to audio/mpeg for better compatibility
+    })
+    
+    formData.append('file', audioBlob, 'recording.mp3') // Changed filename to .mp3
     formData.append('model', 'whisper-1')
-    formData.append('language', 'auto') // Auto-detect language
+    formData.append('language', 'auto') // Auto-detect language including Haitian Creole
+    formData.append('response_format', 'json')
 
     console.log('🌐 [transcribe-audio] Calling OpenAI Whisper API...')
     
@@ -197,7 +217,11 @@ serve(async (req) => {
       console.error('❌ [transcribe-audio] Whisper API error:', response.status, error)
       
       let errorMessage = 'Transcription failed'
-      if (response.status === 429) {
+      if (response.status === 400) {
+        errorMessage = 'Audio file appears to be corrupted or too short. Please try recording again.'
+      } else if (response.status === 413) {
+        errorMessage = 'Audio file is too large. Please record a shorter message.'
+      } else if (response.status === 429) {
         errorMessage = 'Too many requests. Please wait a moment and try again.'
       } else if (response.status === 401) {
         errorMessage = 'Server authentication error. Please contact support.'
@@ -226,11 +250,24 @@ serve(async (req) => {
       )
     }
 
-    const transcribedText = result.text || ''
+    const transcribedText = (result.text || '').trim()
     const processingTime = Date.now() - startTime
     
     console.log('✅ [transcribe-audio] Transcribed successfully in', processingTime, 'ms')
     console.log('📝 [transcribe-audio] Text preview:', transcribedText.substring(0, 100))
+
+    // Check if transcription is empty or too short
+    if (!transcribedText || transcribedText.length < 2) {
+      console.warn('⚠️ [transcribe-audio] Empty or very short transcription')
+      return new Response(
+        JSON.stringify({ 
+          text: '',
+          warning: 'No speech detected in the audio. Please speak clearly and try again.',
+          processingTime
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
 
     // CONTENT MODERATION
     const scamDetection = detectScam(transcribedText)
