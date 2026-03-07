@@ -560,7 +560,7 @@ useFocusEffect(
       }
       return;
     }
-
+    
     let conversationId = currentConversation?.id;
     if (!conversationId) {
       console.log('📝 Creating new conversation for first message');
