@@ -432,80 +432,211 @@ useFocusEffect(
     }
   };
 
-  // FIXED: Transcribe audio with proper error handling
-  const transcribeAudio = async (base64Audio: string) => {
-    try {
-      // Validate audio data
-      if (!base64Audio || base64Audio.length < 100) {
-        throw new Error('Audio data is too short or invalid');
+  // FIXED: Transcribe audio with comprehensive error handling and content moderation
+const transcribeAudio = async (base64Audio: string, retryCount = 0) => {
+  const MAX_RETRIES = 2;
+  
+  try {
+    // Validate audio data
+    if (!base64Audio || base64Audio.length < 100) {
+      throw new Error('Audio data is too short or invalid. Please speak clearly and try again.');
+    }
+
+    // Check file size (base64 is ~33% larger than binary)
+    const estimatedSize = (base64Audio.length * 3) / 4;
+    const maxSize = 25 * 1024 * 1024; // 25MB
+    if (estimatedSize > maxSize) {
+      throw new Error('Audio file is too large. Please record a shorter message (max 60 seconds).');
+    }
+
+    console.log('🎤 Sending audio for transcription...', {
+      size: `${(estimatedSize / 1024).toFixed(1)}KB`,
+      retry: retryCount,
+      timestamp: new Date().toISOString()
+    });
+
+    const { data, error } = await supabase.functions.invoke('transcribe-audio', {
+      body: {
+        audio: base64Audio,
+        userId: user?.id,
+        conversationId: currentConversation?.id,
+        metadata: {
+          platform: Platform.OS,
+          appVersion: '1.0.0', // Replace with your actual version
+          timestamp: new Date().toISOString()
+        }
+      },
+      // Add timeout for better error handling
+      headers: {
+        'x-timeout': '30000' // 30 seconds
       }
+    });
 
-      console.log('🎤 Sending audio for transcription...');
-
-      const { data, error } = await supabase.functions.invoke('transcribe-audio', {
-        body: {
-          audio: base64Audio,
-          userId: user?.id,
-          conversationId: currentConversation?.id,
-        },
+    // Handle function invocation errors
+    if (error) {
+      console.error('❌ Transcription function error:', {
+        message: error.message,
+        context: error.context,
+        retryCount
       });
 
-      if (error) {
-        console.error('Transcription function error:', error);
+      // CONTENT VIOLATION DETECTION - Check multiple patterns
+      const violationPatterns = [
+        'content violation',
+        'content_violation',
+        'scam',
+        'fraud',
+        'suspended',
+        'banned',
+        'inappropriate content',
+        'hate speech',
+        'harassment',
+        'violence',
+        'illegal',
+        'spam',
+        'abuse'
+      ];
 
-        // Check for content violation / account suspension
-        if (error.message?.includes('Content violation') || error.message?.includes('scam') || error.message?.includes('suspended')) {
-          Alert.alert(
-            '🚫 Account Suspended',
-            "Don't fucking say that! Your account has been suspended for 10 days due to scam/fraud content. This conversation has been terminated.",
-            [{ text: 'OK', onPress: () => router.push('/suspended') }]
-          );
-          setRecordingState('idle');
-          return;
-        }
+      const errorMessageLower = error.message?.toLowerCase() || '';
+      const isViolation = violationPatterns.some(pattern => 
+        errorMessageLower.includes(pattern)
+      );
 
-        // Check for network/timeout errors
-        if (error.message?.includes('timeout') || error.message?.includes('network') || error.message?.includes('fetch')) {
-          throw new Error('Network error. Please check your internet connection and try again.');
-        }
-
-        throw new Error(error.message || 'Transcription service error');
-      }
-
-      if (!data) {
-        throw new Error('No response received from transcription service');
-      }
-
-      if (data.text && data.text.trim()) {
-        console.log('📝 Transcribed:', data.text);
-        setInputText(prev => prev + (prev ? ' ' : '') + data.text.trim());
-        setRecordingState('idle');
-
-        // Show success feedback
-        showAlert('Success', 'Voice transcribed successfully!');
-      } else if (data.warning) {
-        // Handle warning from service
+      if (isViolation) {
+        console.warn('🚫 Content violation detected:', error.message);
+        
+        // Extract violation details if available
+        const violationType = error.context?.violationType || 'inappropriate content';
+        const suspensionDays = error.context?.suspensionDays || 10;
+        
         Alert.alert(
-          'No Speech Detected',
-          data.warning,
+          '🚫 Account Suspended',
+          `Your account has been suspended for ${suspensionDays} days due to ${violationType}.\n\n` +
+          `Reason: ${error.message}\n\n` +
+          `This conversation has been terminated. Please review our community guidelines.`,
           [
-            {
-              text: 'Type Manually',
-              style: 'cancel',
-              onPress: () => setRecordingState('idle')
+            { 
+              text: 'View Guidelines', 
+              onPress: () => {
+                // Open community guidelines
+                Linking.openURL('https://your-app.com/guidelines').catch(() => {});
+                router.push('/suspended');
+              }
             },
+            { 
+              text: 'OK', 
+              onPress: () => router.push('/suspended'),
+              style: 'destructive'
+            }
           ]
         );
-      } else {
-        throw new Error('No transcription received from service');
+        
+        // Log violation for analytics/monitoring
+        await logSecurityEvent('content_violation', {
+          userId: user?.id,
+          violationType,
+          timestamp: new Date().toISOString(),
+          conversationId: currentConversation?.id
+        });
+        
+        setRecordingState('idle');
+        return;
       }
 
-    } catch (transcriptionError: any) {
-      console.error('Transcription error:', transcriptionError);
+      // NETWORK/TIMEOUT ERRORS - Retry logic
+      const networkErrorPatterns = [
+        'timeout',
+        'network',
+        'fetch',
+        'connection',
+        'offline',
+        'unreachable',
+        'econnrefused',
+        'socket',
+        'abort'
+      ];
+      
+      const isNetworkError = networkErrorPatterns.some(pattern => 
+        errorMessageLower.includes(pattern)
+      );
 
+      if (isNetworkError && retryCount < MAX_RETRIES) {
+        console.log(`🔄 Retrying transcription (${retryCount + 1}/${MAX_RETRIES})...`);
+        
+        // Exponential backoff
+        const delay = Math.pow(2, retryCount) * 1000;
+        await new Promise(resolve => setTimeout(resolve, delay));
+        
+        return transcribeAudio(base64Audio, retryCount + 1);
+      }
+
+      if (isNetworkError) {
+        throw new Error(
+          'Network connection issue. Please check your internet connection and try again. ' +
+          'If the problem persists, try typing your message instead.'
+        );
+      }
+
+      // AUTHENTICATION ERRORS
+      if (errorMessageLower.includes('auth') || errorMessageLower.includes('unauthorized') || errorMessageLower.includes('401')) {
+        throw new Error('Your session has expired. Please log in again.');
+      }
+
+      // RATE LIMITING
+      if (errorMessageLower.includes('rate limit') || errorMessageLower.includes('too many requests') || errorMessageLower.includes('429')) {
+        throw new Error('Too many requests. Please wait a moment and try again.');
+      }
+
+      // SERVER ERRORS
+      if (errorMessageLower.includes('500') || errorMessageLower.includes('internal server error')) {
+        throw new Error('Server error. Our team has been notified. Please try again later.');
+      }
+
+      // Default error
+      throw new Error(error.message || 'Transcription service encountered an error. Please try again.');
+    }
+
+    // Validate response data
+    if (!data) {
+      throw new Error('No response received from transcription service. Please try again.');
+    }
+
+    console.log('✅ Transcription response:', {
+      hasText: !!data.text,
+      textLength: data.text?.length,
+      hasWarning: !!data.warning,
+      confidence: data.confidence,
+      language: data.detectedLanguage
+    });
+
+    // Success case - Valid transcription
+    if (data.text && data.text.trim()) {
+      const transcribedText = data.text.trim();
+      console.log('📝 Transcribed successfully:', transcribedText.substring(0, 50) + '...');
+      
+      setInputText(prev => prev + (prev ? ' ' : '') + transcribedText);
+      setRecordingState('idle');
+
+      // Show success feedback with confidence indicator
+      const confidence = data.confidence || 0;
+      if (confidence > 0.8) {
+        showAlert('✅ Voice Transcribed', 'High confidence transcription!');
+      } else if (confidence > 0.5) {
+        showAlert('✅ Voice Transcribed', 'Please review for accuracy.');
+      } else {
+        showAlert('⚠️ Low Confidence', 'Please check the transcription and edit if needed.');
+      }
+      
+      return;
+    }
+
+    // Warning case - No speech detected or unclear audio
+    if (data.warning) {
+      console.warn('⚠️ Transcription warning:', data.warning);
+      
       Alert.alert(
-        'Transcription Failed',
-        transcriptionError.message || 'Could not transcribe your audio. Please try again or type your message.',
+        'No Speech Detected',
+        data.warning + '\n\nTips:\n• Speak clearly and closer to the microphone\n• Reduce background noise\n• Try speaking louder',
         [
           {
             text: 'Try Again',
@@ -518,12 +649,76 @@ useFocusEffect(
             text: 'Type Manually',
             style: 'cancel',
             onPress: () => setRecordingState('idle')
-          },
+          }
         ]
       );
+      return;
     }
-  };
 
+    // Empty response case
+    throw new Error('No transcription received. The audio may be unclear or too short.');
+
+  } catch (transcriptionError: any) {
+    console.error('❌ Transcription error:', {
+      message: transcriptionError.message,
+      stack: transcriptionError.stack,
+      retryCount
+    });
+
+    // Don't show alert if it's already handled (like violation)
+    if (transcriptionError.message?.includes('suspended')) {
+      return;
+    }
+
+    // Determine user-friendly error message
+    let userMessage = 'Could not transcribe your audio. ';
+    
+    if (transcriptionError.message?.includes('too short')) {
+      userMessage += 'Please speak for at least 2-3 seconds.';
+    } else if (transcriptionError.message?.includes('internet')) {
+      userMessage += 'Please check your connection and try again.';
+    } else if (transcriptionError.message?.includes('expired')) {
+      userMessage = 'Your session expired. Please log in again.';
+      // Optionally redirect to login
+      setTimeout(() => router.push('/login'), 2000);
+    } else {
+      userMessage += transcriptionError.message || 'Please try again or type your message.';
+    }
+
+    Alert.alert(
+      'Transcription Failed',
+      userMessage,
+      [
+        {
+          text: 'Try Recording Again',
+          onPress: () => {
+            setRecordingState('idle');
+            setTimeout(() => startVoiceRecording(), 500);
+          }
+        },
+        {
+          text: 'Type Manually',
+          style: 'cancel',
+          onPress: () => setRecordingState('idle')
+        }
+      ]
+    );
+  }
+};
+
+// Helper function to log security events
+const logSecurityEvent = async (eventType: string, details: any) => {
+  try {
+    await supabase.from('security_logs').insert({
+      event_type: eventType,
+      user_id: details.userId,
+      details: details,
+      created_at: new Date().toISOString()
+    });
+  } catch (e) {
+    console.error('Failed to log security event:', e);
+  }
+};
 
   // Toggle recording
   const toggleRecording = () => {
