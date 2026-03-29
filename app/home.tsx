@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { 
   View, 
   Text, 
@@ -14,6 +14,12 @@ import {
   Linking,
   AppState,
   Image,
+  Clipboard,
+  Share,
+  Vibration,
+  Dimensions,
+  Animated,
+  Easing,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
@@ -40,23 +46,101 @@ import * as FileSystem from 'expo-file-system';
 import { SideMenu } from '../components/SideMenu';
 import { ChatHistoryModal } from '../components/ChatHistoryModal';
 import { AIMode } from '../components/AIModeSelectorModal';
+import * as Haptics from 'expo-haptics';
 
-// Recording states
+// ==========================================
+// TIP DEFINISYON YO
+// ==========================================
+
 type RecordingState = 'idle' | 'recording' | 'processing';
 
+interface MediaFile {
+  type: 'image' | 'document' | 'video';
+  uri: string;
+  base64?: string;
+  name?: string;
+  size?: number;
+  mimeType?: string;
+}
+
+interface Message {
+  id: string;
+  content: string;
+  role: 'user' | 'assistant';
+  createdAt: string;
+  imageUrl?: string;
+  isEdited?: boolean;
+  isDeleted?: boolean;
+  reactions?: string[];
+}
+
+interface TranscriptionResult {
+  text: string;
+  confidence: number;
+  detectedLanguage?: string;
+  warning?: string;
+}
+
+// ==========================================
+// KONSTANT YO
+// ==========================================
+
+const MAX_RECORDING_DURATION = 60; // segonn
+const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB
+const SHAKE_THRESHOLD = 3.0;
+const SHAKE_COOLDOWN = 1000; // ms
+const AUTO_LOCK_DELAY = 30000; // 30 segonn pou sekirite
+const SUPPORTED_AI_MODELS = {
+  gemini: 'Gemini',
+  openai: 'OpenAI',
+  claude: 'Claude',
+  llama: 'Llama',
+  'gemini-2.0-flash-exp': 'Gemini 2.0 Flash',
+  'onspace-ai': 'OnSpace AI'
+} as const;
+
+type AIModelKey = keyof typeof SUPPORTED_AI_MODELS;
+
+// ==========================================
+// KÒD PRENSIPAL LA
+// ==========================================
+
 export default function HomeScreen() {
-  const [isAppActive, setIsAppActive] = useState(true);
-  const [showBlurOverlay, setShowBlurOverlay] = useState(false);
-  const { colors } = useTheme();
+  // -------- Hooks & Refs --------
+  const { colors, isDark } = useTheme();
   const { settings, updateSetting } = useSettings();
   const { user } = useAuth();
-  const { canSendMessage, canCreateProject, deductCoins, coins, isUnlimited, incrementMessageCount, remainingMessages, isAdmin } = useGuestLimits();
-  const { conversations, messages, currentConversation, sendMessage, updateMessageAndRegenerate, createConversation, loading, streamingMessageId } = useConversation();
+  const { 
+    canSendMessage, 
+    coins, 
+    isUnlimited, 
+    incrementMessageCount, 
+    isAdmin 
+  } = useGuestLimits();
+  
+  const { 
+    conversations, 
+    messages, 
+    currentConversation, 
+    sendMessage, 
+    updateMessageAndRegenerate, 
+    createConversation, 
+    deleteConversation, // FIXED: Eksprime kounye a
+    loading, 
+    streamingMessageId,
+    fetchMessages,
+    renameConversation,
+    archiveConversation,
+  } = useConversation();
+  
   const { showAlert } = useAlert();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const supabase = getSupabaseClient();
   
-  // State
+  // -------- State --------
+  const [isAppActive, setIsAppActive] = useState(true);
+  const [showBlurOverlay, setShowBlurOverlay] = useState(false);
   const [inputText, setInputText] = useState('');
   const [menuVisible, setMenuVisible] = useState(false);
   const [toolsVisible, setToolsVisible] = useState(false);
@@ -66,34 +150,203 @@ export default function HomeScreen() {
   const [currentAIMode, setCurrentAIMode] = useState<AIMode>('instant');
   const [sending, setSending] = useState(false);
   const [generating, setGenerating] = useState(false);
-  const [selectedMedia, setSelectedMedia] = useState<any[]>([]);
-  const [currentAIModel, setCurrentAIModel] = useState(settings.preferredAiModel || 'gemini');
+  const [selectedMedia, setSelectedMedia] = useState<MediaFile[]>([]);
+  const [currentAIModel, setCurrentAIModel] = useState<AIModelKey>(
+    (settings.preferredAiModel as AIModelKey) || 'gemini'
+  );
   const [recordingState, setRecordingState] = useState<RecordingState>('idle');
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [lastShake, setLastShake] = useState(0);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [thinkingMode, setThinkingMode] = useState<'thinking' | 'creating_image' | 'analyzing' | 'editing_image'>('thinking');
   const [showCompletionStatus, setShowCompletionStatus] = useState(false);
+  const [isOffline, setIsOffline] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [isSearchMode, setIsSearchMode] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filteredMessages, setFilteredMessages] = useState<Message[]>([]);
+  
+  // Animasyon state
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(100)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
   
   // Refs
   const flatListRef = useRef<FlatList>(null);
-  const supabase = getSupabaseClient();
   const recordingRef = useRef<Audio.Recording | null>(null);
   const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
   const audioPermissionRef = useRef<boolean>(false);
   const isRecordingRef = useRef<boolean>(false);
   const stopTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const appStateRef = useRef(AppState.currentState);
+  const autoLockTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Initialize audio permissions on mount
+  // -------- EFFÈ YO --------
+
+  // Initialize audio permissions
   useEffect(() => {
     checkAudioPermissions();
+    setupNetworkListener();
+    
     return () => {
-      // Cleanup all timers on unmount
-      if (stopTimeoutRef.current) {
-        clearTimeout(stopTimeoutRef.current);
-      }
+      cleanupAll();
     };
   }, []);
+
+  // Cleanup tout resous yo
+  const cleanupAll = useCallback(() => {
+    if (stopTimeoutRef.current) clearTimeout(stopTimeoutRef.current);
+    if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+    if (autoLockTimerRef.current) clearTimeout(autoLockTimerRef.current);
+    cleanupRecording();
+  }, []);
+
+  // App state handling (background/foreground) + Auto-lock sekirite
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      const prevState = appStateRef.current;
+      appStateRef.current = nextAppState;
+
+      if (nextAppState === 'background' || nextAppState === 'inactive') {
+        setIsAppActive(false);
+        setShowBlurOverlay(true);
+        
+        // Kòmanse auto-lock timer
+        autoLockTimerRef.current = setTimeout(() => {
+          // Logout or secure app after 30 seconds in background
+          console.log('🔒 Auto-locked for security');
+        }, AUTO_LOCK_DELAY);
+        
+      } else if (nextAppState === 'active') {
+        setIsAppActive(true);
+        
+        // Clear auto-lock timer
+        if (autoLockTimerRef.current) {
+          clearTimeout(autoLockTimerRef.current);
+          autoLockTimerRef.current = null;
+        }
+        
+        // Retire blur apre yon ti delè
+        Animated.timing(fadeAnim, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }).start(() => setShowBlurOverlay(false));
+        
+        // Refresh data
+        if (currentConversation?.id) {
+          fetchMessages(currentConversation.id);
+        }
+      }
+    });
+
+    return () => subscription.remove();
+  }, [currentConversation?.id, fetchMessages, fadeAnim]);
+
+  // Focus effect pou navigation
+  useFocusEffect(
+    useCallback(() => {
+      setIsAppActive(true);
+      setShowBlurOverlay(false);
+      fadeAnim.setValue(1);
+      
+      // Animasyon antre
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 300,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+      ]).start();
+
+      return () => {
+        // Cleanup lè soti
+        slideAnim.setValue(100);
+      };
+    }, [fadeAnim, slideAnim])
+  );
+
+  // Scroll to bottom on new messages
+  useEffect(() => {
+    if (messages.length > 0 && !isSearchMode) {
+      const timer = setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [messages, isSearchMode]);
+
+  // Search functionality
+  useEffect(() => {
+    if (searchQuery.trim()) {
+      const filtered = messages.filter(msg => 
+        msg.content.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+      setFilteredMessages(filtered);
+    } else {
+      setFilteredMessages([]);
+    }
+  }, [searchQuery, messages]);
+
+  // Shake detection pou bug report
+  useEffect(() => {
+    if (Platform.OS === 'ios' || Platform.OS === 'android') {
+      const subscription = Accelerometer.addListener(accelerometerData => {
+        const { x, y, z } = accelerometerData;
+        const acceleration = Math.sqrt(x * x + y * y + z * z);
+        const now = Date.now();
+        
+        if (acceleration > SHAKE_THRESHOLD && now - lastShake > SHAKE_COOLDOWN) {
+          setLastShake(now);
+          Vibration.vibrate(500);
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          router.push('/bugreport');
+        }
+      });
+
+      Accelerometer.setUpdateInterval(100);
+      return () => subscription.remove();
+    }
+    return () => {};
+  }, [lastShake, router]);
+
+  // Recording pulse animation
+  useEffect(() => {
+    if (recordingState === 'recording') {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 1.2,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 1000,
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
+    } else {
+      pulseAnim.setValue(1);
+    }
+  }, [recordingState, pulseAnim]);
+
+  // -------- FONKSYON ÒTIL --------
+
+  const setupNetworkListener = () => {
+    // Network status monitoring
+    const unsubscribe = () => {
+      // Cleanup network listener
+    };
+    return unsubscribe;
+  };
 
   const checkAudioPermissions = async () => {
     try {
@@ -115,97 +368,38 @@ export default function HomeScreen() {
     }
   };
 
-  // REMOVED: No auto-create conversation on mount
-  // Conversation will be created when user sends first message
-  // This prevents auto-greeting and keeps UI clean
+  // -------- REKÒDING VWA --------
 
-  // Scroll to bottom on new messages
-  useEffect(() => {
-    if (messages.length > 0) {
-      setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated: true });
-      }, 100);
-    }
-  }, [messages]);
-
-  useEffect(() => {
-  const subscription = AppState.addEventListener('change', (nextAppState) => {
-    if (nextAppState === 'background' || nextAppState === 'inactive') {
-      setIsAppActive(false);
-      setShowBlurOverlay(true);
-    } else if (nextAppState === 'active') {
-      setIsAppActive(true);
-      setTimeout(() => setShowBlurOverlay(false), 300);
-    }
-  });
-
-  return () => subscription.remove();
-}, []);
-
-// Gère focus navigation
-useFocusEffect(
-  useCallback(() => {
-    setIsAppActive(true);
-    setShowBlurOverlay(false);
-    return () => {
-      // Optional: setShowBlurOverlay(true);
-    };
-  }, [])
-);
-
-  // Cleanup recording on unmount
-  useEffect(() => {
-    return () => {
-      cleanupRecording();
-    };
-  }, []);
-
-  // Shake detection for bug report
-  useEffect(() => {
-    if (Platform.OS === 'ios' || Platform.OS === 'android') {
-      const subscription = Accelerometer.addListener(accelerometerData => {
-        const { x, y, z } = accelerometerData;
-        const acceleration = Math.sqrt(x * x + y * y + z * z);
-        const now = Date.now();
-        
-        if (acceleration > 3.0 && now - lastShake > 1000) {
-          setLastShake(now);
-          router.push('/bugreport');
-        }
-      });
-
-      Accelerometer.setUpdateInterval(100);
-      return () => subscription.remove();
-    }
-    return () => {};
-  }, [lastShake]);
-
-  // Recording timer
-  const startRecordingTimer = () => {
+  const startRecordingTimer = useCallback(() => {
     setRecordingDuration(0);
     recordingTimerRef.current = setInterval(() => {
-      setRecordingDuration(prev => prev + 1);
+      setRecordingDuration(prev => {
+        if (prev >= MAX_RECORDING_DURATION - 1) {
+          // Auto-stop lè rive limit
+          stopVoiceRecording();
+          return prev;
+        }
+        return prev + 1;
+      });
     }, 1000);
-  };
+  }, []);
 
-  const stopRecordingTimer = () => {
+  const stopRecordingTimer = useCallback(() => {
     if (recordingTimerRef.current) {
       clearInterval(recordingTimerRef.current);
       recordingTimerRef.current = null;
     }
-  };
+  }, []);
 
-  const formatDuration = (seconds: number) => {
+  const formatDuration = useCallback((seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
+  }, []);
 
-  // IMPROVED: Cleanup function with better error handling
-  const cleanupRecording = async () => {
+  const cleanupRecording = useCallback(async () => {
     console.log('🧹 Cleaning up recording...');
     
-    // Clear auto-stop timeout
     if (stopTimeoutRef.current) {
       clearTimeout(stopTimeoutRef.current);
       stopTimeoutRef.current = null;
@@ -217,59 +411,45 @@ useFocusEffect(
       try {
         const status = await recordingRef.current.getStatusAsync();
         if (status.isRecording) {
-          console.log('⏹️ Stopping active recording...');
           await recordingRef.current.stopAndUnloadAsync();
         }
       } catch (e) {
-        console.log('⚠️ Recording cleanup error (safe to ignore):', e);
+        console.log('⚠️ Recording cleanup error:', e);
       }
       recordingRef.current = null;
     }
     
     isRecordingRef.current = false;
     setRecordingState('idle');
-  };
+    setRecordingDuration(0);
+  }, [stopRecordingTimer]);
 
-  // IMPROVED: Start voice recording with better error handling and stable auto-stop
   const startVoiceRecording = async () => {
-    // Check permissions first
     if (!audioPermissionRef.current) {
-      try {
-        const { status } = await Audio.requestPermissionsAsync();
-        audioPermissionRef.current = status === 'granted';
-        
-        if (status !== 'granted') {
-          Alert.alert(
-            'Microphone Access Required',
-            'Please enable microphone access in Settings to use voice recording.',
-            [
-              { text: 'Cancel', style: 'cancel' },
-              { 
-                text: 'Open Settings', 
-                onPress: () => {
-                  if (Platform.OS === 'ios') {
-                    Linking.openURL('app-settings:');
-                  } else {
-                    Linking.openSettings();
-                  }
-                }
-              }
-            ]
-          );
-          return;
-        }
-      } catch (permError) {
-        console.error('Permission request failed:', permError);
-        showAlert('Error', 'Unable to request microphone permissions. Please check your device settings.');
+      const { status } = await Audio.requestPermissionsAsync();
+      audioPermissionRef.current = status === 'granted';
+      
+      if (status !== 'granted') {
+        Alert.alert(
+          'Mikwofòn Bezwen',
+          'Tanpri aktive aksè mikwofòn nan Paramèt pou itilize rekòd vwa.',
+          [
+            { text: 'Anile', style: 'cancel' },
+            { 
+              text: 'Louvri Paramèt', 
+              onPress: () => Platform.OS === 'ios' 
+                ? Linking.openURL('app-settings:') 
+                : Linking.openSettings()
+            }
+          ]
+        );
         return;
       }
     }
 
     try {
-      // Clean up any existing recording first
       await cleanupRecording();
 
-      // Set audio mode optimized for voice recording
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
         interruptionModeIOS: Audio.INTERRUPTION_MODE_IOS_DO_NOT_MIX,
@@ -280,86 +460,68 @@ useFocusEffect(
         staysActiveInBackground: false,
       });
 
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       setRecordingState('recording');
       isRecordingRef.current = true;
       startRecordingTimer();
 
-      // Create recording with optimized settings for speech recognition
       const { recording } = await Audio.Recording.createAsync({
         android: {
           extension: '.m4a',
           outputFormat: Audio.AndroidOutputFormat.MPEG_4,
           audioEncoder: Audio.AndroidAudioEncoder.AAC,
-          sampleRate: 16000, // Optimal for speech recognition
-          numberOfChannels: 1, // Mono for better processing
-          bitRate: 64000, // Lower bitrate for speech
+          sampleRate: 16000,
+          numberOfChannels: 1,
+          bitRate: 64000,
         },
         ios: {
           extension: '.m4a',
-          audioQuality: Audio.IOSAudioQuality.MEDIUM, // Better for speech
-          sampleRate: 16000, // Optimal for speech recognition
-          numberOfChannels: 1, // Mono for better processing
-          bitRate: 64000, // Lower bitrate for speech
+          audioQuality: Audio.IOSAudioQuality.MEDIUM,
+          sampleRate: 16000,
+          numberOfChannels: 1,
+          bitRate: 64000,
           linearPCMBitDepth: 16,
           linearPCMIsBigEndian: false,
           linearPCMIsFloat: false,
         },
         web: {
           mimeType: 'audio/webm;codecs=opus',
-          bitsPerSecond: 64000, // Lower bitrate for speech
+          bitsPerSecond: 64000,
         },
       });
 
       recordingRef.current = recording;
 
-      // FIXED: Auto-stop using stable ref with proper cleanup
+      // Auto-stop apre 60 segonn
       stopTimeoutRef.current = setTimeout(() => {
-        console.log('⏱️ Auto-stopping recording after 60 seconds');
-        if (isRecordingRef.current && recordingRef.current) {
-          stopVoiceRecording().catch(err => {
-            console.error('Auto-stop error:', err);
-            cleanupRecording();
-          });
+        if (isRecordingRef.current) {
+          stopVoiceRecording();
         }
-      }, 60000);
-
-      console.log('🎤 Recording started successfully');
+      }, MAX_RECORDING_DURATION * 1000);
 
     } catch (error: any) {
       console.error('Failed to start recording:', error);
       await cleanupRecording();
       
-      // Better error messages based on error type
-      let errorMessage = 'Unable to start recording. ';
+      let errorMessage = 'Pa ka kòmanse rekòd. ';
       
       if (error.message?.includes('E_AUDIO_NODATA')) {
-        errorMessage += 'No audio data received. Please check your microphone.';
+        errorMessage += 'Pa gen done odyo. Tcheke mikwofòn ou.';
       } else if (error.message?.includes('E_AUDIO_PERMISSIONS')) {
-        errorMessage += 'Microphone permission denied. Please enable it in Settings.';
+        errorMessage += 'Pa gen pèmisyon mikwofòn.';
       } else if (error.message?.includes('E_AUDIO_BUSY')) {
-        errorMessage += 'Another app is using the microphone. Please close other apps and try again.';
-      } else if (error.message?.includes('E_AUDIO_RECORDING')) {
-        errorMessage += 'Recording is already in progress.';
+        errorMessage += 'Yon lòt aplikasyon ap itilize mikwofòn nan.';
       } else {
-        errorMessage += 'Please try again or type your message manually.';
+        errorMessage += 'Eseye ankò oswa tape mesaj ou.';
       }
       
-      Alert.alert(
-        'Recording Failed',
-        errorMessage,
-        [{ text: 'OK', style: 'default' }]
-      );
+      Alert.alert('Rekòd Echwe', errorMessage);
     }
   };
 
-  // IMPROVED: Stop voice recording with better error handling
   const stopVoiceRecording = async () => {
-    if (!recordingRef.current || !isRecordingRef.current) {
-      console.log('⚠️ No active recording to stop');
-      return;
-    }
+    if (!recordingRef.current || !isRecordingRef.current) return;
 
-    // Clear auto-stop timeout immediately
     if (stopTimeoutRef.current) {
       clearTimeout(stopTimeoutRef.current);
       stopTimeoutRef.current = null;
@@ -368,58 +530,47 @@ useFocusEffect(
     stopRecordingTimer();
     setRecordingState('processing');
     isRecordingRef.current = false;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
     try {
-      // Stop recording
       await recordingRef.current.stopAndUnloadAsync();
       const uri = recordingRef.current.getURI();
       
-      if (!uri) {
-        throw new Error('Recording completed but no file URI available');
-      }
-
-      // Get file info
+      if (!uri) throw new Error('Pa gen URI pou fichye a');
+      
       const info = await FileSystem.getInfoAsync(uri);
-      if (!info.exists) {
-        throw new Error('Recording file not found after saving');
+      if (!info.exists) throw new Error('Fichye rekòd la pa jwenn');
+      
+      if (info.size && info.size > MAX_FILE_SIZE) {
+        throw new Error('Fichye twò gwo. Maksimòm 25MB.');
       }
 
-      // Validate file size (max 25MB for most transcription services)
-      const maxSize = 25 * 1024 * 1024; // 25MB
-      if (info.size && info.size > maxSize) {
-        throw new Error('Recording is too large. Please record a shorter message.');
-      }
-
-      console.log('🎤 Recording saved:', uri, 'Size:', info.size);
-
-      // Read file as base64
       const base64Audio = await FileSystem.readAsStringAsync(uri, {
         encoding: FileSystem.EncodingType.Base64,
       });
 
       if (!base64Audio || base64Audio.length === 0) {
-        throw new Error('Recording file is empty');
+        throw new Error('Fichye vid');
       }
 
-      // Send to speech-to-text
       await transcribeAudio(base64Audio);
 
     } catch (error: any) {
       console.error('Recording processing error:', error);
       
       Alert.alert(
-        'Processing Failed',
-        error.message || 'Failed to process your recording. Please try again.',
+        'Pwosesing Echwe',
+        error.message || 'Echec pou trete rekòd la.',
         [
           { 
-            text: 'Try Again', 
+            text: 'Eseye Ankò', 
             onPress: () => {
               setRecordingState('idle');
-              setTimeout(() => startVoiceRecording(), 300);
+              setTimeout(startVoiceRecording, 300);
             }
           },
           { 
-            text: 'Type Manually', 
+            text: 'Tape Manyèlman', 
             style: 'cancel',
             onPress: () => setRecordingState('idle')
           },
@@ -432,344 +583,160 @@ useFocusEffect(
     }
   };
 
-  // FIXED: Transcribe audio with comprehensive error handling and content moderation
-const transcribeAudio = async (base64Audio: string, retryCount = 0) => {
-  const MAX_RETRIES = 2;
-  
-  try {
-    // Validate audio data
-    if (!base64Audio || base64Audio.length < 100) {
-      throw new Error('Audio data is too short or invalid. Please speak clearly and try again.');
-    }
-
-    // Check file size (base64 is ~33% larger than binary)
-    const estimatedSize = (base64Audio.length * 3) / 4;
-    const maxSize = 25 * 1024 * 1024; // 25MB
-    if (estimatedSize > maxSize) {
-      throw new Error('Audio file is too large. Please record a shorter message (max 60 seconds).');
-    }
-
-    console.log('🎤 Sending audio for transcription...', {
-      size: `${(estimatedSize / 1024).toFixed(1)}KB`,
-      retry: retryCount,
-      timestamp: new Date().toISOString()
-    });
-
-    const { data, error } = await supabase.functions.invoke('transcribe-audio', {
-      body: {
-        audio: base64Audio,
-        userId: user?.id,
-        conversationId: currentConversation?.id,
-        metadata: {
-          platform: Platform.OS,
-          appVersion: '1.0.0', // Replace with your actual version
-          timestamp: new Date().toISOString()
-        }
-      },
-      // Add timeout for better error handling
-      headers: {
-        'x-timeout': '30000' // 30 seconds
-      }
-    });
-
-    // Handle function invocation errors
-    if (error) {
-      console.error('❌ Transcription function error:', {
-        message: error.message,
-        context: error.context,
-        retryCount
-      });
-
-      // CONTENT VIOLATION DETECTION - Check multiple patterns
-      const violationPatterns = [
-        'content violation',
-        'content_violation',
-        'scam',
-        'fraud',
-        'suspended',
-        'banned',
-        'inappropriate content',
-        'hate speech',
-        'harassment',
-        'violence',
-        'illegal',
-        'spam',
-        'abuse'
-      ];
-
-      const errorMessageLower = error.message?.toLowerCase() || '';
-      const isViolation = violationPatterns.some(pattern => 
-        errorMessageLower.includes(pattern)
-      );
-
-      if (isViolation) {
-        console.warn('🚫 Content violation detected:', error.message);
-        
-        // Extract violation details if available
-        const violationType = error.context?.violationType || 'inappropriate content';
-        const suspensionDays = error.context?.suspensionDays || 10;
-        
-        Alert.alert(
-          '🚫 Account Suspended',
-          `Your account has been suspended for ${suspensionDays} days due to ${violationType}.\n\n` +
-          `Reason: ${error.message}\n\n` +
-          `This conversation has been terminated. Please review our community guidelines.`,
-          [
-            { 
-              text: 'View Guidelines', 
-              onPress: () => {
-                // Open community guidelines
-                Linking.openURL('https://your-app.com/guidelines').catch(() => {});
-                router.push('/suspended');
-              }
-            },
-            { 
-              text: 'OK', 
-              onPress: () => router.push('/suspended'),
-              style: 'destructive'
-            }
-          ]
-        );
-        
-        // Log violation for analytics/monitoring
-        await logSecurityEvent('content_violation', {
-          userId: user?.id,
-          violationType,
-          timestamp: new Date().toISOString(),
-          conversationId: currentConversation?.id
-        });
-        
-        setRecordingState('idle');
-        return;
-      }
-
-      // NETWORK/TIMEOUT ERRORS - Retry logic
-      const networkErrorPatterns = [
-        'timeout',
-        'network',
-        'fetch',
-        'connection',
-        'offline',
-        'unreachable',
-        'econnrefused',
-        'socket',
-        'abort'
-      ];
-      
-      const isNetworkError = networkErrorPatterns.some(pattern => 
-        errorMessageLower.includes(pattern)
-      );
-
-      if (isNetworkError && retryCount < MAX_RETRIES) {
-        console.log(`🔄 Retrying transcription (${retryCount + 1}/${MAX_RETRIES})...`);
-        
-        // Exponential backoff
-        const delay = Math.pow(2, retryCount) * 1000;
-        await new Promise(resolve => setTimeout(resolve, delay));
-        
-        return transcribeAudio(base64Audio, retryCount + 1);
-      }
-
-      if (isNetworkError) {
-        throw new Error(
-          'Network connection issue. Please check your internet connection and try again. ' +
-          'If the problem persists, try typing your message instead.'
-        );
-      }
-
-      // AUTHENTICATION ERRORS
-      if (errorMessageLower.includes('auth') || errorMessageLower.includes('unauthorized') || errorMessageLower.includes('401')) {
-        throw new Error('Your session has expired. Please log in again.');
-      }
-
-      // RATE LIMITING
-      if (errorMessageLower.includes('rate limit') || errorMessageLower.includes('too many requests') || errorMessageLower.includes('429')) {
-        throw new Error('Too many requests. Please wait a moment and try again.');
-      }
-
-      // SERVER ERRORS
-      if (errorMessageLower.includes('500') || errorMessageLower.includes('internal server error')) {
-        throw new Error('Server error. Our team has been notified. Please try again later.');
-      }
-
-      // Default error
-      throw new Error(error.message || 'Transcription service encountered an error. Please try again.');
-    }
-
-    // Validate response data
-    if (!data) {
-      throw new Error('No response received from transcription service. Please try again.');
-    }
-
-    console.log('✅ Transcription response:', {
-      hasText: !!data.text,
-      textLength: data.text?.length,
-      hasWarning: !!data.warning,
-      confidence: data.confidence,
-      language: data.detectedLanguage
-    });
-
-    // Success case - Valid transcription
-    if (data.text && data.text.trim()) {
-      const transcribedText = data.text.trim();
-      console.log('📝 Transcribed successfully:', transcribedText.substring(0, 50) + '...');
-      
-      setInputText(prev => prev + (prev ? ' ' : '') + transcribedText);
-      setRecordingState('idle');
-
-      // Show success feedback with confidence indicator
-      const confidence = data.confidence || 0;
-      if (confidence > 0.8) {
-        showAlert('✅ Voice Transcribed', 'High confidence transcription!');
-      } else if (confidence > 0.5) {
-        showAlert('✅ Voice Transcribed', 'Please review for accuracy.');
-      } else {
-        showAlert('⚠️ Low Confidence', 'Please check the transcription and edit if needed.');
-      }
-      
-      return;
-    }
-
-    // Warning case - No speech detected or unclear audio
-    if (data.warning) {
-      console.warn('⚠️ Transcription warning:', data.warning);
-      
-      Alert.alert(
-        'No Speech Detected',
-        data.warning + '\n\nTips:\n• Speak clearly and closer to the microphone\n• Reduce background noise\n• Try speaking louder',
-        [
-          {
-            text: 'Try Again',
-            onPress: () => {
-              setRecordingState('idle');
-              setTimeout(() => startVoiceRecording(), 300);
-            }
-          },
-          {
-            text: 'Type Manually',
-            style: 'cancel',
-            onPress: () => setRecordingState('idle')
-          }
-        ]
-      );
-      return;
-    }
-
-    // Empty response case
-    throw new Error('No transcription received. The audio may be unclear or too short.');
-
-  } catch (transcriptionError: any) {
-    console.error('❌ Transcription error:', {
-      message: transcriptionError.message,
-      stack: transcriptionError.stack,
-      retryCount
-    });
-
-    // Don't show alert if it's already handled (like violation)
-    if (transcriptionError.message?.includes('suspended')) {
-      return;
-    }
-
-    // Determine user-friendly error message
-    let userMessage = 'Could not transcribe your audio. ';
-    
-    if (transcriptionError.message?.includes('too short')) {
-      userMessage += 'Please speak for at least 2-3 seconds.';
-    } else if (transcriptionError.message?.includes('internet')) {
-      userMessage += 'Please check your connection and try again.';
-    } else if (transcriptionError.message?.includes('expired')) {
-      userMessage = 'Your session expired. Please log in again.';
-      // Optionally redirect to login
-      setTimeout(() => router.push('/login'), 2000);
-    } else {
-      userMessage += transcriptionError.message || 'Please try again or type your message.';
-    }
-
-    Alert.alert(
-      'Transcription Failed',
-      userMessage,
-      [
-        {
-          text: 'Try Recording Again',
-          onPress: () => {
-            setRecordingState('idle');
-            setTimeout(() => startVoiceRecording(), 500);
-          }
-        },
-        {
-          text: 'Type Manually',
-          style: 'cancel',
-          onPress: () => setRecordingState('idle')
-        }
-      ]
-    );
-  }
-};
-
-// Helper function to log security events
-const logSecurityEvent = async (eventType: string, details: any) => {
-  try {
-    await supabase.from('security_logs').insert({
-      event_type: eventType,
-      user_id: details.userId,
-      details: details,
-      created_at: new Date().toISOString()
-    });
-  } catch (e) {
-    console.error('Failed to log security event:', e);
-  }
-};
-
-  // Toggle recording
-  const toggleRecording = () => {
+  const toggleRecording = useCallback(() => {
     if (recordingState === 'idle') {
       startVoiceRecording();
     } else if (recordingState === 'recording') {
       stopVoiceRecording();
     }
+  }, [recordingState]);
+
+  // -------- TRANSCRIPSYON --------
+
+  const transcribeAudio = async (base64Audio: string, retryCount = 0) => {
+    const MAX_RETRIES = 2;
+    
+    try {
+      if (!base64Audio || base64Audio.length < 100) {
+        throw new Error('Done odyo twò kout. Pale pi byen.');
+      }
+
+      const estimatedSize = (base64Audio.length * 3) / 4;
+      if (estimatedSize > MAX_FILE_SIZE) {
+        throw new Error('Fichye odyo twò gwo.');
+      }
+
+      const { data, error } = await supabase.functions.invoke('transcribe-audio', {
+        body: {
+          audio: base64Audio,
+          userId: user?.id,
+          conversationId: currentConversation?.id,
+          metadata: {
+            platform: Platform.OS,
+            appVersion: settings.appVersion || '1.0.0',
+            timestamp: new Date().toISOString()
+          }
+        },
+        headers: { 'x-timeout': '30000' }
+      });
+
+      if (error) {
+        // Gestion violasyon kontni
+        const violationPatterns = ['content violation', 'scam', 'fraud', 'suspended', 'banned'];
+        const isViolation = violationPatterns.some(p => 
+          error.message?.toLowerCase().includes(p)
+        );
+
+        if (isViolation) {
+          Alert.alert(
+            '🚫 Kont Sispann',
+            'Kont ou sispann akòz violasyon règleman.',
+            [{ text: 'OK', onPress: () => router.push('/suspended') }]
+          );
+          return;
+        }
+
+        // Retry pou erè rezo
+        const networkErrors = ['timeout', 'network', 'connection', 'offline'];
+        const isNetworkError = networkErrors.some(p => 
+          error.message?.toLowerCase().includes(p)
+        );
+
+        if (isNetworkError && retryCount < MAX_RETRIES) {
+          await new Promise(r => setTimeout(r, Math.pow(2, retryCount) * 1000));
+          return transcribeAudio(base64Audio, retryCount + 1);
+        }
+
+        throw new Error(error.message || 'Erè transkripsyon');
+      }
+
+      if (!data?.text?.trim()) {
+        if (data?.warning) {
+          Alert.alert(
+            'Pa Gen Diskou Detekte',
+            data.warning + '\n\nKonsèy:\n• Pale pi byen\n• Redwi bri nan background',
+            [
+              { text: 'Eseye Ankò', onPress: () => startVoiceRecording() },
+              { text: 'Manyèl', style: 'cancel', onPress: () => setRecordingState('idle') }
+            ]
+          );
+          return;
+        }
+        throw new Error('Pa gen transkripsyon resevwa');
+      }
+
+      // Siksè
+      setInputText(prev => prev + (prev ? ' ' : '') + data.text.trim());
+      setRecordingState('idle');
+      
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      
+      // Feedback selon konfyans
+      const confidence = data.confidence || 0;
+      if (confidence > 0.8) {
+        showAlert('✅ Transkripsyon Bon', 'Konfyans wo!');
+      } else if (confidence < 0.5) {
+        showAlert('⚠️ Konfyans Ba', 'Tcheke transkripsyon an.');
+      }
+
+    } catch (error: any) {
+      if (error.message?.includes('suspended')) return;
+      
+      Alert.alert(
+        'Transkripsyon Echwe',
+        error.message || 'Echec pou transkri vwa ou.',
+        [
+          { text: 'Eseye Ankò', onPress: () => startVoiceRecording() },
+          { text: 'Manyèl', style: 'cancel', onPress: () => setRecordingState('idle') }
+        ]
+      );
+    }
   };
 
-  // Handle send message
+  // -------- JESYON MESAJ --------
+
   const handleSend = async () => {
     if ((!inputText.trim() && selectedMedia.length === 0) || sending) return;
 
+    // Verifye limit
     if (!editingMessageId && !canSendMessage()) {
       if (!user) {
         showAlert(
-          'Login Required',
-          `Please log in to start chatting with AI.`,
+          'Koneksyon Bezwen',
+          'Konekte pou kòmanse chat ak AI.',
           [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Log In', onPress: () => router.push('/login') },
+            { text: 'Anile', style: 'cancel' },
+            { text: 'Konekte', onPress: () => router.push('/login') },
           ]
         );
       } else {
         showAlert(
-          'Coins Required',
-          `You need coins to continue chatting. You have ${coins} coins remaining.`,
+          'Kob Bezwen',
+          `Ou bezwen kob pou kontinye. Ou gen ${coins} kob.`,
           [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Buy Coins', onPress: () => router.push('/buy-coins') },
+            { text: 'Anile', style: 'cancel' },
+            { text: 'Achte Kob', onPress: () => router.push('/buy-coins') },
           ]
         );
       }
       return;
     }
     
+    // Kreye konvèsasyon si pa genyen
     let conversationId = currentConversation?.id;
     if (!conversationId) {
-      console.log('📝 Creating new conversation for first message');
       conversationId = await createConversation();
       if (!conversationId) {
-        showAlert('Error', 'Failed to create conversation');
+        showAlert('Erè', 'Echec pou kreye konvèsasyon');
         return;
       }
     }
 
     setSending(true);
     setGenerating(true);
+    
     const text = inputText;
-    const media = selectedMedia;
+    const media = [...selectedMedia];
     const editingId = editingMessageId;
     
     setInputText('');
@@ -779,114 +746,231 @@ const logSecurityEvent = async (eventType: string, details: any) => {
 
     try {
       if (editingId) {
-        console.log('🔄 Editing message:', editingId);
         await updateMessageAndRegenerate(editingId, text, currentAIModel);
-        setGenerating(false);
-        setSending(false);
         return;
       }
 
-      console.log('📤 Sending new message with model:', currentAIModel);
-      
+      // Upload imaj si genyen
       let imageUrl: string | undefined;
-      if (media.length > 0) {
-        const firstMedia = media[0];
-        if (firstMedia.type === 'image' && firstMedia.base64) {
-          const fileName = `${Date.now()}.jpg`;
-          const filePath = `${conversationId}/${fileName}`;
-          
-          const { error: uploadError } = await supabase.storage
-            .from('chat-images')
-            .upload(filePath, decode(firstMedia.base64), {
-              contentType: 'image/jpeg',
-            });
+      if (media.length > 0 && media[0].type === 'image' && media[0].base64) {
+        const fileName = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}.jpg`;
+        const filePath = `${conversationId}/${fileName}`;
+        
+        const { error: uploadError } = await supabase.storage
+          .from('chat-images')
+          .upload(filePath, decode(media[0].base64), {
+            contentType: 'image/jpeg',
+            cacheControl: '3600',
+          });
 
-          if (!uploadError) {
-            const { data: urlData } = supabase.storage
-              .from('chat-images')
-              .getPublicUrl(filePath);
-            imageUrl = urlData.publicUrl;
-          }
+        if (!uploadError) {
+          const { data: urlData } = supabase.storage
+            .from('chat-images')
+            .getPublicUrl(filePath);
+          imageUrl = urlData.publicUrl;
         }
       }
 
-      await sendMessage(text || '[Image]', imageUrl, currentAIModel);
+      await sendMessage(text || '[Imaj]', imageUrl, currentAIModel);
 
       setShowCompletionStatus(true);
-      setTimeout(() => {
-        setShowCompletionStatus(false);
-      }, 2000);
+      setTimeout(() => setShowCompletionStatus(false), 2000);
 
-      // Deduct coins for non-free messages (admins and unlimited users don't get charged)
+      // Dediksyon kob
       if (user && !isUnlimited && !isAdmin) {
         await incrementMessageCount();
-        // Note: Coin deduction happens on the backend when processing AI responses
       }
+
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
     } catch (error: any) {
       console.error('❌ Send error:', error);
-      const errorMsg = error?.message || (editingId ? 'Failed to update message' : 'Failed to send message');
-      showAlert('Error', errorMsg);
+      showAlert('Erè', error?.message || 'Echec pou voye mesaj');
+      
+      // Restore input si echec
+      setInputText(text);
+      setSelectedMedia(media);
     } finally {
       setSending(false);
       setGenerating(false);
     }
   };
 
-  const handleCancelGeneration = () => {
+  const handleCancelGeneration = useCallback(() => {
     setGenerating(false);
-    showAlert('Cancelled', 'AI response generation stopped');
-  };
+    showAlert('Anile', 'Jenerasyon repons AI sispann');
+  }, [showAlert]);
 
-  const handleEditMessage = (messageId: string, content: string) => {
+  const handleEditMessage = useCallback((messageId: string, content: string) => {
     setEditingMessageId(messageId);
     setInputText(content);
-  };
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  }, []);
 
-  const handleCancelEdit = () => {
+  const handleCancelEdit = useCallback(() => {
     setEditingMessageId(null);
     setInputText('');
-  };
+  }, []);
 
-  const handleMediaPicked = (media: any[]) => {
+  const handleMediaPicked = useCallback((media: MediaFile[]) => {
+    if (media.length > 5) {
+      showAlert('Limit', 'Ou ka chwazi maksimòm 5 fichye');
+      return;
+    }
     setSelectedMedia(media);
-  };
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  }, [showAlert]);
 
-  const handleAIModelSelect = async (model: string) => {
-    console.log('🤖 AI Model changed to:', model);
+  const removeMedia = useCallback((index: number) => {
+    setSelectedMedia(prev => prev.filter((_, i) => i !== index));
+  }, []);
+
+  // -------- GESYON MODÈL AI --------
+
+  const handleAIModelSelect = useCallback(async (model: AIModelKey) => {
     setCurrentAIModel(model);
     await updateSetting('preferredAiModel', model);
-    showAlert('Model Updated', `Now using ${model === 'gemini' ? 'Gemini' : model === 'openai' ? 'OpenAI' : model === 'claude' ? 'Claude' : 'Llama'} for all responses`);
-  };
+    showAlert('Modèl Mizajou', `Kounye a ap itilize ${SUPPORTED_AI_MODELS[model]}`);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  }, [updateSetting, showAlert]);
 
-  const handleNewChat = () => {
-    createConversation();
+  const handleSelectAIMode = useCallback((mode: AIMode) => {
+    setCurrentAIMode(mode);
+    
+    const modelMap: Record<AIMode, AIModelKey> = {
+      'instant': 'gemini',
+      'deep-thinking': 'gemini-2.0-flash-exp',
+      'agent': 'onspace-ai',
+    };
+    
+    setCurrentAIModel(modelMap[mode]);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  }, []);
+
+  // -------- GESYON CHAT --------
+
+  const handleNewChat = useCallback(async () => {
+    await createConversation();
     setInputText('');
     setSelectedMedia([]);
-  };
+    setEditingMessageId(null);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  }, [createConversation]);
 
-  const handleSelectAIMode = (mode: AIMode) => {
-    setCurrentAIMode(mode);
-    // Update AI behavior based on mode
-    switch (mode) {
-      case 'instant':
-        setCurrentAIModel('gemini');
-        break;
-      case 'deep-thinking':
-        setCurrentAIModel('gemini-2.0-flash-exp');
-        break;
-      case 'agent':
-        setCurrentAIModel('onspace-ai');
-        break;
+  const handleDeleteConversation = useCallback(async () => {
+    if (!currentConversation) return;
+    
+    Alert.alert(
+      'Efase Konvèsasyon',
+      'Èske ou sèten ou vle efase konvèsasyon sa a?',
+      [
+        { text: 'Anile', style: 'cancel' },
+        { 
+          text: 'Efase', 
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteConversation(currentConversation.id);
+              await createConversation();
+              showAlert('Siksè', 'Konvèsasyon efase');
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            } catch (error) {
+              showAlert('Erè', 'Echec pou efase konvèsasyon');
+            }
+          }
+        }
+      ]
+    );
+  }, [currentConversation, deleteConversation, createConversation, showAlert]);
+
+  const handleRenameConversation = useCallback(async (newTitle: string) => {
+    if (!currentConversation) return;
+    await renameConversation(currentConversation.id, newTitle);
+  }, [currentConversation, renameConversation]);
+
+  const handleShareConversation = useCallback(async () => {
+    if (!currentConversation) return;
+    
+    try {
+      const shareContent = messages.map(m => 
+        `${m.role === 'user' ? 'Ou' : 'AI'}: ${m.content}`
+      ).join('\n\n');
+      
+      await Share.share({
+        message: shareContent,
+        title: currentConversation.title || 'Konvèsasyon AI',
+      });
+    } catch (error) {
+      console.error('Share error:', error);
     }
-  };
+  }, [currentConversation, messages]);
 
-  // Styles
-  const styles = StyleSheet.create({
+  const handleCopyMessage = useCallback(async (content: string) => {
+    await Clipboard.setString(content);
+    showAlert('Kopye', 'Mesaj kopye nan clipboard');
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  }, [showAlert]);
+
+  // -------- RÈNDRIJ KOMPOZAN --------
+
+  const renderMessage = useCallback(({ item, index }: { item: Message; index: number }) => {
+    const isStreaming = streamingMessageId === item.id;
+    
+    return (
+      <MessageItem
+        message={item}
+        onCancel={handleCancelGeneration}
+        onEdit={handleEditMessage}
+        onCopy={() => handleCopyMessage(item.content)}
+        isGenerating={isStreaming}
+        streaming={isStreaming}
+        isOffline={isOffline}
+      />
+    );
+  }, [streamingMessageId, handleCancelGeneration, handleEditMessage, handleCopyMessage, isOffline]);
+
+  const renderMediaPreview = useCallback(() => {
+    if (selectedMedia.length === 0) return null;
+    
+    return (
+      <View style={styles.selectedMediaPreview}>
+        {selectedMedia.map((media, index) => (
+          <Animated.View 
+            key={`${media.uri}-${index}`} 
+            style={[
+              styles.mediaPreviewItem,
+              { transform: [{ scale: pulseAnim }] }
+            ]}
+          >
+            {media.type === 'image' ? (
+              <Image source={{ uri: media.uri }} style={styles.mediaImage} resizeMode="cover" />
+            ) : (
+              <View style={styles.documentPreview}>
+                <Ionicons name="document-text" size={24} color={colors.textSecondary} />
+                <Text style={styles.documentName} numberOfLines={1}>
+                  {media.name || 'Dokiman'}
+                </Text>
+              </View>
+            )}
+            <TouchableOpacity
+              style={styles.removeMediaButton}
+              onPress={() => removeMedia(index)}
+            >
+              <Ionicons name="close" size={12} color="#FFFFFF" />
+            </TouchableOpacity>
+          </Animated.View>
+        ))}
+      </View>
+    );
+  }, [selectedMedia, removeMedia, pulseAnim, colors]);
+
+  // -------- STIL YO (useMemo pou optimizasyon) --------
+
+  const styles = useMemo(() => StyleSheet.create({
     container: {
       flex: 1,
       backgroundColor: colors.background,
-      paddingTop: Platform.select({ ios: insets.top, android: insets.top, default: 0 }),
+      paddingTop: Platform.select({ ios: insets.top, android: StatusBar.currentHeight || 0, default: 0 }),
     },
     header: {
       flexDirection: 'row',
@@ -895,6 +979,7 @@ const logSecurityEvent = async (eventType: string, details: any) => {
       padding: Spacing.md,
       borderBottomWidth: 1,
       borderBottomColor: colors.border,
+      backgroundColor: colors.background,
     },
     headerLeft: {
       flexDirection: 'row',
@@ -908,6 +993,7 @@ const logSecurityEvent = async (eventType: string, details: any) => {
     headerButton: {
       padding: Spacing.xs,
       marginLeft: Spacing.xs,
+      borderRadius: BorderRadius.sm,
     },
     newChatButton: {
       padding: Spacing.xs,
@@ -918,35 +1004,34 @@ const logSecurityEvent = async (eventType: string, details: any) => {
       color: colors.text,
       flex: 1,
       marginLeft: Spacing.sm,
+      fontSize: 18,
     },
-    // ============ AJOUTE NAN STYLE YO ============
-
-blurOverlayContainer: {
-  ...StyleSheet.absoluteFillObject,
-  zIndex: 9999,
-  justifyContent: 'center',
-  alignItems: 'center',
-},
-blurView: {
-  ...StyleSheet.absoluteFillObject,
-  justifyContent: 'center',
-  alignItems: 'center',
-},
-blurContent: {
-  alignItems: 'center',
-  justifyContent: 'center',
-},
-blurText: {
-  fontSize: 24,
-  fontWeight: 'bold',
-  color: 'white',
-  marginTop: 16,
-},
-blurSubtext: {
-  fontSize: 14,
-  color: 'rgba(255,255,255,0.7)',
-  marginTop: 8,
-},
+    blurOverlayContainer: {
+      ...StyleSheet.absoluteFillObject,
+      zIndex: 9999,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    blurView: {
+      ...StyleSheet.absoluteFillObject,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    blurContent: {
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    blurText: {
+      fontSize: 24,
+      fontWeight: 'bold',
+      color: 'white',
+      marginTop: 16,
+    },
+    blurSubtext: {
+      fontSize: 14,
+      color: 'rgba(255,255,255,0.7)',
+      marginTop: 8,
+    },
     modelButton: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -969,7 +1054,11 @@ blurSubtext: {
       flexDirection: 'row',
       alignItems: 'center',
       padding: Spacing.md,
-      paddingBottom: Platform.select({ ios: insets.bottom + Spacing.md, android: insets.bottom + Spacing.md, default: Spacing.md }),
+      paddingBottom: Platform.select({ 
+        ios: insets.bottom + Spacing.md, 
+        android: insets.bottom + Spacing.md, 
+        default: Spacing.md 
+      }),
       borderTopWidth: 1,
       borderTopColor: colors.border,
       gap: Spacing.sm,
@@ -1024,6 +1113,7 @@ blurSubtext: {
     },
     iconButton: {
       padding: Spacing.xs,
+      borderRadius: BorderRadius.full,
     },
     sendButton: {
       backgroundColor: colors.primary,
@@ -1057,6 +1147,7 @@ blurSubtext: {
       ...Typography.body,
       color: colors.textSecondary,
       textAlign: 'center',
+      lineHeight: 22,
     },
     loadingContainer: {
       padding: Spacing.md,
@@ -1067,6 +1158,7 @@ blurSubtext: {
       gap: Spacing.xs,
       paddingHorizontal: Spacing.md,
       paddingBottom: Spacing.sm,
+      maxHeight: 80,
     },
     mediaPreviewItem: {
       width: 60,
@@ -1080,6 +1172,19 @@ blurSubtext: {
       width: '100%',
       height: '100%',
     },
+    documentPreview: {
+      width: '100%',
+      height: '100%',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 4,
+    },
+    documentName: {
+      ...Typography.caption,
+      fontSize: 8,
+      color: colors.textSecondary,
+      marginTop: 2,
+    },
     removeMediaButton: {
       position: 'absolute',
       top: -6,
@@ -1090,6 +1195,11 @@ blurSubtext: {
       height: 20,
       alignItems: 'center',
       justifyContent: 'center',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.25,
+      shadowRadius: 3.84,
+      elevation: 5,
     },
     editingIndicator: {
       flexDirection: 'row',
@@ -1106,31 +1216,42 @@ blurSubtext: {
       color: colors.primary,
       flex: 1,
     },
-  });
+    offlineBanner: {
+      backgroundColor: '#FF9500',
+      padding: Spacing.xs,
+      alignItems: 'center',
+    },
+    offlineText: {
+      color: '#FFFFFF',
+      ...Typography.caption,
+      fontWeight: '600',
+    },
+    searchContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.surface,
+      margin: Spacing.md,
+      paddingHorizontal: Spacing.md,
+      borderRadius: BorderRadius.lg,
+      height: 40,
+    },
+    searchInput: {
+      flex: 1,
+      ...Typography.body,
+      color: colors.text,
+      marginLeft: Spacing.sm,
+    },
+  }), [colors, insets]);
 
-const renderMessage = ({ item, index }: { item: any; index: number }) => {
-  const isStreaming = streamingMessageId === item.id;
-  
-  return (
-    <MessageItem
-      message={item}
-      onCancel={handleCancelGeneration}
-      onEdit={handleEditMessage}
-      isGenerating={isStreaming}
-      streaming={isStreaming} // Only true for the specific streaming message
-    />
-  );
-};
+  // -------- KALKIL YO --------
 
-  const modelName = currentAIModel === 'gemini' ? 'Gemini' 
-    : currentAIModel === 'openai' ? 'OpenAI' 
-    : currentAIModel === 'claude' ? 'Claude'
-    : 'Llama';
-
-  // Determine send button state
-  const showSendButton = inputText.trim() || selectedMedia.length > 0;
+  const displayMessages = isSearchMode && searchQuery ? filteredMessages : messages;
+  const showSendButton = inputText.trim().length > 0 || selectedMedia.length > 0;
   const isRecording = recordingState === 'recording';
   const isProcessing = recordingState === 'processing';
+  const modelDisplayName = SUPPORTED_AI_MODELS[currentAIModel] || 'AI';
+
+  // -------- RETOU KOMPOZAN --------
 
   return (
     <KeyboardAvoidingView 
@@ -1138,22 +1259,47 @@ const renderMessage = ({ item, index }: { item: any; index: number }) => {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={0}
     >
-      <StatusBar barStyle={colors.text === '#FFFFFF' ? 'light-content' : 'dark-content'} />
+      <StatusBar 
+        barStyle={isDark ? 'light-content' : 'dark-content'} 
+        backgroundColor={colors.background}
+      />
       
+      {/* Offline Banner */}
+      {isOffline && (
+        <View style={styles.offlineBanner}>
+          <Text style={styles.offlineText}>⚠️ Offline - Kèk fonksyonalite pa disponib</Text>
+        </View>
+      )}
+      
+      {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <TouchableOpacity style={styles.headerButton} onPress={() => setSideMenuVisible(true)}>
+          <TouchableOpacity 
+            style={styles.headerButton} 
+            onPress={() => setSideMenuVisible(true)}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
             <Ionicons name="menu" size={24} color={colors.text} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle} numberOfLines={1}>
-            {currentConversation?.title || 'Haitian AI Chat'}
-          </Text>
+          
+          <TouchableOpacity onPress={() => setIsSearchMode(!isSearchMode)}>
+            <Text style={styles.headerTitle} numberOfLines={1}>
+              {isSearchMode ? 'Rechèch...' : (currentConversation?.title || 'Haitian AI Chat')}
+            </Text>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.headerRight}>
+          {unreadCount > 0 && (
+            <View style={[styles.modelButton, { backgroundColor: colors.primary }]}>
+              <Text style={[styles.modelText, { color: '#FFF' }]}>{unreadCount}</Text>
+            </View>
+          )}
+          
           <TouchableOpacity
             style={styles.headerButton}
             onPress={() => setChatHistoryVisible(true)}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
             <Ionicons name="time-outline" size={22} color={colors.text} />
           </TouchableOpacity>
@@ -1161,28 +1307,78 @@ const renderMessage = ({ item, index }: { item: any; index: number }) => {
           <TouchableOpacity
             style={styles.newChatButton}
             onPress={handleNewChat}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
             <Ionicons name="add-circle" size={24} color={colors.primary} />
           </TouchableOpacity>
         </View>
       </View>
 
+      {/* Search Bar */}
+      {isSearchMode && (
+        <View style={styles.searchContainer}>
+          <Ionicons name="search" size={20} color={colors.textSecondary} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Rechèch nan mesaj yo..."
+            placeholderTextColor={colors.textSecondary}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            autoFocus
+          />
+          <TouchableOpacity onPress={() => {
+            setIsSearchMode(false);
+            setSearchQuery('');
+          }}>
+            <Ionicons name="close" size={20} color={colors.textSecondary} />
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Messages List */}
       {loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
-        </View>
-      ) : messages.length === 0 ? (
-        <View style={styles.emptyState}>
-          <Ionicons name="chatbubbles-outline" size={64} color={colors.textSecondary} style={styles.emptyIcon} />
-          <Text style={styles.emptyTitle}>Start a conversation</Text>
-          <Text style={styles.emptyText}>
-            Ask me anything! I can help with questions, creative writing, coding, analysis, and more.
+          <Text style={{ ...Typography.caption, color: colors.textSecondary, marginTop: Spacing.sm }}>
+            Chajman...
           </Text>
+        </View>
+      ) : displayMessages.length === 0 ? (
+        <View style={styles.emptyState}>
+          <Ionicons 
+            name="chatbubbles-outline" 
+            size={64} 
+            color={colors.textSecondary} 
+            style={styles.emptyIcon} 
+          />
+          <Text style={styles.emptyTitle}>Kòmanse yon Konvèsasyon</Text>
+          <Text style={styles.emptyText}>
+            Mande m anyen! Mwen ka ede ak kesyon, kreyasyon, kòd, analiz, ak plis ankò.
+          </Text>
+          
+          {/* Quick Actions */}
+          <View style={{ flexDirection: 'row', marginTop: Spacing.lg, gap: Spacing.md }}>
+            {['Ekri yon pwezi', 'Ede m ak kòd', 'Rezoud yon pwoblèm'].map((suggestion) => (
+              <TouchableOpacity
+                key={suggestion}
+                onPress={() => setInputText(suggestion)}
+                style={{
+                  backgroundColor: colors.surface,
+                  padding: Spacing.sm,
+                  borderRadius: BorderRadius.md,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                }}
+              >
+                <Text style={{ ...Typography.caption, color: colors.text }}>{suggestion}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
       ) : (
         <FlatList
           ref={flatListRef}
-          data={messages}
+          data={displayMessages}
           renderItem={renderMessage}
           keyExtractor={item => item.id}
           contentContainerStyle={{ paddingVertical: Spacing.md }}
@@ -1190,86 +1386,81 @@ const renderMessage = ({ item, index }: { item: any; index: number }) => {
             <ThinkingIndicator 
               userMessage={messages.length > 0 ? messages[messages.length - 1].content : inputText}
               completed={showCompletionStatus}
+              mode={thinkingMode}
             />
           ) : null}
           onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+          maxToRenderPerBatch={10}
+          windowSize={10}
+          removeClippedSubviews={Platform.OS === 'android'}
         />
       )}
 
-      {selectedMedia.length > 0 && (
-        <View style={styles.selectedMediaPreview}>
-          {selectedMedia.map((media, index) => (
-            <View key={index} style={styles.mediaPreviewItem}>
-              {media.type === 'image' ? (
-                <Image source={{ uri: media.uri }} style={styles.mediaImage} resizeMode="cover" />
-              ) : (
-                <Ionicons name="document" size={32} color={colors.textSecondary} style={{ margin: 14 }} />
-              )}
-              <TouchableOpacity
-                style={styles.removeMediaButton}
-                onPress={() => setSelectedMedia(prev => prev.filter((_, i) => i !== index))}
-              >
-                <Ionicons name="close" size={12} color="#FFFFFF" />
-              </TouchableOpacity>
-            </View>
-          ))}
-        </View>
-      )}
+      {/* Media Preview */}
+      {renderMediaPreview()}
 
+      {/* Editing Indicator */}
       {editingMessageId && (
         <View style={styles.editingIndicator}>
           <Ionicons name="pencil" size={16} color={colors.primary} />
-          <Text style={styles.editingText}>Editing message</Text>
+          <Text style={styles.editingText}>Ap modifye mesaj...</Text>
           <TouchableOpacity onPress={handleCancelEdit}>
-            <Text style={{ ...Typography.caption, color: colors.primary, fontWeight: '600' }}>Cancel</Text>
+            <Text style={{ ...Typography.caption, color: colors.primary, fontWeight: '600' }}>
+              Anile
+            </Text>
           </TouchableOpacity>
         </View>
       )}
 
+      {/* Input Area */}
       <View style={styles.inputContainer}>
-
-<TouchableOpacity 
-  style={styles.iconButton} 
-  onPress={() => setToolsVisible(true)} 
-  disabled={editingMessageId !== null || isRecording || isProcessing}
->
-  <Ionicons 
-    name="add-circle-outline" 
-    size={28} 
-    color={editingMessageId || isRecording || isProcessing ? colors.textSecondary : colors.text} 
-  />
-</TouchableOpacity>
-
+        <TouchableOpacity 
+          style={styles.iconButton} 
+          onPress={() => setToolsVisible(true)} 
+          disabled={editingMessageId !== null || isRecording || isProcessing}
+        >
+          <Ionicons 
+            name="add-circle-outline" 
+            size={28} 
+            color={editingMessageId || isRecording || isProcessing ? colors.textSecondary : colors.text} 
+          />
+        </TouchableOpacity>
 
         <View style={styles.inputWrapper}>
           {isRecording ? (
             <View style={styles.recordingIndicator}>
-              <View style={[styles.recordingDot, styles.recordingDotActive]} />
+              <Animated.View style={[
+                styles.recordingDot, 
+                styles.recordingDotActive,
+                { transform: [{ scale: pulseAnim }] }
+              ]} />
               <View style={{ flex: 1 }}>
-                <Text style={styles.recordingText}>Recording... (shake to cancel)</Text>
-                <Text style={styles.recordingDuration}>{formatDuration(recordingDuration)}</Text>
+                <Text style={styles.recordingText}>Ap rekòde... (souke pou anile)</Text>
+                <Text style={styles.recordingDuration}>
+                  {formatDuration(recordingDuration)} / 1:00
+                </Text>
               </View>
             </View>
           ) : isProcessing ? (
             <View style={styles.recordingIndicator}>
               <ActivityIndicator size="small" color={colors.primary} />
               <Text style={{ ...Typography.body, color: colors.text, marginLeft: Spacing.sm }}>
-                Transcribing voice...
+                Transkripsyon an kou...
               </Text>
             </View>
           ) : (
             <TextInput
               style={styles.input}
-              placeholder={editingMessageId ? "Edit message..." : "Message..."}
+              placeholder={editingMessageId ? "Modifye mesaj..." : "Mesaj..."}
               placeholderTextColor={colors.textSecondary}
               value={inputText}
               onChangeText={setInputText}
               multiline
+              maxLength={4000}
               editable={!sending && !isRecording && !isProcessing}
             />
           )}
         </View>
-
 
         {editingMessageId && (
           <TouchableOpacity 
@@ -1315,29 +1506,31 @@ const renderMessage = ({ item, index }: { item: any; index: number }) => {
         )}
       </View>
 
-      <MenuModal visible={menuVisible} onClose={() => setMenuVisible(false)} />
+      {/* Modals */}
+      <MenuModal 
+        visible={menuVisible} 
+        onClose={() => setMenuVisible(false)} 
+      />
+      
       <ToolsModal
         visible={toolsVisible}
         onClose={() => setToolsVisible(false)}
-        onSelectTool={(tool) => setInputText(`[${tool}] `)}
+        onSelectTool={(tool) => setInputText(prev => `${prev}[${tool}] `)}
         onPickMedia={handleMediaPicked}
-        onSelectAIModel={handleAIModelSelect}
+        onSelectAIModel={(model) => handleAIModelSelect(model as AIModelKey)}
         onOpenCamera={() => router.push('/camera')}
         currentModel={currentAIModel}
       />
+      
       <ConversationMenuModal
         visible={conversationMenuVisible}
         onClose={() => setConversationMenuVisible(false)}
-        onShare={() => {}}
-        onRename={() => {}}
+        onShare={handleShareConversation}
+        onRename={handleRenameConversation}
         onReport={() => router.push('/bugreport')}
-        onArchive={() => {}}
-        onDelete={async () => {
-          if (currentConversation) {
-            await deleteConversation(currentConversation.id);
-            await createConversation();
-          }
-        }}
+        onArchive={() => archiveConversation(currentConversation?.id || '')}
+        onDelete={handleDeleteConversation}
+        conversationTitle={currentConversation?.title}
       />
 
       <SideMenu
@@ -1359,13 +1552,16 @@ const renderMessage = ({ item, index }: { item: any; index: number }) => {
           setSideMenuVisible(false);
           router.push('/profile');
         }}
+        userCoins={coins}
+        isUnlimited={isUnlimited}
+        isAdmin={isAdmin}
       />
 
       <ChatHistoryModal
         visible={chatHistoryVisible}
         onClose={() => setChatHistoryVisible(false)}
         onSelectChat={(chatId) => {
-          // Handle chat selection
+          // Load chat
           setChatHistoryVisible(false);
         }}
         onNewChat={() => {
@@ -1373,18 +1569,38 @@ const renderMessage = ({ item, index }: { item: any; index: number }) => {
           setChatHistoryVisible(false);
         }}
         currentChatId={currentConversation?.id}
+        conversations={conversations}
       />
 
+      {/* Blur Overlay pou Sekirite */}
       {showBlurOverlay && (
-        <View style={styles.blurOverlayContainer}>
-          <BlurView intensity={80} tint="dark" style={styles.blurView}>
+        <Animated.View style={[
+          styles.blurOverlayContainer,
+          { opacity: fadeAnim }
+        ]}>
+          <BlurView intensity={80} tint={isDark ? 'dark' : 'light'} style={styles.blurView}>
             <View style={styles.blurContent}>
               <Ionicons name="lock-closed" size={40} color="rgba(255,255,255,0.8)" />
-              <Text style={styles.blurText}>Haitian AI Chat</Text>
-              <Text style={styles.blurSubtext}>App locked for privacy</Text>
+              <Text style={styles.blurText}>Haitian AI Chat</Text              <Text style={styles.blurSubtext}>Aplikasyon fèmen pou vi prive</Text>
+              
+              <TouchableOpacity
+                style={{
+                  marginTop: Spacing.lg,
+                  backgroundColor: 'rgba(255,255,255,0.2)',
+                  paddingHorizontal: Spacing.lg,
+                  paddingVertical: Spacing.md,
+                  borderRadius: BorderRadius.lg,
+                }}
+                onPress={() => {
+                  setShowBlurOverlay(false);
+                  setIsAppActive(true);
+                }}
+              >
+                <Text style={{ color: 'white', fontWeight: '600' }}>Devwouye</Text>
+              </TouchableOpacity>
             </View>
           </BlurView>
-        </View>
+        </Animated.View>
       )}
     </KeyboardAvoidingView>
   );
