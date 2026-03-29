@@ -1581,7 +1581,8 @@ export default function HomeScreen() {
           <BlurView intensity={80} tint={isDark ? 'dark' : 'light'} style={styles.blurView}>
             <View style={styles.blurContent}>
               <Ionicons name="lock-closed" size={40} color="rgba(255,255,255,0.8)" />
-              <Text style={styles.blurText}>Haitian AI Chat</Text              <Text style={styles.blurSubtext}>Aplikasyon fèmen pou vi prive</Text>
+              <Text style={styles.blurText}>Haitian AI Chat</Text>
+              <Text style={styles.blurSubtext}>Aplikasyon fèmen pou vi prive</Text>
               
               <TouchableOpacity
                 style={{
