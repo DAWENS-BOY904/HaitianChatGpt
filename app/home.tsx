@@ -1606,4 +1606,3 @@ export default function HomeScreen() {
     </KeyboardAvoidingView>
   );
 }
-hello ai can you fix the white screen error the home chat not working.
