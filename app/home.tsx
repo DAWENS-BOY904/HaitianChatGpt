@@ -1690,4 +1690,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-PLEASE WHEN I ENTER TO THE APP I SEE WHITE SCREEN ERROR FIX AND ALSO FIX UPABASE FUNCTION CHAT REMOVE CONFIGUTSRION REQUEST.,
+
