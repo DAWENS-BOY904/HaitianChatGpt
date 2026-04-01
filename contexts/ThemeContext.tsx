@@ -8,6 +8,7 @@ type ColorScheme = 'light' | 'dark';
 
 interface ThemeContextType {
   colors: typeof Colors.light;
+  isDark: boolean;
   appearance: Appearance;
   setAppearance: (appearance: Appearance) => void;
   colorScheme: ColorScheme;
@@ -40,7 +41,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const colors = Colors[colorScheme];
 
   return (
-    <ThemeContext.Provider value={{ colors, appearance, setAppearance, colorScheme }}>
+    <ThemeContext.Provider value={{ colors, isDark: colorScheme === 'dark', appearance, setAppearance, colorScheme }}>
       {children}
     </ThemeContext.Provider>
   );

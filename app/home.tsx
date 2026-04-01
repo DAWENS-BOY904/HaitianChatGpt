@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo, Component } from 'react';
 import { 
   View, 
   Text, 
@@ -46,6 +46,9 @@ import * as FileSystem from 'expo-file-system';
 import { SideMenu } from '../components/SideMenu';
 import { ChatHistoryModal } from '../components/ChatHistoryModal';
 import { AIMode } from '../components/AIModeSelectorModal';
+import { CalculatorModal, CalculatorCard, detectMathExpression } from '../components/CalculatorModal';
+import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
+import { runOnJS } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 
 // ==========================================
@@ -125,12 +128,12 @@ export default function HomeScreen() {
     sendMessage, 
     updateMessageAndRegenerate, 
     createConversation, 
-    deleteConversation, // FIXED: Eksprime kounye a
+    deleteConversation,
     loading, 
     streamingMessageId,
-    fetchMessages,
-    renameConversation,
+    updateConversationTitle,
     archiveConversation,
+    selectConversation,
   } = useConversation();
   
   const { showAlert } = useAlert();
@@ -158,6 +161,9 @@ export default function HomeScreen() {
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [lastShake, setLastShake] = useState(0);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [calcVisible, setCalcVisible] = useState(false);
+  const [calcExpression, setCalcExpression] = useState('');
+  const [calcResult, setCalcResult] = useState('');
   const [thinkingMode, setThinkingMode] = useState<'thinking' | 'creating_image' | 'analyzing' | 'editing_image'>('thinking');
   const [showCompletionStatus, setShowCompletionStatus] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
@@ -166,6 +172,17 @@ export default function HomeScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredMessages, setFilteredMessages] = useState<Message[]>([]);
   
+  const runOnJS_setSideMenu = useCallback((val: boolean) => setSideMenuVisible(val), []);
+
+  // Swipe gesture to open side menu
+  const swipeGesture = Gesture.Pan()
+    .activeOffsetX([10, 10000])
+    .onEnd((e) => {
+      if (e.translationX > 60 && e.velocityX > 100 && !sideMenuVisible) {
+        runOnJS(runOnJS_setSideMenu)(true);
+      }
+    });
+
   // Animasyon state
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(100)).current;
@@ -235,7 +252,7 @@ export default function HomeScreen() {
         
         // Refresh data
         if (currentConversation?.id) {
-          fetchMessages(currentConversation.id);
+          selectConversation(currentConversation.id);
         }
       }
     });
@@ -885,8 +902,8 @@ export default function HomeScreen() {
 
   const handleRenameConversation = useCallback(async (newTitle: string) => {
     if (!currentConversation) return;
-    await renameConversation(currentConversation.id, newTitle);
-  }, [currentConversation, renameConversation]);
+    await updateConversationTitle(currentConversation.id, newTitle);
+  }, [currentConversation, updateConversationTitle]);
 
   const handleShareConversation = useCallback(async () => {
     if (!currentConversation) return;
@@ -915,17 +932,32 @@ export default function HomeScreen() {
 
   const renderMessage = useCallback(({ item, index }: { item: Message; index: number }) => {
     const isStreaming = streamingMessageId === item.id;
+    // Detect math in assistant messages
+    const mathData = item.role === 'assistant' ? detectMathExpression(item.content) : null;
     
     return (
-      <MessageItem
-        message={item}
-        onCancel={handleCancelGeneration}
-        onEdit={handleEditMessage}
-        onCopy={() => handleCopyMessage(item.content)}
-        isGenerating={isStreaming}
-        streaming={isStreaming}
-        isOffline={isOffline}
-      />
+      <View>
+        <MessageItem
+          message={item}
+          onCancel={handleCancelGeneration}
+          onEdit={handleEditMessage}
+          onCopy={() => handleCopyMessage(item.content)}
+          isGenerating={isStreaming}
+          streaming={isStreaming}
+          isOffline={isOffline}
+        />
+        {mathData && (
+          <CalculatorCard
+            expression={mathData.expression}
+            result={mathData.result}
+            onOpen={() => {
+              setCalcExpression(mathData.expression);
+              setCalcResult(mathData.result);
+              setCalcVisible(true);
+            }}
+          />
+        )}
+      </View>
     );
   }, [streamingMessageId, handleCancelGeneration, handleEditMessage, handleCopyMessage, isOffline]);
 
@@ -1250,10 +1282,14 @@ export default function HomeScreen() {
   const isRecording = recordingState === 'recording';
   const isProcessing = recordingState === 'processing';
   const modelDisplayName = SUPPORTED_AI_MODELS[currentAIModel] || 'AI';
+  const accentColor = settings.accentColor || colors.primary;
 
   // -------- RETOU KOMPOZAN --------
 
   return (
+    <ErrorBoundary>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+    <GestureDetector gesture={swipeGesture}>
     <KeyboardAvoidingView 
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -1473,7 +1509,7 @@ export default function HomeScreen() {
 
         {showSendButton ? (
           <TouchableOpacity 
-            style={styles.sendButton} 
+            style={[styles.sendButton, { backgroundColor: accentColor }]} 
             onPress={handleSend}
             disabled={sending || isRecording || isProcessing}
           >
@@ -1572,6 +1608,14 @@ export default function HomeScreen() {
         conversations={conversations}
       />
 
+      {/* Calculator Modal */}
+      <CalculatorModal
+        visible={calcVisible}
+        onClose={() => setCalcVisible(false)}
+        initialExpression={calcExpression}
+        initialResult={calcResult}
+      />
+
       {/* Blur Overlay pou Sekirite */}
       {showBlurOverlay && (
         <Animated.View style={[
@@ -1604,5 +1648,45 @@ export default function HomeScreen() {
         </Animated.View>
       )}
     </KeyboardAvoidingView>
+    </GestureDetector>
+    </GestureHandlerRootView>
+    </ErrorBoundary>
   );
+}
+
+// ── Error Boundary ──
+class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError: boolean; error: Error | null }> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error('HomeScreen error boundary caught:', error, info);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <View style={{ flex: 1, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center', padding: 32 }}>
+          <Text style={{ fontSize: 48, marginBottom: 16 }}>⚠️</Text>
+          <Text style={{ color: '#FFF', fontSize: 22, fontWeight: '700', marginBottom: 8 }}>Something went wrong</Text>
+          <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 15, textAlign: 'center', marginBottom: 32 }}>
+            {this.state.error?.message || 'An unexpected error occurred'}
+          </Text>
+          <TouchableOpacity
+            style={{ backgroundColor: '#10A37F', paddingHorizontal: 32, paddingVertical: 14, borderRadius: 12 }}
+            onPress={() => this.setState({ hasError: false, error: null })}
+          >
+            <Text style={{ color: '#FFF', fontSize: 16, fontWeight: '600' }}>Try Again</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+    return this.props.children;
+  }
 }
