@@ -1698,5 +1698,5 @@ If you see this, please do not skip it. I need help fixing an issue.
 When I open the app, I get a white screen error — please fix this.
 
 Also, please fix the Supabase function related to chat and remove any unnecessary configuration requests.
-
+Investigate and fix the white screen on app load by checking the fetchMessages reference error in home.tsx useEffect, the missing decode import for base64-arraybuffer, and ensure all context providers initialize correctly before rendering the home screen.Update supabase/functions/chat/index.ts to remove any configuration request headers or extra setup calls that may be causing failures, and simplify the function to cleanly accept messages and return AI responses.
 Thank you.
