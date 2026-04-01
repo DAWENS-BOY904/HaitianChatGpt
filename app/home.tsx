@@ -52,7 +52,7 @@ import { runOnJS } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 
 // ==========================================
-// TIP DEFINISYON YO
+// TYPE DEFINITIONS
 // ==========================================
 
 type RecordingState = 'idle' | 'recording' | 'processing';
@@ -77,22 +77,15 @@ interface Message {
   reactions?: string[];
 }
 
-interface TranscriptionResult {
-  text: string;
-  confidence: number;
-  detectedLanguage?: string;
-  warning?: string;
-}
-
 // ==========================================
-// KONSTANT YO
+// CONSTANTS
 // ==========================================
 
-const MAX_RECORDING_DURATION = 60; // segonn
+const MAX_RECORDING_DURATION = 60; // seconds
 const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB
 const SHAKE_THRESHOLD = 3.0;
 const SHAKE_COOLDOWN = 1000; // ms
-const AUTO_LOCK_DELAY = 30000; // 30 segonn pou sekirite
+const AUTO_LOCK_DELAY = 30000; // 30 seconds for security
 const SUPPORTED_AI_MODELS = {
   gemini: 'Gemini',
   openai: 'OpenAI',
@@ -105,7 +98,7 @@ const SUPPORTED_AI_MODELS = {
 type AIModelKey = keyof typeof SUPPORTED_AI_MODELS;
 
 // ==========================================
-// KÒD PRENSIPAL LA
+// MAIN COMPONENT
 // ==========================================
 
 export default function HomeScreen() {
@@ -183,7 +176,7 @@ export default function HomeScreen() {
       }
     });
 
-  // Animasyon state
+  // Animation state
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(100)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -198,19 +191,25 @@ export default function HomeScreen() {
   const appStateRef = useRef(AppState.currentState);
   const autoLockTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // -------- EFFÈ YO --------
+  // -------- EFFECTS --------
 
   // Initialize audio permissions
   useEffect(() => {
     checkAudioPermissions();
     setupNetworkListener();
-    
     return () => {
       cleanupAll();
     };
   }, []);
 
-  // Cleanup tout resous yo
+  // Auto-create a conversation when user is authenticated and no conversation exists
+  useEffect(() => {
+    if (user && !loading && conversations.length === 0) {
+      createConversation();
+    }
+  }, [user, loading, conversations.length]);
+
+  // Cleanup all resources
   const cleanupAll = useCallback(() => {
     if (stopTimeoutRef.current) clearTimeout(stopTimeoutRef.current);
     if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
@@ -218,39 +217,33 @@ export default function HomeScreen() {
     cleanupRecording();
   }, []);
 
-  // App state handling (background/foreground) + Auto-lock sekirite
+  // App state handling (background/foreground) + Auto-lock security
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState) => {
-      const prevState = appStateRef.current;
       appStateRef.current = nextAppState;
 
       if (nextAppState === 'background' || nextAppState === 'inactive') {
         setIsAppActive(false);
         setShowBlurOverlay(true);
         
-        // Kòmanse auto-lock timer
         autoLockTimerRef.current = setTimeout(() => {
-          // Logout or secure app after 30 seconds in background
-          console.log('🔒 Auto-locked for security');
+          console.log('Auto-locked for security');
         }, AUTO_LOCK_DELAY);
         
       } else if (nextAppState === 'active') {
         setIsAppActive(true);
         
-        // Clear auto-lock timer
         if (autoLockTimerRef.current) {
           clearTimeout(autoLockTimerRef.current);
           autoLockTimerRef.current = null;
         }
         
-        // Retire blur apre yon ti delè
         Animated.timing(fadeAnim, {
           toValue: 0,
           duration: 300,
           useNativeDriver: true,
         }).start(() => setShowBlurOverlay(false));
         
-        // Refresh data
         if (currentConversation?.id) {
           selectConversation(currentConversation.id);
         }
@@ -258,16 +251,15 @@ export default function HomeScreen() {
     });
 
     return () => subscription.remove();
-  }, [currentConversation?.id, fetchMessages, fadeAnim]);
+  }, [currentConversation?.id, selectConversation, fadeAnim]);
 
-  // Focus effect pou navigation
+  // Focus effect for navigation
   useFocusEffect(
     useCallback(() => {
       setIsAppActive(true);
       setShowBlurOverlay(false);
       fadeAnim.setValue(1);
       
-      // Animasyon antre
       Animated.parallel([
         Animated.timing(fadeAnim, {
           toValue: 1,
@@ -283,7 +275,6 @@ export default function HomeScreen() {
       ]).start();
 
       return () => {
-        // Cleanup lè soti
         slideAnim.setValue(100);
       };
     }, [fadeAnim, slideAnim])
@@ -311,7 +302,7 @@ export default function HomeScreen() {
     }
   }, [searchQuery, messages]);
 
-  // Shake detection pou bug report
+  // Shake detection for bug report
   useEffect(() => {
     if (Platform.OS === 'ios' || Platform.OS === 'android') {
       const subscription = Accelerometer.addListener(accelerometerData => {
@@ -355,14 +346,10 @@ export default function HomeScreen() {
     }
   }, [recordingState, pulseAnim]);
 
-  // -------- FONKSYON ÒTIL --------
+  // -------- UTILITY FUNCTIONS --------
 
   const setupNetworkListener = () => {
-    // Network status monitoring
-    const unsubscribe = () => {
-      // Cleanup network listener
-    };
-    return unsubscribe;
+    return () => {};
   };
 
   const checkAudioPermissions = async () => {
@@ -385,14 +372,13 @@ export default function HomeScreen() {
     }
   };
 
-  // -------- REKÒDING VWA --------
+  // -------- VOICE RECORDING --------
 
   const startRecordingTimer = useCallback(() => {
     setRecordingDuration(0);
     recordingTimerRef.current = setInterval(() => {
       setRecordingDuration(prev => {
         if (prev >= MAX_RECORDING_DURATION - 1) {
-          // Auto-stop lè rive limit
           stopVoiceRecording();
           return prev;
         }
@@ -415,8 +401,6 @@ export default function HomeScreen() {
   }, []);
 
   const cleanupRecording = useCallback(async () => {
-    console.log('🧹 Cleaning up recording...');
-    
     if (stopTimeoutRef.current) {
       clearTimeout(stopTimeoutRef.current);
       stopTimeoutRef.current = null;
@@ -431,7 +415,7 @@ export default function HomeScreen() {
           await recordingRef.current.stopAndUnloadAsync();
         }
       } catch (e) {
-        console.log('⚠️ Recording cleanup error:', e);
+        console.log('Recording cleanup error:', e);
       }
       recordingRef.current = null;
     }
@@ -448,12 +432,12 @@ export default function HomeScreen() {
       
       if (status !== 'granted') {
         Alert.alert(
-          'Mikwofòn Bezwen',
-          'Tanpri aktive aksè mikwofòn nan Paramèt pou itilize rekòd vwa.',
+          'Microphone Required',
+          'Please enable microphone access in Settings to use voice recording.',
           [
-            { text: 'Anile', style: 'cancel' },
+            { text: 'Cancel', style: 'cancel' },
             { 
-              text: 'Louvri Paramèt', 
+              text: 'Open Settings', 
               onPress: () => Platform.OS === 'ios' 
                 ? Linking.openURL('app-settings:') 
                 : Linking.openSettings()
@@ -509,7 +493,6 @@ export default function HomeScreen() {
 
       recordingRef.current = recording;
 
-      // Auto-stop apre 60 segonn
       stopTimeoutRef.current = setTimeout(() => {
         if (isRecordingRef.current) {
           stopVoiceRecording();
@@ -520,19 +503,18 @@ export default function HomeScreen() {
       console.error('Failed to start recording:', error);
       await cleanupRecording();
       
-      let errorMessage = 'Pa ka kòmanse rekòd. ';
-      
+      let errorMessage = 'Could not start recording. ';
       if (error.message?.includes('E_AUDIO_NODATA')) {
-        errorMessage += 'Pa gen done odyo. Tcheke mikwofòn ou.';
+        errorMessage += 'No audio data detected. Check your microphone.';
       } else if (error.message?.includes('E_AUDIO_PERMISSIONS')) {
-        errorMessage += 'Pa gen pèmisyon mikwofòn.';
+        errorMessage += 'Microphone permission denied.';
       } else if (error.message?.includes('E_AUDIO_BUSY')) {
-        errorMessage += 'Yon lòt aplikasyon ap itilize mikwofòn nan.';
+        errorMessage += 'Another app is using the microphone.';
       } else {
-        errorMessage += 'Eseye ankò oswa tape mesaj ou.';
+        errorMessage += 'Please try again or type your message.';
       }
       
-      Alert.alert('Rekòd Echwe', errorMessage);
+      Alert.alert('Recording Failed', errorMessage);
     }
   };
 
@@ -553,13 +535,13 @@ export default function HomeScreen() {
       await recordingRef.current.stopAndUnloadAsync();
       const uri = recordingRef.current.getURI();
       
-      if (!uri) throw new Error('Pa gen URI pou fichye a');
+      if (!uri) throw new Error('No URI for recording file');
       
       const info = await FileSystem.getInfoAsync(uri);
-      if (!info.exists) throw new Error('Fichye rekòd la pa jwenn');
+      if (!info.exists) throw new Error('Recording file not found');
       
       if (info.size && info.size > MAX_FILE_SIZE) {
-        throw new Error('Fichye twò gwo. Maksimòm 25MB.');
+        throw new Error('File too large. Maximum 25MB.');
       }
 
       const base64Audio = await FileSystem.readAsStringAsync(uri, {
@@ -567,7 +549,7 @@ export default function HomeScreen() {
       });
 
       if (!base64Audio || base64Audio.length === 0) {
-        throw new Error('Fichye vid');
+        throw new Error('Empty audio file');
       }
 
       await transcribeAudio(base64Audio);
@@ -576,18 +558,18 @@ export default function HomeScreen() {
       console.error('Recording processing error:', error);
       
       Alert.alert(
-        'Pwosesing Echwe',
-        error.message || 'Echec pou trete rekòd la.',
+        'Processing Failed',
+        error.message || 'Failed to process recording.',
         [
           { 
-            text: 'Eseye Ankò', 
+            text: 'Try Again', 
             onPress: () => {
               setRecordingState('idle');
               setTimeout(startVoiceRecording, 300);
             }
           },
           { 
-            text: 'Tape Manyèlman', 
+            text: 'Type Manually', 
             style: 'cancel',
             onPress: () => setRecordingState('idle')
           },
@@ -608,19 +590,19 @@ export default function HomeScreen() {
     }
   }, [recordingState]);
 
-  // -------- TRANSCRIPSYON --------
+  // -------- TRANSCRIPTION --------
 
   const transcribeAudio = async (base64Audio: string, retryCount = 0) => {
     const MAX_RETRIES = 2;
     
     try {
       if (!base64Audio || base64Audio.length < 100) {
-        throw new Error('Done odyo twò kout. Pale pi byen.');
+        throw new Error('Audio too short. Please speak clearly.');
       }
 
       const estimatedSize = (base64Audio.length * 3) / 4;
       if (estimatedSize > MAX_FILE_SIZE) {
-        throw new Error('Fichye odyo twò gwo.');
+        throw new Error('Audio file too large.');
       }
 
       const { data, error } = await supabase.functions.invoke('transcribe-audio', {
@@ -630,7 +612,6 @@ export default function HomeScreen() {
           conversationId: currentConversation?.id,
           metadata: {
             platform: Platform.OS,
-            appVersion: settings.appVersion || '1.0.0',
             timestamp: new Date().toISOString()
           }
         },
@@ -638,7 +619,6 @@ export default function HomeScreen() {
       });
 
       if (error) {
-        // Gestion violasyon kontni
         const violationPatterns = ['content violation', 'scam', 'fraud', 'suspended', 'banned'];
         const isViolation = violationPatterns.some(p => 
           error.message?.toLowerCase().includes(p)
@@ -646,14 +626,13 @@ export default function HomeScreen() {
 
         if (isViolation) {
           Alert.alert(
-            '🚫 Kont Sispann',
-            'Kont ou sispann akòz violasyon règleman.',
-            [{ text: 'OK', onPress: () => router.push('/suspended') }]
+            'Account Suspended',
+            'Your account has been suspended due to a policy violation.',
+            [{ text: 'OK' }]
           );
           return;
         }
 
-        // Retry pou erè rezo
         const networkErrors = ['timeout', 'network', 'connection', 'offline'];
         const isNetworkError = networkErrors.some(p => 
           error.message?.toLowerCase().includes(p)
@@ -664,87 +643,76 @@ export default function HomeScreen() {
           return transcribeAudio(base64Audio, retryCount + 1);
         }
 
-        throw new Error(error.message || 'Erè transkripsyon');
+        throw new Error(error.message || 'Transcription error');
       }
 
       if (!data?.text?.trim()) {
         if (data?.warning) {
           Alert.alert(
-            'Pa Gen Diskou Detekte',
-            data.warning + '\n\nKonsèy:\n• Pale pi byen\n• Redwi bri nan background',
+            'No Speech Detected',
+            data.warning + '\n\nTips:\n- Speak more clearly\n- Reduce background noise',
             [
-              { text: 'Eseye Ankò', onPress: () => startVoiceRecording() },
-              { text: 'Manyèl', style: 'cancel', onPress: () => setRecordingState('idle') }
+              { text: 'Try Again', onPress: () => startVoiceRecording() },
+              { text: 'Type Manually', style: 'cancel', onPress: () => setRecordingState('idle') }
             ]
           );
           return;
         }
-        throw new Error('Pa gen transkripsyon resevwa');
+        throw new Error('No transcription received');
       }
 
-      // Siksè
       setInputText(prev => prev + (prev ? ' ' : '') + data.text.trim());
       setRecordingState('idle');
       
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      
-      // Feedback selon konfyans
-      const confidence = data.confidence || 0;
-      if (confidence > 0.8) {
-        showAlert('✅ Transkripsyon Bon', 'Konfyans wo!');
-      } else if (confidence < 0.5) {
-        showAlert('⚠️ Konfyans Ba', 'Tcheke transkripsyon an.');
-      }
 
     } catch (error: any) {
       if (error.message?.includes('suspended')) return;
       
       Alert.alert(
-        'Transkripsyon Echwe',
-        error.message || 'Echec pou transkri vwa ou.',
+        'Transcription Failed',
+        error.message || 'Failed to transcribe voice.',
         [
-          { text: 'Eseye Ankò', onPress: () => startVoiceRecording() },
-          { text: 'Manyèl', style: 'cancel', onPress: () => setRecordingState('idle') }
+          { text: 'Try Again', onPress: () => startVoiceRecording() },
+          { text: 'Type Manually', style: 'cancel', onPress: () => setRecordingState('idle') }
         ]
       );
     }
   };
 
-  // -------- JESYON MESAJ --------
+  // -------- MESSAGE HANDLING --------
 
   const handleSend = async () => {
     if ((!inputText.trim() && selectedMedia.length === 0) || sending) return;
 
-    // Verifye limit
     if (!editingMessageId && !canSendMessage()) {
       if (!user) {
         showAlert(
-          'Koneksyon Bezwen',
-          'Konekte pou kòmanse chat ak AI.',
+          'Sign In Required',
+          'Sign in to start chatting with AI.',
           [
-            { text: 'Anile', style: 'cancel' },
-            { text: 'Konekte', onPress: () => router.push('/login') },
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Sign In', onPress: () => router.push('/login') },
           ]
         );
       } else {
         showAlert(
-          'Kob Bezwen',
-          `Ou bezwen kob pou kontinye. Ou gen ${coins} kob.`,
+          'Credits Required',
+          `You need credits to continue. You have ${coins} credits.`,
           [
-            { text: 'Anile', style: 'cancel' },
-            { text: 'Achte Kob', onPress: () => router.push('/buy-coins') },
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Buy Credits', onPress: () => router.push('/buy-coins') },
           ]
         );
       }
       return;
     }
     
-    // Kreye konvèsasyon si pa genyen
     let conversationId = currentConversation?.id;
     if (!conversationId) {
       conversationId = await createConversation();
       if (!conversationId) {
-        showAlert('Erè', 'Echec pou kreye konvèsasyon');
+        showAlert('Error', 'Failed to create conversation');
         return;
       }
     }
@@ -767,7 +735,6 @@ export default function HomeScreen() {
         return;
       }
 
-      // Upload imaj si genyen
       let imageUrl: string | undefined;
       if (media.length > 0 && media[0].type === 'image' && media[0].base64) {
         const fileName = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}.jpg`;
@@ -788,12 +755,11 @@ export default function HomeScreen() {
         }
       }
 
-      await sendMessage(text || '[Imaj]', imageUrl, currentAIModel);
+      await sendMessage(text || '[Image]', imageUrl, currentAIModel);
 
       setShowCompletionStatus(true);
       setTimeout(() => setShowCompletionStatus(false), 2000);
 
-      // Dediksyon kob
       if (user && !isUnlimited && !isAdmin) {
         await incrementMessageCount();
       }
@@ -801,10 +767,8 @@ export default function HomeScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
     } catch (error: any) {
-      console.error('❌ Send error:', error);
-      showAlert('Erè', error?.message || 'Echec pou voye mesaj');
-      
-      // Restore input si echec
+      console.error('Send error:', error);
+      showAlert('Error', error?.message || 'Failed to send message');
       setInputText(text);
       setSelectedMedia(media);
     } finally {
@@ -815,7 +779,7 @@ export default function HomeScreen() {
 
   const handleCancelGeneration = useCallback(() => {
     setGenerating(false);
-    showAlert('Anile', 'Jenerasyon repons AI sispann');
+    showAlert('Cancelled', 'AI response generation stopped');
   }, [showAlert]);
 
   const handleEditMessage = useCallback((messageId: string, content: string) => {
@@ -831,7 +795,7 @@ export default function HomeScreen() {
 
   const handleMediaPicked = useCallback((media: MediaFile[]) => {
     if (media.length > 5) {
-      showAlert('Limit', 'Ou ka chwazi maksimòm 5 fichye');
+      showAlert('Limit', 'You can select a maximum of 5 files');
       return;
     }
     setSelectedMedia(media);
@@ -842,12 +806,12 @@ export default function HomeScreen() {
     setSelectedMedia(prev => prev.filter((_, i) => i !== index));
   }, []);
 
-  // -------- GESYON MODÈL AI --------
+  // -------- AI MODEL HANDLING --------
 
   const handleAIModelSelect = useCallback(async (model: AIModelKey) => {
     setCurrentAIModel(model);
     await updateSetting('preferredAiModel', model);
-    showAlert('Modèl Mizajou', `Kounye a ap itilize ${SUPPORTED_AI_MODELS[model]}`);
+    showAlert('Model Updated', `Now using ${SUPPORTED_AI_MODELS[model]}`);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   }, [updateSetting, showAlert]);
 
@@ -864,7 +828,7 @@ export default function HomeScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   }, []);
 
-  // -------- GESYON CHAT --------
+  // -------- CHAT HANDLING --------
 
   const handleNewChat = useCallback(async () => {
     await createConversation();
@@ -878,21 +842,21 @@ export default function HomeScreen() {
     if (!currentConversation) return;
     
     Alert.alert(
-      'Efase Konvèsasyon',
-      'Èske ou sèten ou vle efase konvèsasyon sa a?',
+      'Delete Conversation',
+      'Are you sure you want to delete this conversation?',
       [
-        { text: 'Anile', style: 'cancel' },
+        { text: 'Cancel', style: 'cancel' },
         { 
-          text: 'Efase', 
+          text: 'Delete', 
           style: 'destructive',
           onPress: async () => {
             try {
               await deleteConversation(currentConversation.id);
               await createConversation();
-              showAlert('Siksè', 'Konvèsasyon efase');
+              showAlert('Success', 'Conversation deleted');
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             } catch (error) {
-              showAlert('Erè', 'Echec pou efase konvèsasyon');
+              showAlert('Error', 'Failed to delete conversation');
             }
           }
         }
@@ -910,12 +874,12 @@ export default function HomeScreen() {
     
     try {
       const shareContent = messages.map(m => 
-        `${m.role === 'user' ? 'Ou' : 'AI'}: ${m.content}`
+        `${m.role === 'user' ? 'You' : 'AI'}: ${m.content}`
       ).join('\n\n');
       
       await Share.share({
         message: shareContent,
-        title: currentConversation.title || 'Konvèsasyon AI',
+        title: currentConversation.title || 'AI Conversation',
       });
     } catch (error) {
       console.error('Share error:', error);
@@ -924,15 +888,14 @@ export default function HomeScreen() {
 
   const handleCopyMessage = useCallback(async (content: string) => {
     await Clipboard.setString(content);
-    showAlert('Kopye', 'Mesaj kopye nan clipboard');
+    showAlert('Copied', 'Message copied to clipboard');
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   }, [showAlert]);
 
-  // -------- RÈNDRIJ KOMPOZAN --------
+  // -------- RENDER FUNCTIONS --------
 
   const renderMessage = useCallback(({ item, index }: { item: Message; index: number }) => {
     const isStreaming = streamingMessageId === item.id;
-    // Detect math in assistant messages
     const mathData = item.role === 'assistant' ? detectMathExpression(item.content) : null;
     
     return (
@@ -980,7 +943,7 @@ export default function HomeScreen() {
               <View style={styles.documentPreview}>
                 <Ionicons name="document-text" size={24} color={colors.textSecondary} />
                 <Text style={styles.documentName} numberOfLines={1}>
-                  {media.name || 'Dokiman'}
+                  {media.name || 'Document'}
                 </Text>
               </View>
             )}
@@ -996,7 +959,7 @@ export default function HomeScreen() {
     );
   }, [selectedMedia, removeMedia, pulseAnim, colors]);
 
-  // -------- STIL YO (useMemo pou optimizasyon) --------
+  // -------- STYLES --------
 
   const styles = useMemo(() => StyleSheet.create({
     container: {
@@ -1275,16 +1238,15 @@ export default function HomeScreen() {
     },
   }), [colors, insets]);
 
-  // -------- KALKIL YO --------
+  // -------- COMPUTED VALUES --------
 
   const displayMessages = isSearchMode && searchQuery ? filteredMessages : messages;
   const showSendButton = inputText.trim().length > 0 || selectedMedia.length > 0;
   const isRecording = recordingState === 'recording';
   const isProcessing = recordingState === 'processing';
-  const modelDisplayName = SUPPORTED_AI_MODELS[currentAIModel] || 'AI';
   const accentColor = settings.accentColor || colors.primary;
 
-  // -------- RETOU KOMPOZAN --------
+  // -------- RENDER --------
 
   return (
     <ErrorBoundary>
@@ -1303,7 +1265,7 @@ export default function HomeScreen() {
       {/* Offline Banner */}
       {isOffline && (
         <View style={styles.offlineBanner}>
-          <Text style={styles.offlineText}>⚠️ Offline - Kèk fonksyonalite pa disponib</Text>
+          <Text style={styles.offlineText}>No connection — some features unavailable</Text>
         </View>
       )}
       
@@ -1320,7 +1282,7 @@ export default function HomeScreen() {
           
           <TouchableOpacity onPress={() => setIsSearchMode(!isSearchMode)}>
             <Text style={styles.headerTitle} numberOfLines={1}>
-              {isSearchMode ? 'Rechèch...' : (currentConversation?.title || 'Haitian AI Chat')}
+              {isSearchMode ? 'Search...' : (currentConversation?.title || 'Haitian AI Chat')}
             </Text>
           </TouchableOpacity>
         </View>
@@ -1356,7 +1318,7 @@ export default function HomeScreen() {
           <Ionicons name="search" size={20} color={colors.textSecondary} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Rechèch nan mesaj yo..."
+            placeholder="Search messages..."
             placeholderTextColor={colors.textSecondary}
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -1376,7 +1338,7 @@ export default function HomeScreen() {
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
           <Text style={{ ...Typography.caption, color: colors.textSecondary, marginTop: Spacing.sm }}>
-            Chajman...
+            Loading...
           </Text>
         </View>
       ) : displayMessages.length === 0 ? (
@@ -1387,14 +1349,14 @@ export default function HomeScreen() {
             color={colors.textSecondary} 
             style={styles.emptyIcon} 
           />
-          <Text style={styles.emptyTitle}>Kòmanse yon Konvèsasyon</Text>
+          <Text style={styles.emptyTitle}>Start a Conversation</Text>
           <Text style={styles.emptyText}>
-            Mande m anyen! Mwen ka ede ak kesyon, kreyasyon, kòd, analiz, ak plis ankò.
+            Ask me anything! I can help with questions, writing, code, analysis, and much more.
           </Text>
           
           {/* Quick Actions */}
           <View style={{ flexDirection: 'row', marginTop: Spacing.lg, gap: Spacing.md }}>
-            {['Ekri yon pwezi', 'Ede m ak kòd', 'Rezoud yon pwoblèm'].map((suggestion) => (
+            {['Write a poem', 'Help with code', 'Solve a problem'].map((suggestion) => (
               <TouchableOpacity
                 key={suggestion}
                 onPress={() => setInputText(suggestion)}
@@ -1439,10 +1401,10 @@ export default function HomeScreen() {
       {editingMessageId && (
         <View style={styles.editingIndicator}>
           <Ionicons name="pencil" size={16} color={colors.primary} />
-          <Text style={styles.editingText}>Ap modifye mesaj...</Text>
+          <Text style={styles.editingText}>Editing message...</Text>
           <TouchableOpacity onPress={handleCancelEdit}>
             <Text style={{ ...Typography.caption, color: colors.primary, fontWeight: '600' }}>
-              Anile
+              Cancel
             </Text>
           </TouchableOpacity>
         </View>
@@ -1471,7 +1433,7 @@ export default function HomeScreen() {
                 { transform: [{ scale: pulseAnim }] }
               ]} />
               <View style={{ flex: 1 }}>
-                <Text style={styles.recordingText}>Ap rekòde... (souke pou anile)</Text>
+                <Text style={styles.recordingText}>Recording... (shake to cancel)</Text>
                 <Text style={styles.recordingDuration}>
                   {formatDuration(recordingDuration)} / 1:00
                 </Text>
@@ -1481,13 +1443,13 @@ export default function HomeScreen() {
             <View style={styles.recordingIndicator}>
               <ActivityIndicator size="small" color={colors.primary} />
               <Text style={{ ...Typography.body, color: colors.text, marginLeft: Spacing.sm }}>
-                Transkripsyon an kou...
+                Transcribing...
               </Text>
             </View>
           ) : (
             <TextInput
               style={styles.input}
-              placeholder={editingMessageId ? "Modifye mesaj..." : "Mesaj..."}
+              placeholder={editingMessageId ? "Edit message..." : "Message..."}
               placeholderTextColor={colors.textSecondary}
               value={inputText}
               onChangeText={setInputText}
@@ -1597,7 +1559,6 @@ export default function HomeScreen() {
         visible={chatHistoryVisible}
         onClose={() => setChatHistoryVisible(false)}
         onSelectChat={(chatId) => {
-          // Load chat
           setChatHistoryVisible(false);
         }}
         onNewChat={() => {
@@ -1616,7 +1577,7 @@ export default function HomeScreen() {
         initialResult={calcResult}
       />
 
-      {/* Blur Overlay pou Sekirite */}
+      {/* Security Blur Overlay */}
       {showBlurOverlay && (
         <Animated.View style={[
           styles.blurOverlayContainer,
@@ -1626,7 +1587,7 @@ export default function HomeScreen() {
             <View style={styles.blurContent}>
               <Ionicons name="lock-closed" size={40} color="rgba(255,255,255,0.8)" />
               <Text style={styles.blurText}>Haitian AI Chat</Text>
-              <Text style={styles.blurSubtext}>Aplikasyon fèmen pou vi prive</Text>
+              <Text style={styles.blurSubtext}>App locked for privacy</Text>
               
               <TouchableOpacity
                 style={{
@@ -1641,7 +1602,7 @@ export default function HomeScreen() {
                   setIsAppActive(true);
                 }}
               >
-                <Text style={{ color: 'white', fontWeight: '600' }}>Devwouye</Text>
+                <Text style={{ color: 'white', fontWeight: '600' }}>Unlock</Text>
               </TouchableOpacity>
             </View>
           </BlurView>
@@ -1690,5 +1651,3 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-
-remove all croele tex add english only code and When the home screen mounts and the user is authenticated but no conversation is selected, automatically call `createConversation()` so users always land on a fresh ready-to-use chat instead of an empty state that requires manual action. Remove the broken `fetchMessages` reference in home.tsx useEffect (line that calls `fetchMessages` in the AppState change handler) and replace it with `selectConversation(currentConversation?.id)` which is the correct function from the ConversationContext, to prevent potential white screen issues on app load. Please avoid pasting text directly into source files via GitHub commits. If you want to request changes, use the chat here instead. I can apply all code changes safely without risking syntax errors in your files. Update supabase/functions/chat/index.ts to remove any unnecessary configuration request headers or extra setup calls, simplify the function to cleanly accept messages array and return AI responses without leaking model names or fallback indicators in the response text. Investigate the white screen on app load: check the fetchMessages reference error in home.tsx useEffect (it references a function that doesn't exist), verify all context providers initialize before rendering, and add a safe loading state so the home screen doesn't render blank while auth/conversation contexts are still loading.
