@@ -5,7 +5,7 @@ import { Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 export default function TabLayout() {
-  const insets = useSafeAreaInsets();
+  const insets = useSafeAreaInsets() || { bottom: 0 };
 
   const tabBarStyle = {
     height: Platform.select({
@@ -14,11 +14,7 @@ export default function TabLayout() {
       default: 70,
     }),
     paddingTop: 8,
-    paddingBottom: Platform.select({
-      ios: insets.bottom + 8,
-      android: insets.bottom + 8,
-      default: 8,
-    }),
+    paddingBottom: insets.bottom + 8,
     paddingHorizontal: 16,
     backgroundColor: '#0a0a0a',
     borderTopWidth: 1,
@@ -27,7 +23,7 @@ export default function TabLayout() {
 
   return (
     <Tabs
-      screenOptions={{
+      screenOptions={() => ({
         headerShown: false,
         tabBarStyle,
         tabBarActiveTintColor: '#10A37F',
@@ -36,7 +32,7 @@ export default function TabLayout() {
           fontSize: 12,
           fontWeight: '500',
         },
-      }}
+      })}
     >
       <Tabs.Screen
         name="index"
