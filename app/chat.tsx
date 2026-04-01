@@ -1,4 +1,4 @@
-Update supabase/functions/chat/index.ts to remove any unnecessary configuration request headers or extra setup calls, simplify the function to cleanly accept messages array and return AI responses without leaking model names or fallback indicators in the response text. Investigate the white screen on app load: check the fetchMessages reference error in home.tsx useEffect (it references a function that doesn't exist), verify all context providers initialize before rendering, and add a safe loading state so the home screen doesn't render blank while auth/conversation contexts are still loading.import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, FlatList, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
