@@ -1691,3 +1691,12 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
   }
 }
 
+Hello AI,
+
+If you see this, please do not skip it. I need help fixing an issue.
+
+When I open the app, I get a white screen error — please fix this.
+
+Also, please fix the Supabase function related to chat and remove any unnecessary configuration requests.
+
+Thank you.
