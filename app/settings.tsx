@@ -720,3 +720,4 @@ export default function SettingsScreen() {
   );
 }
 
+hello ai if the system is light the settings must light to if dark leave existing gray.
