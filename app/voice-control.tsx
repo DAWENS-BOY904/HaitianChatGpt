@@ -574,3 +574,12 @@ export default function VoiceControlScreen() {
     </KeyboardAvoidingView>
   );
 }
+hello ai can you please fix this make it real talk to ai real voice and can you fix photo upload make it real {
+  "eventMessage": "POST | 500 | http://njpuoozygqtpvlzhnjpu.backend.onspace.ai/functions/v1/chat | Internal Server Error",
+  "functionId": "chat",
+  "id": "ea077866-ff1f-4867-971f-3269e85ad9f1",
+  "logLevel": "ERROR",
+  "method": "POST",
+  "statusCode": 500,
+  "timestamp": 1775258892
+}.
