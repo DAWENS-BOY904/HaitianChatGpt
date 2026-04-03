@@ -41,6 +41,16 @@ export const Spacing = {
 };
 
 export const Typography = {
+  h1: {
+    fontSize: 32,
+    fontWeight: '700' as const,
+    lineHeight: 40,
+  },
+  h2: {
+    fontSize: 24,
+    fontWeight: '700' as const,
+    lineHeight: 30,
+  },
   title: {
     fontSize: 28,
     fontWeight: '700' as const,
