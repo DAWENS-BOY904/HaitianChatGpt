@@ -22,7 +22,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getSupabaseClient } from '@/template';
 import Constants from 'expo-constants';
 
-// App Store configuration
 const APP_STORE_ID = 'YOUR_APP_STORE_ID';
 const APP_STORE_LINK = `https://apps.apple.com/app/id${APP_STORE_ID}`;
 const ITUNES_LOOKUP_URL = `https://itunes.apple.com/lookup?id=${APP_STORE_ID}`;
@@ -33,7 +32,7 @@ const getCurrentVersion = (): string => {
 };
 
 export default function SettingsScreen() {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const { settings, updateSetting } = useSettings();
   const { tier } = useSubscription();
   const { user, logout } = useAuth();
@@ -48,6 +47,19 @@ export default function SettingsScreen() {
   const [currentVersion, setCurrentVersion] = useState('1.0.0');
   const [latestVersion, setLatestVersion] = useState(null);
   const [isCheckingVersion, setIsCheckingVersion] = useState(false);
+
+  // ── Theme-aware color tokens ──
+  const bg = isDark ? '#000000' : '#F2F2F7';
+  const modalBg = isDark ? '#1C1C1E' : '#FFFFFF';
+  const cardBg = isDark ? '#2C2C2E' : '#F9F9F9';
+  const dividerColor = isDark ? '#3A3A3C' : '#E0E0E5';
+  const primaryText = isDark ? '#FFFFFF' : '#000000';
+  const secondaryText = isDark ? '#8E8E93' : '#6C6C70';
+  const iconColor = isDark ? '#FFFFFF' : '#1C1C1E';
+  const closeButtonBg = isDark ? '#2C2C2E' : '#E5E5EA';
+  const editButtonBorder = isDark ? '#3A3A3C' : '#C7C7CC';
+  const appearanceChipBg = isDark ? '#3A3A3C' : '#E5E5EA';
+  const switchTrackFalse = isDark ? '#3A3A3C' : '#D1D1D6';
 
   useEffect(() => {
     checkAdminAccess();
@@ -78,28 +90,21 @@ export default function SettingsScreen() {
   const checkForUpdates = useCallback(async () => {
     if (isCheckingVersion) return;
     setIsCheckingVersion(true);
-    
     try {
       const response = await fetch(ITUNES_LOOKUP_URL);
       const data = await response.json();
-      
       if (data.resultCount > 0) {
         const appStoreVersion = data.results[0].version;
         setLatestVersion(appStoreVersion);
-        
         const current = currentVersion.split('.').map(Number);
         const latest = appStoreVersion.split('.').map(Number);
-        
         let isUpdateAvailable = false;
         for (let i = 0; i < Math.max(current.length, latest.length); i++) {
           const currentPart = current[i] || 0;
           const latestPart = latest[i] || 0;
-          if (latestPart > currentPart) {
-            isUpdateAvailable = true;
-            break;
-          } else if (latestPart < currentPart) break;
+          if (latestPart > currentPart) { isUpdateAvailable = true; break; }
+          else if (latestPart < currentPart) break;
         }
-        
         if (isUpdateAvailable) {
           Alert.alert(
             'Update Available',
@@ -142,21 +147,18 @@ export default function SettingsScreen() {
   };
 
   const styles = StyleSheet.create({
-    // Background nwa ki dèyè
     backgroundContainer: {
       flex: 1,
-      backgroundColor: '#000000',
+      backgroundColor: bg,
     },
-    // Container won ki soti anba tankou foto a
     modalContainer: {
       flex: 1,
-      backgroundColor: '#1C1C1E', // Background gri fonse tankou foto a
-      borderTopLeftRadius: 20,    // Kwen anlè goch won
-      borderTopRightRadius: 20,   // Kwen anlè dwat won
-      marginTop: 40,              // Espas anlè pou wè background nwa a
+      backgroundColor: modalBg,
+      borderTopLeftRadius: 20,
+      borderTopRightRadius: 20,
+      marginTop: 40,
       overflow: 'hidden',
     },
-    // Header style
     header: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -165,7 +167,9 @@ export default function SettingsScreen() {
       paddingBottom: 10,
       paddingHorizontal: 20,
       position: 'relative',
-      backgroundColor: '#1C1C1E',
+      backgroundColor: modalBg,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: dividerColor,
     },
     closeButton: {
       position: 'absolute',
@@ -174,27 +178,26 @@ export default function SettingsScreen() {
       width: 32,
       height: 32,
       borderRadius: 16,
-      backgroundColor: '#2C2C2E',
+      backgroundColor: closeButtonBg,
       alignItems: 'center',
       justifyContent: 'center',
     },
     headerTitle: {
       fontSize: 17,
       fontWeight: '600',
-      color: '#FFFFFF',
+      color: primaryText,
     },
-    // Profile section
     profileSection: {
       alignItems: 'center',
       paddingVertical: 20,
       paddingHorizontal: 20,
-      backgroundColor: '#1C1C1E',
+      backgroundColor: modalBg,
     },
     avatarContainer: {
       width: 80,
       height: 80,
       borderRadius: 40,
-      backgroundColor: '#2C2C2E',
+      backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA',
       overflow: 'hidden',
       marginBottom: 12,
     },
@@ -205,17 +208,17 @@ export default function SettingsScreen() {
     avatarText: {
       fontSize: 32,
       fontWeight: '600',
-      color: '#FFFFFF',
+      color: primaryText,
     },
     profileName: {
       fontSize: 22,
       fontWeight: '600',
-      color: '#FFFFFF',
+      color: primaryText,
       marginBottom: 4,
     },
     profileUsername: {
       fontSize: 15,
-      color: '#8E8E93',
+      color: secondaryText,
       marginBottom: 12,
     },
     editProfileButton: {
@@ -224,18 +227,16 @@ export default function SettingsScreen() {
       borderRadius: 20,
       backgroundColor: 'transparent',
       borderWidth: 1,
-      borderColor: '#3A3A3C',
+      borderColor: editButtonBorder,
     },
     editProfileText: {
       fontSize: 15,
-      color: '#FFFFFF',
+      color: primaryText,
       fontWeight: '500',
     },
-    // ScrollView content
     scrollContent: {
       flex: 1,
     },
-    // Section styling
     section: {
       marginTop: 24,
       paddingHorizontal: 16,
@@ -243,17 +244,18 @@ export default function SettingsScreen() {
     sectionTitle: {
       fontSize: 13,
       fontWeight: '600',
-      color: '#8E8E93',
+      color: secondaryText,
       marginBottom: 8,
       marginLeft: 16,
       textTransform: 'uppercase',
       letterSpacing: 0.5,
     },
-    // Card styling
     card: {
-      backgroundColor: '#2C2C2E', // Pi fonse pase background la
+      backgroundColor: cardBg,
       borderRadius: 12,
       overflow: 'hidden',
+      borderWidth: isDark ? 0 : StyleSheet.hairlineWidth,
+      borderColor: dividerColor,
     },
     settingItem: {
       flexDirection: 'row',
@@ -262,7 +264,8 @@ export default function SettingsScreen() {
       paddingVertical: 12,
       paddingHorizontal: 16,
       borderBottomWidth: 0.5,
-      borderBottomColor: '#3A3A3C',
+      borderBottomColor: dividerColor,
+      backgroundColor: cardBg,
     },
     settingItemLast: {
       borderBottomWidth: 0,
@@ -284,28 +287,26 @@ export default function SettingsScreen() {
     },
     settingTitle: {
       fontSize: 16,
-      color: '#FFFFFF',
+      color: primaryText,
       fontWeight: '400',
     },
     settingSubtitle: {
       fontSize: 13,
-      color: '#8E8E93',
+      color: secondaryText,
       marginTop: 2,
     },
     settingValue: {
       fontSize: 16,
-      color: '#8E8E93',
+      color: secondaryText,
       marginRight: 4,
     },
     chevron: {
       marginLeft: 4,
     },
-    // Switch styling
     switchContainer: {
       flexDirection: 'row',
       alignItems: 'center',
     },
-    // Color options
     colorOptions: {
       flexDirection: 'row',
       gap: 8,
@@ -319,9 +320,8 @@ export default function SettingsScreen() {
       borderColor: 'transparent',
     },
     colorOptionSelected: {
-      borderColor: '#FFFFFF',
+      borderColor: isDark ? '#FFFFFF' : '#000000',
     },
-    // Appearance options
     appearanceOptions: {
       flexDirection: 'row',
       gap: 8,
@@ -331,16 +331,19 @@ export default function SettingsScreen() {
       paddingHorizontal: 12,
       paddingVertical: 6,
       borderRadius: 8,
-      backgroundColor: '#3A3A3C',
+      backgroundColor: appearanceChipBg,
     },
     appearanceOptionSelected: {
       backgroundColor: '#0A84FF',
     },
     appearanceText: {
       fontSize: 13,
+      color: primaryText,
+    },
+    appearanceTextSelected: {
+      fontSize: 13,
       color: '#FFFFFF',
     },
-    // Logout button
     logoutButton: {
       marginHorizontal: 16,
       marginTop: 32,
@@ -355,10 +358,9 @@ export default function SettingsScreen() {
       color: '#FFFFFF',
       fontWeight: '600',
     },
-    // Version text
     versionText: {
       fontSize: 12,
-      color: '#8E8E93',
+      color: secondaryText,
       textAlign: 'center',
       marginBottom: 20,
     },
@@ -367,25 +369,25 @@ export default function SettingsScreen() {
     },
   });
 
-  const SettingRow = ({ 
-    icon, 
-    title, 
+  const SettingRow = ({
+    icon,
+    title,
     subtitle,
-    value, 
-    onPress, 
+    value,
+    onPress,
     rightElement,
     isLast = false,
     isLoading = false,
   }) => (
-    <TouchableOpacity 
-      style={[styles.settingItem, isLast && styles.settingItemLast]} 
+    <TouchableOpacity
+      style={[styles.settingItem, isLast && styles.settingItemLast]}
       onPress={onPress}
       activeOpacity={0.6}
       disabled={!onPress && !rightElement}
     >
       <View style={styles.settingLeft}>
         <View style={styles.settingIcon}>
-          <Ionicons name={icon} size={22} color="#FFFFFF" />
+          <Ionicons name={icon} size={22} color={iconColor} />
         </View>
         <View style={styles.settingTextContainer}>
           <Text style={styles.settingTitle}>{title}</Text>
@@ -394,12 +396,12 @@ export default function SettingsScreen() {
       </View>
       <View style={styles.switchContainer}>
         {isLoading ? (
-          <ActivityIndicator size="small" color="#8E8E93" style={styles.loadingIndicator} />
+          <ActivityIndicator size="small" color={secondaryText} style={styles.loadingIndicator} />
         ) : (
           <>
             {value && <Text style={styles.settingValue}>{value}</Text>}
             {rightElement || (onPress && (
-              <Ionicons name="chevron-forward" size={20} color="#8E8E93" style={styles.chevron} />
+              <Ionicons name="chevron-forward" size={20} color={secondaryText} style={styles.chevron} />
             ))}
           </>
         )}
@@ -411,15 +413,15 @@ export default function SettingsScreen() {
     <View style={[styles.settingItem, isLast && styles.settingItemLast]}>
       <View style={styles.settingLeft}>
         <View style={styles.settingIcon}>
-          <Ionicons name={icon} size={22} color="#FFFFFF" />
+          <Ionicons name={icon} size={22} color={iconColor} />
         </View>
         <Text style={styles.settingTitle}>{title}</Text>
       </View>
       <Switch
         value={value}
         onValueChange={onValueChange}
-        trackColor={{ true: '#34C759', false: '#3A3A3C' }}
-        thumbColor={Platform.OS === 'ios' ? undefined : value ? '#FFFFFF' : '#8E8E93'}
+        trackColor={{ true: '#34C759', false: switchTrackFalse }}
+        thumbColor={Platform.OS === 'ios' ? undefined : value ? '#FFFFFF' : secondaryText}
       />
     </View>
   );
@@ -428,7 +430,7 @@ export default function SettingsScreen() {
     <View style={styles.settingItem}>
       <View style={styles.settingLeft}>
         <View style={styles.settingIcon}>
-          <Ionicons name={icon} size={22} color="#FFFFFF" />
+          <Ionicons name={icon} size={22} color={iconColor} />
         </View>
         <View style={styles.settingTextContainer}>
           <Text style={styles.settingTitle}>{title}</Text>
@@ -443,17 +445,16 @@ export default function SettingsScreen() {
 
   return (
     <View style={styles.backgroundContainer}>
-      {/* Container won ki soti anba tankou yon modal */}
       <View style={styles.modalContainer}>
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Settings</Text>
           <TouchableOpacity style={styles.closeButton} onPress={() => router.back()}>
-            <Ionicons name="close" size={20} color="#FFFFFF" />
+            <Ionicons name="close" size={20} color={primaryText} />
           </TouchableOpacity>
         </View>
 
-        <ScrollView 
+        <ScrollView
           showsVerticalScrollIndicator={false}
           style={styles.scrollContent}
         >
@@ -470,11 +471,11 @@ export default function SettingsScreen() {
                 </View>
               )}
             </View>
-            
+
             <Text style={styles.profileName}>{username || 'User'}</Text>
             <Text style={styles.profileUsername}>{user?.email}</Text>
-            
-            <TouchableOpacity 
+
+            <TouchableOpacity
               style={styles.editProfileButton}
               onPress={() => router.push('/profile')}
             >
@@ -487,59 +488,59 @@ export default function SettingsScreen() {
             <Text style={styles.sectionTitle}>Account</Text>
             <View style={styles.card}>
               <SettingRow icon="mail-outline" title="Email" value={user?.email} />
-              <SettingRow 
-                icon="add-circle-outline" 
-                title="Subscription" 
-                value={tierNames[tier]} 
+              <SettingRow
+                icon="add-circle-outline"
+                title="Subscription"
+                value={tierNames[tier]}
               />
-              <SettingRow 
-                icon="arrow-up-circle-outline" 
-                title="Upgrade to ChatGPT Plus" 
+              <SettingRow
+                icon="arrow-up-circle-outline"
+                title="Upgrade to ChatGPT Plus"
                 onPress={() => router.push('/subscription')}
               />
-              <SettingRow 
-                icon="refresh-outline" 
-                title="Restore purchases" 
+              <SettingRow
+                icon="refresh-outline"
+                title="Restore purchases"
                 onPress={() => router.push('/subscription')}
               />
-              <SettingRow 
-                icon="receipt-outline" 
-                title="Orders" 
+              <SettingRow
+                icon="receipt-outline"
+                title="Orders"
                 onPress={() => router.push('/orders')}
               />
-              <SettingRow 
-                icon="person-circle-outline" 
-                title="Personalization" 
+              <SettingRow
+                icon="person-circle-outline"
+                title="Personalization"
                 onPress={() => router.push('/personalization')}
               />
-              <SettingRow 
-                icon="notifications-outline" 
-                title="Notifications" 
+              <SettingRow
+                icon="notifications-outline"
+                title="Notifications"
                 onPress={() => router.push('/notifications')}
               />
-              <SettingRow 
-                icon="apps-outline" 
-                title="Apps" 
+              <SettingRow
+                icon="apps-outline"
+                title="Apps"
                 onPress={() => {}}
               />
-              <SettingRow 
-                icon="people-outline" 
-                title="Parental controls" 
+              <SettingRow
+                icon="people-outline"
+                title="Parental controls"
                 onPress={() => router.push('/parental-controls')}
               />
-              <SettingRow 
-                icon="document-lock-outline" 
-                title="Data controls" 
+              <SettingRow
+                icon="document-lock-outline"
+                title="Data controls"
                 onPress={() => router.push('/data-controls')}
               />
-              <SettingRow 
-                icon="archive-outline" 
-                title="Archived chats" 
+              <SettingRow
+                icon="archive-outline"
+                title="Archived chats"
                 onPress={() => router.push('/archived-chats')}
               />
-              <SettingRow 
-                icon="lock-closed-outline" 
-                title="Security" 
+              <SettingRow
+                icon="lock-closed-outline"
+                title="Security"
                 onPress={() => router.push('/security')}
                 isLast={true}
               />
@@ -550,29 +551,34 @@ export default function SettingsScreen() {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>App Settings</Text>
             <View style={styles.card}>
-              <SettingRow 
-                icon="arrow-up-circle-outline" 
-                title="Check for updates" 
+              <SettingRow
+                icon="arrow-up-circle-outline"
+                title="Check for updates"
                 value={latestVersion && latestVersion !== currentVersion ? `${currentVersion} → ${latestVersion}` : currentVersion}
                 onPress={checkForUpdates}
                 isLoading={isCheckingVersion}
               />
-              
+
               {/* Appearance with inline options */}
               <InlineSettingRow icon="contrast-outline" title="Appearance">
                 <View style={styles.appearanceOptions}>
-                  {appearanceOptions.map(option => (
-                    <TouchableOpacity
-                      key={option}
-                      onPress={() => updateSetting('appearance', option)}
-                      style={[
-                        styles.appearanceOption,
-                        settings.appearance === option && styles.appearanceOptionSelected,
-                      ]}
-                    >
-                      <Text style={styles.appearanceText}>{option}</Text>
-                    </TouchableOpacity>
-                  ))}
+                  {appearanceOptions.map(option => {
+                    const isSelected = settings.appearance === option;
+                    return (
+                      <TouchableOpacity
+                        key={option}
+                        onPress={() => updateSetting('appearance', option)}
+                        style={[
+                          styles.appearanceOption,
+                          isSelected && styles.appearanceOptionSelected,
+                        ]}
+                      >
+                        <Text style={isSelected ? styles.appearanceTextSelected : styles.appearanceText}>
+                          {option}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
                 </View>
               </InlineSettingRow>
 
@@ -593,64 +599,64 @@ export default function SettingsScreen() {
                 </View>
               </InlineSettingRow>
 
-              <SwitchRow 
-                icon="phone-portrait-outline" 
-                title="Haptic feedback" 
+              <SwitchRow
+                icon="phone-portrait-outline"
+                title="Haptic feedback"
                 value={settings.hapticFeedback}
                 onValueChange={(v) => updateSetting('hapticFeedback', v)}
               />
-              
-              <SwitchRow 
-                icon="text-outline" 
-                title="Auto spelling correction" 
+
+              <SwitchRow
+                icon="text-outline"
+                title="Auto spelling correction"
                 value={settings.autoSpelling}
                 onValueChange={(v) => updateSetting('autoSpelling', v)}
               />
-              
-              <SettingRow 
-                icon="globe-outline" 
-                title="App language" 
+
+              <SettingRow
+                icon="globe-outline"
+                title="App language"
                 value={settings.appLanguage}
                 onPress={() => router.push('/languages')}
               />
-              
-              <SettingRow 
-                icon="language-outline" 
-                title="Main language for speech" 
+
+              <SettingRow
+                icon="language-outline"
+                title="Main language for speech"
                 value={settings.mainLanguage}
                 onPress={() => router.push('/languages')}
               />
-              
-              <SettingRow 
-                icon="mic-outline" 
-                title="Voice selection" 
+
+              <SettingRow
+                icon="mic-outline"
+                title="Voice selection"
                 value={settings.voiceSelection}
               />
-              
-              <SwitchRow 
-                icon="chatbubbles-outline" 
-                title="Background conversations" 
+
+              <SwitchRow
+                icon="chatbubbles-outline"
+                title="Background conversations"
                 value={settings.backgroundConversations}
                 onValueChange={(v) => updateSetting('backgroundConversations', v)}
               />
-              
-              <SwitchRow 
-                icon="create-outline" 
-                title="Autocomplete" 
+
+              <SwitchRow
+                icon="create-outline"
+                title="Autocomplete"
                 value={settings.autocomplete}
                 onValueChange={(v) => updateSetting('autocomplete', v)}
               />
-              
-              <SwitchRow 
-                icon="trending-up-outline" 
-                title="Trending searches" 
+
+              <SwitchRow
+                icon="trending-up-outline"
+                title="Trending searches"
                 value={settings.trendingSearches}
                 onValueChange={(v) => updateSetting('trendingSearches', v)}
               />
-              
-              <SwitchRow 
-                icon="list-outline" 
-                title="Follow-up suggestions" 
+
+              <SwitchRow
+                icon="list-outline"
+                title="Follow-up suggestions"
                 value={settings.followupSuggestions}
                 onValueChange={(v) => updateSetting('followupSuggestions', v)}
                 isLast={true}
@@ -663,15 +669,15 @@ export default function SettingsScreen() {
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Admin</Text>
               <View style={styles.card}>
-                <SettingRow 
-                  icon="shield-outline" 
-                  title="Admin Dashboard" 
+                <SettingRow
+                  icon="shield-outline"
+                  title="Admin Dashboard"
                   subtitle="Full system control"
                   onPress={() => router.push('/admin')}
                 />
-                <SettingRow 
-                  icon="mail-outline" 
-                  title="Send Email to Users" 
+                <SettingRow
+                  icon="mail-outline"
+                  title="Send Email to Users"
                   subtitle="Broadcast messages"
                   onPress={() => router.push('/admin-email')}
                   isLast={true}
@@ -684,24 +690,24 @@ export default function SettingsScreen() {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>About</Text>
             <View style={styles.card}>
-              <SettingRow 
-                icon="bug-outline" 
-                title="Report bug" 
+              <SettingRow
+                icon="bug-outline"
+                title="Report bug"
                 onPress={() => router.push('/bugreport')}
               />
-              <SettingRow 
-                icon="help-circle-outline" 
-                title="Help Center" 
+              <SettingRow
+                icon="help-circle-outline"
+                title="Help Center"
                 onPress={() => router.push('/help')}
               />
-              <SettingRow 
-                icon="document-text-outline" 
-                title="Terms of Use" 
+              <SettingRow
+                icon="document-text-outline"
+                title="Terms of Use"
                 onPress={() => router.push('/terms-of-use')}
               />
-              <SettingRow 
-                icon="shield-checkmark-outline" 
-                title="Privacy Policy" 
+              <SettingRow
+                icon="shield-checkmark-outline"
+                title="Privacy Policy"
                 onPress={() => router.push('/privacy-policy')}
                 isLast={true}
               />
@@ -719,5 +725,3 @@ export default function SettingsScreen() {
     </View>
   );
 }
-
-hello ai if the system is light the settings must light to if dark leave existing gray.
