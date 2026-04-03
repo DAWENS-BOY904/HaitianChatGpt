@@ -263,3 +263,25 @@ export function GuestLimitsProvider({ children }: { children: ReactNode }) {
     </GuestLimitsContext.Provider>
   );
 }
+Enforce the image upload limits (4 images/day for free, 10 for pro) in handleMediaPicked in home.tsx: track uploads via GuestLimitsContext incrementImageUploadCount, and when the limit is reached show a banner matching the daily limit design with 'You have reached your image upload limit. Try again tomorrow at [time].' and a Get Plus button.In the daily limit banner shown in home.tsx, add a live countdown showing exactly how many hours and minutes remain until midnight reset. Format it as 'Resets in 3h 42m' displayed next to the 'Get Plus' button AND if limit messag done in bannet get plus  put another that says new chat and they can start a new chat with 100 message and ai must can help students with they work and if create table format if require so usage limits vary by plan, with Free users typically allowed 30–50 messages per 3 hours and Plus users up to 160 messages per 3 hours, subject to dynamic adjustments based on system load.
+Free Plan Limits
+Free-tier users generally have a rolling limit of 30–50 messages per 3-hour window, depending on traffic and model availability. During peak hours, this limit may temporarily drop, and once reached, users are blocked from sending additional messages until the window resets. This ensures fair access and prevents system overload.Plus Limits
+Plus subscribers enjoy significantly higher limits:
+Up to 160 GPT-5.2 messages per 3 hours for Plus/Go users. 
+Plus/Business users can send up to 3,000 GPT-5.2 Thinking messages per week when manually selected. 
+Plus users also benefit from priority access to newer models and faster response times during high-demand periods. Team and Enterprise Plans
+These plans offer customized, higher usage caps designed for collaboration, automation, and large-scale workflows. Limits are rarely a bottleneck unless multiple departments or high-volume processes are running simultaneously. 
+makesaasbetter.com
+API Usage
+For the OpenAI API, limits are measured in tokens and request rates, not messages. Each plan includes a monthly token budget and throughput caps, such as requests per minute. Exceeding these limits triggers temporary rate-limiting. 
+Managing Limits
+If you hit a limit, you can:
+Wait for the rolling window to reset.
+Switch to a lighter model or reduce prompt length.
+Batch multiple requests into a single prompt to conserve message usage. 
+Upgrade to Plus or Business for higher caps and priority access. 
+Key Takeaways
+ChatGPT limits are dynamic, adjusting based on demand, system load, and model usage. 
+1
+Free users are best suited for casual or light usage, while Plus and Business plans support consistent, high-volume workflows.
+Understanding rolling windows and batching strategies can help avoid hitting limits during intensive sessions.
