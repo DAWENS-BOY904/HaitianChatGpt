@@ -761,7 +761,6 @@ export default function HomeScreen() {
         if (media[0].base64) {
           base64Image = media[0].base64;
         } else if (media[0].uri) {
-          // Read file as base64
           try {
             base64Image = await FileSystem.readAsStringAsync(media[0].uri, {
               encoding: FileSystem.EncodingType.Base64,
@@ -772,7 +771,6 @@ export default function HomeScreen() {
         }
       }
 
-      // Send message with base64 image - ConversationContext handles upload
       await sendMessage(text || (base64Image ? '[Image]' : ''), imageUrl, base64Image, false, currentAIModel);
 
       setShowCompletionStatus(true);
@@ -820,14 +818,6 @@ export default function HomeScreen() {
       showAlert('Limit', 'You can select a maximum of 5 files');
       return;
     }
-    
-    // Check image upload limits
-    const imageCount = media.filter(m => m.type === 'image').length;
-    if (imageCount > 0) {
-      // Pro users: 10 images, Free users: 4 images per 24h
-      // We'll just allow and enforce in the send handler
-    }
-    
     setSelectedMedia(media);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   }, [showAlert]);
@@ -1437,7 +1427,7 @@ export default function HomeScreen() {
           </Text>
           
           {/* Quick Actions */}
-          <View style={{ flexDirection: 'row', marginTop: Spacing.lg, gap: Spacing.md }}>
+          <View style={{ flexDirection: 'row', marginTop: Spacing.lg, gap: Spacing.md, flexWrap: 'wrap', justifyContent: 'center' }}>
             {['Write a poem', 'Help with code', 'Solve a problem'].map((suggestion) => (
               <TouchableOpacity
                 key={suggestion}
@@ -1515,7 +1505,7 @@ export default function HomeScreen() {
                 { transform: [{ scale: pulseAnim }] }
               ]} />
               <View style={{ flex: 1 }}>
-                <Text style={styles.recordingText}>Recording... (shake to cancel)</Text>
+                <Text style={styles.recordingText}>Recording...</Text>
                 <Text style={styles.recordingDuration}>
                   {formatDuration(recordingDuration)} / 1:00
                 </Text>
@@ -1733,12 +1723,3 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-hello ai please dont skip fix this for me:{
-  "eventMessage": "POST | 500 | http://njpuoozygqtpvlzhnjpu.backend.onspace.ai/functions/v1/chat | Internal Server Error",
-  "functionId": "chat",
-  "id": "79c8ed97-1cdb-4c12-a81e-18c13f5cbf5f",
-  "logLevel": "ERROR",
-  "method": "POST",
-  "statusCode": 500,
-  "timestamp": 1775233799
-}.
