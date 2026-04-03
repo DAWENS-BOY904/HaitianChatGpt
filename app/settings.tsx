@@ -142,28 +142,39 @@ export default function SettingsScreen() {
   };
 
   const styles = StyleSheet.create({
-    container: {
+    // Background nwa ki dèyè
+    backgroundContainer: {
       flex: 1,
       backgroundColor: '#000000',
     },
-    // Header style tankou foto a
+    // Container won ki soti anba tankou foto a
+    modalContainer: {
+      flex: 1,
+      backgroundColor: '#1C1C1E', // Background gri fonse tankou foto a
+      borderTopLeftRadius: 20,    // Kwen anlè goch won
+      borderTopRightRadius: 20,   // Kwen anlè dwat won
+      marginTop: 40,              // Espas anlè pou wè background nwa a
+      overflow: 'hidden',
+    },
+    // Header style
     header: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      paddingTop: insets.top + 10,
+      paddingTop: 16,
       paddingBottom: 10,
       paddingHorizontal: 20,
       position: 'relative',
+      backgroundColor: '#1C1C1E',
     },
     closeButton: {
       position: 'absolute',
-      right: 20,
-      top: insets.top + 10,
+      right: 16,
+      top: 12,
       width: 32,
       height: 32,
       borderRadius: 16,
-      backgroundColor: '#1C1C1E',
+      backgroundColor: '#2C2C2E',
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -172,11 +183,12 @@ export default function SettingsScreen() {
       fontWeight: '600',
       color: '#FFFFFF',
     },
-    // Profile section tankou foto a
+    // Profile section
     profileSection: {
       alignItems: 'center',
       paddingVertical: 20,
       paddingHorizontal: 20,
+      backgroundColor: '#1C1C1E',
     },
     avatarContainer: {
       width: 80,
@@ -219,6 +231,10 @@ export default function SettingsScreen() {
       color: '#FFFFFF',
       fontWeight: '500',
     },
+    // ScrollView content
+    scrollContent: {
+      flex: 1,
+    },
     // Section styling
     section: {
       marginTop: 24,
@@ -235,7 +251,7 @@ export default function SettingsScreen() {
     },
     // Card styling
     card: {
-      backgroundColor: '#1C1C1E',
+      backgroundColor: '#2C2C2E', // Pi fonse pase background la
       borderRadius: 12,
       overflow: 'hidden',
     },
@@ -246,7 +262,7 @@ export default function SettingsScreen() {
       paddingVertical: 12,
       paddingHorizontal: 16,
       borderBottomWidth: 0.5,
-      borderBottomColor: '#2C2C2E',
+      borderBottomColor: '#3A3A3C',
     },
     settingItemLast: {
       borderBottomWidth: 0,
@@ -315,7 +331,7 @@ export default function SettingsScreen() {
       paddingHorizontal: 12,
       paddingVertical: 6,
       borderRadius: 8,
-      backgroundColor: '#2C2C2E',
+      backgroundColor: '#3A3A3C',
     },
     appearanceOptionSelected: {
       backgroundColor: '#0A84FF',
@@ -426,274 +442,281 @@ export default function SettingsScreen() {
   const appearanceOptions = ['System', 'Light', 'Dark'];
 
   return (
-    <View style={styles.container}>
-      {/* Header tankou foto a */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Settings</Text>
-        <TouchableOpacity style={styles.closeButton} onPress={() => router.back()}>
-          <Ionicons name="close" size={20} color="#FFFFFF" />
-        </TouchableOpacity>
-      </View>
-
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Profile Section - Tankou foto a */}
-        <View style={styles.profileSection}>
-          <View style={styles.avatarContainer}>
-            {profilePhoto ? (
-              <Image source={{ uri: profilePhoto }} style={styles.avatarImage} />
-            ) : (
-              <View style={[styles.avatarContainer, { alignItems: 'center', justifyContent: 'center' }]}>
-                <Text style={styles.avatarText}>
-                  {(username?.[0] || user?.email?.[0] || 'U').toUpperCase()}
-                </Text>
-              </View>
-            )}
-          </View>
-          
-          <Text style={styles.profileName}>{username || 'User'}</Text>
-          <Text style={styles.profileUsername}>{user?.email}</Text>
-          
-          <TouchableOpacity 
-            style={styles.editProfileButton}
-            onPress={() => router.push('/profile')}
-          >
-            <Text style={styles.editProfileText}>Edit profile</Text>
+    <View style={styles.backgroundContainer}>
+      {/* Container won ki soti anba tankou yon modal */}
+      <View style={styles.modalContainer}>
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>Settings</Text>
+          <TouchableOpacity style={styles.closeButton} onPress={() => router.back()}>
+            <Ionicons name="close" size={20} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
 
-        {/* Account Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Account</Text>
-          <View style={styles.card}>
-            <SettingRow icon="mail-outline" title="Email" value={user?.email} />
-            <SettingRow 
-              icon="add-circle-outline" 
-              title="Subscription" 
-              value={tierNames[tier]} 
-            />
-            <SettingRow 
-              icon="arrow-up-circle-outline" 
-              title="Upgrade to ChatGPT Plus" 
-              onPress={() => router.push('/subscription')}
-            />
-            <SettingRow 
-              icon="refresh-outline" 
-              title="Restore purchases" 
-              onPress={() => router.push('/subscription')}
-            />
-            <SettingRow 
-              icon="receipt-outline" 
-              title="Orders" 
-              onPress={() => router.push('/orders')}
-            />
-            <SettingRow 
-              icon="person-circle-outline" 
-              title="Personalization" 
-              onPress={() => router.push('/personalization')}
-            />
-            <SettingRow 
-              icon="notifications-outline" 
-              title="Notifications" 
-              onPress={() => router.push('/notifications')}
-            />
-            <SettingRow 
-              icon="apps-outline" 
-              title="Apps" 
-              onPress={() => {}}
-            />
-            <SettingRow 
-              icon="people-outline" 
-              title="Parental controls" 
-              onPress={() => router.push('/parental-controls')}
-            />
-            <SettingRow 
-              icon="document-lock-outline" 
-              title="Data controls" 
-              onPress={() => router.push('/data-controls')}
-            />
-            <SettingRow 
-              icon="archive-outline" 
-              title="Archived chats" 
-              onPress={() => router.push('/archived-chats')}
-            />
-            <SettingRow 
-              icon="lock-closed-outline" 
-              title="Security" 
-              onPress={() => router.push('/security')}
-              isLast={true}
-            />
+        <ScrollView 
+          showsVerticalScrollIndicator={false}
+          style={styles.scrollContent}
+        >
+          {/* Profile Section */}
+          <View style={styles.profileSection}>
+            <View style={styles.avatarContainer}>
+              {profilePhoto ? (
+                <Image source={{ uri: profilePhoto }} style={styles.avatarImage} />
+              ) : (
+                <View style={[styles.avatarContainer, { alignItems: 'center', justifyContent: 'center' }]}>
+                  <Text style={styles.avatarText}>
+                    {(username?.[0] || user?.email?.[0] || 'U').toUpperCase()}
+                  </Text>
+                </View>
+              )}
+            </View>
+            
+            <Text style={styles.profileName}>{username || 'User'}</Text>
+            <Text style={styles.profileUsername}>{user?.email}</Text>
+            
+            <TouchableOpacity 
+              style={styles.editProfileButton}
+              onPress={() => router.push('/profile')}
+            >
+              <Text style={styles.editProfileText}>Edit profile</Text>
+            </TouchableOpacity>
           </View>
-        </View>
 
-        {/* App Settings */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>App Settings</Text>
-          <View style={styles.card}>
-            <SettingRow 
-              icon="arrow-up-circle-outline" 
-              title="Check for updates" 
-              value={latestVersion && latestVersion !== currentVersion ? `${currentVersion} → ${latestVersion}` : currentVersion}
-              onPress={checkForUpdates}
-              isLoading={isCheckingVersion}
-            />
-            
-            {/* Appearance with inline options */}
-            <InlineSettingRow icon="contrast-outline" title="Appearance">
-              <View style={styles.appearanceOptions}>
-                {appearanceOptions.map(option => (
-                  <TouchableOpacity
-                    key={option}
-                    onPress={() => updateSetting('appearance', option)}
-                    style={[
-                      styles.appearanceOption,
-                      settings.appearance === option && styles.appearanceOptionSelected,
-                    ]}
-                  >
-                    <Text style={styles.appearanceText}>{option}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </InlineSettingRow>
-
-            {/* Accent Color */}
-            <InlineSettingRow icon="color-palette-outline" title="Accent color">
-              <View style={styles.colorOptions}>
-                {accentColors.map(color => (
-                  <TouchableOpacity
-                    key={color}
-                    onPress={() => updateSetting('accentColor', color)}
-                    style={[
-                      styles.colorOption,
-                      { backgroundColor: color },
-                      settings.accentColor === color && styles.colorOptionSelected,
-                    ]}
-                  />
-                ))}
-              </View>
-            </InlineSettingRow>
-
-            <SwitchRow 
-              icon="phone-portrait-outline" 
-              title="Haptic feedback" 
-              value={settings.hapticFeedback}
-              onValueChange={(v) => updateSetting('hapticFeedback', v)}
-            />
-            
-            <SwitchRow 
-              icon="text-outline" 
-              title="Auto spelling correction" 
-              value={settings.autoSpelling}
-              onValueChange={(v) => updateSetting('autoSpelling', v)}
-            />
-            
-            <SettingRow 
-              icon="globe-outline" 
-              title="App language" 
-              value={settings.appLanguage}
-              onPress={() => router.push('/languages')}
-            />
-            
-            <SettingRow 
-              icon="language-outline" 
-              title="Main language for speech" 
-              value={settings.mainLanguage}
-              onPress={() => router.push('/languages')}
-            />
-            
-            <SettingRow 
-              icon="mic-outline" 
-              title="Voice selection" 
-              value={settings.voiceSelection}
-            />
-            
-            <SwitchRow 
-              icon="chatbubbles-outline" 
-              title="Background conversations" 
-              value={settings.backgroundConversations}
-              onValueChange={(v) => updateSetting('backgroundConversations', v)}
-            />
-            
-            <SwitchRow 
-              icon="create-outline" 
-              title="Autocomplete" 
-              value={settings.autocomplete}
-              onValueChange={(v) => updateSetting('autocomplete', v)}
-            />
-            
-            <SwitchRow 
-              icon="trending-up-outline" 
-              title="Trending searches" 
-              value={settings.trendingSearches}
-              onValueChange={(v) => updateSetting('trendingSearches', v)}
-            />
-            
-            <SwitchRow 
-              icon="list-outline" 
-              title="Follow-up suggestions" 
-              value={settings.followupSuggestions}
-              onValueChange={(v) => updateSetting('followupSuggestions', v)}
-              isLast={true}
-            />
-          </View>
-        </View>
-
-        {/* Admin Section */}
-        {isAdmin && (
+          {/* Account Section */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Admin</Text>
+            <Text style={styles.sectionTitle}>Account</Text>
             <View style={styles.card}>
+              <SettingRow icon="mail-outline" title="Email" value={user?.email} />
               <SettingRow 
-                icon="shield-outline" 
-                title="Admin Dashboard" 
-                subtitle="Full system control"
-                onPress={() => router.push('/admin')}
+                icon="add-circle-outline" 
+                title="Subscription" 
+                value={tierNames[tier]} 
               />
               <SettingRow 
-                icon="mail-outline" 
-                title="Send Email to Users" 
-                subtitle="Broadcast messages"
-                onPress={() => router.push('/admin-email')}
+                icon="arrow-up-circle-outline" 
+                title="Upgrade to ChatGPT Plus" 
+                onPress={() => router.push('/subscription')}
+              />
+              <SettingRow 
+                icon="refresh-outline" 
+                title="Restore purchases" 
+                onPress={() => router.push('/subscription')}
+              />
+              <SettingRow 
+                icon="receipt-outline" 
+                title="Orders" 
+                onPress={() => router.push('/orders')}
+              />
+              <SettingRow 
+                icon="person-circle-outline" 
+                title="Personalization" 
+                onPress={() => router.push('/personalization')}
+              />
+              <SettingRow 
+                icon="notifications-outline" 
+                title="Notifications" 
+                onPress={() => router.push('/notifications')}
+              />
+              <SettingRow 
+                icon="apps-outline" 
+                title="Apps" 
+                onPress={() => {}}
+              />
+              <SettingRow 
+                icon="people-outline" 
+                title="Parental controls" 
+                onPress={() => router.push('/parental-controls')}
+              />
+              <SettingRow 
+                icon="document-lock-outline" 
+                title="Data controls" 
+                onPress={() => router.push('/data-controls')}
+              />
+              <SettingRow 
+                icon="archive-outline" 
+                title="Archived chats" 
+                onPress={() => router.push('/archived-chats')}
+              />
+              <SettingRow 
+                icon="lock-closed-outline" 
+                title="Security" 
+                onPress={() => router.push('/security')}
                 isLast={true}
               />
             </View>
           </View>
-        )}
 
-        {/* About Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>About</Text>
-          <View style={styles.card}>
-            <SettingRow 
-              icon="bug-outline" 
-              title="Report bug" 
-              onPress={() => router.push('/bugreport')}
-            />
-            <SettingRow 
-              icon="help-circle-outline" 
-              title="Help Center" 
-              onPress={() => router.push('/help')}
-            />
-            <SettingRow 
-              icon="document-text-outline" 
-              title="Terms of Use" 
-              onPress={() => router.push('/terms-of-use')}
-            />
-            <SettingRow 
-              icon="shield-checkmark-outline" 
-              title="Privacy Policy" 
-              onPress={() => router.push('/privacy-policy')}
-              isLast={true}
-            />
+          {/* App Settings */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>App Settings</Text>
+            <View style={styles.card}>
+              <SettingRow 
+                icon="arrow-up-circle-outline" 
+                title="Check for updates" 
+                value={latestVersion && latestVersion !== currentVersion ? `${currentVersion} → ${latestVersion}` : currentVersion}
+                onPress={checkForUpdates}
+                isLoading={isCheckingVersion}
+              />
+              
+              {/* Appearance with inline options */}
+              <InlineSettingRow icon="contrast-outline" title="Appearance">
+                <View style={styles.appearanceOptions}>
+                  {appearanceOptions.map(option => (
+                    <TouchableOpacity
+                      key={option}
+                      onPress={() => updateSetting('appearance', option)}
+                      style={[
+                        styles.appearanceOption,
+                        settings.appearance === option && styles.appearanceOptionSelected,
+                      ]}
+                    >
+                      <Text style={styles.appearanceText}>{option}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </InlineSettingRow>
+
+              {/* Accent Color */}
+              <InlineSettingRow icon="color-palette-outline" title="Accent color">
+                <View style={styles.colorOptions}>
+                  {accentColors.map(color => (
+                    <TouchableOpacity
+                      key={color}
+                      onPress={() => updateSetting('accentColor', color)}
+                      style={[
+                        styles.colorOption,
+                        { backgroundColor: color },
+                        settings.accentColor === color && styles.colorOptionSelected,
+                      ]}
+                    />
+                  ))}
+                </View>
+              </InlineSettingRow>
+
+              <SwitchRow 
+                icon="phone-portrait-outline" 
+                title="Haptic feedback" 
+                value={settings.hapticFeedback}
+                onValueChange={(v) => updateSetting('hapticFeedback', v)}
+              />
+              
+              <SwitchRow 
+                icon="text-outline" 
+                title="Auto spelling correction" 
+                value={settings.autoSpelling}
+                onValueChange={(v) => updateSetting('autoSpelling', v)}
+              />
+              
+              <SettingRow 
+                icon="globe-outline" 
+                title="App language" 
+                value={settings.appLanguage}
+                onPress={() => router.push('/languages')}
+              />
+              
+              <SettingRow 
+                icon="language-outline" 
+                title="Main language for speech" 
+                value={settings.mainLanguage}
+                onPress={() => router.push('/languages')}
+              />
+              
+              <SettingRow 
+                icon="mic-outline" 
+                title="Voice selection" 
+                value={settings.voiceSelection}
+              />
+              
+              <SwitchRow 
+                icon="chatbubbles-outline" 
+                title="Background conversations" 
+                value={settings.backgroundConversations}
+                onValueChange={(v) => updateSetting('backgroundConversations', v)}
+              />
+              
+              <SwitchRow 
+                icon="create-outline" 
+                title="Autocomplete" 
+                value={settings.autocomplete}
+                onValueChange={(v) => updateSetting('autocomplete', v)}
+              />
+              
+              <SwitchRow 
+                icon="trending-up-outline" 
+                title="Trending searches" 
+                value={settings.trendE8E93'}
+                onValueChange={(v) => updateSetting('trendingSearches', v)}
+              />
+              
+              <SwitchRow 
+                icon="list-outline" 
+                title="Follow-up suggestions" 
+                value={settings.followupSuggestions}
+                onValueChange={(v) => updateSetting('followupSuggestions', v)}
+                isLast={true}
+              />
+            </View>
           </View>
-        </View>
 
-        {/* Logout */}
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-          <Text style={styles.logoutText}>Log Out</Text>
-        </TouchableOpacity>
+          {/* Admin Section */}
+          {isAdmin && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Admin</Text>
+              <View style={styles.card}>
+                <SettingRow 
+                  icon="shield-outline" 
+                  title="Admin Dashboard" 
+                  subtitle="Full system control"
+                  onPress={() => router.push('/admin')}
+                />
+                <SettingRow 
+                  icon="mail-outline" 
+                  title="Send Email to Users" 
+                  subtitle="Broadcast messages"
+                  onPress={() => router.push('/admin-email')}
+                  isLast={true}
+                />
+              </View>
+            </View>
+          )}
 
-        <Text style={styles.versionText}>HaitianChatGpt for iOS – v{currentVersion}</Text>
-      </ScrollView>
+          {/* About Section */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>About</Text>
+            <View style={styles.card}>
+              <SettingRow 
+                icon="bug-outline" 
+                title="Report bug" 
+                onPress={() => router.push('/bugreport')}
+              />
+              <SettingRow 
+                icon="help-circle-outline" 
+                title="Help Center" 
+                onPress={() => router.push('/help')}
+              />
+              <SettingRow 
+                icon="document-text-outline" 
+                title="Terms of Use" 
+                onPress={() => router.push('/terms-of-use')}
+              />
+              <SettingRow 
+                icon="shield-checkmark-outline" 
+                title="Privacy Policy" 
+                onPress={() => router.push('/privacy-policy')}
+                isLast={true}
+              />
+            </View>
+          </View>
+
+          {/* Logout */}
+          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+            <Text style={styles.logoutText}>Log Out</Text>
+          </TouchableOpacity>
+
+          <Text style={styles.versionText}>HaitianChatGpt for iOS – v{currentVersion}</Text>
+        </ScrollView>
+      </View>
     </View>
   );
 }
+
