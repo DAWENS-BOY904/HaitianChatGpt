@@ -1,136 +1,155 @@
-// StreamingText.tsx - Ultra-realistic typing animation component
+// StreamingText.tsx - Ultra-realistic streaming text with blinking cursor & smooth rendering
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Text, TextStyle } from 'react-native';
+import { Text, TextStyle, Animated, Easing } from 'react-native';
 
 interface StreamingTextProps {
   text: string;
-  speed?: number; // Base characters per second
-  variance?: number; // Random variance for human-like feel (0-1)
-  pausePunctuation?: number; // Extra pause on punctuation (ms)
+  speed?: number;           // characters per second
+  variance?: number;        // human-like variance 0-1
+  pausePunctuation?: number;// extra pause on punctuation ms
   onComplete?: () => void;
   onCharacterTyped?: (char: string, index: number) => void;
+  onChunkRendered?: () => void; // called after each chunk so parent can scroll
   style?: TextStyle | TextStyle[];
-  cursor?: boolean; // Show blinking cursor
+  cursor?: boolean;
   cursorStyle?: TextStyle;
-  startDelay?: number; // Delay before starting (ms)
-  enableBackspace?: boolean; // Occasionally "fix" typos (advanced)
+  startDelay?: number;
+  chunkSize?: number;       // characters per render tick (word-by-word feel)
 }
 
 /**
- * PRODUCTION-READY STREAMING TEXT COMPONENT
- * Ultra-realistic AI typing simulation with human-like variance
- * 
- * Features:
- * - Human-like typing speed variance (not robotic constant speed)
- * - Smart pauses on punctuation (.!?,)
- * - Optional blinking cursor
- * - Smooth requestAnimationFrame-based timing
- * - Start delay support
- * - Character-by-character callback
- * - Memory efficient
+ * Word-by-word streaming text with:
+ * - Smooth blinking cursor (Animated API, no setState flicker)
+ * - Human-like speed variance
+ * - Smart punctuation pauses
+ * - onChunkRendered callback for parent scroll-to-bottom
  */
-export function StreamingText({ 
-  text, 
-  speed = 50, // Characters per second (human-like: 40-80)
-  variance = 0.3, // 30% speed variance feels natural
-  pausePunctuation = 150, // 150ms pause on punctuation
+export function StreamingText({
+  text,
+  speed = 60,
+  variance = 0.25,
+  pausePunctuation = 120,
   onComplete,
   onCharacterTyped,
+  onChunkRendered,
   style,
   cursor = true,
   cursorStyle,
   startDelay = 0,
+  chunkSize = 3,            // render 3 chars per tick → smooth word-by-word feel
 }: StreamingTextProps) {
   const [displayedText, setDisplayedText] = useState('');
-  const [showCursor, setShowCursor] = useState(true);
   const currentIndex = useRef(0);
-  const timeoutRef = useRef<NodeJS.Timeout>();
-  const cursorIntervalRef = useRef<NodeJS.Timeout>();
-  const isRunning = useRef(false);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const cursorOpacity = useRef(new Animated.Value(1)).current;
+  const cursorLoopRef = useRef<Animated.CompositeAnimation>();
 
-  // Get random delay for next character (human-like variance)
-  const getNextDelay = useCallback((char: string): number => {
-    const baseDelay = 1000 / speed;
-    const randomVariance = baseDelay * variance * (Math.random() * 2 - 1);
-    let delay = baseDelay + randomVariance;
-    
-    // Add pause for punctuation
-    if ('.!?'.includes(char)) delay += pausePunctuation * 1.5;
-    else if (',;:)'.includes(char)) delay += pausePunctuation;
-    else if (char === ' ') delay += pausePunctuation * 0.3; // Slight pause on spaces
-    
-    return Math.max(delay, 20); // Minimum 20ms to prevent browser hang
-  }, [speed, variance, pausePunctuation]);
-
-  // Blinking cursor effect
+  // ── Cursor blink (Animated loop, no re-renders) ──
   useEffect(() => {
     if (!cursor) return;
-    
-    cursorIntervalRef.current = setInterval(() => {
-      setShowCursor(prev => !prev);
-    }, 530); // Prime number for less visual sync with other animations
-    
-    return () => {
-      if (cursorIntervalRef.current) clearInterval(cursorIntervalRef.current);
-    };
-  }, [cursor]);
 
-  // Main typing animation
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(cursorOpacity, {
+          toValue: 0,
+          duration: 480,
+          easing: Easing.step0,
+          useNativeDriver: true,
+        }),
+        Animated.timing(cursorOpacity, {
+          toValue: 1,
+          duration: 480,
+          easing: Easing.step0,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    cursorLoopRef.current = loop;
+    loop.start();
+
+    return () => loop.stop();
+  }, [cursor, cursorOpacity]);
+
+  // ── Delay helper ──
+  const getNextDelay = useCallback(
+    (char: string): number => {
+      const base = 1000 / speed;
+      const jitter = base * variance * (Math.random() * 2 - 1);
+      let delay = base + jitter;
+
+      if ('.!?'.includes(char)) delay += pausePunctuation * 1.8;
+      else if (',;:'.includes(char)) delay += pausePunctuation;
+      else if (char === '\n') delay += pausePunctuation * 1.2;
+      else if (char === ' ') delay += pausePunctuation * 0.15;
+
+      return Math.max(delay, 16);
+    },
+    [speed, variance, pausePunctuation]
+  );
+
+  // ── Main typing engine ──
   useEffect(() => {
-    // Reset state
     currentIndex.current = 0;
     setDisplayedText('');
-    isRunning.current = false;
-    
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    
     if (!text) return;
 
-    const typeNextChar = () => {
+    const typeChunk = () => {
       if (currentIndex.current >= text.length) {
         onComplete?.();
         return;
       }
 
-      const nextIndex = currentIndex.current + 1;
-      const char = text[currentIndex.current];
-      
-      setDisplayedText(text.substring(0, nextIndex));
-      onCharacterTyped?.(char, currentIndex.current);
-      
-      currentIndex.current = nextIndex;
+      // Render a small chunk at once for smoother visuals
+      const end = Math.min(currentIndex.current + chunkSize, text.length);
+      const chunk = text.substring(currentIndex.current, end);
+      const lastChar = chunk[chunk.length - 1];
 
-      if (nextIndex < text.length) {
-        const nextChar = text[nextIndex];
-        const delay = getNextDelay(nextChar);
-        timeoutRef.current = setTimeout(typeNextChar, delay);
+      setDisplayedText(text.substring(0, end));
+
+      // Notify parent to scroll
+      onChunkRendered?.();
+
+      for (let i = currentIndex.current; i < end; i++) {
+        onCharacterTyped?.(text[i], i);
+      }
+
+      currentIndex.current = end;
+
+      if (end < text.length) {
+        const delay = getNextDelay(lastChar);
+        timeoutRef.current = setTimeout(typeChunk, delay);
       } else {
         onComplete?.();
       }
     };
 
-    // Start with delay
-    isRunning.current = true;
-    timeoutRef.current = setTimeout(typeNextChar, startDelay);
+    timeoutRef.current = setTimeout(typeChunk, startDelay);
 
     return () => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
-  }, [text, startDelay, getNextDelay, onComplete, onCharacterTyped]);
+  }, [text, startDelay, chunkSize, getNextDelay, onComplete, onCharacterTyped, onChunkRendered]);
 
   return (
     <Text style={style}>
       {displayedText}
       {cursor && (
-        <Text style={[{ opacity: showCursor ? 1 : 0 }, cursorStyle]}>
-          ▋
-        </Text>
+        <Animated.Text
+          style={[
+            { opacity: cursorOpacity, color: 'inherit' },
+            cursorStyle,
+          ]}
+        >
+          {'|'}
+        </Animated.Text>
       )}
     </Text>
   );
 }
 
-// Hook version for more control
+// ── Convenience hook ──
 export function useStreamingText(options: {
   text: string;
   speed?: number;
@@ -138,24 +157,20 @@ export function useStreamingText(options: {
 } & Omit<StreamingTextProps, 'text'>) {
   const [displayedText, setDisplayedText] = useState('');
   const [isComplete, setIsComplete] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
-  
-  // Control methods could be added here
-  
+
   return {
     displayedText,
     isComplete,
-    isPlaying,
     StreamingTextComponent: (overrideProps?: Partial<StreamingTextProps>) => (
-      <StreamingText 
-        text={options.text} 
-        {...options} 
+      <StreamingText
+        text={options.text}
+        {...options}
         {...overrideProps}
         onComplete={() => {
           setIsComplete(true);
           options.onComplete?.();
         }}
       />
-    )
+    ),
   };
 }

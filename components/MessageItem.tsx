@@ -51,6 +51,7 @@ interface MessageItemProps {
   onCancel?: () => void;
   onEdit?: (messageId: string, content: string) => void;
   onCopy?: () => void;
+  onChunkRendered?: () => void;
   isGenerating?: boolean;
   streaming?: boolean;
   streamingSpeed?: number;
@@ -279,6 +280,7 @@ export const MessageItem = memo(function MessageItem({
   onCancel,
   onEdit,
   onCopy,
+  onChunkRendered,
   isGenerating,
   streaming = false,
   streamingSpeed = 50,
@@ -712,8 +714,10 @@ export const MessageItem = memo(function MessageItem({
                   text={part.content}
                   speed={streamingSpeed}
                   variance={0.2}
+                  chunkSize={4}
                   cursor={true}
                   style={styles.assistantMessageText}
+                  onChunkRendered={onChunkRendered}
                 />
               ) : (
                 textParts.map((textPart, textIndex) => {

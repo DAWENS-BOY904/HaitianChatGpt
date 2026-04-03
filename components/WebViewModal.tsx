@@ -25,6 +25,8 @@ export function WebViewModal({ visible, url, onClose }: WebViewModalProps) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(true);
+  const [hasError, setHasError] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
   const [canGoBack, setCanGoBack] = useState(false);
   const [canGoForward, setCanGoForward] = useState(false);
   const webViewRef = useRef<WebView>(null);
@@ -148,21 +150,57 @@ export function WebViewModal({ visible, url, onClose }: WebViewModalProps) {
         </View>
 
         {/* WEBVIEW */}
-        <WebView
-          ref={webViewRef}
-          source={{ uri: url }}
-          style={styles.webView}
-          onLoadStart={() => setLoading(true)}
-          onLoadEnd={() => setLoading(false)}
-          onNavigationStateChange={navState => {
-            setCanGoBack(navState.canGoBack);
-            setCanGoForward(navState.canGoForward);
-          }}
-          javaScriptEnabled
-          domStorageEnabled
-          startInLoadingState
-          scalesPageToFit
-        />
+        {hasError ? (
+          <View style={[styles.loadingContainer, { gap: 12 }]}>
+            <Ionicons name="warning-outline" size={48} color="#FF9500" />
+            <Text style={{ color: colors.text, fontSize: 16, fontWeight: '600', textAlign: 'center' }}>
+              Could not load page
+            </Text>
+            <Text style={{ color: colors.textSecondary, fontSize: 13, textAlign: 'center', paddingHorizontal: 24 }}>
+              {errorMsg || 'The page could not be loaded. Check your connection or try opening in the browser.'}
+            </Text>
+            <TouchableOpacity
+              style={{ marginTop: 8, backgroundColor: colors.primary, paddingHorizontal: 24, paddingVertical: 10, borderRadius: 10 }}
+              onPress={() => { setHasError(false); setLoading(true); webViewRef.current?.reload(); }}
+            >
+              <Text style={{ color: '#FFF', fontWeight: '600' }}>Retry</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={{ marginTop: 4 }}
+              onPress={openExternal}
+            >
+              <Text style={{ color: colors.primary, fontSize: 13 }}>Open in browser instead</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <WebView
+            ref={webViewRef}
+            source={{ uri: url }}
+            style={styles.webView}
+            onLoadStart={() => { setLoading(true); setHasError(false); }}
+            onLoadEnd={() => setLoading(false)}
+            onError={(e) => {
+              setLoading(false);
+              setHasError(true);
+              setErrorMsg(e.nativeEvent.description || 'Failed to load');
+            }}
+            onHttpError={(e) => {
+              setLoading(false);
+              setHasError(true);
+              setErrorMsg(`HTTP ${e.nativeEvent.statusCode}: ${e.nativeEvent.description || 'Server error'}`);
+            }}
+            onNavigationStateChange={navState => {
+              setCanGoBack(navState.canGoBack);
+              setCanGoForward(navState.canGoForward);
+            }}
+            javaScriptEnabled
+            domStorageEnabled
+            startInLoadingState
+            scalesPageToFit
+            allowsInlineMediaPlayback
+            mediaPlaybackRequiresUserAction={false}
+          />
+        )}
 
         {/* LOADING */}
         {loading && (
