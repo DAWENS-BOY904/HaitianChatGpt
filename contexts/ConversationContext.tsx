@@ -2,6 +2,7 @@ import React, { createContext, ReactNode, useState, useEffect, useCallback, useR
 import { useAuth } from '../template';
 import { getSupabaseClient } from '../template';
 import { FunctionsHttpError } from '@supabase/supabase-js';
+// Note: base64 images are sent as strings to the backend for server-side processing
 
 // ==================== INTERFACES ====================
 
@@ -517,9 +518,16 @@ const sendMessage = async (
       const fileName = `${Date.now()}.jpg`;
       const filePath = `${user.id}/${conversationId}/${fileName}`;
       
+      // Convert base64 to Uint8Array for upload
+      const binaryStr = atob(base64Image);
+      const bytes = new Uint8Array(binaryStr.length);
+      for (let i = 0; i < binaryStr.length; i++) {
+        bytes[i] = binaryStr.charCodeAt(i);
+      }
+      
       const { error: uploadError } = await supabase.storage
         .from('chat-images')
-        .upload(filePath, decode(base64Image), {
+        .upload(filePath, bytes, {
           contentType: 'image/jpeg',
           upsert: true,
         });

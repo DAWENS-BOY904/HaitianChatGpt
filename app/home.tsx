@@ -36,7 +36,6 @@ import { MessageItem } from '../components/MessageItem';
 import { ThinkingIndicator } from '../components/ThinkingIndicator';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getSupabaseClient } from '@/template';
-import { decode } from 'base64-arraybuffer';
 import { useRouter } from 'expo-router';
 import { Accelerometer } from 'expo-sensors';
 import { Audio } from 'expo-av';
@@ -736,26 +735,25 @@ export default function HomeScreen() {
       }
 
       let imageUrl: string | undefined;
-      if (media.length > 0 && media[0].type === 'image' && media[0].base64) {
-        const fileName = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}.jpg`;
-        const filePath = `${conversationId}/${fileName}`;
-        
-        const { error: uploadError } = await supabase.storage
-          .from('chat-images')
-          .upload(filePath, decode(media[0].base64), {
-            contentType: 'image/jpeg',
-            cacheControl: '3600',
-          });
+      let base64Image: string | undefined;
 
-        if (!uploadError) {
-          const { data: urlData } = supabase.storage
-            .from('chat-images')
-            .getPublicUrl(filePath);
-          imageUrl = urlData.publicUrl;
+      if (media.length > 0 && media[0].type === 'image') {
+        if (media[0].base64) {
+          base64Image = media[0].base64;
+        } else if (media[0].uri) {
+          // Read file as base64
+          try {
+            base64Image = await FileSystem.readAsStringAsync(media[0].uri, {
+              encoding: FileSystem.EncodingType.Base64,
+            });
+          } catch (e) {
+            console.error('Failed to read image as base64:', e);
+          }
         }
       }
 
-      await sendMessage(text || '[Image]', imageUrl, currentAIModel);
+      // Send message with base64 image - ConversationContext handles upload
+      await sendMessage(text || (base64Image ? '[Image]' : ''), imageUrl, base64Image, false, currentAIModel);
 
       setShowCompletionStatus(true);
       setTimeout(() => setShowCompletionStatus(false), 2000);
@@ -798,6 +796,14 @@ export default function HomeScreen() {
       showAlert('Limit', 'You can select a maximum of 5 files');
       return;
     }
+    
+    // Check image upload limits
+    const imageCount = media.filter(m => m.type === 'image').length;
+    if (imageCount > 0) {
+      // Pro users: 10 images, Free users: 4 images per 24h
+      // We'll just allow and enforce in the send handler
+    }
+    
     setSelectedMedia(media);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   }, [showAlert]);

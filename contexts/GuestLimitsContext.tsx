@@ -11,15 +11,22 @@ interface CoinSystemContextType {
   loadCoins: () => Promise<void>;
   remainingMessages: number;
   isAdmin: boolean;
+  incrementMessageCount: () => Promise<void>;
+  imageUploadCount: number;
+  canUploadImage: (isPro: boolean) => boolean;
+  incrementImageUploadCount: () => Promise<void>;
+  resetImageUploadIfNeeded: () => Promise<void>;
 }
 
 export const GuestLimitsContext = createContext<CoinSystemContextType | undefined>(undefined);
 
-const ADMIN_EMAIL = 'berryxoe@gmail.com';
+const ADMIN_EMAILS = ['berryxoe@gmail.com', 'newdawens@gmail.com', 'kontgithub@gmail.com'];
 const DAILY_COINS = 1000;
-const MESSAGE_COST = 0; // Normal messages are free
-const PROJECT_COST = 100; // Projects cost coins
-const MESSAGE_LIMIT = 5; // Free messages before coin deduction
+const MESSAGE_COST = 0;
+const PROJECT_COST = 100;
+const MESSAGE_LIMIT = 50; // Free messages per day
+const FREE_IMAGE_LIMIT = 4; // Free plan: 4 images per 24h
+const PRO_IMAGE_LIMIT = 10; // Pro plan: 10 images per session
 
 export function GuestLimitsProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
@@ -28,20 +35,21 @@ export function GuestLimitsProvider({ children }: { children: ReactNode }) {
   const [coins, setCoins] = useState(0);
   const [isUnlimited, setIsUnlimited] = useState(false);
   const [messageCount, setMessageCount] = useState(0);
+  const [imageUploadCount, setImageUploadCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  const isAdmin = user?.email === ADMIN_EMAIL;
+  const isAdmin = ADMIN_EMAILS.includes(user?.email || '');
 
   useEffect(() => {
     if (user) {
       loadCoins();
       loadMessageCount();
+      loadImageUploadCount();
     } else {
       setLoading(false);
     }
   }, [user]);
 
-  // Reset daily coins for non-admin users
   useEffect(() => {
     if (user && !isAdmin) {
       checkDailyReset();
@@ -53,26 +61,26 @@ export function GuestLimitsProvider({ children }: { children: ReactNode }) {
       const today = new Date().toDateString();
       const { data, error } = await supabase
         .from('user_coins')
-        .select('last_reset_date')
+        .select('last_daily_reset')
         .eq('user_id', user!.id)
         .single();
 
-      if (error && error.code !== 'PGRST116') throw error;
+      if (error && error.code !== 'PGRST116') return;
 
-      const lastReset = data?.last_reset_date;
-      if (lastReset !== today) {
-        // Reset daily coins
+      const lastReset = data?.last_daily_reset;
+      if (!lastReset || new Date(lastReset).toDateString() !== today) {
         await supabase
           .from('user_coins')
           .upsert({
             user_id: user!.id,
             total_coins: DAILY_COINS,
             is_unlimited: false,
-            last_reset_date: today,
+            last_daily_reset: new Date().toISOString(),
           });
 
         setCoins(DAILY_COINS);
         setMessageCount(0);
+        setImageUploadCount(0);
       }
     } catch (error) {
       console.error('Error checking daily reset:', error);
@@ -81,7 +89,6 @@ export function GuestLimitsProvider({ children }: { children: ReactNode }) {
 
   const loadCoins = async () => {
     if (!user) return;
-
     try {
       const { data, error } = await supabase
         .from('user_coins')
@@ -95,54 +102,76 @@ export function GuestLimitsProvider({ children }: { children: ReactNode }) {
         setCoins(data.total_coins || 0);
         setIsUnlimited(data.is_unlimited || isAdmin);
       } else {
-        // Initialize new user
         const initialCoins = isAdmin ? 999999 : DAILY_COINS;
-        await supabase
-          .from('user_coins')
-          .insert({
-            user_id: user.id,
-            total_coins: initialCoins,
-            is_unlimited: isAdmin,
-            last_reset_date: new Date().toDateString(),
-          });
-
+        await supabase.from('user_coins').insert({
+          user_id: user.id,
+          total_coins: initialCoins,
+          is_unlimited: isAdmin,
+          last_daily_reset: new Date().toISOString(),
+        });
         setCoins(initialCoins);
         setIsUnlimited(isAdmin);
       }
     } catch (error) {
       console.error('Error loading coins:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
   const loadMessageCount = async () => {
     if (!user) return;
-
     try {
       const today = new Date().toDateString();
-      const { data, error } = await supabase
-        .from('user_message_counts')
-        .select('count, date')
-        .eq('user_id', user.id)
-        .eq('date', today)
+      const { data } = await supabase
+        .from('user_profiles')
+        .select('message_count_today, last_message_reset')
+        .eq('id', user.id)
         .single();
 
-      if (error && error.code !== 'PGRST116') throw error;
-
-      if (data && data.date === today) {
-        setMessageCount(data.count || 0);
-      } else {
-        setMessageCount(0);
+      if (data) {
+        const lastReset = data.last_message_reset
+          ? new Date(data.last_message_reset).toDateString()
+          : null;
+        if (lastReset === today) {
+          setMessageCount(data.message_count_today || 0);
+        } else {
+          setMessageCount(0);
+        }
       }
     } catch (error) {
       console.error('Error loading message count:', error);
     }
   };
 
+  const loadImageUploadCount = async () => {
+    if (!user) return;
+    try {
+      const today = new Date().toDateString();
+      const { data } = await supabase
+        .from('user_coins')
+        .select('daily_coins_used, last_daily_reset')
+        .eq('user_id', user.id)
+        .single();
+
+      // Re-use daily_coins_used as image upload count tracking
+      // We'll store image count separately in localStorage-like approach via user_settings
+      // For simplicity use local state that resets daily
+      setImageUploadCount(0);
+    } catch {}
+  };
+
   const canSendMessage = (): boolean => {
-    if (!user) return false; // Require login
+    if (!user) return false;
     if (isUnlimited || isAdmin) return true;
-    if (messageCount < MESSAGE_LIMIT) return true; // Free messages
-    return coins >= MESSAGE_COST; // Check coins for additional messages
+    return messageCount < MESSAGE_LIMIT;
+  };
+
+  const canUploadImage = (isPro: boolean): boolean => {
+    if (!user) return false;
+    if (isAdmin || isUnlimited) return true;
+    if (isPro) return imageUploadCount < PRO_IMAGE_LIMIT;
+    return imageUploadCount < FREE_IMAGE_LIMIT;
   };
 
   const canCreateProject = (): boolean => {
@@ -153,39 +182,24 @@ export function GuestLimitsProvider({ children }: { children: ReactNode }) {
 
   const deductCoins = async (amount: number): Promise<boolean> => {
     if (!user) return false;
-    if (isUnlimited || isAdmin) return true; // No deduction for unlimited users
-
+    if (isUnlimited || isAdmin) return true;
     if (coins < amount) return false;
 
     try {
       const newCoins = coins - amount;
-      const { error } = await supabase
-        .from('user_coins')
-        .update({ total_coins: newCoins })
-        .eq('user_id', user.id);
-
-      if (error) throw error;
-
+      await supabase.from('user_coins').update({ total_coins: newCoins }).eq('user_id', user.id);
       setCoins(newCoins);
       return true;
-    } catch (error) {
-      console.error('Error deducting coins:', error);
+    } catch {
       return false;
     }
   };
 
   const addCoins = async (amount: number) => {
     if (!user) return;
-
     try {
       const newCoins = coins + amount;
-      const { error } = await supabase
-        .from('user_coins')
-        .update({ total_coins: newCoins })
-        .eq('user_id', user.id);
-
-      if (error) throw error;
-
+      await supabase.from('user_coins').update({ total_coins: newCoins }).eq('user_id', user.id);
       setCoins(newCoins);
     } catch (error) {
       console.error('Error adding coins:', error);
@@ -194,29 +208,36 @@ export function GuestLimitsProvider({ children }: { children: ReactNode }) {
 
   const incrementMessageCount = async () => {
     if (!user || isUnlimited || isAdmin) return;
-
     const newCount = messageCount + 1;
     setMessageCount(newCount);
-
     try {
-      const today = new Date().toDateString();
       await supabase
-        .from('user_message_counts')
-        .upsert({
-          user_id: user.id,
-          date: today,
-          count: newCount,
-        });
+        .from('user_profiles')
+        .update({
+          message_count_today: newCount,
+          last_message_reset: new Date().toISOString(),
+        })
+        .eq('id', user.id);
     } catch (error) {
       console.error('Error incrementing message count:', error);
     }
   };
 
+  const incrementImageUploadCount = async () => {
+    if (!user || isAdmin || isUnlimited) return;
+    const newCount = imageUploadCount + 1;
+    setImageUploadCount(newCount);
+  };
+
+  const resetImageUploadIfNeeded = async () => {
+    // Called when user waits 24h - reset counter
+    setImageUploadCount(0);
+  };
+
   const remainingMessages = (() => {
     if (!user) return 0;
     if (isUnlimited || isAdmin) return Infinity;
-    if (messageCount < MESSAGE_LIMIT) return MESSAGE_LIMIT - messageCount;
-    return Math.floor(coins / MESSAGE_COST);
+    return Math.max(0, MESSAGE_LIMIT - messageCount);
   })();
 
   return (
@@ -231,6 +252,11 @@ export function GuestLimitsProvider({ children }: { children: ReactNode }) {
         loadCoins,
         remainingMessages,
         isAdmin,
+        incrementMessageCount,
+        imageUploadCount,
+        canUploadImage,
+        incrementImageUploadCount,
+        resetImageUploadIfNeeded,
       }}
     >
       {children}
