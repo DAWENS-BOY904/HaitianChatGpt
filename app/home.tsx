@@ -163,8 +163,28 @@ export default function HomeScreen() {
   const [isSearchMode, setIsSearchMode] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredMessages, setFilteredMessages] = useState<Message[]>([]);
+  const [timeUntilMidnight, setTimeUntilMidnight] = useState('');
+  const [sessionBonusMessages, setSessionBonusMessages] = useState(0);
+  const [hasUsedNewChatBonus, setHasUsedNewChatBonus] = useState(false);
   
   const runOnJS_setSideMenu = useCallback((val: boolean) => setSideMenuVisible(val), []);
+
+  // Compute time until midnight and update every minute
+  const computeTimeUntilMidnight = useCallback(() => {
+    const now = new Date();
+    const midnight = new Date();
+    midnight.setHours(24, 0, 0, 0);
+    const diff = midnight.getTime() - now.getTime();
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    setTimeUntilMidnight(`${hours}h ${minutes}m`);
+  }, []);
+
+  useEffect(() => {
+    computeTimeUntilMidnight();
+    const interval = setInterval(computeTimeUntilMidnight, 60000);
+    return () => clearInterval(interval);
+  }, [computeTimeUntilMidnight]);
 
   // Swipe gesture to open side menu
   const swipeGesture = Gesture.Pan()
@@ -684,7 +704,7 @@ export default function HomeScreen() {
   const handleSend = async () => {
     if ((!inputText.trim() && selectedMedia.length === 0) || sending) return;
 
-    if (!editingMessageId && !canSendMessage()) {
+    if (!editingMessageId && !canSendMessage() && sessionBonusMessages <= 0) {
       if (!user) {
         showAlert(
           'Sign In Required',
@@ -759,7 +779,11 @@ export default function HomeScreen() {
       setTimeout(() => setShowCompletionStatus(false), 2000);
 
       if (user && !isUnlimited && !isAdmin) {
-        await incrementMessageCount();
+        if (sessionBonusMessages > 0) {
+          setSessionBonusMessages(prev => prev - 1);
+        } else {
+          await incrementMessageCount();
+        }
       }
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -1289,25 +1313,41 @@ export default function HomeScreen() {
       )}
 
       {/* Daily Limit Banner */}
-      {user && !isUnlimited && !isAdmin && !canSendMessage() && (
+      {user && !isUnlimited && !isAdmin && !canSendMessage() && sessionBonusMessages <= 0 && (
         <View style={[
           styles.limitBanner,
-          { backgroundColor: colors.surface, borderColor: colors.border }
+          { backgroundColor: colors.surface, borderColor: colors.border, flexWrap: 'wrap' }
         ]}>
-          <View style={{ flex: 1 }}>
+          <View style={{ flex: 1, minWidth: 160 }}>
             <Text style={{ color: colors.text, fontWeight: '600', fontSize: 14 }}>
               Daily limit reached
             </Text>
             <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 2 }}>
-              Try again tomorrow at midnight or upgrade to Plus.
+              {timeUntilMidnight ? `Resets in ${timeUntilMidnight}` : 'Resets at midnight'}
             </Text>
           </View>
-          <TouchableOpacity
-            style={[styles.limitBannerButton, { backgroundColor: accentColor }]}
-            onPress={() => router.push('/subscription')}
-          >
-            <Text style={{ color: '#FFF', fontWeight: '700', fontSize: 13 }}>Get Plus</Text>
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
+            {!hasUsedNewChatBonus && (
+              <TouchableOpacity
+                style={[styles.limitBannerButton, { backgroundColor: colors.surfaceSecondary || '#2C2C2E', borderWidth: 1, borderColor: colors.border }]}
+                onPress={async () => {
+                  setHasUsedNewChatBonus(true);
+                  setSessionBonusMessages(100);
+                  await createConversation();
+                  setInputText('');
+                  setSelectedMedia([]);
+                }}
+              >
+                <Text style={{ color: colors.text, fontWeight: '700', fontSize: 13 }}>New Chat</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              style={[styles.limitBannerButton, { backgroundColor: accentColor }]}
+              onPress={() => router.push('/subscription')}
+            >
+              <Text style={{ color: '#FFF', fontWeight: '700', fontSize: 13 }}>Get Plus</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       )}
       

@@ -264,4 +264,4 @@ export function GuestLimitsProvider({ children }: { children: ReactNode }) {
     </GuestLimitsContext.Provider>
   );
 }
-hello ai dont skip please In the daily limit banner in home.tsx, add a live countdown showing hours and minutes remaining until midnight reset, formatted as 'Resets in 3h 42m', updating every minute via a useEffect interval.When the daily message limit is reached in home.tsx, add a second button 'New Chat' next to 'Get Plus' in the limit banner that starts a fresh conversation granting 100 extra messages for that session only.
+
