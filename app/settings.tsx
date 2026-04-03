@@ -147,15 +147,22 @@ export default function SettingsScreen() {
       backgroundColor: '#111111',
     },
     // Header style tankou foto a
-    header: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      paddingTop: insets.top + 10,
-      paddingBottom: 10,
-      paddingHorizontal: 20,
-      position: 'relative',
-    },
+   header: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'center',
+  paddingTop: insets.top + 10,
+  paddingBottom: 10,
+  paddingHorizontal: 20,
+  position: 'relative',
+
+  // 👇 ajoute sa
+  borderBottomLeftRadius: 20,
+  borderBottomRightRadius: 20,
+
+  // opsyonèl si w vle li pi clean
+  overflow: 'hidden',
+},
     closeButton: {
       position: 'absolute',
       right: 20,
