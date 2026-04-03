@@ -263,4 +263,3 @@ export function GuestLimitsProvider({ children }: { children: ReactNode }) {
     </GuestLimitsContext.Provider>
   );
 }
-HELLO AI DONT SKIP When a free user reaches their daily message limit (50 messages/day), show a non-dismissible sticky banner above the input bar with text 'You have reached your daily limit. Try again tomorrow at [time].' and a 'Get Plus' button that navigates to /subscription.

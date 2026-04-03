@@ -1227,6 +1227,19 @@ export default function HomeScreen() {
       ...Typography.caption,
       fontWeight: '600',
     },
+    limitBanner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: Spacing.md,
+      paddingVertical: Spacing.sm,
+      borderTopWidth: 1,
+      gap: Spacing.sm,
+    },
+    limitBannerButton: {
+      paddingHorizontal: Spacing.md,
+      paddingVertical: Spacing.sm,
+      borderRadius: BorderRadius.full,
+    },
     searchContainer: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -1272,6 +1285,29 @@ export default function HomeScreen() {
       {isOffline && (
         <View style={styles.offlineBanner}>
           <Text style={styles.offlineText}>No connection — some features unavailable</Text>
+        </View>
+      )}
+
+      {/* Daily Limit Banner */}
+      {user && !isUnlimited && !isAdmin && !canSendMessage() && (
+        <View style={[
+          styles.limitBanner,
+          { backgroundColor: colors.surface, borderColor: colors.border }
+        ]}>
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: colors.text, fontWeight: '600', fontSize: 14 }}>
+              Daily limit reached
+            </Text>
+            <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 2 }}>
+              Try again tomorrow at midnight or upgrade to Plus.
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={[styles.limitBannerButton, { backgroundColor: accentColor }]}
+            onPress={() => router.push('/subscription')}
+          >
+            <Text style={{ color: '#FFF', fontWeight: '700', fontSize: 13 }}>Get Plus</Text>
+          </TouchableOpacity>
         </View>
       )}
       
