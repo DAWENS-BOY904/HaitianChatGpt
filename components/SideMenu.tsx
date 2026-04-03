@@ -326,7 +326,7 @@ export function SideMenu({
 const styles = StyleSheet.create({
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'backgroundColor: 'rgba(55, 65, 81, 0.6)'',
+    backgroundColor: 'rgba(0,0,0,0.45)',
     zIndex: 998,
   },
   drawer: {
