@@ -644,7 +644,7 @@ export default function SettingsScreen() {
               <SwitchRow 
                 icon="trending-up-outline" 
                 title="Trending searches" 
-                value={settings.trendE8E93'}
+                value={settings.trendingSearches}
                 onValueChange={(v) => updateSetting('trendingSearches', v)}
               />
               
