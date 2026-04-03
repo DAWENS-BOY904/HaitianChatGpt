@@ -1723,4 +1723,3 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-hello ai please dont skip: allow the ai can search any link and when click its open linksafety modal after click its open webview page file like the old old model. 
