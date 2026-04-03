@@ -149,6 +149,7 @@ export default function HomeScreen() {
   const [currentAIModel, setCurrentAIModel] = useState<AIModelKey>(
     (settings.preferredAiModel as AIModelKey) || 'gemini'
   );
+  const inputRef = useRef<TextInput>(null);
   const [recordingState, setRecordingState] = useState<RecordingState>('idle');
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [lastShake, setLastShake] = useState(0);
@@ -221,12 +222,7 @@ export default function HomeScreen() {
     };
   }, []);
 
-  // Auto-create a conversation when user is authenticated and no conversation exists
-  useEffect(() => {
-    if (user && !loading && conversations.length === 0) {
-      createConversation();
-    }
-  }, [user, loading, conversations.length]);
+  // Do NOT auto-create empty conversations — only create on first real send
 
   // Cleanup all resources
   const cleanupAll = useCallback(() => {
@@ -445,30 +441,35 @@ export default function HomeScreen() {
   }, [stopRecordingTimer]);
 
   const startVoiceRecording = async () => {
-    if (!audioPermissionRef.current) {
+    // Always re-request permissions to ensure they are current
+    try {
       const { status } = await Audio.requestPermissionsAsync();
       audioPermissionRef.current = status === 'granted';
-      
-      if (status !== 'granted') {
-        Alert.alert(
-          'Microphone Required',
-          'Please enable microphone access in Settings to use voice recording.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { 
-              text: 'Open Settings', 
-              onPress: () => Platform.OS === 'ios' 
-                ? Linking.openURL('app-settings:') 
-                : Linking.openSettings()
-            }
-          ]
-        );
-        return;
-      }
+    } catch (e) {
+      audioPermissionRef.current = false;
+    }
+
+    if (!audioPermissionRef.current) {
+      Alert.alert(
+        'Microphone Required',
+        'Please enable microphone access in Settings to use voice recording.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { 
+            text: 'Open Settings', 
+            onPress: () => Platform.OS === 'ios' 
+              ? Linking.openURL('app-settings:') 
+              : Linking.openSettings()
+          }
+        ]
+      );
+      return;
     }
 
     try {
+      // Fully clean up any previous recording, then wait for audio session to release
       await cleanupRecording();
+      await new Promise(r => setTimeout(r, 150));
 
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
@@ -525,10 +526,12 @@ export default function HomeScreen() {
       let errorMessage = 'Could not start recording. ';
       if (error.message?.includes('E_AUDIO_NODATA')) {
         errorMessage += 'No audio data detected. Check your microphone.';
-      } else if (error.message?.includes('E_AUDIO_PERMISSIONS')) {
-        errorMessage += 'Microphone permission denied.';
-      } else if (error.message?.includes('E_AUDIO_BUSY')) {
-        errorMessage += 'Another app is using the microphone.';
+      } else if (error.message?.includes('E_AUDIO_PERMISSIONS') || error.message?.includes('permission')) {
+        errorMessage = 'Microphone permission denied. Please enable it in Settings.';
+      } else if (error.message?.includes('E_AUDIO_BUSY') || error.message?.includes('busy')) {
+        errorMessage += 'Another app is using the microphone. Close it and try again.';
+      } else if (error.message?.includes('E_AUDIO_FOCUS')) {
+        errorMessage += 'Audio focus could not be obtained. Try again.';
       } else {
         errorMessage += 'Please try again or type your message.';
       }
@@ -851,12 +854,15 @@ export default function HomeScreen() {
   // -------- CHAT HANDLING --------
 
   const handleNewChat = useCallback(async () => {
-    await createConversation();
+    // Only create a new conversation if current one has messages
+    if (messages.length > 0) {
+      await createConversation();
+    }
     setInputText('');
     setSelectedMedia([]);
     setEditingMessageId(null);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-  }, [createConversation]);
+  }, [createConversation, messages.length]);
 
   const handleDeleteConversation = useCallback(async () => {
     if (!currentConversation) return;
@@ -1290,7 +1296,7 @@ export default function HomeScreen() {
     <GestureDetector gesture={swipeGesture}>
     <KeyboardAvoidingView 
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={0}
     >
       <StatusBar 
@@ -1523,6 +1529,7 @@ export default function HomeScreen() {
             </View>
           ) : (
             <TextInput
+              ref={inputRef}
               style={styles.input}
               placeholder={editingMessageId ? "Edit message..." : "Message..."}
               placeholderTextColor={colors.textSecondary}
@@ -1531,6 +1538,8 @@ export default function HomeScreen() {
               multiline
               maxLength={4000}
               editable={!sending && !isRecording && !isProcessing}
+              returnKeyType="default"
+              blurOnSubmit={false}
             />
           )}
         </View>
@@ -1726,4 +1735,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-hello ai if see this dont skip : in home page when you tap the screen keybvoard to tex must be ale and lew tape tex li paret siw tape lot kote li dwe ale pa dwe tro rete and fix transcribe lem click li show could not start recording fix it real evite new conversatio nwihtout tex on it.
+
