@@ -314,9 +314,9 @@ ${customInstructions ? `CUSTOM INSTRUCTIONS FROM USER:\n${customInstructions}` :
 ==============================
 USER PROFILE (IF AVAILABLE):
 ==============================
-${nickname ? - Preferred name: ${nickname} : ''}
-${occupation ? - Occupation: ${occupation} : ''}
-${interests.length > 0 ? - Interests: ${interests.join(', ')} : ''}
+${nickname ? `- Preferred name: ${nickname}` : ''}
+${occupation ? `- Occupation: ${occupation}` : ''}
+${interests.length > 0 ? `- Interests: ${interests.join(', ')}` : ''}
 
 ==============================
 CORE CAPABILITIES:
