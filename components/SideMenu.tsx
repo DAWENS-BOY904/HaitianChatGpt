@@ -168,7 +168,7 @@ export function SideMenu({
           style={[
             styles.drawer,
             {
-              backgroundColor: isDark ? '#000000' : '#FFFFFF',
+              backgroundColor: isDark ? '#9CA3AF' : '#FFFFFF',
               paddingTop: insets.top + (Platform.OS === 'android' ? StatusBar.currentHeight || 0 : 0),
             },
             containerStyle,

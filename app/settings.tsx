@@ -144,25 +144,18 @@ export default function SettingsScreen() {
   const styles = StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: '#111111',
+      backgroundColor: '#000000',
     },
     // Header style tankou foto a
-   header: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  justifyContent: 'center',
-  paddingTop: insets.top + 10,
-  paddingBottom: 10,
-  paddingHorizontal: 20,
-  position: 'relative',
-
-  // 👇 enpòtan anpil
-  backgroundColor: '#1C1C1E',
-
-  borderBottomLeftRadius: 25,
-  borderBottomRightRadius: 25,
-  overflow: 'hidden',
-},
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingTop: insets.top + 10,
+      paddingBottom: 10,
+      paddingHorizontal: 20,
+      position: 'relative',
+    },
     closeButton: {
       position: 'absolute',
       right: 20,
