@@ -49,9 +49,9 @@ interface SideMenuProps {
 }
 
 const QUICK_ACTIONS = [
-  { id: 'projects', icon: 'folder-outline', label: 'Projects', color: '#8B5CF6' },
-  { id: 'images', icon: 'images-outline', label: 'Images', color: '#EC4899' },
-  { id: 'apps', icon: 'grid-outline', label: 'Apps', color: '#6366F1' },
+  { id: 'projects', icon: 'folder-outline', label: 'Projects', color: '#8B5CF6', route: '/projects' },
+  { id: 'images', icon: 'images-outline', label: 'Images', color: '#EC4899', route: '/images' },
+  { id: 'apps', icon: 'grid-outline', label: 'Apps', color: '#6366F1', route: '/apps' },
   { id: 'upgrade', icon: 'sparkles', label: 'Upgrade', color: '#7C3AED', isUpgrade: true },
 ];
 
@@ -74,6 +74,12 @@ export function SideMenu({
   const { user } = useAuth();
   const { conversations, currentConversation, selectConversation } = useConversation();
   const insets = useSafeAreaInsets();
+
+  const handleQuickAction = (action) => {
+  if (action.route) {
+    router.push(action.route);
+  }
+};
 
   const [searchQuery, setSearchQuery] = useState('');
   const [searchActive, setSearchActive] = useState(false);
