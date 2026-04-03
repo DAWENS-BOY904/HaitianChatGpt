@@ -1723,3 +1723,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
+hello ai dont  skip please :when i ask for openai link or other its says its can have access so fix it real link search and When a user clicks a link in a message, it correctly shows LinkSafetyModal then opens WebViewModal. Please verify the flow works end-to-end and make sure the WebView loads URLs properly, handles load errors gracefully, and shows a loading spinner while the page loads.Improve the streaming text display so AI responses render word-by-word smoothly with a blinking cursor, and automatically scroll to the bottom as new tokens arrive without jumping.
