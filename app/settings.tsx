@@ -156,11 +156,11 @@ export default function SettingsScreen() {
   paddingHorizontal: 20,
   position: 'relative',
 
-  // 👇 ajoute sa
-  borderBottomLeftRadius: 20,
-  borderBottomRightRadius: 20,
+  // 👇 enpòtan anpil
+  backgroundColor: '#1C1C1E',
 
-  // opsyonèl si w vle li pi clean
+  borderBottomLeftRadius: 25,
+  borderBottomRightRadius: 25,
   overflow: 'hidden',
 },
     closeButton: {
