@@ -28,6 +28,7 @@ import { useSettings } from '../hooks/useSettings';
 import { useAuth } from '@/template';
 import { useConversation } from '../hooks/useConversation';
 import { BorderRadius } from '../constants/theme';
+import { useRouter } from 'expo-router';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -72,6 +73,7 @@ export function SideMenu({
   const { colors, isDark } = useTheme();
   const { settings } = useSettings();
   const { user } = useAuth();
+  const router = useRouter();
   const { conversations, currentConversation, selectConversation } = useConversation();
   const insets = useSafeAreaInsets();
 
