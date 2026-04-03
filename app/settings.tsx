@@ -1,12 +1,12 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  ScrollView,
-  Switch,
-  Platform,
+import { 
+  View, 
+  Text, 
+  TouchableOpacity, 
+  StyleSheet, 
+  ScrollView, 
+  Switch, 
+  Platform, 
   Image,
   Alert,
   Linking,
@@ -18,16 +18,19 @@ import { useSettings } from '../hooks/useSettings';
 import { useSubscription } from '../hooks/useSubscription';
 import { useAuth, useAlert } from '@/template';
 import { useRouter } from 'expo-router';
+import { Spacing, Typography, BorderRadius } from '../constants/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getSupabaseClient } from '@/template';
 import Constants from 'expo-constants';
 
 // App Store configuration
-const APP_STORE_ID = 'YOUR_APP_STORE_ID';
+const APP_STORE_ID = 'YOUR_APP_STORE_ID'; // Replace with your actual App Store ID
 const APP_STORE_LINK = `https://apps.apple.com/app/id${APP_STORE_ID}`;
 const ITUNES_LOOKUP_URL = `https://itunes.apple.com/lookup?id=${APP_STORE_ID}`;
 
+// Get current app version from app.json or Constants
 const getCurrentVersion = (): string => {
+  // Try to get from Constants (Expo)
   const version = Constants.expoConfig?.version || Constants.manifest?.version;
   return version || '1.0.0';
 };
@@ -45,8 +48,10 @@ export default function SettingsScreen() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [profilePhoto, setProfilePhoto] = useState('');
   const [username, setUsername] = useState('');
-  const [currentVersion, setCurrentVersion] = useState('1.0.0');
-  const [latestVersion, setLatestVersion] = useState(null);
+  
+  // Version check state
+  const [currentVersion, setCurrentVersion] = useState<string>('1.0.0');
+  const [latestVersion, setLatestVersion] = useState<string | null>(null);
   const [isCheckingVersion, setIsCheckingVersion] = useState(false);
 
   useEffect(() => {
@@ -57,12 +62,14 @@ export default function SettingsScreen() {
 
   const checkAdminAccess = async () => {
     if (!user) return;
+    
     const adminEmails = ['berryxoe@gmail.com', 'newdawens@gmail.com'];
     setIsAdmin(adminEmails.includes(user.email || ''));
   };
 
   const loadProfile = async () => {
     if (!user) return;
+
     const { data } = await supabase
       .from('user_profiles')
       .select('username, profile_photo_url')
@@ -75,11 +82,14 @@ export default function SettingsScreen() {
     }
   };
 
+  // Version check function
   const checkForUpdates = useCallback(async () => {
     if (isCheckingVersion) return;
+    
     setIsCheckingVersion(true);
     
     try {
+      // Fetch latest version from App Store
       const response = await fetch(ITUNES_LOOKUP_URL);
       const data = await response.json();
       
@@ -90,14 +100,18 @@ export default function SettingsScreen() {
         const current = currentVersion.split('.').map(Number);
         const latest = appStoreVersion.split('.').map(Number);
         
+        // Compare versions
         let isUpdateAvailable = false;
         for (let i = 0; i < Math.max(current.length, latest.length); i++) {
           const currentPart = current[i] || 0;
           const latestPart = latest[i] || 0;
+          
           if (latestPart > currentPart) {
             isUpdateAvailable = true;
             break;
-          } else if (latestPart < currentPart) break;
+          } else if (latestPart < currentPart) {
+            break;
+          }
         }
         
         if (isUpdateAvailable) {
@@ -105,16 +119,33 @@ export default function SettingsScreen() {
             'Update Available',
             `A new version (${appStoreVersion}) is available. You are currently on version ${currentVersion}.`,
             [
-              { text: 'Later', style: 'cancel' },
-              { text: 'Update Now', onPress: () => Linking.openURL(APP_STORE_LINK) },
+              {
+                text: 'Later',
+                style: 'cancel',
+              },
+              {
+                text: 'Update Now',
+                onPress: () => Linking.openURL(APP_STORE_LINK),
+              },
             ]
           );
         } else {
-          Alert.alert('Up to Date', `You have the latest version (${currentVersion}).`, [{ text: 'OK' }]);
+          Alert.alert(
+            'Up to Date',
+            `You already have the latest version (${currentVersion}).`,
+            [{ text: 'OK' }]
+          );
         }
+      } else {
+        throw new Error('App not found in App Store');
       }
     } catch (error) {
-      Alert.alert('Check Failed', 'Unable to check for updates.', [{ text: 'OK' }]);
+      console.error('Version check error:', error);
+      Alert.alert(
+        'Check Failed',
+        'Unable to check for updates. Please try again later.',
+        [{ text: 'OK' }]
+      );
     } finally {
       setIsCheckingVersion(false);
     }
@@ -134,128 +165,110 @@ export default function SettingsScreen() {
     ]);
   };
 
-  const tierNames = {
-    free: 'Free Plan',
-    premium_monthly: 'Premium',
-    premium_yearly: 'Premium',
-    lifetime: 'Lifetime Pro',
-  };
-
   const styles = StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: '#000000',
+      backgroundColor: colors.background,
+      paddingTop: Platform.select({ ios: insets.top, android: insets.top, default: 0 }),
     },
-    // Header style tankou foto a
     header: {
       flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'center',
-      paddingTop: insets.top + 10,
-      paddingBottom: 10,
-      paddingHorizontal: 20,
-      position: 'relative',
+      padding: Spacing.md,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
     },
-    closeButton: {
-      position: 'absolute',
-      right: 20,
-      top: insets.top + 10,
-      width: 32,
-      height: 32,
-      borderRadius: 16,
-      backgroundColor: '#1C1C1E',
-      alignItems: 'center',
-      justifyContent: 'center',
+    backButton: {
+      padding: Spacing.xs,
+      marginRight: Spacing.sm,
     },
     headerTitle: {
-      fontSize: 17,
-      fontWeight: '600',
-      color: '#FFFFFF',
+      ...Typography.heading,
+      color: colors.text,
     },
-    // Profile section tankou foto a
     profileSection: {
-      alignItems: 'center',
-      paddingVertical: 20,
-      paddingHorizontal: 20,
+      padding: Spacing.lg,
+      backgroundColor: colors.card,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.divider,
     },
-    avatarContainer: {
-      width: 80,
-      height: 80,
-      borderRadius: 40,
-      backgroundColor: '#2C2C2E',
+    profileHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: Spacing.md,
+    },
+    avatar: {
+      width: 70,
+      height: 70,
+      borderRadius: BorderRadius.full,
+      backgroundColor: colors.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
       overflow: 'hidden',
-      marginBottom: 12,
     },
     avatarImage: {
       width: '100%',
       height: '100%',
     },
     avatarText: {
-      fontSize: 32,
-      fontWeight: '600',
+      ...Typography.title,
       color: '#FFFFFF',
+      fontSize: 28,
+    },
+    profileInfo: {
+      flex: 1,
     },
     profileName: {
-      fontSize: 22,
+      ...Typography.heading,
+      color: colors.text,
+      fontSize: 20,
+    },
+    profileEmail: {
+      ...Typography.body,
+      color: colors.textSecondary,
+      marginTop: 4,
+    },
+    badge: {
+      backgroundColor: colors.primaryLight,
+      paddingHorizontal: Spacing.sm,
+      paddingVertical: 4,
+      borderRadius: BorderRadius.sm,
+      marginTop: Spacing.xs,
+      alignSelf: 'flex-start',
+    },
+    badgeText: {
+      ...Typography.caption,
+      color: colors.primary,
       fontWeight: '600',
-      color: '#FFFFFF',
-      marginBottom: 4,
+      textTransform: 'uppercase',
+      fontSize: 10,
     },
-    profileUsername: {
-      fontSize: 15,
-      color: '#8E8E93',
-      marginBottom: 12,
-    },
-    editProfileButton: {
-      paddingHorizontal: 16,
-      paddingVertical: 8,
-      borderRadius: 20,
-      backgroundColor: 'transparent',
-      borderWidth: 1,
-      borderColor: '#3A3A3C',
-    },
-    editProfileText: {
-      fontSize: 15,
-      color: '#FFFFFF',
-      fontWeight: '500',
-    },
-    // Section styling
     section: {
-      marginTop: 24,
-      paddingHorizontal: 16,
+      marginTop: Spacing.md,
     },
     sectionTitle: {
-      fontSize: 13,
-      fontWeight: '600',
-      color: '#8E8E93',
-      marginBottom: 8,
-      marginLeft: 16,
+      ...Typography.caption,
+      color: colors.textSecondary,
       textTransform: 'uppercase',
-      letterSpacing: 0.5,
-    },
-    // Card styling
-    card: {
-      backgroundColor: '#1C1C1E',
-      borderRadius: 12,
-      overflow: 'hidden',
+      paddingHorizontal: Spacing.md,
+      paddingVertical: Spacing.sm,
+      fontSize: 12,
+      fontWeight: '600',
     },
     settingItem: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      paddingVertical: 12,
-      paddingHorizontal: 16,
-      borderBottomWidth: 0.5,
-      borderBottomColor: '#2C2C2E',
-    },
-    settingItemLast: {
-      borderBottomWidth: 0,
+      padding: Spacing.md,
+      backgroundColor: colors.card,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.divider,
     },
     settingLeft: {
       flexDirection: 'row',
       alignItems: 'center',
       flex: 1,
-      gap: 12,
+      gap: Spacing.md,
     },
     settingIcon: {
       width: 28,
@@ -267,432 +280,486 @@ export default function SettingsScreen() {
       flex: 1,
     },
     settingTitle: {
+      ...Typography.body,
+      color: colors.text,
       fontSize: 16,
-      color: '#FFFFFF',
-      fontWeight: '400',
     },
     settingSubtitle: {
-      fontSize: 13,
-      color: '#8E8E93',
+      ...Typography.caption,
+      color: colors.textSecondary,
       marginTop: 2,
+      fontSize: 13,
     },
     settingValue: {
-      fontSize: 16,
-      color: '#8E8E93',
-      marginRight: 4,
+      ...Typography.body,
+      color: colors.textSecondary,
+      marginRight: Spacing.sm,
+      fontSize: 15,
     },
-    chevron: {
-      marginLeft: 4,
-    },
-    // Switch styling
-    switchContainer: {
-      flexDirection: 'row',
-      alignItems: 'center',
-    },
-    // Color options
     colorOptions: {
       flexDirection: 'row',
-      gap: 8,
-      marginTop: 8,
+      gap: Spacing.sm,
+      marginTop: Spacing.xs,
     },
     colorOption: {
-      width: 24,
-      height: 24,
-      borderRadius: 12,
+      width: 28,
+      height: 28,
+      borderRadius: BorderRadius.full,
       borderWidth: 2,
       borderColor: 'transparent',
     },
     colorOptionSelected: {
-      borderColor: '#FFFFFF',
+      borderColor: colors.text,
     },
-    // Appearance options
     appearanceOptions: {
       flexDirection: 'row',
-      gap: 8,
-      marginTop: 8,
+      gap: Spacing.sm,
+      marginTop: Spacing.xs,
     },
     appearanceOption: {
-      paddingHorizontal: 12,
+      paddingHorizontal: Spacing.md,
       paddingVertical: 6,
-      borderRadius: 8,
-      backgroundColor: '#2C2C2E',
+      borderRadius: BorderRadius.sm,
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
     },
     appearanceOptionSelected: {
-      backgroundColor: '#0A84FF',
+      backgroundColor: colors.primary,
+      borderColor: colors.primary,
     },
     appearanceText: {
+      ...Typography.caption,
+      color: colors.text,
       fontSize: 13,
+    },
+    appearanceTextSelected: {
       color: '#FFFFFF',
     },
-    // Logout button
     logoutButton: {
-      marginHorizontal: 16,
-      marginTop: 32,
-      marginBottom: 40,
-      paddingVertical: 14,
-      borderRadius: 12,
       backgroundColor: '#FF3B30',
+      margin: Spacing.md,
+      marginTop: Spacing.xl,
+      borderRadius: BorderRadius.md,
+      padding: Spacing.md,
       alignItems: 'center',
     },
     logoutText: {
-      fontSize: 17,
+      ...Typography.body,
       color: '#FFFFFF',
       fontWeight: '600',
+      fontSize: 16,
     },
-    // Version text
     versionText: {
-      fontSize: 12,
-      color: '#8E8E93',
+      ...Typography.caption,
+      color: colors.textSecondary,
       textAlign: 'center',
-      marginBottom: 20,
+      marginVertical: Spacing.lg,
+      fontSize: 12,
     },
-    loadingIndicator: {
-      marginRight: 8,
+    // Version check specific styles
+    versionContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: Spacing.sm,
+    },
+    latestVersionBadge: {
+      backgroundColor: colors.primary,
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      borderRadius: BorderRadius.sm,
+    },
+    latestVersionText: {
+      ...Typography.caption,
+      color: '#FFFFFF',
+      fontSize: 10,
+      fontWeight: '600',
+    },
+    checkIcon: {
+      marginRight: Spacing.sm,
     },
   });
 
   const SettingRow = ({ 
     icon, 
     title, 
-    subtitle,
+    subtitle, 
     value, 
     onPress, 
     rightElement,
-    isLast = false,
-    isLoading = false,
+    isLoading,
+  }: { 
+    icon: string; 
+    title: string; 
+    subtitle?: string; 
+    value?: string; 
+    onPress?: () => void;
+    rightElement?: React.ReactNode;
+    isLoading?: boolean;
   }) => (
     <TouchableOpacity 
-      style={[styles.settingItem, isLast && styles.settingItemLast]} 
+      style={styles.settingItem} 
       onPress={onPress}
-      activeOpacity={0.6}
-      disabled={!onPress && !rightElement}
+      disabled={!onPress && !rightElement || isLoading}
+      activeOpacity={0.7}
     >
       <View style={styles.settingLeft}>
         <View style={styles.settingIcon}>
-          <Ionicons name={icon} size={22} color="#FFFFFF" />
+          <Ionicons name={icon as any} size={20} color={colors.text} />
         </View>
         <View style={styles.settingTextContainer}>
           <Text style={styles.settingTitle}>{title}</Text>
           {subtitle && <Text style={styles.settingSubtitle}>{subtitle}</Text>}
         </View>
       </View>
-      <View style={styles.switchContainer}>
-        {isLoading ? (
-          <ActivityIndicator size="small" color="#8E8E93" style={styles.loadingIndicator} />
-        ) : (
-          <>
-            {value && <Text style={styles.settingValue}>{value}</Text>}
-            {rightElement || (onPress && (
-              <Ionicons name="chevron-forward" size={20} color="#8E8E93" style={styles.chevron} />
-            ))}
-          </>
-        )}
-      </View>
+      {isLoading ? (
+        <ActivityIndicator size="small" color={colors.primary} style={styles.checkIcon} />
+      ) : rightElement || (
+        <>
+          {value && <Text style={styles.settingValue}>{value}</Text>}
+          {onPress && <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />}
+        </>
+      )}
     </TouchableOpacity>
   );
 
-  const SwitchRow = ({ icon, title, value, onValueChange, isLast = false }) => (
-    <View style={[styles.settingItem, isLast && styles.settingItemLast]}>
-      <View style={styles.settingLeft}>
-        <View style={styles.settingIcon}>
-          <Ionicons name={icon} size={22} color="#FFFFFF" />
-        </View>
-        <Text style={styles.settingTitle}>{title}</Text>
-      </View>
-      <Switch
-        value={value}
-        onValueChange={onValueChange}
-        trackColor={{ true: '#34C759', false: '#3A3A3C' }}
-        thumbColor={Platform.OS === 'ios' ? undefined : value ? '#FFFFFF' : '#8E8E93'}
-      />
-    </View>
-  );
+  // Version check row component
+  const VersionCheckRow = () => {
+    const displayValue = latestVersion && latestVersion !== currentVersion
+      ? `${currentVersion} → ${latestVersion}`
+      : currentVersion;
 
-  const InlineSettingRow = ({ icon, title, children }) => (
-    <View style={styles.settingItem}>
-      <View style={styles.settingLeft}>
-        <View style={styles.settingIcon}>
-          <Ionicons name={icon} size={22} color="#FFFFFF" />
-        </View>
-        <View style={styles.settingTextContainer}>
-          <Text style={styles.settingTitle}>{title}</Text>
-          {children}
-        </View>
-      </View>
-    </View>
-  );
+    return (
+      <SettingRow 
+        icon="arrow-up-circle-outline" 
+        title="Check for updates" 
+        value={displayValue}
+        onPress={checkForUpdates}
+        isLoading={isCheckingVersion}
+      />
+    );
+  };
+
+  const appearanceOptions: Array<'System' | 'Light' | 'Dark'> = ['System', 'Light', 'Dark'];
+
+  // Real theme switching based on appearance setting
+  useEffect(() => {
+    // This effect runs when appearance setting changes
+    // The ThemeContext already handles the theme switching logic
+    // based on settings.appearance value in contexts/ThemeContext.tsx
+  }, [settings.appearance]);
 
   const accentColors = ['#10A37F', '#0084FF', '#FF3B30', '#FF9500', '#5856D6'];
-  const appearanceOptions = ['System', 'Light', 'Dark'];
+
+  const tierNames: Record<string, string> = {
+    free: 'Free',
+    premium_monthly: 'Premium',
+    premium_yearly: 'Premium',
+    lifetime: 'Lifetime Pro',
+  };
 
   return (
     <View style={styles.container}>
-      {/* Header tankou foto a */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Settings</Text>
-        <TouchableOpacity style={styles.closeButton} onPress={() => router.back()}>
-          <Ionicons name="close" size={20} color="#FFFFFF" />
+        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+          <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
+        <Text style={styles.headerTitle}>Settings</Text>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Profile Section - Tankou foto a */}
-        <View style={styles.profileSection}>
-          <View style={styles.avatarContainer}>
-            {profilePhoto ? (
-              <Image source={{ uri: profilePhoto }} style={styles.avatarImage} />
-            ) : (
-              <View style={[styles.avatarContainer, { alignItems: 'center', justifyContent: 'center' }]}>
+      <ScrollView>
+        <TouchableOpacity style={styles.profileSection} onPress={() => router.push('/profile')}>
+          <View style={styles.profileHeader}>
+            <View style={styles.avatar}>
+              {profilePhoto ? (
+                <Image source={{ uri: profilePhoto }} style={styles.avatarImage} />
+              ) : (
                 <Text style={styles.avatarText}>
-                  {(username?.[0] || user?.email?.[0] || 'U').toUpperCase()}
+                  {username?.[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase() || 'U'}
                 </Text>
+              )}
+            </View>
+            <View style={styles.profileInfo}>
+              <Text style={styles.profileName}>{username || 'User'}</Text>
+              <Text style={styles.profileEmail}>{user?.email}</Text>
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>{tierNames[tier]}</Text>
               </View>
-            )}
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
           </View>
-          
-          <Text style={styles.profileName}>{username || 'User'}</Text>
-          <Text style={styles.profileUsername}>{user?.email}</Text>
-          
-          <TouchableOpacity 
-            style={styles.editProfileButton}
-            onPress={() => router.push('/profile')}
-          >
-            <Text style={styles.editProfileText}>Edit profile</Text>
-          </TouchableOpacity>
-        </View>
+        </TouchableOpacity>
 
-        {/* Account Section */}
+        {/* ACCOUNT SECTION */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Account</Text>
-          <View style={styles.card}>
-            <SettingRow icon="mail-outline" title="Email" value={user?.email} />
-            <SettingRow 
-              icon="add-circle-outline" 
-              title="Subscription" 
-              value={tierNames[tier]} 
-            />
-            <SettingRow 
-              icon="arrow-up-circle-outline" 
-              title="Upgrade to ChatGPT Plus" 
-              onPress={() => router.push('/subscription')}
-            />
-            <SettingRow 
-              icon="refresh-outline" 
-              title="Restore purchases" 
-              onPress={() => router.push('/subscription')}
-            />
-            <SettingRow 
-              icon="receipt-outline" 
-              title="Orders" 
-              onPress={() => router.push('/orders')}
-            />
-            <SettingRow 
-              icon="person-circle-outline" 
-              title="Personalization" 
-              onPress={() => router.push('/personalization')}
-            />
-            <SettingRow 
-              icon="notifications-outline" 
-              title="Notifications" 
-              onPress={() => router.push('/notifications')}
-            />
-            <SettingRow 
-              icon="apps-outline" 
-              title="Apps" 
-              onPress={() => {}}
-            />
-            <SettingRow 
-              icon="people-outline" 
-              title="Parental controls" 
-              onPress={() => router.push('/parental-controls')}
-            />
-            <SettingRow 
-              icon="document-lock-outline" 
-              title="Data controls" 
-              onPress={() => router.push('/data-controls')}
-            />
-            <SettingRow 
-              icon="archive-outline" 
-              title="Archived chats" 
-              onPress={() => router.push('/archived-chats')}
-            />
-            <SettingRow 
-              icon="lock-closed-outline" 
-              title="Security" 
-              onPress={() => router.push('/security')}
-              isLast={true}
-            />
-          </View>
+          <Text style={styles.sectionTitle}>ACCOUNT</Text>
+          <SettingRow 
+            icon="mail-outline" 
+            title="Email" 
+            value={user?.email || ''}
+          />
+          <SettingRow 
+            icon="card-outline" 
+            title="Subscription" 
+            value={tierNames[tier]}
+            onPress={() => router.push('/subscription')}
+          />
+          <SettingRow 
+            icon="arrow-up-circle-outline" 
+            title="Upgrade plan" 
+            onPress={() => router.push('/subscription')}
+          />
+          <SettingRow 
+            icon="refresh-outline" 
+            title="Restore purchases" 
+            onPress={() => router.push('/subscription')}
+          />
+          <SettingRow 
+            icon="receipt-outline" 
+            title="Orders" 
+            onPress={() => router.push('/orders')}
+          />
+          <SettingRow 
+            icon="person-circle-outline" 
+            title="Personalization" 
+            onPress={() => router.push('/personalization')}
+          />
+          <SettingRow 
+            icon="notifications-outline" 
+            title="Notifications" 
+            onPress={() => router.push('/notifications')}
+          />
+          <SettingRow 
+            icon="grid-outline" 
+            title="Apps & connectors" 
+            onPress={() => {}}
+          />
+          <SettingRow 
+            icon="shield-checkmark-outline" 
+            title="Parental controls" 
+            onPress={() => router.push('/parental-controls')}
+          />
+          <SettingRow 
+            icon="document-lock-outline" 
+            title="Data controls" 
+            onPress={() => router.push('/data-controls')}
+          />
+          <SettingRow 
+            icon="archive-outline" 
+            title="Archived chats" 
+            onPress={() => router.push('/archived-chats')}
+          />
+          <SettingRow 
+            icon="lock-closed-outline" 
+            title="Security" 
+            onPress={() => router.push('/security')}
+          />
         </View>
 
-        {/* App Settings */}
+        {/* APP SETTINGS */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>App Settings</Text>
-          <View style={styles.card}>
-            <SettingRow 
-              icon="arrow-up-circle-outline" 
-              title="Check for updates" 
-              value={latestVersion && latestVersion !== currentVersion ? `${currentVersion} → ${latestVersion}` : currentVersion}
-              onPress={checkForUpdates}
-              isLoading={isCheckingVersion}
-            />
-            
-            {/* Appearance with inline options */}
-            <InlineSettingRow icon="contrast-outline" title="Appearance">
-              <View style={styles.appearanceOptions}>
-                {appearanceOptions.map(option => (
-                  <TouchableOpacity
-                    key={option}
-                    onPress={() => updateSetting('appearance', option)}
-                    style={[
-                      styles.appearanceOption,
-                      settings.appearance === option && styles.appearanceOptionSelected,
-                    ]}
-                  >
-                    <Text style={styles.appearanceText}>{option}</Text>
-                  </TouchableOpacity>
-                ))}
+          <Text style={styles.sectionTitle}>APP SETTINGS</Text>
+          <SettingRow 
+            icon="globe-outline" 
+            title="App language" 
+            value={settings.appLanguage}
+            onPress={() => router.push('/languages')}
+          />
+          
+          <View style={styles.settingItem}>
+            <View style={styles.settingLeft}>
+              <View style={styles.settingIcon}>
+                <Ionicons name="contrast-outline" size={20} color={colors.text} />
               </View>
-            </InlineSettingRow>
-
-            {/* Accent Color */}
-            <InlineSettingRow icon="color-palette-outline" title="Accent color">
-              <View style={styles.colorOptions}>
-                {accentColors.map(color => (
-                  <TouchableOpacity
-                    key={color}
-                    onPress={() => updateSetting('accentColor', color)}
-                    style={[
-                      styles.colorOption,
-                      { backgroundColor: color },
-                      settings.accentColor === color && styles.colorOptionSelected,
-                    ]}
-                  />
-                ))}
+              <View style={styles.settingTextContainer}>
+                <Text style={styles.settingTitle}>Appearance</Text>
+                <View style={styles.appearanceOptions}>
+                  {appearanceOptions.map(option => (
+                    <TouchableOpacity
+                      key={option}
+                      onPress={() => updateSetting('appearance', option)}
+                      style={[
+                        styles.appearanceOption,
+                        settings.appearance === option && styles.appearanceOptionSelected,
+                      ]}
+                    >
+                      <Text style={[
+                        styles.appearanceText,
+                        settings.appearance === option && styles.appearanceTextSelected,
+                      ]}>
+                        {option}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
               </View>
-            </InlineSettingRow>
-
-            <SwitchRow 
-              icon="phone-portrait-outline" 
-              title="Haptic feedback" 
-              value={settings.hapticFeedback}
-              onValueChange={(v) => updateSetting('hapticFeedback', v)}
-            />
-            
-            <SwitchRow 
-              icon="text-outline" 
-              title="Auto spelling correction" 
-              value={settings.autoSpelling}
-              onValueChange={(v) => updateSetting('autoSpelling', v)}
-            />
-            
-            <SettingRow 
-              icon="globe-outline" 
-              title="App language" 
-              value={settings.appLanguage}
-              onPress={() => router.push('/languages')}
-            />
-            
-            <SettingRow 
-              icon="language-outline" 
-              title="Main language for speech" 
-              value={settings.mainLanguage}
-              onPress={() => router.push('/languages')}
-            />
-            
-            <SettingRow 
-              icon="mic-outline" 
-              title="Voice selection" 
-              value={settings.voiceSelection}
-            />
-            
-            <SwitchRow 
-              icon="chatbubbles-outline" 
-              title="Background conversations" 
-              value={settings.backgroundConversations}
-              onValueChange={(v) => updateSetting('backgroundConversations', v)}
-            />
-            
-            <SwitchRow 
-              icon="create-outline" 
-              title="Autocomplete" 
-              value={settings.autocomplete}
-              onValueChange={(v) => updateSetting('autocomplete', v)}
-            />
-            
-            <SwitchRow 
-              icon="trending-up-outline" 
-              title="Trending searches" 
-              value={settings.trendingSearches}
-              onValueChange={(v) => updateSetting('trendingSearches', v)}
-            />
-            
-            <SwitchRow 
-              icon="list-outline" 
-              title="Follow-up suggestions" 
-              value={settings.followupSuggestions}
-              onValueChange={(v) => updateSetting('followupSuggestions', v)}
-              isLast={true}
-            />
+            </View>
           </View>
+
+          <View style={styles.settingItem}>
+            <View style={styles.settingLeft}>
+              <View style={styles.settingIcon}>
+                <Ionicons name="color-palette-outline" size={20} color={colors.text} />
+              </View>
+              <View style={styles.settingTextContainer}>
+                <Text style={styles.settingTitle}>Accent color</Text>
+                <View style={styles.colorOptions}>
+                  {accentColors.map(color => (
+                    <TouchableOpacity
+                      key={color}
+                      onPress={() => updateSetting('accentColor', color)}
+                      style={[
+                        styles.colorOption,
+                        { backgroundColor: color },
+                        settings.accentColor === color && styles.colorOptionSelected,
+                      ]}
+                    />
+                  ))}
+                </View>
+              </View>
+            </View>
+          </View>
+
+          <SettingRow 
+            icon="phone-portrait-outline" 
+            title="Haptic feedback" 
+            rightElement={
+              <Switch
+                value={settings.hapticFeedback}
+                onValueChange={(value) => updateSetting('hapticFeedback', value)}
+                trackColor={{ true: colors.primary, false: colors.border }}
+              />
+            }
+          />
+
+          <SettingRow 
+            icon="text-outline" 
+            title="Auto spelling correction" 
+            rightElement={
+              <Switch
+                value={settings.autoSpelling}
+                onValueChange={(value) => updateSetting('autoSpelling', value)}
+                trackColor={{ true: colors.primary, false: colors.border }}
+              />
+            }
+          />
+
+          <SettingRow 
+            icon="language-outline" 
+            title="Main language for speech" 
+            value={settings.mainLanguage}
+            onPress={() => router.push('/languages')}
+          />
+          
+          <SettingRow 
+            icon="mic-outline" 
+            title="Voice selection" 
+            value={settings.voiceSelection}
+          />
+
+          <SettingRow 
+            icon="chatbubbles-outline" 
+            title="Background conversations" 
+            rightElement={
+              <Switch
+                value={settings.backgroundConversations}
+                onValueChange={(value) => updateSetting('backgroundConversations', value)}
+                trackColor={{ true: colors.primary, false: colors.border }}
+              />
+            }
+          />
+
+          <SettingRow 
+            icon="create-outline" 
+            title="Autocomplete" 
+            rightElement={
+              <Switch
+                value={settings.autocomplete}
+                onValueChange={(value) => updateSetting('autocomplete', value)}
+                trackColor={{ true: colors.primary, false: colors.border }}
+              />
+            }
+          />
+
+          <SettingRow 
+            icon="trending-up-outline" 
+            title="Trending searches" 
+            rightElement={
+              <Switch
+                value={settings.trendingSearches}
+                onValueChange={(value) => updateSetting('trendingSearches', value)}
+                trackColor={{ true: colors.primary, false: colors.border }}
+              />
+            }
+          />
+
+          <SettingRow 
+            icon="list-outline" 
+            title="Follow-up suggestions" 
+            rightElement={
+              <Switch
+                value={settings.followupSuggestions}
+                onValueChange={(value) => updateSetting('followupSuggestions', value)}
+                trackColor={{ true: colors.primary, false: colors.border }}
+              />
+            }
+          />
         </View>
 
-        {/* Admin Section */}
+        {/* ADMIN DASHBOARD (HIDDEN FOR NON-ADMINS) */}
         {isAdmin && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Admin</Text>
-            <View style={styles.card}>
-              <SettingRow 
-                icon="shield-outline" 
-                title="Admin Dashboard" 
-                subtitle="Full system control"
-                onPress={() => router.push('/admin')}
-              />
-              <SettingRow 
-                icon="mail-outline" 
-                title="Send Email to Users" 
-                subtitle="Broadcast messages"
-                onPress={() => router.push('/admin-email')}
-                isLast={true}
-              />
-            </View>
+            <Text style={styles.sectionTitle}>ADMIN</Text>
+            <SettingRow 
+              icon="shield-outline" 
+              title="Admin Dashboard" 
+              subtitle="Full system control"
+              onPress={() => router.push('/admin')}
+            />
+            <SettingRow 
+              icon="mail-outline" 
+              title="Send Email to Users" 
+              subtitle="Broadcast messages to users"
+              onPress={() => router.push('/admin-email')}
+            />
           </View>
         )}
 
-        {/* About Section */}
+        {/* ABOUT SECTION */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>About</Text>
-          <View style={styles.card}>
-            <SettingRow 
-              icon="bug-outline" 
-              title="Report bug" 
-              onPress={() => router.push('/bugreport')}
-            />
-            <SettingRow 
-              icon="help-circle-outline" 
-              title="Help Center" 
-              onPress={() => router.push('/help')}
-            />
-            <SettingRow 
-              icon="document-text-outline" 
-              title="Terms of Use" 
-              onPress={() => router.push('/terms-of-use')}
-            />
-            <SettingRow 
-              icon="shield-checkmark-outline" 
-              title="Privacy Policy" 
-              onPress={() => router.push('/privacy-policy')}
-              isLast={true}
-            />
-          </View>
+          <Text style={styles.sectionTitle}>ABOUT</Text>
+        
+          
+          <SettingRow 
+            icon="bug-outline" 
+            title="Report bug" 
+            onPress={() => router.push('/bugreport')}
+          />
+          <SettingRow 
+            icon="help-circle-outline" 
+            title="Help Center" 
+            onPress={() => {}}
+          />
+          <SettingRow 
+            icon="document-text-outline" 
+            title="Terms of Use" 
+            onPress={() => router.push('/terms-of-use')}
+          />
+          <SettingRow 
+            icon="shield-checkmark-outline" 
+            title="Privacy Policy" 
+            onPress={() => router.push('/privacy-policy')}
+          />
         </View>
 
-        {/* Logout */}
+        {/* VERSION CHECK ROW */}
+          <VersionCheckRow />
+
+        <Text style={styles.versionText}>HaitianChatGpt for iOS – v{currentVersion}</Text>
+
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
           <Text style={styles.logoutText}>Log Out</Text>
         </TouchableOpacity>
-
-        <Text style={styles.versionText}>HaitianChatGpt for iOS – v{currentVersion}</Text>
       </ScrollView>
     </View>
   );
