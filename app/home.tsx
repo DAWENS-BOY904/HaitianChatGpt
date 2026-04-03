@@ -1726,3 +1726,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
+hello ai if see this dont skip : in home page when you tap the screen keybvoard to tex must be ale and lew tape tex li paret siw tape lot kote li dwe ale pa dwe tro rete and fix transcribe lem click li show could not start recording fix it real evite new conversatio nwihtout tex on it.
