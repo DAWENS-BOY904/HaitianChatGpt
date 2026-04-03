@@ -1657,4 +1657,3 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-When a free user reaches their daily message limit (50 messages), show a sticky banner at the bottom of the chat with 'You have reached your daily limit. Upgrade to Plus or try again tomorrow at [time].' with a Get Plus button that navigates to /subscription.
