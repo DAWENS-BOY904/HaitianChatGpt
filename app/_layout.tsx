@@ -43,7 +43,7 @@ export default function RootLayout() {
                     <Stack.Screen name="signup" />
                     <Stack.Screen name="verify-code" />
                     <Stack.Screen name="home" />
-                    <Stack.Screen name="settings" options={{ presentation: 'modal', headerShown: false, animation: 'slide_from_bottom' }} />
+                    <Stack.Screen name="settings" />
                     <Stack.Screen name="social" />
                     <Stack.Screen name="chat" />
                     <Stack.Screen name="about" />

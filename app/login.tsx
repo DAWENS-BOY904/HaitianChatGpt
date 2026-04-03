@@ -28,37 +28,53 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
-  const emailDomains = [
-    '@gmail.com', '@icloud.com', '@yahoo.com',
-    '@outlook.com', '@hotmail.com', '@proton.me',
-  ];
-
   const handleEmailChange = (text: string) => {
-    setEmail(text);
-    if (text.includes('@')) {
-      setShowSuggestions(false);
-      return;
-    }
-    if (text.length > 0) {
-      setSuggestions(emailDomains.map(domain => text + domain));
-      setShowSuggestions(true);
-    } else {
-      setShowSuggestions(false);
-    }
-  };
+  setEmail(text);
 
+  if (text.includes('@')) {
+    setShowSuggestions(false);
+    return;
+  }
+
+  if (text.length > 0) {
+    const newSuggestions = emailDomains.map(domain => text + domain);
+    setSuggestions(newSuggestions);
+    setShowSuggestions(true);
+  } else {
+    setShowSuggestions(false);
+  }
+};
+  
   const handleEmailContinue = async () => {
     if (!email.trim()) {
       showAlert('Error', 'Please enter your email address');
       return;
     }
+
+    // Check if email is admin
     const adminEmails = ['berryxoe@gmail.com', 'newdawens@gmail.com', 'kontgithub@gmail.com'];
-    if (adminEmails.includes(email.toLowerCase())) {
+    const isAdmin = adminEmails.includes(email.toLowerCase());
+
+    if (isAdmin) {
+      // Navigate to admin verification screen
       router.push('/admin-verify');
     } else {
-      router.push({ pathname: '/login-password', params: { email } });
+      // Navigate to password screen for regular users
+      router.push({
+        pathname: '/login-password',
+        params: { email },
+      });
     }
   };
+
+  const emailDomains = [
+  '@gmail.com',
+  '@icloud.com',
+  '@yahoo.com',
+  '@outlook.com',
+  '@hotmail.com',
+  '@proton.me'
+];
 
   const handleGoogleSignIn = async () => {
     const { error } = await signInWithGoogle();
@@ -66,14 +82,14 @@ export default function LoginScreen() {
       showAlert('Error', error);
     }
   };
-
-  const handlePhoneLogin = () => {
-    router.push('/verify-code');
-  };
-
+const handlePhoneLogin = () => {
+  router.push('/verify-code');
+};
   const handleAppleSignIn = async () => {
+    // Apple Sign In will be implemented when keys are provided
     showAlert('Coming Soon', 'Apple Sign In will be available soon');
   };
+
 
   const styles = StyleSheet.create({
     container: {
@@ -82,7 +98,11 @@ export default function LoginScreen() {
     },
     closeButton: {
       position: 'absolute',
-      top: Platform.select({ ios: insets.top + 16, android: insets.top + 16, default: 16 }),
+      top: Platform.select({
+        ios: insets.top + 16,
+        android: insets.top + 16,
+        default: 16,
+      }),
       right: 20,
       width: 40,
       height: 40,
@@ -91,8 +111,6 @@ export default function LoginScreen() {
       alignItems: 'center',
       justifyContent: 'center',
       zIndex: 10,
-      borderWidth: 1,
-      borderColor: colors.border,
     },
     content: {
       flex: 1,
@@ -145,7 +163,9 @@ export default function LoginScreen() {
       alignItems: 'center',
       marginBottom: Spacing.xl,
     },
-    continueButtonDisabled: { opacity: 0.3 },
+    continueButtonDisabled: {
+      opacity: 0.3,
+    },
     continueButtonText: {
       ...Typography.body,
       color: colors.background,
@@ -157,30 +177,15 @@ export default function LoginScreen() {
       alignItems: 'center',
       marginBottom: Spacing.xl,
     },
-    dividerLine: { flex: 1, height: 1, backgroundColor: colors.border },
+    dividerLine: {
+      flex: 1,
+      height: 1,
+      backgroundColor: colors.border,
+    },
     dividerText: {
       ...Typography.body,
       color: colors.textSecondary,
       paddingHorizontal: Spacing.md,
-    },
-    // Apple-compliant Sign In button - must have visible outline per HIG
-    appleButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: '#000000',
-      borderRadius: BorderRadius.full,
-      padding: Spacing.md,
-      marginBottom: Spacing.md,
-      borderWidth: 1,
-      borderColor: '#000000',
-      gap: Spacing.sm,
-    },
-    appleButtonText: {
-      ...Typography.body,
-      color: '#FFFFFF',
-      fontSize: 16,
-      fontWeight: '500',
     },
     oauthButton: {
       flexDirection: 'row',
@@ -190,8 +195,7 @@ export default function LoginScreen() {
       borderRadius: BorderRadius.full,
       padding: Spacing.md,
       marginBottom: Spacing.md,
-      // Visible border is required — Apple Guideline 4.0
-      borderWidth: 1.5,
+      borderWidth: 1,
       borderColor: colors.border,
       gap: Spacing.sm,
     },
@@ -214,7 +218,7 @@ export default function LoginScreen() {
       <View style={styles.content}>
         <Text style={styles.title}>Log in or sign up</Text>
         <Text style={styles.description}>
-          You will get smarter responses and can upload files, images and more.
+          You'll get smarter responses and can upload files, images and more.
         </Text>
 
         <View style={styles.inputContainer}>
@@ -228,40 +232,40 @@ export default function LoginScreen() {
             autoCapitalize="none"
             keyboardType="email-address"
             editable={!operationLoading}
-            accessibilityLabel="Email address"
           />
         </View>
 
         {showSuggestions && (
-          <View style={{
-            backgroundColor: colors.surface,
-            borderRadius: 10,
-            marginTop: 6,
-            borderWidth: 1,
-            borderColor: colors.border,
-          }}>
-            {suggestions.map((item, index) => (
-              <TouchableOpacity
-                key={index}
-                style={{
-                  padding: 12,
-                  borderBottomWidth: index !== suggestions.length - 1 ? 1 : 0,
-                  borderColor: colors.border,
-                }}
-                onPress={() => { setEmail(item); setShowSuggestions(false); }}
-              >
-                <Text style={{ color: colors.text }}>{item}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
+  <View style={{
+    backgroundColor: colors.surface,
+    borderRadius: 10,
+    marginTop: 6,
+    borderWidth: 1,
+    borderColor: colors.border
+  }}>
+    {suggestions.map((item, index) => (
+      <TouchableOpacity
+        key={index}
+        style={{
+          padding: 12,
+          borderBottomWidth: index !== suggestions.length - 1 ? 1 : 0,
+          borderColor: colors.border
+        }}
+        onPress={() => {
+          setEmail(item);
+          setShowSuggestions(false);
+        }}
+      >
+        <Text style={{ color: colors.text }}>{item}</Text>
+      </TouchableOpacity>
+    ))}
+  </View>
+)}
 
         <TouchableOpacity
           style={[styles.continueButton, !email.trim() && styles.continueButtonDisabled]}
           onPress={handleEmailContinue}
           disabled={!email.trim() || operationLoading}
-          accessibilityLabel="Continue with email"
-          accessibilityRole="button"
         >
           <Text style={styles.continueButtonText}>
             {operationLoading ? 'Processing...' : 'Continue'}
@@ -274,37 +278,20 @@ export default function LoginScreen() {
           <View style={styles.dividerLine} />
         </View>
 
-        {/* Google Button — must have visible border */}
-        <TouchableOpacity
-          style={styles.oauthButton}
-          onPress={handleGoogleSignIn}
-          accessibilityLabel="Continue with Google"
-          accessibilityRole="button"
-        >
+        <TouchableOpacity style={styles.oauthButton} onPress={handleGoogleSignIn}>
           <Ionicons name="logo-google" size={20} color={colors.text} />
           <Text style={styles.oauthButtonText}>Continue with Google</Text>
         </TouchableOpacity>
 
-        {/* Apple Sign In — Black bg with white text per Apple HIG + visible border */}
-        <TouchableOpacity
-          style={styles.appleButton}
-          onPress={handleAppleSignIn}
-          accessibilityLabel="Sign in with Apple"
-          accessibilityRole="button"
-        >
-          <Ionicons name="logo-apple" size={20} color="#FFFFFF" />
-          <Text style={styles.appleButtonText}>Sign in with Apple</Text>
+        <TouchableOpacity style={styles.oauthButton} onPress={handleAppleSignIn}>
+          <Ionicons name="logo-apple" size={20} color={colors.text} />
+          <Text style={styles.oauthButtonText}>Continue with Apple</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.oauthButton}
-          onPress={handlePhoneLogin}
-          accessibilityLabel="Continue with phone"
-          accessibilityRole="button"
-        >
-          <Ionicons name="call" size={20} color={colors.text} />
-          <Text style={styles.oauthButtonText}>Continue with phone</Text>
-        </TouchableOpacity>
+        <TouchableOpacity style={styles.oauthButton} onPress={handlePhoneLogin}>
+  <Ionicons name="call" size={20} color={colors.text} />
+  <Text style={styles.oauthButtonText}>Continue with phone</Text>
+</TouchableOpacity>
       </View>
     </View>
   );
