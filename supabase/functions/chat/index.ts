@@ -309,7 +309,7 @@ RESPONSE STYLE:
 ==============================
 BASE TONE: ${baseTone}
 
-${customInstructions ? CUSTOM INSTRUCTIONS FROM USER:\n${customInstructions} : ''}
+${customInstructions ? `CUSTOM INSTRUCTIONS FROM USER:\n${customInstructions}` : ''}
 
 ==============================
 USER PROFILE (IF AVAILABLE):
