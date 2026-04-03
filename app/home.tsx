@@ -1733,3 +1733,12 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
+hello ai please dont skip fix this for me:{
+  "eventMessage": "POST | 500 | http://njpuoozygqtpvlzhnjpu.backend.onspace.ai/functions/v1/chat | Internal Server Error",
+  "functionId": "chat",
+  "id": "79c8ed97-1cdb-4c12-a81e-18c13f5cbf5f",
+  "logLevel": "ERROR",
+  "method": "POST",
+  "statusCode": 500,
+  "timestamp": 1775233799
+}.
