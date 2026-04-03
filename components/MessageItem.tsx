@@ -473,15 +473,10 @@ export const MessageItem = memo(function MessageItem({
     },
     assistantMessage: {
       alignSelf: 'flex-start',
-      backgroundColor: colors.surface,
-      borderRadius: BorderRadius.lg,
-      borderBottomLeftRadius: 4,
+      backgroundColor: 'transparent',
+      borderRadius: 0,
       marginLeft: Spacing.sm,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 1 },
-      shadowOpacity: 0.08,
-      shadowRadius: 4,
-      elevation: 2,
+      maxWidth: '95%',
     },
     messageImage: {
       width: '100%',
