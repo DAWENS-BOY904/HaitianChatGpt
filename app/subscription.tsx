@@ -1,5 +1,14 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Platform } from 'react-native';
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  ScrollView,
+  Platform,
+  Linking,
+  Alert,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
 import { useSubscription } from '../hooks/useSubscription';
@@ -8,135 +17,115 @@ import { Spacing, Typography, BorderRadius } from '../constants/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAlert } from '@/template';
 
+// ── Feature comparison rows ──
+const GO_FEATURES = [
+  { label: 'Basic models', free: true, plan: true },
+  { label: 'More messages', free: false, plan: true },
+  { label: 'More uploads', free: false, plan: true },
+  { label: 'More image creation', free: false, plan: true },
+  { label: 'Longer memory', free: false, plan: true },
+];
+
+const PLUS_FEATURES = [
+  { label: 'Basic models', free: true, plan: true },
+  { label: 'Smarter models', free: false, plan: true },
+  { label: 'More messages and uploads', free: false, plan: true },
+  { label: 'More image creation', free: false, plan: true },
+  { label: 'Early access to new features', free: false, plan: true },
+  { label: 'Agents and deep research', free: false, plan: true },
+  { label: 'More memory', free: false, plan: true },
+];
+
+// Stripe checkout links (one-time links you can update)
+const STRIPE_PLUS_URL = 'https://buy.stripe.com/plus_19_99';
+const STRIPE_GO_URL = 'https://buy.stripe.com/go_8_00';
+
 export default function SubscriptionScreen() {
-  const { colors } = useTheme();
-  const { tier, upgradeSubscription, restorePurchases } = useSubscription();
+  const { colors, isDark } = useTheme();
+  const { tier, restorePurchases } = useSubscription();
   const { showAlert } = useAlert();
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
- const plans = [
-  {
-    id: 'free' as const,
-    name: 'Free',
-    price: '$0',
-    period: 'Forever',
-    features: [
-      '20 messages per day',
-      'Basic AI responses',
-      'Limited chat history (7 days)',
-      'Standard response speed',
-      'No media uploads',
-      'No group creation',
-      'Community support only',
-      'Ads included',
-    ],
-    color: '#6B7280',
-  },
-  {
-    id: 'premium_monthly' as const,
-    name: 'Premium Monthly',
-    price: '$10',
-    period: 'per month',
-    features: [
-      '1,000 messages per day',
-      'Advanced AI responses',
-      'Faster response speed',
-      'Unlimited chat history',
-      'Media uploads (images & files)',
-      'Create groups (up to 256 members)',
-      'Profile customization',
-      'No ads',
-      'Priority support',
-    ],
-    color: '#10A37F',
-    popular: true,
-  },
-  {
-    id: 'premium_yearly' as const,
-    name: 'Premium Yearly',
-    price: '$20',
-    period: 'per year',
-    savings: 'Save $100/year',
-    features: [
-      '1,000 messages per day',
-      'Advanced AI responses',
-      'Faster response speed',
-      'Unlimited chat history',
-      'Media uploads (images & files)',
-      'Create groups (up to 256 members)',
-      'Early access to new features',
-      'Automatic chat backup',
-      'Profile customization',
-      'No ads',
-      '24/7 priority support',
-    ],
-    color: '#0084FF',
-  },
-  {
-    id: 'lifetime' as const,
-    name: 'Lifetime',
-    price: '$80',
-    period: 'one-time',
-    savings: 'Best Value',
-    features: [
-      'Unlimited messages',
-      'All premium AI features',
-      'Ultra-fast response speed',
-      'Unlimited chat history',
-      'All media uploads supported',
-      'Large groups (up to 512 members)',
-      'Full profile & theme customization',
-      'Beta & experimental features access',
-      'Lifetime updates',
-      'No ads ever',
-      'VIP priority support',
-      'Lifetime member badge',
-    ],
-    color: '#FF9500',
-    recommended: true,
-  },
-];
+  const [selectedPlan, setSelectedPlan] = useState<'go' | 'plus'>('go');
 
-  const handleSubscribe = async (planId: typeof tier) => {
-    if (planId === tier) {
-      showAlert('Info', 'You already have this plan');
-      return;
+  const features = selectedPlan === 'go' ? GO_FEATURES : PLUS_FEATURES;
+  const planColor = '#6B5CE7'; // Purple like ChatGPT
+  const planPrice = selectedPlan === 'go' ? '$8.00' : '$19.99';
+  const planLabel = selectedPlan === 'go' ? 'Get Dawinix Go' : 'Get Dawinix Plus';
+  const planSubtitle = selectedPlan === 'go'
+    ? 'Keep chatting with expanded access'
+    : 'Do more with advanced intelligence';
+
+  const handleUpgrade = async () => {
+    if (selectedPlan === 'go') {
+      // Go plan: trigger Apple Pay / in-app purchase directly
+      // On iOS this would be StoreKit, for now open Stripe
+      Alert.alert(
+        'Dawinix Go',
+        'Subscribe for $8.00/month with Apple Pay',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Subscribe with Apple Pay',
+            onPress: () => {
+              // Open Stripe checkout
+              router.push({
+                pathname: '/stripe-checkout',
+                params: {
+                  priceId: 'price_go_800',
+                  planName: 'Dawinix Go',
+                  amount: '8',
+                },
+              });
+            },
+          },
+        ]
+      );
+    } else {
+      // Plus plan: open payment method selection
+      Alert.alert(
+        'Dawinix Plus — $19.99/month',
+        'Choose your payment method',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Pay with Card (Stripe)',
+            onPress: () => {
+              router.push({
+                pathname: '/stripe-checkout',
+                params: {
+                  priceId: 'price_1SjmtpE0VkO7z1Vn1lpvP0PC',
+                  planName: 'Dawinix Plus',
+                  amount: '19.99',
+                },
+              });
+            },
+          },
+          {
+            text: 'Pay with Apple Pay',
+            onPress: () => {
+              router.push({
+                pathname: '/stripe-checkout',
+                params: {
+                  priceId: 'price_1SjmtpE0VkO7z1Vn1lpvP0PC',
+                  planName: 'Dawinix Plus',
+                  amount: '19.99',
+                  method: 'apple_pay',
+                },
+              });
+            },
+          },
+        ]
+      );
     }
+  };
 
-    // Get Stripe price ID based on plan
-    let priceId = '';
-    let amount = '';
-    
-    switch (planId) {
-      case 'premium_monthly':
-        priceId = 'price_1SjmtpE0VkO7z1Vn1lpvP0PC';
-        amount = '10';
-        break;
-      case 'premium_yearly':
-        priceId = 'price_1SjmtrE0VkO7z1Vn5IXRKlsN';
-        amount = '20';
-        break;
-      case 'lifetime':
-        priceId = 'price_1SjmttE0VkO7z1VnGElDFXCT';
-        amount = '80';
-        break;
-      default:
-        showAlert('Error', 'Invalid plan selected');
-        return;
+  const handlePurchaseOnWeb = () => {
+    if (selectedPlan === 'plus') {
+      Linking.openURL('https://dawinix.com/subscription');
     }
-
-    const plan = plans.find(p => p.id === planId);
-    
-    // Navigate to Stripe checkout
-    router.push({
-      pathname: '/stripe-checkout',
-      params: {
-        priceId,
-        planName: plan?.name || '',
-        amount,
-      },
-    });
+    // Go plan: no web purchase
   };
 
   const handleRestore = async () => {
@@ -148,190 +137,264 @@ export default function SubscriptionScreen() {
     }
   };
 
-  const styles = StyleSheet.create({
-    container: {
-      flex: 1,
-      backgroundColor: colors.background,
-      paddingTop: Platform.select({ ios: insets.top, android: insets.top, default: 0 }),
-    },
-    header: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      padding: Spacing.md,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border,
-    },
-    backButton: {
-      padding: Spacing.xs,
-      marginRight: Spacing.sm,
-    },
-    headerTitle: {
-      ...Typography.heading,
-      color: colors.text,
-    },
-    content: {
-      padding: Spacing.md,
-    },
-    planCard: {
-      backgroundColor: colors.card,
-      borderRadius: BorderRadius.md,
-      padding: Spacing.lg,
-      marginBottom: Spacing.md,
-      borderWidth: 2,
-      borderColor: 'transparent',
-    },
-    activePlan: {
-      borderColor: colors.primary,
-    },
-    planHeader: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: Spacing.sm,
-    },
-    planName: {
-      ...Typography.heading,
-      color: colors.text,
-    },
-    badge: {
-      paddingHorizontal: Spacing.sm,
-      paddingVertical: 4,
-      borderRadius: BorderRadius.sm,
-      backgroundColor: colors.primary,
-    },
-    badgeText: {
-      ...Typography.small,
-      color: '#FFFFFF',
-      fontWeight: '600',
-    },
-    priceContainer: {
-      marginBottom: Spacing.md,
-    },
-    price: {
-      ...Typography.title,
-      color: colors.text,
-      fontSize: 32,
-    },
-    period: {
-      ...Typography.body,
-      color: colors.textSecondary,
-    },
-    savings: {
-      ...Typography.caption,
-      color: '#10A37F',
-      fontWeight: '600',
-      marginTop: 4,
-    },
-    features: {
-      marginBottom: Spacing.md,
-    },
-    feature: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      marginBottom: Spacing.xs,
-      gap: Spacing.sm,
-    },
-    featureText: {
-      ...Typography.body,
-      color: colors.text,
-    },
-    subscribeButton: {
-      backgroundColor: colors.primary,
-      borderRadius: BorderRadius.sm,
-      padding: Spacing.md,
-      alignItems: 'center',
-    },
-    subscribedButton: {
-      backgroundColor: colors.border,
-    },
-    buttonText: {
-      ...Typography.body,
-      color: '#FFFFFF',
-      fontWeight: '600',
-    },
-    restoreButton: {
-      padding: Spacing.md,
-      alignItems: 'center',
-      marginTop: Spacing.lg,
-    },
-    restoreText: {
-      ...Typography.body,
-      color: colors.primary,
-    },
-  });
-
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={24} color={colors.text} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Subscription Plans</Text>
-      </View>
+    <View style={[styles.container, { backgroundColor: '#000' }]}>
+      {/* Close button */}
+      <TouchableOpacity
+        style={[styles.closeBtn, { top: insets.top + 12 }]}
+        onPress={() => router.back()}
+        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+      >
+        <Ionicons name="close" size={22} color="rgba(255,255,255,0.7)" />
+      </TouchableOpacity>
 
-      <ScrollView style={styles.content}>
-        {plans.map(plan => (
-          <View
-            key={plan.id}
-            style={[
-              styles.planCard,
-              tier === plan.id && styles.activePlan,
-            ]}
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 56, paddingBottom: insets.bottom + 100 }]}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Star icon */}
+        <View style={[styles.iconWrap, { backgroundColor: planColor }]}>
+          <Ionicons name="sparkles" size={28} color="#FFF" />
+        </View>
+
+        {/* Title */}
+        <Text style={styles.title}>{planLabel}</Text>
+        <Text style={styles.subtitle}>{planSubtitle}</Text>
+
+        {/* Plan Toggle */}
+        <View style={styles.toggle}>
+          <TouchableOpacity
+            style={[styles.toggleBtn, selectedPlan === 'go' && styles.toggleBtnActive]}
+            onPress={() => setSelectedPlan('go')}
           >
-            <View style={styles.planHeader}>
-              <Text style={styles.planName}>{plan.name}</Text>
-              {plan.popular && (
-                <View style={[styles.badge, { backgroundColor: plan.color }]}>
-                  <Text style={styles.badgeText}>POPULAR</Text>
-                </View>
-              )}
-              {plan.recommended && (
-                <View style={[styles.badge, { backgroundColor: plan.color }]}>
-                  <Text style={styles.badgeText}>BEST VALUE</Text>
-                </View>
-              )}
-              {tier === plan.id && (
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>CURRENT</Text>
-                </View>
-              )}
-            </View>
+            <Text style={[styles.toggleText, selectedPlan === 'go' && styles.toggleTextActive]}>
+              Go
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.toggleBtn, selectedPlan === 'plus' && styles.toggleBtnActive]}
+            onPress={() => setSelectedPlan('plus')}
+          >
+            <Text style={[styles.toggleText, selectedPlan === 'plus' && styles.toggleTextActive]}>
+              Plus
+            </Text>
+          </TouchableOpacity>
+        </View>
 
-            <View style={styles.priceContainer}>
-              <Text style={styles.price}>{plan.price}</Text>
-              <Text style={styles.period}>{plan.period}</Text>
-              {plan.savings && <Text style={styles.savings}>{plan.savings}</Text>}
-            </View>
-
-            <View style={styles.features}>
-              {plan.features.map((feature, index) => (
-                <View key={index} style={styles.feature}>
-                  <Ionicons name="checkmark-circle" size={20} color={plan.color} />
-                  <Text style={styles.featureText}>{feature}</Text>
-                </View>
-              ))}
-            </View>
-
-            <TouchableOpacity
-              style={[
-                styles.subscribeButton,
-                { backgroundColor: plan.color },
-                tier === plan.id && styles.subscribedButton,
-              ]}
-              onPress={() => handleSubscribe(plan.id)}
-              disabled={tier === plan.id}
-            >
-              <Text style={styles.buttonText}>
-                {tier === plan.id ? 'Current Plan' : plan.id === 'free' ? 'Downgrade' : 'Subscribe'}
-              </Text>
-            </TouchableOpacity>
+        {/* Feature Comparison Table */}
+        <View style={styles.featureCard}>
+          {/* Header row */}
+          <View style={styles.featureRow}>
+            <Text style={styles.featureHeaderLabel}>Features</Text>
+            <Text style={styles.featureHeaderFree}>Free</Text>
+            <Text style={[styles.featureHeaderPlan, { color: planColor }]}>
+              {selectedPlan === 'go' ? 'Go' : 'Plus'}
+            </Text>
           </View>
-        ))}
 
-        <TouchableOpacity style={styles.restoreButton} onPress={handleRestore}>
-          <Text style={styles.restoreText}>Restore Purchases</Text>
-        </TouchableOpacity>
+          {features.map((f, i) => (
+            <View
+              key={f.label}
+              style={[styles.featureRow, i < features.length - 1 && styles.featureRowBorder]}
+            >
+              <Text style={styles.featureLabel}>{f.label}</Text>
+              <View style={styles.featureCheck}>
+                {f.free ? (
+                  <Ionicons name="checkmark" size={18} color="rgba(255,255,255,0.7)" />
+                ) : (
+                  <Text style={styles.featureDash}>—</Text>
+                )}
+              </View>
+              <View style={styles.featureCheck}>
+                <Ionicons name="checkmark" size={18} color={planColor} />
+              </View>
+            </View>
+          ))}
+        </View>
       </ScrollView>
+
+      {/* Bottom CTA */}
+      <View style={[styles.bottomCTA, { paddingBottom: insets.bottom + 20 }]}>
+        <TouchableOpacity style={styles.upgradeBtn} onPress={handleUpgrade}>
+          <Text style={styles.upgradeBtnText}>Upgrade for {planPrice}</Text>
+        </TouchableOpacity>
+
+        {selectedPlan === 'plus' && (
+          <TouchableOpacity onPress={handlePurchaseOnWeb} style={{ marginTop: 12 }}>
+            <Text style={styles.webLink}>
+              Purchase on web {'↗'}
+            </Text>
+          </TouchableOpacity>
+        )}
+
+        <Text style={styles.legalText}>
+          Auto-renews monthly. Cancel anytime.
+          {selectedPlan === 'go' ? '\nThis plan may include ads. ' : ' '}
+          <Text style={[styles.legalText, { textDecorationLine: 'underline' }]}>Learn more</Text>
+        </Text>
+      </View>
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  closeBtn: {
+    position: 'absolute',
+    right: 20,
+    zIndex: 10,
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  scrollContent: {
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  iconWrap: {
+    width: 64,
+    height: 64,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+    shadowColor: '#6B5CE7',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#FFF',
+    textAlign: 'center',
+    marginBottom: 10,
+    letterSpacing: -0.5,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: 'rgba(255,255,255,0.55)',
+    textAlign: 'center',
+    marginBottom: 28,
+  },
+  toggle: {
+    flexDirection: 'row',
+    backgroundColor: '#1C1C1E',
+    borderRadius: 30,
+    padding: 4,
+    marginBottom: 28,
+    width: '100%',
+  },
+  toggleBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 26,
+    alignItems: 'center',
+  },
+  toggleBtnActive: {
+    backgroundColor: '#2C2C2E',
+  },
+  toggleText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: 'rgba(255,255,255,0.4)',
+  },
+  toggleTextActive: {
+    color: '#FFF',
+    fontWeight: '700',
+  },
+  featureCard: {
+    width: '100%',
+    backgroundColor: '#111',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    overflow: 'hidden',
+    marginBottom: 20,
+  },
+  featureRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 15,
+  },
+  featureRowBorder: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(255,255,255,0.1)',
+  },
+  featureHeaderLabel: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.4)',
+  },
+  featureHeaderFree: {
+    width: 52,
+    textAlign: 'center',
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#FFF',
+  },
+  featureHeaderPlan: {
+    width: 52,
+    textAlign: 'center',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  featureLabel: {
+    flex: 1,
+    fontSize: 15,
+    color: '#FFF',
+    fontWeight: '400',
+  },
+  featureCheck: {
+    width: 52,
+    alignItems: 'center',
+  },
+  featureDash: {
+    fontSize: 18,
+    color: 'rgba(255,255,255,0.3)',
+    lineHeight: 22,
+  },
+  bottomCTA: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 24,
+    paddingTop: 16,
+    backgroundColor: '#000',
+    alignItems: 'center',
+  },
+  upgradeBtn: {
+    width: '100%',
+    backgroundColor: '#FFF',
+    borderRadius: 50,
+    paddingVertical: 17,
+    alignItems: 'center',
+  },
+  upgradeBtnText: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#000',
+  },
+  webLink: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFF',
+    textDecorationLine: 'underline',
+    marginBottom: 10,
+  },
+  legalText: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.4)',
+    textAlign: 'center',
+    marginTop: 8,
+    lineHeight: 17,
+  },
+});
