@@ -158,27 +158,49 @@ export const SourcesListModal = memo(function SourcesListModal({
   );
 });
 
-// ── Inline "Sources" pill shown below an AI message ──
+// ── Inline "Sources" pill shown below an AI message (compact with favicons) ──
 export const SourcesButton = memo(function SourcesButton({ sources }: SourcesButtonProps) {
   const { colors } = useTheme();
   const [modalVisible, setModalVisible] = useState(false);
 
   if (!sources || sources.length === 0) return null;
 
+  const firstThree = sources.slice(0, 3);
+
   return (
     <>
       <TouchableOpacity
-        style={[styles.pill, { backgroundColor: colors.surface, borderColor: colors.border }]}
+        style={[styles.pill, { borderColor: colors.border }]}
         onPress={() => setModalVisible(true)}
         activeOpacity={0.75}
       >
-        <View style={styles.pillIcon}>
-          <Ionicons name="search-circle" size={18} color="#0084FF" />
+        {/* Stacked favicon circles */}
+        <View style={styles.faviconStack}>
+          {firstThree.map((s, i) => {
+            const faviconUrl = s.favicon || getFaviconUrl(s.url);
+            return (
+              <View
+                key={i}
+                style={[
+                  styles.faviconCircle,
+                  { marginLeft: i === 0 ? 0 : -7, zIndex: 3 - i, borderColor: colors.background },
+                ]}
+              >
+                {faviconUrl ? (
+                  <Image
+                    source={{ uri: faviconUrl }}
+                    style={{ width: 20, height: 20, borderRadius: 10 }}
+                    contentFit="contain"
+                  />
+                ) : (
+                  <Ionicons name="globe-outline" size={11} color={colors.textSecondary} />
+                )}
+              </View>
+            );
+          })}
         </View>
         <Text style={[styles.pillText, { color: colors.text }]}>Sources</Text>
-        <View style={[styles.pillBadge, { backgroundColor: '#0084FF' }]}>
-          <Text style={styles.pillBadgeText}>{sources.length}</Text>
-        </View>
+        <Ionicons name="chevron-forward" size={11} color={colors.textSecondary} />
       </TouchableOpacity>
 
       <SourcesListModal
@@ -219,36 +241,31 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 20,
-    borderWidth: 1,
-    gap: 6,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    gap: 5,
     marginTop: 6,
     marginBottom: 2,
   },
-  pillIcon: {
-    width: 18,
-    height: 18,
+  faviconStack: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  faviconCircle: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#555',
+    borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
   },
   pillText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '500',
-  },
-  pillBadge: {
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 4,
-  },
-  pillBadgeText: {
-    color: '#FFF',
-    fontSize: 11,
-    fontWeight: '700',
   },
   // Modal
   modalContainer: {
