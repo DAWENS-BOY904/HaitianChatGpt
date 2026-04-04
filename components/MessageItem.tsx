@@ -31,6 +31,8 @@ import { WebViewModal } from './WebViewModal';
 import { ImageViewerModal } from './ImageViewerModal';
 import { ImageEditModal } from './ImageEditModal';
 import { FileDownloadModal } from './FileDownloadModal';
+import { SourcesButton, parseSources, Source } from './SourcesModal';
+import { AnalysisModal, TerminalButton, parseAnalysis } from './AnalysisModal';
 import { getSupabaseClient } from '@/template';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -68,7 +70,7 @@ const isImageUrl = (url: string): boolean => {
     lowerUrl.includes('oaidalleapiprodscus') ||
     lowerUrl.includes('replicate.delivery') ||
     lowerUrl.includes('storage.googleapis') ||
-    lowerUrl.includes('supabase') && lowerUrl.includes('chat-images')
+    (lowerUrl.includes('supabase') && lowerUrl.includes('chat-images'))
   );
 };
 
@@ -77,7 +79,7 @@ const getFileIcon = (fileType?: string): keyof typeof Ionicons.glyphMap => {
     csv: 'document-text', html: 'code-slash', json: 'code',
     js: 'logo-javascript', ts: 'code', pdf: 'document',
     doc: 'document-text', docx: 'document-text', xls: 'grid',
-    xlsx: 'grid', default: 'document',
+    xlsx: 'grid', zip: 'archive', default: 'document',
   };
   return iconMap[fileType?.toLowerCase() || ''] || iconMap.default;
 };
@@ -97,6 +99,36 @@ const extractMessageCard = (content: string): { hasCard: boolean; cardContent: s
   }
   return { hasCard: false, cardContent: '', beforeCard: content };
 };
+
+// ── Project/file download link card ──
+const DownloadLinkCard = memo(function DownloadLinkCard({
+  label,
+  colors,
+}: {
+  label: string;
+  colors: any;
+}) {
+  return (
+    <View style={{
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      marginTop: 6,
+      marginBottom: 2,
+    }}>
+      <Text style={{ fontSize: 18 }}>👉</Text>
+      <Text style={{
+        fontSize: 15,
+        color: colors.primary,
+        textDecorationLine: 'underline',
+        fontWeight: '500',
+      }}>
+        {label}
+      </Text>
+      <Text style={{ fontSize: 14, color: colors.primary }}>↗</Text>
+    </View>
+  );
+});
 
 // Styled Message Card Component
 const MessageCard = memo(function MessageCard({
@@ -124,7 +156,6 @@ const MessageCard = memo(function MessageCard({
       await FileSystem.writeAsStringAsync(fileUri, editedContent, {
         encoding: FileSystem.EncodingType.UTF8,
       });
-
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(fileUri, {
           mimeType: 'text/plain',
@@ -140,55 +171,30 @@ const MessageCard = memo(function MessageCard({
   };
 
   const handleShare = async () => {
-    try {
-      await Share.share({ message: editedContent, title: 'Message' });
-    } catch {}
+    try { await Share.share({ message: editedContent, title: 'Message' }); } catch {}
   };
 
   if (isEditing) {
     return (
       <Modal visible animationType="slide" presentationStyle="pageSheet">
         <View style={{ flex: 1, backgroundColor: colors.background }}>
-          {/* Edit Modal Header */}
           <View style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            paddingHorizontal: 16,
-            paddingTop: Platform.OS === 'ios' ? 56 : 24,
-            paddingBottom: 16,
-            borderBottomWidth: 1,
-            borderBottomColor: colors.border,
+            flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+            paddingHorizontal: 16, paddingTop: Platform.OS === 'ios' ? 56 : 24,
+            paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: colors.border,
           }}>
             <TouchableOpacity onPress={() => setIsEditing(false)}>
               <Ionicons name="close" size={24} color={colors.text} />
             </TouchableOpacity>
             <Text style={{ color: colors.text, fontSize: 17, fontWeight: '600' }}>Message</Text>
             <View style={{ flexDirection: 'row', gap: 12 }}>
-              <TouchableOpacity onPress={handleCopy}>
-                <Ionicons name="copy-outline" size={22} color={colors.text} />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={handleShare}>
-                <Ionicons name="share-outline" size={22} color={colors.text} />
-              </TouchableOpacity>
+              <TouchableOpacity onPress={handleCopy}><Ionicons name="copy-outline" size={22} color={colors.text} /></TouchableOpacity>
+              <TouchableOpacity onPress={handleShare}><Ionicons name="share-outline" size={22} color={colors.text} /></TouchableOpacity>
             </View>
           </View>
           <ScrollView style={{ flex: 1, padding: 20 }}>
-            <View style={{
-              backgroundColor: colors.surface,
-              borderRadius: 16,
-              padding: 20,
-              minHeight: 300,
-            }}>
-              <Text
-                style={{
-                  color: colors.text,
-                  fontSize: 16,
-                  lineHeight: 26,
-                  fontWeight: '400',
-                }}
-                selectable
-              >
+            <View style={{ backgroundColor: colors.surface, borderRadius: 16, padding: 20, minHeight: 300 }}>
+              <Text style={{ color: colors.text, fontSize: 16, lineHeight: 26, fontWeight: '400' }} selectable>
                 {editedContent}
               </Text>
             </View>
@@ -199,81 +205,51 @@ const MessageCard = memo(function MessageCard({
   }
 
   return (
-    <View style={{
-      backgroundColor: colors.surface,
-      borderRadius: 16,
-      marginTop: 8,
-      overflow: 'hidden',
-      borderWidth: 1,
-      borderColor: colors.border,
-    }}>
-      {/* Card Header */}
-      <View style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: colors.border,
-        backgroundColor: `${colors.background}80`,
-      }}>
-        <Text style={{ color: colors.textSecondary, fontSize: 13, fontWeight: '500' }}>
-          Message
-        </Text>
+    <View style={{ backgroundColor: colors.surface, borderRadius: 16, marginTop: 8, overflow: 'hidden', borderWidth: 1, borderColor: colors.border }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: `${colors.background}80` }}>
+        <Text style={{ color: colors.textSecondary, fontSize: 13, fontWeight: '500' }}>Message</Text>
         <View style={{ flexDirection: 'row', gap: 16 }}>
           <TouchableOpacity onPress={() => setIsEditing(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
             <Ionicons name="pencil-outline" size={18} color={colors.textSecondary} />
           </TouchableOpacity>
           <TouchableOpacity onPress={handleCopy} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Ionicons
-              name={copied ? 'checkmark' : 'copy-outline'}
-              size={18}
-              color={copied ? colors.primary : colors.textSecondary}
-            />
+            <Ionicons name={copied ? 'checkmark' : 'copy-outline'} size={18} color={copied ? colors.primary : colors.textSecondary} />
           </TouchableOpacity>
           <TouchableOpacity onPress={handleShare} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
             <Ionicons name="share-outline" size={18} color={colors.textSecondary} />
           </TouchableOpacity>
         </View>
       </View>
-
-      {/* Card Content */}
       <ScrollView style={{ maxHeight: 320 }} showsVerticalScrollIndicator={false}>
         <View style={{ padding: 16 }}>
-          <Text style={{
-            color: colors.text,
-            fontSize: 15,
-            lineHeight: 24,
-            fontWeight: '400',
-          }}>
+          <Text style={{ color: colors.text, fontSize: 15, lineHeight: 24, fontWeight: '400' }}>
             {editedContent}
           </Text>
         </View>
       </ScrollView>
-
-      {/* Card Footer */}
       <TouchableOpacity
         onPress={handleDownload}
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 8,
-          paddingVertical: 12,
-          borderTopWidth: 1,
-          borderTopColor: colors.border,
-          backgroundColor: `${colors.primary}10`,
-        }}
+        style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: `${colors.primary}10` }}
       >
         <Ionicons name="download-outline" size={16} color={colors.primary} />
-        <Text style={{ color: colors.primary, fontSize: 14, fontWeight: '600' }}>
-          Download Message
-        </Text>
+        <Text style={{ color: colors.primary, fontSize: 14, fontWeight: '600' }}>Download Message</Text>
       </TouchableOpacity>
     </View>
   );
 });
+
+// ── Parse [DOWNLOAD_CARD] from AI content ──
+function parseDownloadCard(content: string): { text: string; downloadLabel?: string } {
+  const startTag = '[DOWNLOAD_CARD]';
+  const endTag = '[/DOWNLOAD_CARD]';
+  const start = content.indexOf(startTag);
+  const end = content.indexOf(endTag);
+  if (start === -1 || end === -1) return { text: content };
+  const label = content.substring(start + startTag.length, end).trim();
+  const before = content.substring(0, start).trim();
+  const after = content.substring(end + endTag.length).trim();
+  return { text: [before, after].filter(Boolean).join('\n\n'), downloadLabel: label };
+}
 
 export const MessageItem = memo(function MessageItem({
   message,
@@ -295,6 +271,7 @@ export const MessageItem = memo(function MessageItem({
   const [showActionsModal, setShowActionsModal] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
   const [liked, setLiked] = useState<'like' | 'dislike' | null>(null);
+  const [analysisVisible, setAnalysisVisible] = useState(false);
   const [selectedLink, setSelectedLink] = useState('');
   const [selectedImageUrl, setSelectedImageUrl] = useState('');
   const [fileData, setFileData] = useState({ name: '', content: '', type: '' });
@@ -307,7 +284,6 @@ export const MessageItem = memo(function MessageItem({
     setModals(prev => ({ ...prev, [modalName]: value ?? !prev[modalName] }));
   }, []);
 
-  // Download image to device
   const handleDownloadImage = useCallback(async (imageUrl: string) => {
     try {
       setDownloadingImage(true);
@@ -323,7 +299,7 @@ export const MessageItem = memo(function MessageItem({
       const asset = await MediaLibrary.createAssetAsync(downloadResult.uri);
       await MediaLibrary.createAlbumAsync('HaitianChatGPT', asset, false);
       showAlert('Success', 'Image saved to your photo library!');
-    } catch (error) {
+    } catch {
       Alert.alert('Error', 'Failed to save image. Please try again.');
     } finally {
       setDownloadingImage(false);
@@ -333,11 +309,8 @@ export const MessageItem = memo(function MessageItem({
   const handleLongPress = useCallback((event: any) => {
     const { pageX, pageY } = event.nativeEvent;
     setMenuPosition({ x: Math.min(pageX, SCREEN_WIDTH - 140), y: pageY - 100 });
-    if (message.role === 'assistant') {
-      setShowActionsModal(true);
-    } else {
-      setShowContextMenu(true);
-    }
+    if (message.role === 'assistant') setShowActionsModal(true);
+    else setShowContextMenu(true);
   }, [message.role]);
 
   const handleCopy = useCallback(async () => {
@@ -403,11 +376,16 @@ export const MessageItem = memo(function MessageItem({
     toggleModal('file', true);
   }, [toggleModal]);
 
-  // Parse message card
-  const { hasCard, cardContent, beforeCard } = useMemo(
-    () => extractMessageCard(message.content),
-    [message.content]
-  );
+  // ── Parse all special blocks ──
+  const parsed = useMemo(() => {
+    const { text: t1, sources } = parseSources(message.content);
+    const { text: t2, entries: analysisEntries } = parseAnalysis(t1);
+    const { text: t3, downloadLabel } = parseDownloadCard(t2);
+    const { hasCard, cardContent, beforeCard } = extractMessageCard(t3);
+    return { sources, analysisEntries, downloadLabel, hasCard, cardContent, beforeCard };
+  }, [message.content]);
+
+  const { sources, analysisEntries, downloadLabel, hasCard, cardContent, beforeCard } = parsed;
 
   // Parse content into text/code parts
   const contentParts = useMemo(() => {
@@ -483,7 +461,6 @@ export const MessageItem = memo(function MessageItem({
       height: 220,
       borderRadius: BorderRadius.md,
       marginBottom: Spacing.sm,
-      backgroundColor: colors.background,
     },
     downloadOverlay: {
       ...StyleSheet.absoluteFillObject,
@@ -555,12 +532,6 @@ export const MessageItem = memo(function MessageItem({
       backgroundColor: message.role === 'user' ? 'rgba(255,255,255,0.15)' : colors.background,
     },
     actionButtonActive: { backgroundColor: colors.primary },
-    actionButtonText: {
-      ...Typography.caption,
-      color: message.role === 'user' ? '#FFFFFF' : colors.text,
-      fontSize: 12,
-      fontWeight: '500',
-    },
     generatingIndicator: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -607,7 +578,6 @@ export const MessageItem = memo(function MessageItem({
       height: SCREEN_WIDTH * 0.4,
       borderRadius: BorderRadius.md,
       marginBottom: Spacing.sm,
-      backgroundColor: colors.background,
     },
   }), [colors, message.role]);
 
@@ -620,9 +590,13 @@ export const MessageItem = memo(function MessageItem({
           message.role === 'user' ? styles.userMessage : styles.assistantMessage,
         ]}
       >
-        {/* User uploaded image */}
+        {/* User uploaded image — clean, no background */}
         {message.role === 'user' && message.image_url && (
-          <TouchableOpacity onPress={() => handleImagePress(message.image_url!)}>
+          <TouchableOpacity
+            onPress={() => handleImagePress(message.image_url!)}
+            style={{ borderRadius: BorderRadius.md, overflow: 'hidden', marginBottom: Spacing.sm }}
+            activeOpacity={0.9}
+          >
             <Image
               source={{ uri: message.image_url }}
               style={styles.userImagePreview}
@@ -734,9 +708,19 @@ export const MessageItem = memo(function MessageItem({
           );
         })}
 
+        {/* Download card (👉 Download your project) */}
+        {downloadLabel && message.role === 'assistant' && (
+          <DownloadLinkCard label={downloadLabel} colors={colors} />
+        )}
+
         {/* Styled Message Card */}
         {hasCard && message.role === 'assistant' && (
           <MessageCard content={cardContent} colors={colors} />
+        )}
+
+        {/* Sources pill */}
+        {message.role === 'assistant' && sources.length > 0 && (
+          <SourcesButton sources={sources} />
         )}
 
         {/* Edited Indicator */}
@@ -759,7 +743,7 @@ export const MessageItem = memo(function MessageItem({
           </View>
         )}
 
-        {/* Action Buttons - Assistant only */}
+        {/* Action Buttons — assistant only */}
         {message.role === 'assistant' && !isGenerating && (
           <View style={styles.actionsContainer}>
             <TouchableOpacity style={styles.actionButton} onPress={handleCopy}>
@@ -788,6 +772,11 @@ export const MessageItem = memo(function MessageItem({
               />
             </TouchableOpacity>
 
+            {/* Terminal icon — opens analysis modal */}
+            {analysisEntries.length > 0 && (
+              <TerminalButton onPress={() => setAnalysisVisible(true)} />
+            )}
+
             <TouchableOpacity
               style={styles.actionButton}
               onPress={() => setShowActionsModal(true)}
@@ -797,6 +786,16 @@ export const MessageItem = memo(function MessageItem({
           </View>
         )}
       </Pressable>
+
+      {/* Analysis Modal */}
+      {analysisEntries.length > 0 && (
+        <AnalysisModal
+          visible={analysisVisible}
+          onClose={() => setAnalysisVisible(false)}
+          entries={analysisEntries}
+          title="Analysis"
+        />
+      )}
 
       {/* Context Menu Modal */}
       <Modal

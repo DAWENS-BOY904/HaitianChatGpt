@@ -21,7 +21,7 @@ interface ThinkingIndicatorProps {
 // Keywords mapped to intents
 const INTENT_KEYWORDS: Record<IntentType, string[]> = {
   image: ['logo', 'image', 'img', 'design', 'picture', 'photo', 'draw', 'generate', 'create image'],
-  file: ['file', 'pdf', 'document', 'spreadsheet', 'excel', 'csv', 'download', 'chatbot', 'html'],
+  file: ['file', 'pdf', 'document', 'spreadsheet', 'excel', 'csv', 'download', 'chatbot', 'html', 'code', 'create', 'build', 'write'],
   web_search: ['search', 'find', 'look up', 'google', 'browse', 'web', 'search for'],
   message: [],
 };
@@ -52,7 +52,7 @@ function getStatusText(
 
   const presentTense: Record<IntentType, string | ((msg?: string) => string)> = {
     image: 'Creating image...',
-    file: 'Writing code...',
+    file: 'Analyzing...',
     web_search: (msg) => {
       const query = msg?.replace(/search|find|look up|google|browse|web/gi, '').trim();
       return query ? `Searching for ${query}...` : 'Searching web...';
