@@ -659,3 +659,4 @@ const fsStyles = StyleSheet.create({
     includeFontPadding: false,
   },
 });
+hello ai can you dont skip:When an AI response contains code that uses a detected third-party API, show a small version badge chip (e.g. 'Stripe v2025-03-31') above the CodeBlock header so users can see which API version was used at a glance.In CodeBlock.tsx, when the code contains placeholder strings like YOUR_API_KEY, sk_..., or API_KEY_HERE, highlight them in a distinct yellow/orange color with a small warning badge so users immediately know where to fill in their credentials.Improve the CodeBlock horizontal scroll by adding a visible scroll indicator track and momentum scrolling on both axes, ensuring long code lines can be smoothly scrolled left-right without conflicting with the parent FlatList vertical scroll.
