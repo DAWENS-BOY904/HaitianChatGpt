@@ -50,9 +50,9 @@ interface SideMenuProps {
 }
 
 const QUICK_ACTIONS = [
-  { id: 'projects', icon: 'folder-outline', label: 'Projects', color: '#8B5CF6', route: '/new-project' },
+  { id: 'projects', icon: 'folder-outline', label: 'Projects', color: '#8B5CF6', route: '/projects' },
   { id: 'images', icon: 'images-outline', label: 'Images', color: '#EC4899', route: '/images' },
-  { id: 'apps', icon: 'grid-outline', label: 'Apps', color: '#6366F1', route: '/gpts' },
+  { id: 'apps', icon: 'grid-outline', label: 'Apps', color: '#6366F1', route: '/apps' },
   { id: 'upgrade', icon: 'sparkles', label: 'Upgrade', color: '#7C3AED', isUpgrade: true },
 ];
 
@@ -77,17 +77,11 @@ export function SideMenu({
   const { conversations, currentConversation, selectConversation } = useConversation();
   const insets = useSafeAreaInsets();
 
-  const handleQuickAction = (action: any) => {
-    if (action.id === 'upgrade') {
-      onClose();
-      router.push('/subscription');
-      return;
-    }
-    if (action.route) {
-      onClose();
-      router.push(action.route);
-    }
-  };
+  const handleQuickAction = (action) => {
+  if (action.route) {
+    router.push(action.route);
+  }
+};
 
   const [searchQuery, setSearchQuery] = useState('');
   const [searchActive, setSearchActive] = useState(false);
@@ -156,11 +150,7 @@ export function SideMenu({
     return 'DH';
   };
 
-  const getUserName = () => {
-    if ((user as any)?.username) return (user as any).username;
-    if (user?.email) return user.email.split('@')[0];
-    return 'Haitian User';
-  };
+  const getUserName = () => user?.email?.split('@')[0] || 'Haitian User';
 
   return (
     <>
@@ -198,19 +188,11 @@ export function SideMenu({
                 <Ionicons name="search" size={22} color={colors.text} />
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.profileBtn}
-                onPress={() => { onClose(); onProfile(); }}
+                style={[styles.avatarBtn, { backgroundColor: accentColor }]}
+                onPress={() => { onClose(); onSettings(); }}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
-                {user ? (
-                  <Text style={[styles.profileName, { color: colors.text }]} numberOfLines={1}>
-                    {getUserName()}
-                  </Text>
-                ) : (
-                  <View style={[styles.avatarBtn, { backgroundColor: accentColor }]}>
-                    <Text style={styles.avatarText}>{getUserInitials()}</Text>
-                  </View>
-                )}
+                <Text style={styles.avatarText}>{getUserInitials()}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -247,7 +229,9 @@ export function SideMenu({
                     (qa as any).isUpgrade && { borderColor: qa.color, borderWidth: 1 },
                   ]}
                   activeOpacity={0.7}
-                  onPress={() => handleQuickAction(qa)}
+                  onPress={() => {
+                    if (qa.id === 'upgrade') { onClose(); onSettings(); }
+                  }}
                 >
                   <Ionicons
                     name={qa.icon as any}
@@ -388,20 +372,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '700',
     fontSize: 14,
-  },
-  profileBtn: {
-    maxWidth: 130,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(128,128,128,0.3)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  profileName: {
-    fontSize: 14,
-    fontWeight: '600',
   },
   searchBar: {
     flexDirection: 'row',

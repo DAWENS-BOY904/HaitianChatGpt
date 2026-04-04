@@ -197,25 +197,28 @@ export function ThinkingIndicator({
 const styles = StyleSheet.create({
   wrapper: {
     paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs,
-    alignItems: 'flex-start',
+    paddingVertical: Spacing.sm,
   },
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 6,
-    paddingHorizontal: 0,
-    backgroundColor: 'transparent',
-    minHeight: 36,
+    padding: Spacing.md,
+    borderRadius: BorderRadius.lg,
+    minHeight: 56,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   iconContainer: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: 'transparent',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: Spacing.sm,
+    marginRight: Spacing.md,
   },
   text: {
     ...Typography.body,
@@ -225,13 +228,13 @@ const styles = StyleSheet.create({
   },
   dotsContainer: {
     flexDirection: 'row',
-    gap: 4,
-    marginLeft: Spacing.xs,
+    gap: 6,
+    marginLeft: Spacing.sm,
   },
   dot: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
 });
 

@@ -5,13 +5,13 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
+  Image,
   Platform,
+  ActionSheetIOS,
   Alert,
-  Dimensions,
   TextInput,
   ActivityIndicator,
 } from 'react-native';
-import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
 import { useAuth, useAlert } from '@/template';
@@ -22,61 +22,67 @@ import { getSupabaseClient } from '@/template';
 import * as ImagePicker from 'expo-image-picker';
 import { useConversation } from '../hooks/useConversation';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-
 const STYLES = [
   {
-    id: 'caricature',
-    name: 'Caricature\nTrend',
+    id: 'sketch',
+    name: 'Sketch',
     image: require('@/assets/models/sketch-style.png'),
-    prompt: 'Transform the person in the uploaded photo into a modern caricature trend art style. Exaggerate features in a fun and stylized anime-inspired way with vibrant colors.',
+    color: '#8E8E93',
+    prompt: 'Create a detailed pencil sketch of the person in the uploaded photo. Show them drawing themselves, with realistic shading and pencil texture on white paper.',
   },
   {
-    id: 'flower',
-    name: 'Flower petals',
-    image: require('@/assets/models/plushie-style.png'),
-    prompt: 'Transform the person in the uploaded photo into a figure made entirely from layered flower petals. Use realistic petal textures, delicate edges, and natural overlaps. Soft daylight, gentle shadows, clean minimal background. Photoreal, high-detail, elegant.',
-  },
-  {
-    id: 'gold',
-    name: 'Gold',
-    image: require('@/assets/models/dramatic-style.png'),
-    prompt: 'Transform the person in the uploaded photo into a luxurious golden statue with rich metallic gold texture, dramatic lighting, and an elegant pose. Highly detailed, photorealistic golden sculpture.',
-  },
-  {
-    id: 'crayon',
-    name: 'Crayon',
+    id: 'holiday',
+    name: 'Holiday portrait',
     image: require('@/assets/models/holiday-style.png'),
-    prompt: 'Reimagine the person in the uploaded photo as a cute crayon-drawn cartoon character. Bright colors, thick outlines, childlike charm, white paper background.',
+    color: '#FF3B30',
+    prompt: 'Create a festive holiday portrait of the person in the uploaded photo with warm lighting, Christmas decorations, and a cozy atmosphere.',
   },
   {
-    id: 'paparazzi',
-    name: 'Paparazzi',
+    id: 'dramatic',
+    name: 'Dramatic',
+    image: require('@/assets/models/dramatic-style.png'),
+    color: '#000000',
+    prompt: 'Create a dramatic black and white portrait of the person in the uploaded photo with intense contrast, moody lighting, and powerful expression.',
+  },
+  {
+    id: 'plushie',
+    name: 'Plushie',
+    image: require('@/assets/models/plushie-style.png'),
+    color: '#FF9500',
+    prompt: 'Transform the person in the uploaded photo into an adorable soft plushie toy with cute features, fabric texture, and gentle colors.',
+  },
+  {
+    id: 'baseball',
+    name: 'Baseball bobblehead',
     image: require('@/assets/models/baseball-style.png'),
-    prompt: 'Create a dramatic paparazzi-style photo of the person in the uploaded photo. Flash photography, candid moment, celebrity aesthetic, high contrast lighting.',
+    color: '#007AFF',
+    prompt: 'Create a fun baseball bobblehead figurine of the person in the uploaded photo wearing team uniform, with exaggerated head and cute proportions.',
   },
 ];
 
 const DISCOVER_IDEAS = [
   {
-    id: 'emperor',
-    title: 'Me as an emperor',
-    prompt: 'Transform the person in the uploaded photo into a majestic emperor with royal robes, golden crown, and a powerful commanding pose in an ancient palace setting.',
+    id: 'holiday-card',
+    title: 'Create a holiday card',
+    icon: 'card-outline',
+    color: '#34C759',
   },
   {
-    id: 'pet-human',
-    title: 'Reimagine my pet as a human',
-    prompt: 'Transform the animal in the uploaded photo into a realistic human character that captures the same personality, colors, and energy of the original animal.',
+    id: 'kpop',
+    title: 'What would I look like as a K-Pop star?',
+    icon: 'musical-notes-outline',
+    color: '#AF52DE',
   },
   {
-    id: 'bowl-cut',
-    title: 'Give them a bowl cut',
-    prompt: 'Give the person in the uploaded photo a perfectly round bowl haircut while keeping all other features exactly the same. Photorealistic, natural lighting.',
+    id: 'pearl',
+    title: 'Me as The Girl with a Pearl',
+    icon: 'diamond-outline',
+    color: '#5856D6',
   },
 ];
 
 export default function ImagesScreen() {
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   const { user } = useAuth();
   const { showAlert } = useAlert();
   const router = useRouter();
@@ -86,275 +92,446 @@ export default function ImagesScreen() {
 
   const [myImages, setMyImages] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [selectedStyle, setSelectedStyle] = useState<any>(null);
   const [customDescription, setCustomDescription] = useState('');
-  const [customImage, setCustomImage] = useState<{ uri: string; base64: string } | null>(null);
+  const [customImage, setCustomImage] = useState<string | null>(null);
 
-  useEffect(() => { loadMyImages(); }, []);
+  useEffect(() => {
+    loadMyImages();
+  }, []);
 
   const loadMyImages = async () => {
     if (!user) return;
+
     setLoading(true);
+
     try {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('media_files')
         .select('*')
         .eq('user_id', user.id)
         .eq('file_type', 'image')
         .order('created_at', { ascending: false });
-      setMyImages(data || []);
-    } catch {}
-    finally { setLoading(false); }
-  };
 
-  // ── Navigate to image-prompt page with selected photo + style ──
-  const goToImagePromptPage = (imageUri: string, base64: string, stylePrompt: string) => {
-    router.push({
-      pathname: '/image-prompt',
-      params: { imageUri, base64, stylePrompt },
-    });
+      if (error) throw error;
+
+      setMyImages(data || []);
+    } catch (error) {
+      console.error('Load images error:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleStyleSelect = (style: any) => {
-    Alert.alert(
-      style.name.replace('\n', ' '),
-      'Choose a photo to get started.',
-      [
-        {
-          text: 'Choose Photo',
-          onPress: async () => {
-            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-            if (status !== 'granted') { showAlert('Permission required', 'Please allow photo access'); return; }
-            const result = await ImagePicker.launchImageLibraryAsync({
-              mediaTypes: ImagePicker.MediaTypeOptions.Images,
-              quality: 0.9,
-              base64: true,
-            });
-            if (!result.canceled && result.assets[0]) {
-              goToImagePromptPage(result.assets[0].uri, result.assets[0].base64 || '', style.prompt);
-            }
-          },
-        },
-        {
-          text: 'Take Selfie',
-          onPress: async () => {
-            const { status } = await ImagePicker.requestCameraPermissionsAsync();
-            if (status !== 'granted') { showAlert('Permission required', 'Please allow camera access'); return; }
-            const result = await ImagePicker.launchCameraAsync({
-              quality: 0.9,
-              base64: true,
-              cameraType: ImagePicker.CameraType.front,
-            });
-            if (!result.canceled && result.assets[0]) {
-              goToImagePromptPage(result.assets[0].uri, result.assets[0].base64 || '', style.prompt);
-            }
-          },
-        },
-        { text: 'Cancel', style: 'cancel' },
-      ]
-    );
-  };
+    setSelectedStyle(style);
 
-  const handleDiscoverSelect = (idea: any) => {
-    Alert.alert(
-      idea.title,
-      'Choose a photo.',
-      [
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
         {
-          text: 'Choose Photo',
-          onPress: async () => {
-            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-            if (status !== 'granted') { showAlert('Permission required', 'Please allow photo access'); return; }
-            const result = await ImagePicker.launchImageLibraryAsync({
-              mediaTypes: ImagePicker.MediaTypeOptions.Images,
-              quality: 0.9,
-              base64: true,
-            });
-            if (!result.canceled && result.assets[0]) {
-              goToImagePromptPage(result.assets[0].uri, result.assets[0].base64 || '', idea.prompt);
-            }
-          },
+          title: style.name,
+          message: 'Choose a photo to get started.',
+          options: ['Choose a photo', 'Take a selfie', 'Cancel'],
+          cancelButtonIndex: 2,
         },
-        {
-          text: 'Take Selfie',
-          onPress: async () => {
-            const { status } = await ImagePicker.requestCameraPermissionsAsync();
-            if (status !== 'granted') return;
-            const result = await ImagePicker.launchCameraAsync({
-              quality: 0.9, base64: true, cameraType: ImagePicker.CameraType.front,
-            });
-            if (!result.canceled && result.assets[0]) {
-              goToImagePromptPage(result.assets[0].uri, result.assets[0].base64 || '', idea.prompt);
-            }
-          },
-        },
-        { text: 'Cancel', style: 'cancel' },
-      ]
-    );
-  };
-
-  // Bottom bar pick photo
-  const handlePickForCustom = () => {
-    Alert.alert('Add Image', '', [
-      {
-        text: 'Choose Photo',
-        onPress: async () => {
-          const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-          if (status !== 'granted') return;
-          const result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            quality: 0.9,
-            base64: true,
-          });
-          if (!result.canceled && result.assets[0]) {
-            setCustomImage({ uri: result.assets[0].uri, base64: result.assets[0].base64 || '' });
+        (buttonIndex) => {
+          if (buttonIndex === 0) {
+            handleChoosePhoto(style);
+          } else if (buttonIndex === 1) {
+            handleTakeSelfie(style);
           }
-        },
-      },
-      {
-        text: 'Take Selfie',
-        onPress: async () => {
-          const { status } = await ImagePicker.requestCameraPermissionsAsync();
-          if (status !== 'granted') return;
-          const result = await ImagePicker.launchCameraAsync({
-            quality: 0.9, base64: true, cameraType: ImagePicker.CameraType.front,
-          });
-          if (!result.canceled && result.assets[0]) {
-            setCustomImage({ uri: result.assets[0].uri, base64: result.assets[0].base64 || '' });
-          }
-        },
-      },
-      { text: 'Cancel', style: 'cancel' },
-    ]);
-  };
-
-  const handleSendCustom = async () => {
-    if (!customDescription.trim() && !customImage) return;
-    if (customImage) {
-      goToImagePromptPage(customImage.uri, customImage.base64, customDescription || 'Describe this image');
+        }
+      );
     } else {
-      // Navigate to image prompt with only text
-      router.push({
-        pathname: '/image-prompt',
-        params: { stylePrompt: customDescription },
-      });
+      Alert.alert(
+        style.name,
+        'Choose a photo to get started.',
+        [
+          { text: 'Choose a photo', onPress: () => handleChoosePhoto(style) },
+          { text: 'Take a selfie', onPress: () => handleTakeSelfie(style) },
+          { text: 'Cancel', style: 'cancel' },
+        ]
+      );
     }
+  };
+
+  const handleChoosePhoto = async (style?: any) => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      showAlert('Permission required', 'Please allow access to your photos');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 1,
+      base64: true,
+    });
+
+    if (!result.canceled && result.assets[0].base64) {
+      if (style) {
+        // Auto-send to home page with photo and prompt
+        await sendImageGenerationToHome(result.assets[0].uri, result.assets[0].base64!, style);
+      } else {
+        // Custom description flow - store image and wait for description
+        setCustomImage(result.assets[0].uri);
+      }
+    }
+  };
+
+  const handleTakeSelfie = async (style?: any) => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      showAlert('Permission required', 'Please allow access to your camera');
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      quality: 1,
+      base64: true,
+    });
+
+    if (!result.canceled && result.assets[0].base64) {
+      if (style) {
+        await sendImageGenerationToHome(result.assets[0].uri, result.assets[0].base64!, style);
+      } else {
+        setCustomImage(result.assets[0].uri);
+      }
+    }
+  };
+
+  const sendImageGenerationToHome = async (imageUri: string, base64: string, style: any) => {
+    // Navigate to home page first
+    router.replace('/home');
+    
+    // Small delay to ensure navigation completes
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    // Send message with image and style prompt to conversation
+    // The ConversationContext will handle:
+    // 1. Creating user message immediately (shows photo + prompt)
+    // 2. Calling AI Edge Function (shows thinking state)
+    // 3. Displaying AI response (generated image)
+    const messageText = `${style.prompt}`;
+    await sendMessage(messageText, imageUri, base64, true); // true = isImageGeneration
+  };
+
+  const handleCustomImageGeneration = async () => {
+    if (!customDescription.trim()) {
+      showAlert('Description required', 'Please describe the image you want to create');
+      return;
+    }
+
+    if (customImage) {
+      // User uploaded an image with custom description - need to get base64
+      const customStyle = {
+        name: 'Custom',
+        prompt: customDescription,
+      };
+      
+      // Re-pick to get base64 (or use stored customImage if we already have it)
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        showAlert('Permission required', 'Please allow access to your photos');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 1,
+        base64: true,
+      });
+
+      if (!result.canceled && result.assets[0].base64) {
+        await sendImageGenerationToHome(result.assets[0].uri, result.assets[0].base64, customStyle);
+      }
+    } else {
+      // Generate from text only - send to home
+      router.replace('/home');
+      await new Promise(resolve => setTimeout(resolve, 300));
+      await sendMessage(customDescription, undefined, undefined, true);
+    }
+
     setCustomDescription('');
     setCustomImage(null);
   };
 
   const handleImagePress = (image: any) => {
-    router.push({ pathname: '/image-viewer', params: { imageUrl: image.file_url } });
+    router.push({
+      pathname: '/image-viewer',
+      params: {
+        imageId: image.id,
+        imageUrl: image.file_url,
+      },
+    });
   };
 
-  const bg = isDark ? '#000' : colors.background;
-  const cardBg = isDark ? '#111' : colors.surface;
+  const handlePickImageForCustom = () => {
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          title: 'Choose a photo',
+          options: ['Choose from library', 'Take a photo', 'Cancel'],
+          cancelButtonIndex: 2,
+        },
+        (buttonIndex) => {
+          if (buttonIndex === 0) {
+            handleChoosePhoto();
+          } else if (buttonIndex === 1) {
+            handleTakeSelfie();
+          }
+        }
+      );
+    } else {
+      Alert.alert(
+        'Choose a photo',
+        '',
+        [
+          { text: 'Choose from library', onPress: () => handleChoosePhoto() },
+          { text: 'Take a photo', onPress: () => handleTakeSelfie() },
+          { text: 'Cancel', style: 'cancel' },
+        ]
+      );
+    }
+  };
+
+  const styles = StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    header: {
+      paddingTop: Platform.select({
+        ios: insets.top + 10,
+        android: insets.top + 10,
+      }),
+      paddingHorizontal: Spacing.md,
+      paddingBottom: Spacing.md,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    backButton: {
+      padding: Spacing.xs,
+    },
+    headerTitle: {
+      ...Typography.heading,
+      color: colors.text,
+      fontSize: 20,
+    },
+    content: {
+      flex: 1,
+    },
+    section: {
+      marginBottom: Spacing.xl,
+    },
+    sectionTitle: {
+      ...Typography.heading,
+      color: colors.text,
+      fontSize: 18,
+      paddingHorizontal: Spacing.md,
+      marginBottom: Spacing.md,
+      marginTop: Spacing.lg,
+    },
+    stylesScroll: {
+      paddingHorizontal: Spacing.md,
+    },
+    styleItem: {
+      marginRight: Spacing.md,
+      alignItems: 'center',
+      width: 140,
+    },
+    styleImage: {
+      width: 140,
+      height: 180,
+      borderRadius: BorderRadius.lg,
+      backgroundColor: colors.surface,
+      marginBottom: Spacing.xs,
+      overflow: 'hidden',
+    },
+    stylePreviewImage: {
+      width: '100%',
+      height: '100%',
+    },
+    styleName: {
+      ...Typography.caption,
+      color: colors.text,
+      textAlign: 'center',
+    },
+    discoverItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: Spacing.md,
+      paddingHorizontal: Spacing.md,
+      backgroundColor: colors.card,
+      marginHorizontal: Spacing.md,
+      marginBottom: Spacing.sm,
+      borderRadius: BorderRadius.md,
+    },
+    discoverImage: {
+      width: 60,
+      height: 60,
+      borderRadius: BorderRadius.md,
+      backgroundColor: colors.surface,
+      marginRight: Spacing.md,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    discoverTitle: {
+      ...Typography.body,
+      color: colors.text,
+      flex: 1,
+    },
+    imagesGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      paddingHorizontal: Spacing.md - 4,
+    },
+    imageItem: {
+      width: '50%',
+      padding: 4,
+    },
+    gridImage: {
+      width: '100%',
+      aspectRatio: 1,
+      borderRadius: BorderRadius.md,
+      backgroundColor: colors.surface,
+    },
+    emptyState: {
+      padding: Spacing.xl,
+      alignItems: 'center',
+    },
+    emptyText: {
+      ...Typography.body,
+      color: colors.textSecondary,
+      textAlign: 'center',
+    },
+    bottomBar: {
+      padding: Spacing.md,
+      paddingBottom: Platform.select({
+        ios: insets.bottom + Spacing.md,
+        android: Spacing.md,
+      }),
+      borderTopWidth: 1,
+      borderTopColor: colors.border,
+      backgroundColor: colors.background,
+    },
+    inputContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.surface,
+      borderRadius: BorderRadius.full,
+      paddingHorizontal: Spacing.md,
+      paddingVertical: Spacing.sm,
+      gap: Spacing.sm,
+    },
+    input: {
+      flex: 1,
+      ...Typography.body,
+      color: colors.text,
+      maxHeight: 100,
+    },
+    iconButton: {
+      padding: Spacing.xs,
+    },
+    customImagePreview: {
+      width: 40,
+      height: 40,
+      borderRadius: BorderRadius.sm,
+      overflow: 'hidden',
+      backgroundColor: colors.surface,
+    },
+    customImagePreviewImage: {
+      width: '100%',
+      height: '100%',
+    },
+  });
 
   return (
-    <View style={[styles.container, { backgroundColor: bg }]}>
+    <View style={styles.container}>
       {/* HEADER */}
-      <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
-        <TouchableOpacity
-          style={[styles.menuBtn, { backgroundColor: isDark ? '#1C1C1E' : colors.surface }]}
-          onPress={() => router.back()}
-        >
-          <Ionicons name="menu" size={20} color={colors.text} />
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+          <Ionicons name="menu" size={28} color={colors.text} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>Images</Text>
+        <Text style={styles.headerTitle}>Images</Text>
         <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
-
-        {/* STYLES */}
-        <Text style={[styles.sectionTitle, { color: colors.text }]}>Try a style on an image</Text>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 8, gap: 14 }}
-        >
-          {STYLES.map(s => (
-            <TouchableOpacity key={s.id} style={styles.styleItem} onPress={() => handleStyleSelect(s)} activeOpacity={0.8}>
-              <Image
-                source={s.image}
-                style={styles.styleImg}
-                contentFit="cover"
-                transition={200}
-              />
-              <Text style={[styles.styleName, { color: colors.text }]}>{s.name}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-
-        {/* DISCOVER */}
-        <Text style={[styles.sectionTitle, { color: colors.text, marginTop: 24 }]}>Discover something new</Text>
-        {DISCOVER_IDEAS.map(idea => (
-          <TouchableOpacity
-            key={idea.id}
-            style={[styles.discoverRow, { borderBottomColor: isDark ? 'rgba(255,255,255,0.06)' : colors.border }]}
-            onPress={() => handleDiscoverSelect(idea)}
-            activeOpacity={0.7}
-          >
-            <View style={[styles.discoverThumbWrap, { backgroundColor: isDark ? '#1C1C1E' : colors.surface }]}>
-              <Ionicons name="sparkles" size={24} color={colors.text} />
-            </View>
-            <Text style={[styles.discoverTitle, { color: colors.text }]}>{idea.title}</Text>
-            {/* Right example thumb placeholder */}
-            <View style={[styles.discoverRightThumb, { backgroundColor: isDark ? '#1C1C1E' : colors.surface }]}>
-              <Ionicons name="image-outline" size={20} color={colors.textSecondary} />
-            </View>
-          </TouchableOpacity>
-        ))}
-
-        {/* MY IMAGES */}
-        <Text style={[styles.sectionTitle, { color: colors.text, marginTop: 24 }]}>My images</Text>
-        {loading ? (
-          <View style={{ padding: 32, alignItems: 'center' }}>
-            <ActivityIndicator size="large" color={colors.primary} />
-          </View>
-        ) : myImages.length === 0 ? (
-          <View style={{ padding: 24, alignItems: 'center' }}>
-            <Text style={{ color: colors.textSecondary, fontSize: 14 }}>
-              No images yet. Try a style above!
-            </Text>
-          </View>
-        ) : (
-          <View style={styles.grid}>
-            {myImages.map(img => (
-              <TouchableOpacity key={img.id} style={styles.gridItem} onPress={() => handleImagePress(img)} activeOpacity={0.85}>
-                <Image
-                  source={{ uri: img.file_url }}
-                  style={styles.gridImg}
-                  contentFit="cover"
-                  transition={200}
-                />
+      {/* CONTENT */}
+      <ScrollView style={styles.content}>
+        {/* STYLES SECTION */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Try a style on an image</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.stylesScroll}>
+            {STYLES.map((style) => (
+              <TouchableOpacity key={style.id} style={styles.styleItem} onPress={() => handleStyleSelect(style)}>
+                <View style={styles.styleImage}>
+                  <Image 
+                    source={style.image} 
+                    style={styles.stylePreviewImage}
+                    resizeMode="cover"
+                  />
+                </View>
+                <Text style={styles.styleName}>{style.name}</Text>
               </TouchableOpacity>
             ))}
-          </View>
-        )}
+          </ScrollView>
+        </View>
 
-        <View style={{ height: 120 }} />
+        {/* DISCOVER SECTION */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Discover something new</Text>
+          {DISCOVER_IDEAS.map((idea) => (
+            <TouchableOpacity key={idea.id} style={styles.discoverItem}>
+              <View style={[styles.discoverImage, { backgroundColor: idea.color }]}>
+                <Ionicons name={idea.icon as any} size={32} color="#FFFFFF" />
+              </View>
+              <Text style={styles.discoverTitle}>{idea.title}</Text>
+              <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* MY IMAGES SECTION */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>My images</Text>
+          {loading ? (
+            <View style={styles.emptyState}>
+              <ActivityIndicator size="large" color={colors.primary} />
+            </View>
+          ) : myImages.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyText}>No images yet. Try a style above to get started!</Text>
+            </View>
+          ) : (
+            <View style={styles.imagesGrid}>
+              {myImages.map((image) => (
+                <TouchableOpacity key={image.id} style={styles.imageItem} onPress={() => handleImagePress(image)}>
+                  <Image source={{ uri: image.file_url }} style={styles.gridImage} resizeMode="cover" />
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+        </View>
       </ScrollView>
 
-      {/* BOTTOM INPUT BAR */}
-      <View style={[styles.bottomBar, {
-        paddingBottom: insets.bottom + 12,
-        backgroundColor: isDark ? '#000' : colors.background,
-        borderTopColor: isDark ? 'rgba(255,255,255,0.08)' : colors.border,
-      }]}>
-        {customImage && (
-          <View style={styles.previewRow}>
-            <Image source={{ uri: customImage.uri }} style={styles.previewThumb} contentFit="cover" />
-            <TouchableOpacity onPress={() => setCustomImage(null)} style={styles.removePreview}>
-              <Ionicons name="close" size={10} color="#FFF" />
-            </TouchableOpacity>
-          </View>
-        )}
-        <View style={[styles.inputRow, { backgroundColor: isDark ? '#1C1C1E' : colors.surface }]}>
-          <TouchableOpacity onPress={handlePickForCustom} style={styles.inputIcon}>
-            <Ionicons name="image-outline" size={22} color={isDark ? 'rgba(255,255,255,0.6)' : colors.textSecondary} />
+      {/* BOTTOM INPUT BAR - NOW FUNCTIONAL */}
+      <View style={styles.bottomBar}>
+        <View style={styles.inputContainer}>
+          <TouchableOpacity style={styles.iconButton} onPress={handlePickImageForCustom}>
+            {customImage ? (
+              <View style={styles.customImagePreview}>
+                <Image source={{ uri: customImage }} style={styles.customImagePreviewImage} />
+              </View>
+            ) : (
+              <Ionicons name="image-outline" size={24} color={colors.text} />
+            )}
           </TouchableOpacity>
           <TextInput
-            style={[styles.textInput, { color: colors.text }]}
+            style={styles.input}
             placeholder="Describe an image"
             placeholderTextColor={colors.textSecondary}
             value={customDescription}
@@ -362,170 +539,22 @@ export default function ImagesScreen() {
             multiline
             maxLength={500}
           />
-          <TouchableOpacity style={styles.inputIcon}>
-            <Ionicons name="mic-outline" size={22} color={isDark ? 'rgba(255,255,255,0.6)' : colors.textSecondary} />
+          <TouchableOpacity style={styles.iconButton}>
+            <Ionicons name="mic-outline" size={24} color={colors.text} />
           </TouchableOpacity>
-          <TouchableOpacity
-            onPress={handleSendCustom}
-            style={[
-              styles.sendBtn,
-              { backgroundColor: (customDescription.trim() || customImage) ? '#FF6B35' : 'rgba(255,107,53,0.3)' }
-            ]}
-            disabled={!customDescription.trim() && !customImage}
+          <TouchableOpacity 
+            style={styles.iconButton} 
+            onPress={handleCustomImageGeneration}
+            disabled={!customDescription.trim()}
           >
-            <Ionicons name="arrow-up" size={18} color="#FFF" />
+            <Ionicons 
+              name="arrow-up-circle" 
+              size={32} 
+              color={customDescription.trim() ? colors.primary : colors.textSecondary} 
+            />
           </TouchableOpacity>
         </View>
       </View>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-  },
-  menuBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    letterSpacing: -0.3,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    paddingHorizontal: 16,
-    marginBottom: 14,
-    letterSpacing: -0.3,
-  },
-  styleItem: {
-    width: 120,
-    alignItems: 'center',
-  },
-  styleImg: {
-    width: 120,
-    height: 156,
-    borderRadius: 16,
-    marginBottom: 8,
-  },
-  styleName: {
-    fontSize: 12,
-    fontWeight: '500',
-    textAlign: 'center',
-    lineHeight: 16,
-  },
-  discoverRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    gap: 14,
-  },
-  discoverThumbWrap: {
-    width: 56,
-    height: 56,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  discoverTitle: {
-    flex: 1,
-    fontSize: 16,
-    fontWeight: '500',
-    lineHeight: 22,
-  },
-  discoverRightThumb: {
-    width: 56,
-    height: 56,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    paddingHorizontal: 12,
-    gap: 4,
-  },
-  gridItem: {
-    width: (SCREEN_WIDTH - 32) / 2,
-    aspectRatio: 1,
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  gridImg: {
-    width: '100%',
-    height: '100%',
-  },
-  bottomBar: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    paddingTop: 10,
-    paddingHorizontal: 12,
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
-  previewRow: {
-    flexDirection: 'row',
-    paddingBottom: 6,
-    position: 'relative',
-    alignSelf: 'flex-start',
-    marginLeft: 4,
-  },
-  previewThumb: {
-    width: 52,
-    height: 52,
-    borderRadius: 10,
-  },
-  removePreview: {
-    position: 'absolute',
-    top: -5,
-    right: -5,
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: '#FF3B30',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  inputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 28,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    gap: 6,
-  },
-  inputIcon: {
-    width: 36,
-    height: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  textInput: {
-    flex: 1,
-    fontSize: 16,
-    paddingVertical: 6,
-    maxHeight: 80,
-  },
-  sendBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});

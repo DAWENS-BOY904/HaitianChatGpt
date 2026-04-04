@@ -1,593 +1,275 @@
-/**
- * image-prompt.tsx — "Home Photo" page
- * A second home page for AI image generation with an uploaded photo.
- * User picks a photo from images page, sees it here with a prompt input,
- * taps send → AI transforms the photo.
- */
-
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
-  FlatList,
-  KeyboardAvoidingView,
-  Platform,
+  Image,
+  TextInput,
   ActivityIndicator,
-  Alert,
-  StatusBar,
-  Dimensions,
+  Platform,
+  KeyboardAvoidingView,
 } from 'react-native';
-import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
 import { useAuth, useAlert } from '@/template';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { Spacing, BorderRadius } from '../constants/theme';
+import { Spacing, Typography, BorderRadius } from '../constants/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getSupabaseClient } from '@/template';
-import { Audio } from 'expo-av';
-import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system';
-import * as MediaLibrary from 'expo-media-library';
-import * as Sharing from 'expo-sharing';
-import * as Haptics from 'expo-haptics';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-
-interface ChatMessage {
-  id: string;
-  role: 'user' | 'assistant';
-  text?: string;
-  imageUri?: string;     // user uploaded photo
-  generatedUrl?: string; // AI result
-  loading?: boolean;
-}
-
-type RecordingState = 'idle' | 'recording' | 'processing';
+import { decode } from 'base64-arraybuffer';
 
 export default function ImagePromptScreen() {
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   const { user } = useAuth();
   const { showAlert } = useAlert();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const supabase = getSupabaseClient();
 
-  // Params passed from images page
-  const { imageUri: initUri, base64: initB64, stylePrompt: initPrompt } =
-    useLocalSearchParams<{ imageUri: string; base64: string; stylePrompt: string }>();
+  const { image, base64, stylePrompt, styleName } = useLocalSearchParams<{
+    image: string;
+    base64: string;
+    stylePrompt: string;
+    styleName: string;
+  }>();
 
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [inputText, setInputText] = useState(initPrompt || '');
-  const [selectedImage, setSelectedImage] = useState<{ uri: string; base64: string } | null>(
-    initUri ? { uri: initUri, base64: initB64 || '' } : null
-  );
-  const [sending, setSending] = useState(false);
-  const [recordingState, setRecordingState] = useState<RecordingState>('idle');
-  const flatListRef = useRef<FlatList>(null);
-  const recordingRef = useRef<Audio.Recording | null>(null);
+  const [prompt, setPrompt] = useState('');
+  const [generating, setGenerating] = useState(false);
 
-  // Auto-send on mount if we have an initial image + prompt
   useEffect(() => {
-    if (initUri && initPrompt) {
-      handleSend();
-    }
-  }, []);
+    // Auto-generate prompt based on style
+    setPrompt(stylePrompt || 'Generate an image from the uploaded photo.');
+  }, [stylePrompt]);
 
-  const handleSend = useCallback(async () => {
-    if (!inputText.trim() && !selectedImage) return;
-    if (sending) return;
+  const handleGenerate = async () => {
+    if (!prompt.trim() || generating) return;
 
-    const text = inputText.trim();
-    const img = selectedImage;
-
-    setSending(true);
-    setInputText('');
-    setSelectedImage(null);
-
-    // Add user message
-    const userId = `user-${Date.now()}`;
-    const assistantId = `ai-${Date.now()}`;
-
-    setMessages(prev => [
-      ...prev,
-      {
-        id: userId,
-        role: 'user',
-        text,
-        imageUri: img?.uri,
-      },
-      {
-        id: assistantId,
-        role: 'assistant',
-        loading: true,
-      },
-    ]);
-
-    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+    setGenerating(true);
 
     try {
-      let base64ToSend = img?.base64;
+      // Upload the image to storage first
+      const fileName = `${Date.now()}_${user?.id}.jpg`;
+      const filePath = `${user?.id}/${fileName}`;
 
-      // If we have a URI but no base64, read it
-      if (img?.uri && !base64ToSend) {
-        try {
-          base64ToSend = await FileSystem.readAsStringAsync(img.uri, {
-            encoding: FileSystem.EncodingType.Base64,
-          });
-        } catch {}
-      }
+      const { error: uploadError } = await supabase.storage
+        .from('media-files')
+        .upload(filePath, decode(base64), {
+          contentType: 'image/jpeg',
+        });
 
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage
+        .from('media-files')
+        .getPublicUrl(filePath);
+
+      const imageUrl = urlData.publicUrl;
+
+      // Call Edge Function to generate image
       const { data, error } = await supabase.functions.invoke('chat', {
         body: {
           messages: [
             {
               role: 'user',
-              content: text || 'Generate an image',
-              image_url: img?.uri,
+              content: prompt,
+              image_url: imageUrl,
             },
           ],
-          conversationId: `image-prompt-${Date.now()}`,
-          aiModel: 'google-gemini',
-          base64Image: base64ToSend,
+          model: 'google/gemini-2.5-flash-image-preview',
+          modalities: ['image', 'text'],
+          imageConfig: { aspectRatio: '1:1' },
         },
       });
 
       if (error) throw error;
 
-      const aiImageUrl = data?.imageUrl;
-      const aiText = data?.message || 'Image created ✨';
+      if (data.image) {
+        // Save generated image to media_files
+        const generatedFileName = `generated_${Date.now()}.png`;
+        const generatedFilePath = `${user?.id}/${generatedFileName}`;
 
-      setMessages(prev =>
-        prev.map(m =>
-          m.id === assistantId
-            ? { ...m, loading: false, generatedUrl: aiImageUrl, text: aiText }
-            : m
-        )
-      );
-    } catch (err: any) {
-      setMessages(prev =>
-        prev.map(m =>
-          m.id === assistantId
-            ? { ...m, loading: false, text: 'Failed to generate image. Please try again.' }
-            : m
-        )
-      );
-    } finally {
-      setSending(false);
-      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 200);
-    }
-  }, [inputText, selectedImage, sending, supabase]);
-
-  const handlePickPhoto = useCallback(async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      showAlert('Permission required', 'Please allow photo library access');
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.9,
-      base64: true,
-    });
-    if (!result.canceled && result.assets[0]) {
-      setSelectedImage({ uri: result.assets[0].uri, base64: result.assets[0].base64 || '' });
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-  }, [showAlert]);
-
-  const handleTakeSelfie = useCallback(async () => {
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') {
-      showAlert('Permission required', 'Please allow camera access');
-      return;
-    }
-    const result = await ImagePicker.launchCameraAsync({
-      quality: 0.9,
-      base64: true,
-      cameraType: ImagePicker.CameraType.front,
-    });
-    if (!result.canceled && result.assets[0]) {
-      setSelectedImage({ uri: result.assets[0].uri, base64: result.assets[0].base64 || '' });
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-  }, [showAlert]);
-
-  const handlePickImageOptions = () => {
-    Alert.alert(
-      'Add Photo',
-      '',
-      [
-        { text: 'Choose Photo', onPress: handlePickPhoto },
-        { text: 'Take Selfie', onPress: handleTakeSelfie },
-        { text: 'Cancel', style: 'cancel' },
-      ]
-    );
-  };
-
-  // Voice
-  const toggleRecording = useCallback(async () => {
-    if (recordingState === 'recording') {
-      // Stop
-      setRecordingState('processing');
-      try {
-        await recordingRef.current?.stopAndUnloadAsync();
-        const uri = recordingRef.current?.getURI();
-        if (uri) {
-          const b64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
-          const { data, error } = await supabase.functions.invoke('transcribe-audio', {
-            body: { audio: b64, userId: user?.id },
+        // Convert base64 to blob
+        const base64Image = data.image.split(',')[1];
+        const { error: generatedUploadError } = await supabase.storage
+          .from('media-files')
+          .upload(generatedFilePath, decode(base64Image), {
+            contentType: 'image/png',
           });
-          if (!error && data?.text) {
-            setInputText(prev => prev + (prev ? ' ' : '') + data.text.trim());
-          }
+
+        if (!generatedUploadError) {
+          const { data: generatedUrlData } = supabase.storage
+            .from('media-files')
+            .getPublicUrl(generatedFilePath);
+
+          // Save to media_files table
+          await supabase.from('media_files').insert({
+            user_id: user?.id,
+            file_type: 'image',
+            file_url: generatedUrlData.publicUrl,
+            file_name: generatedFileName,
+          });
+
+          // Navigate to image viewer
+          router.replace({
+            pathname: '/image-viewer',
+            params: {
+              imageUrl: generatedUrlData.publicUrl,
+              prompt: prompt,
+            },
+          });
         }
-      } catch {}
-      recordingRef.current = null;
-      setRecordingState('idle');
-    } else {
-      // Start
-      try {
-        const { status } = await Audio.requestPermissionsAsync();
-        if (status !== 'granted') { showAlert('Permission', 'Microphone access required'); return; }
-        await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
-        const { recording } = await Audio.Recording.createAsync({
-          android: {
-            extension: '.m4a',
-            outputFormat: Audio.AndroidOutputFormat.MPEG_4,
-            audioEncoder: Audio.AndroidAudioEncoder.AAC,
-            sampleRate: 16000,
-            numberOfChannels: 1,
-            bitRate: 64000,
-          },
-          ios: {
-            extension: '.m4a',
-            audioQuality: Audio.IOSAudioQuality.MEDIUM,
-            sampleRate: 16000,
-            numberOfChannels: 1,
-            bitRate: 64000,
-            linearPCMBitDepth: 16,
-            linearPCMIsBigEndian: false,
-            linearPCMIsFloat: false,
-          },
-          web: { mimeType: 'audio/webm', bitsPerSecond: 64000 },
-        });
-        recordingRef.current = recording;
-        setRecordingState('recording');
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      } catch (e) {
-        showAlert('Error', 'Could not start recording');
       }
-    }
-  }, [recordingState, supabase, user?.id, showAlert]);
-
-  const handleDownloadImage = async (url: string) => {
-    try {
-      const { status } = await MediaLibrary.requestPermissionsAsync();
-      if (status !== 'granted') { showAlert('Permission', 'Photo library access required'); return; }
-      const fileUri = `${FileSystem.documentDirectory}ai_img_${Date.now()}.jpg`;
-      const dl = await FileSystem.downloadAsync(url, fileUri);
-      await MediaLibrary.createAssetAsync(dl.uri);
-      showAlert('Saved', 'Image saved to your photos!');
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch {
-      showAlert('Error', 'Failed to save image');
+    } catch (error) {
+      console.error('Image generation error:', error);
+      showAlert('Error', 'Failed to generate image');
+    } finally {
+      setGenerating(false);
     }
   };
 
-  const accentColor = '#10A37F';
+  const styles = StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    header: {
+      paddingTop: Platform.select({
+        ios: insets.top + 10,
+        android: insets.top + 10,
+      }),
+      paddingHorizontal: Spacing.md,
+      paddingBottom: Spacing.md,
+      flexDirection: 'row',
+      alignItems: 'center',
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    backButton: {
+      padding: Spacing.xs,
+      marginRight: Spacing.sm,
+    },
+    headerTitle: {
+      ...Typography.heading,
+      color: colors.text,
+      fontSize: 18,
+    },
+    content: {
+      flex: 1,
+      padding: Spacing.lg,
+    },
+    imagePreview: {
+      width: 120,
+      height: 120,
+      borderRadius: BorderRadius.md,
+      backgroundColor: colors.surface,
+      alignSelf: 'center',
+      marginBottom: Spacing.lg,
+    },
+    promptBubble: {
+      backgroundColor: `${colors.primary}20`,
+      borderRadius: BorderRadius.lg,
+      padding: Spacing.md,
+      marginBottom: Spacing.lg,
+    },
+    prompt: {
+      ...Typography.body,
+      color: colors.text,
+      lineHeight: 22,
+    },
+    editButton: {
+      marginTop: Spacing.sm,
+      alignSelf: 'flex-end',
+    },
+    editButtonText: {
+      ...Typography.caption,
+      color: colors.primary,
+      fontWeight: '600',
+    },
+    inputContainer: {
+      backgroundColor: colors.surface,
+      borderRadius: BorderRadius.lg,
+      padding: Spacing.md,
+      minHeight: 100,
+      marginBottom: Spacing.lg,
+    },
+    input: {
+      ...Typography.body,
+      color: colors.text,
+      flex: 1,
+    },
+    generateButton: {
+      backgroundColor: colors.text,
+      borderRadius: BorderRadius.full,
+      padding: Spacing.md,
+      alignItems: 'center',
+      flexDirection: 'row',
+      justifyContent: 'center',
+      gap: Spacing.sm,
+    },
+    generateButtonText: {
+      ...Typography.body,
+      color: colors.background,
+      fontWeight: '600',
+      fontSize: 16,
+    },
+  });
 
-  const renderMessage = ({ item }: { item: ChatMessage }) => {
-    if (item.role === 'user') {
-      return (
-        <View style={localStyles.userMsgContainer}>
-          {item.imageUri ? (
-            <Image
-              source={{ uri: item.imageUri }}
-              style={localStyles.userPhoto}
-              contentFit="cover"
-              transition={200}
-            />
-          ) : null}
-          {item.text ? (
-            <View style={[localStyles.userBubble, { backgroundColor: '#7C3AED' }]}>
-              <Text style={localStyles.userBubbleText}>{item.text}</Text>
-            </View>
-          ) : null}
-        </View>
-      );
-    }
-
-    // Assistant
-    return (
-      <View style={localStyles.aiBubbleContainer}>
-        {item.loading ? (
-          <View style={localStyles.loadingDot}>
-            <ActivityIndicator size="small" color="rgba(255,255,255,0.5)" />
-          </View>
-        ) : (
-          <>
-            {item.text && !item.generatedUrl && (
-              <Text style={[localStyles.aiText, { color: colors.text }]}>{item.text}</Text>
-            )}
-            {item.generatedUrl ? (
-              <View style={{ position: 'relative' }}>
-                <Image
-                  source={{ uri: item.generatedUrl }}
-                  style={localStyles.generatedImage}
-                  contentFit="cover"
-                  transition={300}
-                />
-                <TouchableOpacity
-                  style={localStyles.downloadBtn}
-                  onPress={() => handleDownloadImage(item.generatedUrl!)}
-                >
-                  <Ionicons name="download" size={20} color="#FFF" />
-                </TouchableOpacity>
-              </View>
-            ) : null}
-            {item.generatedUrl && item.text ? (
-              <Text style={[localStyles.aiCaption, { color: colors.textSecondary }]}>{item.text}</Text>
-            ) : null}
-          </>
-        )}
-      </View>
-    );
-  };
+  const [isEditing, setIsEditing] = useState(false);
 
   return (
-    <View style={[localStyles.container, { backgroundColor: '#000' }]}>
-      <StatusBar barStyle="light-content" backgroundColor="#000" />
-
-      {/* Header */}
-      <View style={[localStyles.header, { paddingTop: insets.top + 8 }]}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-          <Ionicons name="close" size={26} color="#FFF" />
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+          <Ionicons name="close" size={28} color={colors.text} />
         </TouchableOpacity>
-        <Text style={localStyles.headerTitle}>Dawinix Images</Text>
-        <View style={{ width: 26 }} />
+        <Text style={styles.headerTitle}>{styleName || 'Generate Image'}</Text>
       </View>
 
-      {/* Messages */}
-      <FlatList
-        ref={flatListRef}
-        data={messages}
-        renderItem={renderMessage}
-        keyExtractor={item => item.id}
-        contentContainerStyle={{ paddingVertical: 16 }}
-        showsVerticalScrollIndicator={false}
-        ListEmptyComponent={
-          <View style={localStyles.emptyWrap}>
-            <Ionicons name="image-outline" size={48} color="rgba(255,255,255,0.2)" />
-            <Text style={localStyles.emptyText}>
-              Upload a photo and describe what you want to create
-            </Text>
-          </View>
-        }
-        onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
-      />
+      <View style={styles.content}>
+        {/* IMAGE PREVIEW */}
+        <Image source={{ uri: image }} style={styles.imagePreview} resizeMode="cover" />
 
-      {/* Input area */}
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={0}
-      >
-        {/* Selected image preview */}
-        {selectedImage && (
-          <View style={localStyles.previewWrap}>
-            <Image source={{ uri: selectedImage.uri }} style={localStyles.previewThumb} contentFit="cover" />
-            <TouchableOpacity
-              style={localStyles.previewRemove}
-              onPress={() => setSelectedImage(null)}
-            >
-              <Ionicons name="close" size={12} color="#FFF" />
+        {/* PROMPT */}
+        {!isEditing ? (
+          <View style={styles.promptBubble}>
+            <Text style={styles.prompt}>{prompt}</Text>
+            <TouchableOpacity style={styles.editButton} onPress={() => setIsEditing(true)}>
+              <Text style={styles.editButtonText}>Edit</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={styles.inputContainer}>
+            <TextInput
+              style={styles.input}
+              value={prompt}
+              onChangeText={setPrompt}
+              multiline
+              autoFocus
+              placeholder="Describe how you want the image..."
+              placeholderTextColor={colors.textSecondary}
+            />
+            <TouchableOpacity style={styles.editButton} onPress={() => setIsEditing(false)}>
+              <Text style={styles.editButtonText}>Done</Text>
             </TouchableOpacity>
           </View>
         )}
 
-        <View style={[
-          localStyles.inputBar,
-          { paddingBottom: insets.bottom + 12 }
-        ]}>
-          {/* Photo pick button */}
-          <TouchableOpacity style={localStyles.iconBtn} onPress={handlePickImageOptions}>
-            <Ionicons name="image-outline" size={26} color="rgba(255,255,255,0.7)" />
-          </TouchableOpacity>
-
-          <TextInput
-            style={localStyles.input}
-            placeholder="Describe an image"
-            placeholderTextColor="rgba(255,255,255,0.35)"
-            value={inputText}
-            onChangeText={setInputText}
-            multiline
-            maxLength={1000}
-            editable={!sending}
-          />
-
-          {/* Voice button */}
-          <TouchableOpacity
-            style={localStyles.iconBtn}
-            onPress={toggleRecording}
-          >
-            {recordingState === 'processing' ? (
-              <ActivityIndicator size="small" color={accentColor} />
-            ) : (
-              <Ionicons
-                name={recordingState === 'recording' ? 'stop-circle' : 'mic-outline'}
-                size={24}
-                color={recordingState === 'recording' ? '#FF3B30' : 'rgba(255,255,255,0.7)'}
-              />
-            )}
-          </TouchableOpacity>
-
-          {/* Send button */}
-          <TouchableOpacity
-            style={[
-              localStyles.sendBtn,
-              { backgroundColor: (inputText.trim() || selectedImage) ? accentColor : 'rgba(255,255,255,0.15)' }
-            ]}
-            onPress={handleSend}
-            disabled={sending || (!inputText.trim() && !selectedImage)}
-          >
-            {sending ? (
-              <ActivityIndicator size="small" color="#FFF" />
-            ) : (
-              <Ionicons name="arrow-up" size={18} color="#FFF" />
-            )}
-          </TouchableOpacity>
-        </View>
-      </KeyboardAvoidingView>
-    </View>
+        {/* GENERATE BUTTON */}
+        <TouchableOpacity style={styles.generateButton} onPress={handleGenerate} disabled={generating}>
+          {generating ? (
+            <ActivityIndicator size="small" color={colors.background} />
+          ) : (
+            <>
+              <Ionicons name="sparkles" size={20} color={colors.background} />
+              <Text style={styles.generateButtonText}>Generate</Text>
+            </>
+          )}
+        </TouchableOpacity>
+      </View>
+    </KeyboardAvoidingView>
   );
 }
-
-const localStyles = StyleSheet.create({
-  container: { flex: 1 },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingBottom: 12,
-  },
-  headerTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: '#FFF',
-  },
-  emptyWrap: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingTop: 80,
-    paddingHorizontal: 40,
-    gap: 16,
-  },
-  emptyText: {
-    color: 'rgba(255,255,255,0.35)',
-    fontSize: 15,
-    textAlign: 'center',
-    lineHeight: 22,
-  },
-  userMsgContainer: {
-    alignItems: 'flex-end',
-    paddingHorizontal: 16,
-    marginBottom: 12,
-    gap: 8,
-  },
-  userPhoto: {
-    width: SCREEN_WIDTH * 0.55,
-    height: SCREEN_WIDTH * 0.55,
-    borderRadius: 20,
-  },
-  userBubble: {
-    maxWidth: SCREEN_WIDTH * 0.75,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 20,
-    borderBottomRightRadius: 4,
-  },
-  userBubbleText: {
-    color: '#FFF',
-    fontSize: 15,
-    lineHeight: 22,
-  },
-  aiBubbleContainer: {
-    paddingHorizontal: 16,
-    marginBottom: 12,
-    alignItems: 'flex-start',
-  },
-  loadingDot: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  aiText: {
-    fontSize: 15,
-    lineHeight: 22,
-    marginBottom: 6,
-  },
-  aiCaption: {
-    fontSize: 13,
-    marginTop: 6,
-    lineHeight: 18,
-  },
-  generatedImage: {
-    width: SCREEN_WIDTH * 0.72,
-    height: SCREEN_WIDTH * 0.72,
-    borderRadius: 20,
-  },
-  downloadBtn: {
-    position: 'absolute',
-    bottom: 12,
-    right: 12,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.4)',
-  },
-  previewWrap: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingBottom: 8,
-    position: 'relative',
-    alignSelf: 'flex-start',
-  },
-  previewThumb: {
-    width: 56,
-    height: 56,
-    borderRadius: 10,
-  },
-  previewRemove: {
-    position: 'absolute',
-    top: -6,
-    right: 8,
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: '#FF3B30',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  inputBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingTop: 10,
-    gap: 8,
-    backgroundColor: '#111',
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.08)',
-  },
-  iconBtn: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  input: {
-    flex: 1,
-    color: '#FFF',
-    fontSize: 16,
-    paddingVertical: 8,
-    maxHeight: 100,
-  },
-  sendBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});

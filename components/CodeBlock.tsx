@@ -1,4 +1,3 @@
-
 import React, { useState, memo, useCallback, useRef } from 'react';
 import {
   View,
@@ -488,28 +487,27 @@ export const CodeBlock = memo(function CodeBlock({
             </TouchableOpacity>
           </View>
         ) : (
-          <View style={[styles.scrollArea, expanded ? styles.scrollExpanded : styles.scrollCollapsed]}>
+          <ScrollView
+            style={[styles.scrollArea, expanded ? styles.scrollExpanded : styles.scrollCollapsed]}
+            nestedScrollEnabled
+            showsVerticalScrollIndicator
+            persistentScrollbar
+            indicatorStyle="white"
+            decelerationRate="fast"
+          >
             <ScrollView
-              style={{ flex: 1 }}
-              nestedScrollEnabled
-              showsVerticalScrollIndicator
+              horizontal={!wordWrap}
+              showsHorizontalScrollIndicator={!wordWrap}
+              persistentScrollbar
+              contentContainerStyle={[
+                styles.hContent,
+                wordWrap && { flexShrink: 1 },
+              ]}
               indicatorStyle="white"
               decelerationRate="fast"
+              scrollIndicatorInsets={{ bottom: 0 }}
+              bounces
             >
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={!wordWrap}
-                persistentScrollbar={!wordWrap}
-                indicatorStyle="white"
-                decelerationRate={0.9}
-                bounces
-                contentContainerStyle={[
-                  styles.hContent,
-                  wordWrap && { flexShrink: 1, flexWrap: 'wrap' },
-                ]}
-                scrollEventThrottle={16}
-                directionalLockEnabled
-              >
               {/* Line numbers */}
               <View style={styles.lineNumbers}>
                 {displayLines.map((_, i) => (
@@ -535,9 +533,8 @@ export const CodeBlock = memo(function CodeBlock({
                   </View>
                 ))}
               </View>
-              </ScrollView>
             </ScrollView>
-          </View>
+          </ScrollView>
         )}
 
         {/* ── SHOW MORE / LESS ── */}
@@ -675,12 +672,9 @@ const styles = StyleSheet.create({
   tabTextActive: {
     color: '#F8F8F2',
   },
-  scrollArea: {
-    maxWidth: '100%',
-    overflow: 'hidden',
-  },
-  scrollCollapsed: { height: 240 },
-  scrollExpanded: { height: 480 },
+  scrollArea: { maxWidth: '100%' },
+  scrollCollapsed: { maxHeight: 240 },
+  scrollExpanded: { maxHeight: 480 },
   hContent: {
     paddingHorizontal: 0,
     paddingVertical: 10,
