@@ -659,4 +659,3 @@ const fsStyles = StyleSheet.create({
     includeFontPadding: false,
   },
 });
-HELLO AI can you please allow you can move code to see right and left and srow down in up in code block make better and redesign with the preview button i said and In the chat edge function (supabase/functions/chat/index.ts), when the AI detects the user wants to create a project using a third-party API (OpenAI, Stripe, Twilio, etc.), automatically fetch the latest API version from the provider's docs URL and inject it into the system context before generating the code.

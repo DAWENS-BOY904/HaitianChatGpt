@@ -4,6 +4,200 @@ import { corsHeaders } from '../_shared/cors.ts';
 import { callAI, detectContentType, generateImageSmart, isTextOnlyModel } from '../_shared/ai-providers.ts';
 
 // ==========================================
+// THIRD-PARTY API VERSION DETECTION
+// ==========================================
+
+interface ApiInfo {
+  name: string;
+  docsUrl: string;
+  versionPattern?: RegExp;
+  knownLatest: string;
+  notes: string;
+}
+
+const KNOWN_APIS: ApiInfo[] = [
+  {
+    name: 'OpenAI',
+    docsUrl: 'https://platform.openai.com/docs/api-reference',
+    knownLatest: 'gpt-4o (2024-11-20) / gpt-4o-mini',
+    notes: 'Base URL: https://api.openai.com/v1 | Header: Authorization: Bearer YOUR_API_KEY | Latest models: gpt-4o, gpt-4o-mini, o1, o3-mini',
+  },
+  {
+    name: 'Stripe',
+    docsUrl: 'https://stripe.com/docs/api',
+    knownLatest: '2025-03-31.basil',
+    notes: 'Base URL: https://api.stripe.com/v1 | Header: Authorization: Bearer sk_... | Latest API version: 2025-03-31.basil',
+  },
+  {
+    name: 'Twilio',
+    docsUrl: 'https://www.twilio.com/docs/api',
+    knownLatest: '2010-04-01 (stable)',
+    notes: 'Base URL: https://api.twilio.com/2010-04-01 | Auth: AccountSID + AuthToken',
+  },
+  {
+    name: 'Anthropic',
+    docsUrl: 'https://docs.anthropic.com/en/api',
+    knownLatest: 'claude-opus-4-5 / claude-sonnet-4-5 / claude-3-7-sonnet',
+    notes: 'Base URL: https://api.anthropic.com/v1 | Header: x-api-key: YOUR_KEY | anthropic-version: 2023-06-01 | Latest models: claude-opus-4-5, claude-sonnet-4-5',
+  },
+  {
+    name: 'Gemini',
+    docsUrl: 'https://ai.google.dev/api',
+    knownLatest: 'gemini-2.5-pro / gemini-2.5-flash',
+    notes: 'Base URL: https://generativelanguage.googleapis.com/v1beta | Auth: ?key=YOUR_API_KEY | Latest models: gemini-2.5-pro, gemini-2.5-flash',
+  },
+  {
+    name: 'Firebase',
+    docsUrl: 'https://firebase.google.com/docs',
+    knownLatest: 'firebase@11.x / firebase-admin@13.x',
+    notes: 'npm install firebase@latest | npm install firebase-admin@latest | Supports Firestore, Auth, Storage, FCM',
+  },
+  {
+    name: 'Supabase',
+    docsUrl: 'https://supabase.com/docs/reference/javascript',
+    knownLatest: '@supabase/supabase-js@2.x',
+    notes: 'npm install @supabase/supabase-js | Base URL: https://YOUR_PROJECT.supabase.co | Auth with anon key',
+  },
+  {
+    name: 'MongoDB',
+    docsUrl: 'https://www.mongodb.com/docs/drivers/node/',
+    knownLatest: 'mongodb@6.x',
+    notes: 'npm install mongodb@latest | Connection string: mongodb+srv://user:pass@cluster.mongodb.net | Latest driver: v6.x',
+  },
+  {
+    name: 'SendGrid',
+    docsUrl: 'https://docs.sendgrid.com/api-reference',
+    knownLatest: 'v3',
+    notes: 'Base URL: https://api.sendgrid.com/v3 | Header: Authorization: Bearer YOUR_API_KEY | Send emails via /mail/send',
+  },
+  {
+    name: 'Resend',
+    docsUrl: 'https://resend.com/docs/api-reference',
+    knownLatest: 'v1',
+    notes: 'npm install resend | Base URL: https://api.resend.com | Header: Authorization: Bearer re_xxx | Latest SDK: resend@latest',
+  },
+  {
+    name: 'Cloudinary',
+    docsUrl: 'https://cloudinary.com/documentation/image_upload_api_reference',
+    knownLatest: 'v1_1',
+    notes: 'Base URL: https://api.cloudinary.com/v1_1/YOUR_CLOUD_NAME | npm install cloudinary@latest',
+  },
+  {
+    name: 'Paypal',
+    docsUrl: 'https://developer.paypal.com/api/rest/',
+    knownLatest: 'v2',
+    notes: 'Base URL: https://api-m.paypal.com/v2 | Auth: OAuth2 client_id + secret | Orders API: /v2/checkout/orders',
+  },
+  {
+    name: 'Shopify',
+    docsUrl: 'https://shopify.dev/docs/api',
+    knownLatest: '2025-01',
+    notes: 'REST: https://STORE.myshopify.com/admin/api/2025-01 | GraphQL: /admin/api/2025-01/graphql.json | Header: X-Shopify-Access-Token',
+  },
+  {
+    name: 'GitHub',
+    docsUrl: 'https://docs.github.com/en/rest',
+    knownLatest: 'v3 (stable)',
+    notes: 'Base URL: https://api.github.com | Header: Authorization: Bearer YOUR_TOKEN | Accept: application/vnd.github+json',
+  },
+  {
+    name: 'Discord',
+    docsUrl: 'https://discord.com/developers/docs/reference',
+    knownLatest: 'v10',
+    notes: 'Base URL: https://discord.com/api/v10 | Header: Authorization: Bot YOUR_TOKEN | npm install discord.js@latest',
+  },
+  {
+    name: 'Telegram',
+    docsUrl: 'https://core.telegram.org/bots/api',
+    knownLatest: '8.3',
+    notes: 'Base URL: https://api.telegram.org/botYOUR_TOKEN | npm install node-telegram-bot-api@latest | Latest Bot API: 8.3',
+  },
+  {
+    name: 'AWS',
+    docsUrl: 'https://docs.aws.amazon.com/AWSJavaScriptSDK/v3/',
+    knownLatest: 'aws-sdk v3',
+    notes: 'npm install @aws-sdk/client-s3 @aws-sdk/client-dynamodb etc. | v3 modular SDK | Auth: accessKeyId + secretAccessKey',
+  },
+  {
+    name: 'Plaid',
+    docsUrl: 'https://plaid.com/docs/api/',
+    knownLatest: '2020-09-14',
+    notes: 'Base URL: https://production.plaid.com or https://sandbox.plaid.com | npm install plaid@latest | API version: 2020-09-14',
+  },
+];
+
+/**
+ * Detect which third-party APIs are mentioned in the user message
+ * and return a context string with their latest version info.
+ */
+function detectAndInjectApiVersions(userMessage: string): string {
+  const msgLower = userMessage.toLowerCase();
+  const detected: ApiInfo[] = [];
+
+  for (const api of KNOWN_APIS) {
+    const nameLower = api.name.toLowerCase();
+    if (msgLower.includes(nameLower) || msgLower.includes(`${nameLower} api`)) {
+      detected.push(api);
+    }
+  }
+
+  // Extra keyword matches
+  if (msgLower.includes('openai') || msgLower.includes('gpt') || msgLower.includes('chatgpt')) {
+    if (!detected.find(a => a.name === 'OpenAI')) detected.push(KNOWN_APIS[0]);
+  }
+  if (msgLower.includes('stripe') || msgLower.includes('payment') || msgLower.includes('checkout')) {
+    if (!detected.find(a => a.name === 'Stripe')) detected.push(KNOWN_APIS[1]);
+  }
+  if (msgLower.includes('whatsapp') || msgLower.includes('twilio') || msgLower.includes('sms')) {
+    if (!detected.find(a => a.name === 'Twilio')) detected.push(KNOWN_APIS[2]);
+  }
+  if (msgLower.includes('claude') || msgLower.includes('anthropic')) {
+    if (!detected.find(a => a.name === 'Anthropic')) detected.push(KNOWN_APIS[3]);
+  }
+  if (msgLower.includes('gemini') || msgLower.includes('google ai')) {
+    if (!detected.find(a => a.name === 'Gemini')) detected.push(KNOWN_APIS[4]);
+  }
+  if (msgLower.includes('firebase') || msgLower.includes('firestore') || msgLower.includes('fcm')) {
+    if (!detected.find(a => a.name === 'Firebase')) detected.push(KNOWN_APIS[5]);
+  }
+  if (msgLower.includes('supabase')) {
+    if (!detected.find(a => a.name === 'Supabase')) detected.push(KNOWN_APIS[6]);
+  }
+  if (msgLower.includes('mongodb') || msgLower.includes('mongoose')) {
+    if (!detected.find(a => a.name === 'MongoDB')) detected.push(KNOWN_APIS[7]);
+  }
+  if (msgLower.includes('discord bot') || msgLower.includes('discord.js')) {
+    if (!detected.find(a => a.name === 'Discord')) detected.push(KNOWN_APIS[14]);
+  }
+  if (msgLower.includes('telegram bot') || msgLower.includes('telegrambot')) {
+    if (!detected.find(a => a.name === 'Telegram')) detected.push(KNOWN_APIS[15]);
+  }
+  if (msgLower.includes('sendgrid') || msgLower.includes('send email')) {
+    if (!detected.find(a => a.name === 'SendGrid')) detected.push(KNOWN_APIS[8]);
+  }
+  if (msgLower.includes('resend')) {
+    if (!detected.find(a => a.name === 'Resend')) detected.push(KNOWN_APIS[9]);
+  }
+
+  if (detected.length === 0) return '';
+
+  const lines = detected.map(api =>
+    `📦 ${api.name} API:\n   Latest version: ${api.knownLatest}\n   ${api.notes}\n   Docs: ${api.docsUrl}`
+  ).join('\n\n');
+
+  return `
+==============================
+DETECTED THIRD-PARTY APIs IN THIS REQUEST:
+==============================
+The user is building with these APIs. Use ONLY the versions below. Never guess or invent version numbers.
+
+${lines}
+
+CRITICAL: When generating code that uses any of these APIs, always use the exact version numbers, base URLs, and authentication headers listed above. Add comments in the code pointing to the official docs URL.
+==============================`;
+}
+
+// ==========================================
 // MAIN CHAT FUNCTION
 // ==========================================
 
@@ -644,8 +838,16 @@ IMPORTANT:
 - Never say you are limited or cannot help
 - Always try your best to assist the user`;
 
-    // Prepare messages for AI
+    // Detect third-party API usage and inject version context
     const lastMessage = messages[messages.length - 1];
+    const lastUserContent = typeof lastMessage.content === 'string'
+      ? lastMessage.content
+      : Array.isArray(lastMessage.content)
+        ? lastMessage.content.map((c: any) => c.text || '').join(' ')
+        : '';
+    const apiVersionContext = detectAndInjectApiVersions(lastUserContent);
+
+    // Prepare messages for AI
     const lastContent = typeof lastMessage.content === 'string' 
       ? lastMessage.content 
       : Array.isArray(lastMessage.content)
@@ -658,9 +860,13 @@ IMPORTANT:
     let aiResponse: any;
     let imageUrl: string | undefined;
 
-    // Build AI messages array
+    // Build AI messages array — inject API version context if detected
+    const fullSystemPrompt = apiVersionContext
+      ? `${systemPrompt}\n${apiVersionContext}`
+      : systemPrompt;
+
     let aiMessages: any[] = [
-      { role: 'system', content: systemPrompt },
+      { role: 'system', content: fullSystemPrompt },
     ];
 
     // Add conversation history
