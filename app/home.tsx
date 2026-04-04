@@ -167,6 +167,7 @@ export default function HomeScreen() {
   const [timeUntilMidnight, setTimeUntilMidnight] = useState('');
   const [sessionBonusMessages, setSessionBonusMessages] = useState(0);
   const [hasUsedNewChatBonus, setHasUsedNewChatBonus] = useState(false);
+  const [codeLangChips, setCodeLangChips] = useState(false);
   
   const runOnJS_setSideMenu = useCallback((val: boolean) => setSideMenuVisible(val), []);
 
@@ -1278,6 +1279,27 @@ export default function HomeScreen() {
       color: colors.text,
       marginLeft: Spacing.sm,
     },
+    langChipsContainer: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 6,
+      paddingHorizontal: Spacing.md,
+      paddingVertical: 8,
+      backgroundColor: colors.surface,
+      borderTopWidth: 1,
+      borderTopColor: colors.border,
+    },
+    langChip: {
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 20,
+      borderWidth: 1,
+    },
+    langChipText: {
+      fontSize: 13,
+      fontWeight: '600',
+      fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    },
   }), [colors, insets]);
 
   // -------- COMPUTED VALUES --------
@@ -1475,6 +1497,25 @@ export default function HomeScreen() {
         />
       )}
 
+      {/* Code language suggestion chips */}
+      {codeLangChips && (
+        <View style={styles.langChipsContainer}>
+          {['python', 'javascript', 'typescript', 'html', 'css', 'bash', 'json'].map(lang => (
+            <TouchableOpacity
+              key={lang}
+              style={[styles.langChip, { backgroundColor: colors.surface, borderColor: colors.border }]}
+              onPress={() => {
+                const newText = inputText.replace(/```\w*$/, '```' + lang + '\n');
+                setInputText(newText);
+                setCodeLangChips(false);
+              }}
+            >
+              <Text style={[styles.langChipText, { color: colors.text }]}>{lang}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
       {/* Media Preview */}
       {renderMediaPreview()}
 
@@ -1534,7 +1575,10 @@ export default function HomeScreen() {
               placeholder={editingMessageId ? "Edit message..." : "Message..."}
               placeholderTextColor={colors.textSecondary}
               value={inputText}
-              onChangeText={setInputText}
+              onChangeText={(txt) => {
+                setInputText(txt);
+                setCodeLangChips(/```\w*$/.test(txt));
+              }}
               multiline
               maxLength={4000}
               editable={!sending && !isRecording && !isProcessing}
