@@ -21,32 +21,85 @@ interface CodeBlockProps {
   previewHtml?: string;
   /** file name shown in header */
   fileName?: string;
+  /** Optional API version badge e.g. "Stripe v2025-03-31" */
+  apiVersion?: string;
 }
 
 /* ────────────── DRACULA PALETTE ────────────── */
 const D = {
-  bg:       '#282A36',
-  header:   '#21222C',
-  border:   '#44475A',
-  keyword:  '#FF79C6',
-  string:   '#F1FA8C',
-  comment:  '#6272A4',
-  number:   '#BD93F9',
-  operator: '#FF79C6',
-  tag:      '#FF5555',
-  attr:     '#50FA7B',
-  attrVal:  '#F1FA8C',
-  type:     '#8BE9FD',
-  plain:    '#F8F8F2',
-  lineNum:  '#6272A4',
-  purple:   '#BD93F9',
+  bg:          '#282A36',
+  header:      '#21222C',
+  border:      '#44475A',
+  keyword:     '#FF79C6',
+  string:      '#F1FA8C',
+  comment:     '#6272A4',
+  number:      '#BD93F9',
+  operator:    '#FF79C6',
+  tag:         '#FF5555',
+  attr:        '#50FA7B',
+  attrVal:     '#F1FA8C',
+  type:        '#8BE9FD',
+  plain:       '#F8F8F2',
+  lineNum:     '#6272A4',
+  purple:      '#BD93F9',
+  placeholder: '#FFB86C',   // orange for API key placeholders
+  placeholderBg: 'rgba(255,184,108,0.15)',
 };
 
+/* ────────────── PLACEHOLDER PATTERNS ────────────── */
+const PLACEHOLDER_PATTERNS = [
+  /\bYOUR_API_KEY\b/g,
+  /\bYOUR_SECRET_KEY\b/g,
+  /\bYOUR_PUBLIC_KEY\b/g,
+  /\bAPI_KEY_HERE\b/g,
+  /\bSECRET_KEY_HERE\b/g,
+  /\bYOUR_TOKEN\b/g,
+  /\bYOUR_ACCESS_TOKEN\b/g,
+  /\bINSERT_API_KEY\b/g,
+  /\bPUT_YOUR_KEY_HERE\b/g,
+  /\bYOUR_OPENAI_KEY\b/g,
+  /\bYOUR_STRIPE_KEY\b/g,
+  /sk_test_[A-Za-z0-9]{4,}/g,
+  /sk_live_[A-Za-z0-9]{4,}/g,
+  /rk_test_[A-Za-z0-9]{4,}/g,
+  /pk_test_[A-Za-z0-9]{4,}/g,
+  /re_[A-Za-z0-9]{4,}/g,
+];
+
+function isPlaceholder(text: string): boolean {
+  return PLACEHOLDER_PATTERNS.some(re => { re.lastIndex = 0; return re.test(text); });
+}
+
 /* ────────────── TOKENISER ────────────── */
-type Token = { text: string; color: string };
+type Token = { text: string; color: string; isPlaceholder?: boolean };
 
 function tokenize(line: string, lang: string): Token[] {
   const l = (lang || '').toLowerCase();
+
+  // Helper: wrap tokens through placeholder detection
+  function checkPlaceholders(tokens: Token[]): Token[] {
+    const result: Token[] = [];
+    for (const token of tokens) {
+      // Split on placeholder patterns
+      let remaining = token.text;
+      let lastIdx = 0;
+      const combined = new RegExp(PLACEHOLDER_PATTERNS.map(r => r.source).join('|'), 'g');
+      let m: RegExpExecArray | null;
+      const parts: Token[] = [];
+      while ((m = combined.exec(remaining)) !== null) {
+        if (m.index > lastIdx) {
+          parts.push({ text: remaining.slice(lastIdx, m.index), color: token.color });
+        }
+        parts.push({ text: m[0], color: D.placeholder, isPlaceholder: true });
+        lastIdx = combined.lastIndex;
+      }
+      if (lastIdx < remaining.length) {
+        parts.push({ text: remaining.slice(lastIdx), color: token.color });
+      }
+      result.push(...(parts.length > 0 ? parts : [token]));
+    }
+    return result;
+  }
 
   if (['html', 'xml'].includes(l)) {
     const tokens: Token[] = [];
@@ -65,7 +118,7 @@ function tokenize(line: string, lang: string): Token[] {
       last = re.lastIndex;
     }
     if (last < line.length) tokens.push({ text: line.slice(last), color: D.plain });
-    return tokens;
+    return checkPlaceholders(tokens);
   }
 
   if (['js','ts','tsx','jsx','javascript','typescript'].includes(l)) {
@@ -82,7 +135,7 @@ function tokenize(line: string, lang: string): Token[] {
       last = re.lastIndex;
     }
     if (last < line.length) tokens.push({ text: line.slice(last), color: D.plain });
-    return tokens;
+    return checkPlaceholders(tokens);
   }
 
   if (['css','scss'].includes(l)) {
@@ -99,7 +152,7 @@ function tokenize(line: string, lang: string): Token[] {
       last = re.lastIndex;
     }
     if (last < line.length) tokens.push({ text: line.slice(last), color: D.plain });
-    return tokens;
+    return checkPlaceholders(tokens);
   }
 
   if (['python','py'].includes(l)) {
@@ -116,10 +169,16 @@ function tokenize(line: string, lang: string): Token[] {
       last = re.lastIndex;
     }
     if (last < line.length) tokens.push({ text: line.slice(last), color: D.plain });
-    return tokens;
+    return checkPlaceholders(tokens);
   }
 
-  return [{ text: line, color: D.plain }];
+  // Generic fallback — still check placeholders
+  return checkPlaceholders([{ text: line, color: D.plain }]);
+}
+
+/* ────────────── PLACEHOLDER WARNING BADGE ────────────── */
+function hasApiKeyPlaceholders(code: string): boolean {
+  return PLACEHOLDER_PATTERNS.some(re => { re.lastIndex = 0; return re.test(code); });
 }
 
 /* ────────────── FULL-SCREEN MODAL ────────────── */
@@ -129,11 +188,12 @@ interface FullScreenProps {
   language: string;
   previewHtml?: string;
   fileName?: string;
+  apiVersion?: string;
   onClose: () => void;
 }
 
 const FullScreenModal = memo(function FullScreenModal({
-  visible, code, language, previewHtml, fileName, onClose,
+  visible, code, language, previewHtml, fileName, apiVersion, onClose,
 }: FullScreenProps) {
   const [tab, setTab] = useState<'code' | 'preview'>('code');
   const [wordWrap, setWordWrap] = useState(false);
@@ -141,6 +201,7 @@ const FullScreenModal = memo(function FullScreenModal({
 
   const canPreview = ['html', 'htm'].includes((language || '').toLowerCase()) || Boolean(previewHtml);
   const htmlToPreview = previewHtml || code;
+  const hasPlaceholders = hasApiKeyPlaceholders(code);
 
   const onCopy = async () => {
     await Clipboard.setStringAsync(code);
@@ -164,17 +225,14 @@ const FullScreenModal = memo(function FullScreenModal({
           </Text>
 
           <View style={fsStyles.headerRight}>
-            {/* Expand (already fullscreen) */}
             <TouchableOpacity style={fsStyles.iconBtn} onPress={() => {}}>
               <Ionicons name="expand-outline" size={18} color="#AAA" />
             </TouchableOpacity>
 
-            {/* Copy */}
             <TouchableOpacity style={fsStyles.iconBtn} onPress={onCopy}>
               <Ionicons name={copied ? 'checkmark' : 'copy-outline'} size={18} color={copied ? '#50FA7B' : '#AAA'} />
             </TouchableOpacity>
 
-            {/* Word wrap */}
             {tab === 'code' && (
               <TouchableOpacity
                 style={[fsStyles.iconBtn, wordWrap && { backgroundColor: '#44475A' }]}
@@ -184,7 +242,6 @@ const FullScreenModal = memo(function FullScreenModal({
               </TouchableOpacity>
             )}
 
-            {/* Code / Preview tabs */}
             {canPreview && (
               <View style={fsStyles.tabs}>
                 <TouchableOpacity
@@ -203,6 +260,26 @@ const FullScreenModal = memo(function FullScreenModal({
             )}
           </View>
         </View>
+
+        {/* API version badge */}
+        {apiVersion ? (
+          <View style={fsStyles.apiBadgeRow}>
+            <View style={fsStyles.apiBadge}>
+              <Ionicons name="cube-outline" size={12} color="#BD93F9" />
+              <Text style={fsStyles.apiBadgeText}>{apiVersion}</Text>
+            </View>
+          </View>
+        ) : null}
+
+        {/* Placeholder warning */}
+        {hasPlaceholders && tab === 'code' && (
+          <View style={fsStyles.placeholderWarning}>
+            <Ionicons name="warning-outline" size={14} color={D.placeholder} />
+            <Text style={fsStyles.placeholderWarningText}>
+              Replace highlighted API keys before using this code
+            </Text>
+          </View>
+        )}
 
         {/* Content */}
         {tab === 'preview' && canPreview ? (
@@ -224,6 +301,7 @@ const FullScreenModal = memo(function FullScreenModal({
               horizontal={!wordWrap}
               showsHorizontalScrollIndicator={!wordWrap}
               indicatorStyle="white"
+              decelerationRate="fast"
               contentContainerStyle={[
                 fsStyles.codeContent,
                 wordWrap && { flexShrink: 1, width: '100%' },
@@ -240,12 +318,20 @@ const FullScreenModal = memo(function FullScreenModal({
                 {rawLines.map((line, i) => (
                   <View key={i} style={fsStyles.codeLine}>
                     {tokenize(line, language).map((t, ti) => (
-                      <Text
-                        key={ti}
-                        style={[fsStyles.codeText, { color: t.color }, wordWrap && { flexWrap: 'wrap' }]}
-                      >
-                        {t.text}
-                      </Text>
+                      t.isPlaceholder ? (
+                        <View key={ti} style={fsStyles.placeholderToken}>
+                          <Text style={[fsStyles.codeText, { color: t.color }, wordWrap && { flexWrap: 'wrap' }]}>
+                            {t.text}
+                          </Text>
+                        </View>
+                      ) : (
+                        <Text
+                          key={ti}
+                          style={[fsStyles.codeText, { color: t.color }, wordWrap && { flexWrap: 'wrap' }]}
+                        >
+                          {t.text}
+                        </Text>
+                      )
                     ))}
                   </View>
                 ))}
@@ -264,6 +350,7 @@ export const CodeBlock = memo(function CodeBlock({
   language = 'code',
   previewHtml,
   fileName,
+  apiVersion,
 }: CodeBlockProps) {
   const [copied, setCopied] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -279,6 +366,7 @@ export const CodeBlock = memo(function CodeBlock({
 
   const canPreview = ['html', 'htm'].includes((language || '').toLowerCase()) || Boolean(previewHtml);
   const htmlToPreview = previewHtml || code;
+  const hasPlaceholders = hasApiKeyPlaceholders(code);
 
   const rawLines = code.split('\n');
   const lineCount = rawLines.length;
@@ -288,6 +376,27 @@ export const CodeBlock = memo(function CodeBlock({
   return (
     <>
       <View style={styles.wrapper}>
+
+        {/* ── API VERSION BADGE (above header) ── */}
+        {apiVersion ? (
+          <View style={styles.apiBadgeRow}>
+            <View style={styles.apiBadge}>
+              <Ionicons name="cube-outline" size={11} color="#BD93F9" />
+              <Text style={styles.apiBadgeText}>{apiVersion}</Text>
+            </View>
+          </View>
+        ) : null}
+
+        {/* ── PLACEHOLDER WARNING BADGE ── */}
+        {hasPlaceholders && tab === 'code' && (
+          <View style={styles.placeholderWarning}>
+            <Ionicons name="warning-outline" size={13} color={D.placeholder} />
+            <Text style={styles.placeholderWarningText}>
+              Replace highlighted placeholders with your real API keys
+            </Text>
+          </View>
+        )}
+
         {/* ── HEADER ── */}
         <View style={styles.header}>
           {/* Mac dots */}
@@ -323,7 +432,7 @@ export const CodeBlock = memo(function CodeBlock({
               />
             </TouchableOpacity>
 
-            {/* Word wrap toggle (only in code tab) */}
+            {/* Word wrap toggle */}
             {tab === 'code' && (
               <TouchableOpacity
                 style={[styles.iconBtn, wordWrap && { backgroundColor: '#44475A' }]}
@@ -369,7 +478,6 @@ export const CodeBlock = memo(function CodeBlock({
               domStorageEnabled
               scrollEnabled
             />
-            {/* Preview All full-screen button */}
             <TouchableOpacity
               style={styles.previewAllBtn}
               onPress={() => setFullScreen(true)}
@@ -385,15 +493,20 @@ export const CodeBlock = memo(function CodeBlock({
             showsVerticalScrollIndicator
             persistentScrollbar
             indicatorStyle="white"
+            decelerationRate="fast"
           >
             <ScrollView
               horizontal={!wordWrap}
               showsHorizontalScrollIndicator={!wordWrap}
+              persistentScrollbar
               contentContainerStyle={[
                 styles.hContent,
                 wordWrap && { flexShrink: 1 },
               ]}
               indicatorStyle="white"
+              decelerationRate="fast"
+              scrollIndicatorInsets={{ bottom: 0 }}
+              bounces
             >
               {/* Line numbers */}
               <View style={styles.lineNumbers}>
@@ -407,12 +520,15 @@ export const CodeBlock = memo(function CodeBlock({
                 {displayLines.map((line, i) => (
                   <View key={i} style={[styles.codeLine, wordWrap && { flexWrap: 'wrap' }]}>
                     {tokenize(line, language).map((t, ti) => (
-                      <Text
-                        key={ti}
-                        style={[styles.codeText, { color: t.color }]}
-                      >
-                        {t.text}
-                      </Text>
+                      t.isPlaceholder ? (
+                        <View key={ti} style={styles.placeholderToken}>
+                          <Text style={[styles.codeText, { color: t.color }]}>{t.text}</Text>
+                        </View>
+                      ) : (
+                        <Text key={ti} style={[styles.codeText, { color: t.color }]}>
+                          {t.text}
+                        </Text>
+                      )
                     ))}
                   </View>
                 ))}
@@ -421,7 +537,7 @@ export const CodeBlock = memo(function CodeBlock({
           </ScrollView>
         )}
 
-        {/* ── SHOW MORE / LESS (code tab only) ── */}
+        {/* ── SHOW MORE / LESS ── */}
         {tab === 'code' && isLong && (
           <TouchableOpacity style={styles.expandBtn} onPress={() => setExpanded(e => !e)}>
             <Text style={styles.expandText}>
@@ -438,6 +554,7 @@ export const CodeBlock = memo(function CodeBlock({
         language={language}
         previewHtml={previewHtml}
         fileName={fileName}
+        apiVersion={apiVersion}
         onClose={() => setFullScreen(false)}
       />
     </>
@@ -453,6 +570,54 @@ const styles = StyleSheet.create({
     marginVertical: 6,
     borderWidth: 1,
     borderColor: D.border,
+  },
+  apiBadgeRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    paddingBottom: 4,
+    backgroundColor: D.header,
+    borderBottomWidth: 1,
+    borderBottomColor: D.border,
+  },
+  apiBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(189,147,249,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(189,147,249,0.35)',
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  apiBadgeText: {
+    fontSize: 11,
+    color: '#BD93F9',
+    fontWeight: '600',
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+  },
+  placeholderWarning: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: 'rgba(255,184,108,0.10)',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,184,108,0.25)',
+  },
+  placeholderWarningText: {
+    fontSize: 11,
+    color: D.placeholder,
+    fontWeight: '500',
+    flex: 1,
+  },
+  placeholderToken: {
+    backgroundColor: D.placeholderBg,
+    borderRadius: 3,
+    borderWidth: 1,
+    borderColor: 'rgba(255,184,108,0.4)',
   },
   header: {
     flexDirection: 'row',
@@ -625,6 +790,53 @@ const fsStyles = StyleSheet.create({
   tabActive: { backgroundColor: '#44475A' },
   tabText: { fontSize: 11, color: '#6272A4', fontWeight: '600' },
   tabTextActive: { color: '#F8F8F2' },
+  apiBadgeRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: D.header,
+    borderBottomWidth: 1,
+    borderBottomColor: D.border,
+  },
+  apiBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(189,147,249,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(189,147,249,0.35)',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  apiBadgeText: {
+    fontSize: 12,
+    color: '#BD93F9',
+    fontWeight: '600',
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+  },
+  placeholderWarning: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: 'rgba(255,184,108,0.10)',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,184,108,0.25)',
+  },
+  placeholderWarningText: {
+    fontSize: 12,
+    color: D.placeholder,
+    fontWeight: '500',
+    flex: 1,
+  },
+  placeholderToken: {
+    backgroundColor: D.placeholderBg,
+    borderRadius: 3,
+    borderWidth: 1,
+    borderColor: 'rgba(255,184,108,0.4)',
+  },
   codeContent: {
     paddingVertical: 10,
     flexDirection: 'row',
@@ -651,6 +863,7 @@ const fsStyles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'nowrap',
     minHeight: 20,
+    alignItems: 'flex-start',
   },
   codeText: {
     fontSize: 14,
@@ -659,4 +872,3 @@ const fsStyles = StyleSheet.create({
     includeFontPadding: false,
   },
 });
-hello ai can you dont skip:When an AI response contains code that uses a detected third-party API, show a small version badge chip (e.g. 'Stripe v2025-03-31') above the CodeBlock header so users can see which API version was used at a glance.In CodeBlock.tsx, when the code contains placeholder strings like YOUR_API_KEY, sk_..., or API_KEY_HERE, highlight them in a distinct yellow/orange color with a small warning badge so users immediately know where to fill in their credentials.Improve the CodeBlock horizontal scroll by adding a visible scroll indicator track and momentum scrolling on both axes, ensuring long code lines can be smoothly scrolled left-right without conflicting with the parent FlatList vertical scroll.
