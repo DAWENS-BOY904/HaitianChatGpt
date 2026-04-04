@@ -659,4 +659,3 @@ const fsStyles = StyleSheet.create({
     includeFontPadding: false,
   },
 });
-
