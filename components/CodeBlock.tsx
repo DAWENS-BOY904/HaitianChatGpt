@@ -1,4 +1,4 @@
-import React, { useState, memo, useCallback, useRef } from 'react';
+import React, { useState, memo } from 'react';
 import {
   View,
   Text,
@@ -6,141 +6,141 @@ import {
   TouchableOpacity,
   ScrollView,
   Platform,
-  Modal,
-  SafeAreaView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
-import { WebView } from 'react-native-webview';
 import { BorderRadius } from '../constants/theme';
 
 interface CodeBlockProps {
   code: string;
   language?: string;
-  /** If provided, the preview tab renders this HTML string instead of code */
-  previewHtml?: string;
-  /** file name shown in header */
-  fileName?: string;
 }
 
-/* ────────────── DRACULA PALETTE ────────────── */
-const D = {
-  bg:       '#282A36',
-  header:   '#21222C',
-  border:   '#44475A',
-  keyword:  '#FF79C6',
-  string:   '#F1FA8C',
-  comment:  '#6272A4',
-  number:   '#BD93F9',
-  operator: '#FF79C6',
-  tag:      '#FF5555',
-  attr:     '#50FA7B',
-  attrVal:  '#F1FA8C',
-  type:     '#8BE9FD',
-  plain:    '#F8F8F2',
-  lineNum:  '#6272A4',
-  purple:   '#BD93F9',
-};
+/* ────────────── SYNTAX HIGHLIGHT ────────────── */
 
-/* ────────────── TOKENISER ────────────── */
 type Token = { text: string; color: string };
 
-function tokenize(line: string, lang: string): Token[] {
-  const l = (lang || '').toLowerCase();
+const COLORS = {
+  keyword:  '#FF79C6',   // pink
+  string:   '#F1FA8C',   // yellow
+  comment:  '#6272A4',   // muted blue
+  number:   '#BD93F9',   // purple
+  operator: '#FF79C6',   // pink
+  tag:      '#FF5555',   // red
+  attr:     '#50FA7B',   // green
+  attrVal:  '#F1FA8C',   // yellow
+  type:     '#8BE9FD',   // cyan
+  fn:       '#50FA7B',   // green
+  plain:    '#F8F8F2',   // foreground
+};
 
-  if (['html', 'xml'].includes(l)) {
+function tokenize(code: string, lang: string): Token[] {
+  const l = lang.toLowerCase();
+
+  // HTML / XML
+  if (l === 'html' || l === 'xml' || l === 'jsx') {
     const tokens: Token[] = [];
-    const re = /(<!--[\s\S]*?-->)|(<\/?[\w-]+)(\/?>)?|(\s[\w-:]+)(\s*=\s*)("[^"]*"|'[^']*')/g;
-    let last = 0, m: RegExpExecArray | null;
-    while ((m = re.exec(line)) !== null) {
-      if (m.index > last) tokens.push({ text: line.slice(last, m.index), color: D.plain });
-      if (m[1]) tokens.push({ text: m[1], color: D.comment });
-      else {
-        if (m[2]) tokens.push({ text: m[2], color: D.tag });
-        if (m[3]) tokens.push({ text: m[3], color: D.tag });
-        if (m[4]) tokens.push({ text: m[4], color: D.attr });
-        if (m[5]) tokens.push({ text: m[5], color: D.plain });
-        if (m[6]) tokens.push({ text: m[6], color: D.attrVal });
-      }
+    const re = /(<!--[\s\S]*?-->)|(<\/?[\w-]+)|(\/?>)|(\s[\w-:]+)(\s*=\s*)("[^"]*"|'[^']*')/g;
+    let last = 0;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(code)) !== null) {
+      if (m.index > last) tokens.push({ text: code.slice(last, m.index), color: COLORS.plain });
+      if (m[1])  tokens.push({ text: m[1], color: COLORS.comment });
+      else if (m[2]) {
+        tokens.push({ text: m[2], color: COLORS.tag });
+        if (m[3]) tokens.push({ text: m[3], color: COLORS.tag });
+        if (m[4]) tokens.push({ text: m[4], color: COLORS.attr });
+        if (m[5]) tokens.push({ text: m[5], color: COLORS.plain });
+        if (m[6]) tokens.push({ text: m[6], color: COLORS.attrVal });
+      } else if (m[3]) tokens.push({ text: m[3], color: COLORS.tag });
       last = re.lastIndex;
     }
-    if (last < line.length) tokens.push({ text: line.slice(last), color: D.plain });
+    if (last < code.length) tokens.push({ text: code.slice(last), color: COLORS.plain });
     return tokens;
   }
 
-  if (['js','ts','tsx','jsx','javascript','typescript'].includes(l)) {
+  // JS / TS / TSX
+  if (['js','ts','tsx','javascript','typescript','jsx'].includes(l)) {
     const tokens: Token[] = [];
-    const re = /(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`[^`]*`)|(\b(?:const|let|var|function|return|import|export|default|from|if|else|for|while|class|extends|new|typeof|instanceof|async|await|try|catch|finally|throw|of|in|switch|case|break|continue|void|null|undefined|true|false|this|super|type|interface|enum)\b)|(\b[A-Z][a-zA-Z0-9_]*\b)|(\b\d+(?:\.\d+)?\b)/g;
-    let last = 0, m: RegExpExecArray | null;
-    while ((m = re.exec(line)) !== null) {
-      if (m.index > last) tokens.push({ text: line.slice(last, m.index), color: D.plain });
-      if (m[1])      tokens.push({ text: m[1], color: D.comment });
-      else if (m[2]) tokens.push({ text: m[2], color: D.string });
-      else if (m[3]) tokens.push({ text: m[3], color: D.keyword });
-      else if (m[4]) tokens.push({ text: m[4], color: D.type });
-      else if (m[5]) tokens.push({ text: m[5], color: D.number });
+    const re = /(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`[^`]*`)|(\b(?:const|let|var|function|return|import|export|default|from|if|else|for|while|class|extends|new|typeof|instanceof|async|await|try|catch|finally|throw|of|in|switch|case|break|continue|void|null|undefined|true|false|this|super)\b)|(\b[A-Z][a-zA-Z0-9_]*\b)|(\b\d+(\.\d+)?\b)|([+\-*/%=<>!&|?:,;.{}[\]()]+)/g;
+    let last = 0;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(code)) !== null) {
+      if (m.index > last) tokens.push({ text: code.slice(last, m.index), color: COLORS.plain });
+      if (m[1])      tokens.push({ text: m[1], color: COLORS.comment });
+      else if (m[2]) tokens.push({ text: m[2], color: COLORS.string });
+      else if (m[3]) tokens.push({ text: m[3], color: COLORS.keyword });
+      else if (m[4]) tokens.push({ text: m[4], color: COLORS.type });
+      else if (m[5]) tokens.push({ text: m[5], color: COLORS.number });
+      else if (m[7]) tokens.push({ text: m[7], color: COLORS.operator });
       last = re.lastIndex;
     }
-    if (last < line.length) tokens.push({ text: line.slice(last), color: D.plain });
+    if (last < code.length) tokens.push({ text: code.slice(last), color: COLORS.plain });
     return tokens;
   }
 
-  if (['css','scss'].includes(l)) {
+  // CSS
+  if (l === 'css' || l === 'scss') {
     const tokens: Token[] = [];
-    const re = /(\/\*[\s\S]*?\*\/)|([.#]?[\w-]+\s*(?={))|([a-z-]+\s*(?=:))|(\b\d+(?:px|em|rem|%|vh|vw|s|ms)?\b)|("[^"]*"|'[^']*')/g;
-    let last = 0, m: RegExpExecArray | null;
-    while ((m = re.exec(line)) !== null) {
-      if (m.index > last) tokens.push({ text: line.slice(last, m.index), color: D.plain });
-      if (m[1])      tokens.push({ text: m[1], color: D.comment });
-      else if (m[2]) tokens.push({ text: m[2], color: D.tag });
-      else if (m[3]) tokens.push({ text: m[3], color: D.attr });
-      else if (m[4]) tokens.push({ text: m[4], color: D.number });
-      else if (m[5]) tokens.push({ text: m[5], color: D.string });
+    const re = /(\/\*[\s\S]*?\*\/)|([.#]?[\w-]+\s*(?={))|({|})|([a-z-]+\s*(?=:))|(:)|(["'][^"']*["'])|(\b\d+(?:px|em|rem|%|vh|vw|s|ms)?\b)/g;
+    let last = 0;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(code)) !== null) {
+      if (m.index > last) tokens.push({ text: code.slice(last, m.index), color: COLORS.plain });
+      if (m[1])      tokens.push({ text: m[1], color: COLORS.comment });
+      else if (m[2]) tokens.push({ text: m[2], color: COLORS.tag });
+      else if (m[3]) tokens.push({ text: m[3], color: COLORS.operator });
+      else if (m[4]) tokens.push({ text: m[4], color: COLORS.attr });
+      else if (m[5]) tokens.push({ text: m[5], color: COLORS.operator });
+      else if (m[6]) tokens.push({ text: m[6], color: COLORS.string });
+      else if (m[7]) tokens.push({ text: m[7], color: COLORS.number });
       last = re.lastIndex;
     }
-    if (last < line.length) tokens.push({ text: line.slice(last), color: D.plain });
+    if (last < code.length) tokens.push({ text: code.slice(last), color: COLORS.plain });
     return tokens;
   }
 
-  if (['python','py'].includes(l)) {
+  // Python
+  if (l === 'python' || l === 'py') {
     const tokens: Token[] = [];
-    const re = /(#[^\n]*)|("""[\s\S]*?"""|'''[\s\S]*?'''|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')|(\b(?:def|class|import|from|return|if|elif|else|for|while|in|not|and|or|is|True|False|None|lambda|with|as|try|except|finally|raise|pass|break|continue|yield)\b)|(\b[A-Z][a-zA-Z0-9_]*\b)|(\b\d+(?:\.\d+)?\b)/g;
-    let last = 0, m: RegExpExecArray | null;
-    while ((m = re.exec(line)) !== null) {
-      if (m.index > last) tokens.push({ text: line.slice(last, m.index), color: D.plain });
-      if (m[1])      tokens.push({ text: m[1], color: D.comment });
-      else if (m[2]) tokens.push({ text: m[2], color: D.string });
-      else if (m[3]) tokens.push({ text: m[3], color: D.keyword });
-      else if (m[4]) tokens.push({ text: m[4], color: D.type });
-      else if (m[5]) tokens.push({ text: m[5], color: D.number });
+    const re = /(#[^\n]*)|("""[\s\S]*?"""|'''[\s\S]*?'''|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')|(\b(?:def|class|import|from|return|if|elif|else|for|while|in|not|and|or|is|True|False|None|lambda|with|as|try|except|finally|raise|pass|break|continue|yield|global|nonlocal|del|assert)\b)|(\b[A-Z][a-zA-Z0-9_]*\b)|(\b\d+(\.\d+)?\b)/g;
+    let last = 0;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(code)) !== null) {
+      if (m.index > last) tokens.push({ text: code.slice(last, m.index), color: COLORS.plain });
+      if (m[1])      tokens.push({ text: m[1], color: COLORS.comment });
+      else if (m[2]) tokens.push({ text: m[2], color: COLORS.string });
+      else if (m[3]) tokens.push({ text: m[3], color: COLORS.keyword });
+      else if (m[4]) tokens.push({ text: m[4], color: COLORS.type });
+      else if (m[5]) tokens.push({ text: m[5], color: COLORS.number });
       last = re.lastIndex;
     }
-    if (last < line.length) tokens.push({ text: line.slice(last), color: D.plain });
+    if (last < code.length) tokens.push({ text: code.slice(last), color: COLORS.plain });
     return tokens;
   }
 
-  return [{ text: line, color: D.plain }];
+  // Fallback — no highlight
+  return [{ text: code, color: COLORS.plain }];
 }
 
-/* ────────────── FULL-SCREEN MODAL ────────────── */
-interface FullScreenProps {
-  visible: boolean;
-  code: string;
-  language: string;
-  previewHtml?: string;
-  fileName?: string;
-  onClose: () => void;
+/* ────────────── LINE NUMBERS ────────────── */
+
+function buildLines(code: string, lang: string): { tokens: Token[]; lineNum: number }[] {
+  const rawLines = code.split('\n');
+  return rawLines.map((line, i) => ({
+    tokens: tokenize(line, lang),
+    lineNum: i + 1,
+  }));
 }
 
-const FullScreenModal = memo(function FullScreenModal({
-  visible, code, language, previewHtml, fileName, onClose,
-}: FullScreenProps) {
-  const [tab, setTab] = useState<'code' | 'preview'>('code');
-  const [wordWrap, setWordWrap] = useState(false);
+/* ────────────── COMPONENT ────────────── */
+
+export const CodeBlock = memo(function CodeBlock({
+  code,
+  language = 'code',
+}: CodeBlockProps) {
   const [copied, setCopied] = useState(false);
-
-  const canPreview = ['html', 'htm'].includes((language || '').toLowerCase()) || Boolean(previewHtml);
-  const htmlToPreview = previewHtml || code;
+  const [expanded, setExpanded] = useState(false);
 
   const onCopy = async () => {
     await Clipboard.setStringAsync(code);
@@ -148,368 +148,144 @@ const FullScreenModal = memo(function FullScreenModal({
     setTimeout(() => setCopied(false), 1500);
   };
 
-  const rawLines = code.split('\n');
-
-  return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <SafeAreaView style={[fsStyles.container]}>
-        {/* Header */}
-        <View style={fsStyles.header}>
-          <TouchableOpacity onPress={onClose} style={fsStyles.iconBtn}>
-            <Ionicons name="close" size={22} color="#FFF" />
-          </TouchableOpacity>
-
-          <Text style={fsStyles.fileName} numberOfLines={1}>
-            {fileName || language || 'code'}
-          </Text>
-
-          <View style={fsStyles.headerRight}>
-            {/* Expand (already fullscreen) */}
-            <TouchableOpacity style={fsStyles.iconBtn} onPress={() => {}}>
-              <Ionicons name="expand-outline" size={18} color="#AAA" />
-            </TouchableOpacity>
-
-            {/* Copy */}
-            <TouchableOpacity style={fsStyles.iconBtn} onPress={onCopy}>
-              <Ionicons name={copied ? 'checkmark' : 'copy-outline'} size={18} color={copied ? '#50FA7B' : '#AAA'} />
-            </TouchableOpacity>
-
-            {/* Word wrap */}
-            {tab === 'code' && (
-              <TouchableOpacity
-                style={[fsStyles.iconBtn, wordWrap && { backgroundColor: '#44475A' }]}
-                onPress={() => setWordWrap(w => !w)}
-              >
-                <Ionicons name="return-down-forward-outline" size={18} color={wordWrap ? '#BD93F9' : '#AAA'} />
-              </TouchableOpacity>
-            )}
-
-            {/* Code / Preview tabs */}
-            {canPreview && (
-              <View style={fsStyles.tabs}>
-                <TouchableOpacity
-                  style={[fsStyles.tab, tab === 'code' && fsStyles.tabActive]}
-                  onPress={() => setTab('code')}
-                >
-                  <Text style={[fsStyles.tabText, tab === 'code' && fsStyles.tabTextActive]}>Code</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[fsStyles.tab, tab === 'preview' && fsStyles.tabActive]}
-                  onPress={() => setTab('preview')}
-                >
-                  <Text style={[fsStyles.tabText, tab === 'preview' && fsStyles.tabTextActive]}>Preview</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
-        </View>
-
-        {/* Content */}
-        {tab === 'preview' && canPreview ? (
-          <WebView
-            source={{ html: htmlToPreview }}
-            style={{ flex: 1, backgroundColor: '#FFF' }}
-            originWhitelist={['*']}
-            javaScriptEnabled
-            domStorageEnabled
-          />
-        ) : (
-          <ScrollView
-            style={{ flex: 1, backgroundColor: D.bg }}
-            nestedScrollEnabled
-            showsVerticalScrollIndicator
-            indicatorStyle="white"
-          >
-            <ScrollView
-              horizontal={!wordWrap}
-              showsHorizontalScrollIndicator={!wordWrap}
-              indicatorStyle="white"
-              contentContainerStyle={[
-                fsStyles.codeContent,
-                wordWrap && { flexShrink: 1, width: '100%' },
-              ]}
-            >
-              {/* Line numbers */}
-              <View style={fsStyles.lineNumbers}>
-                {rawLines.map((_, i) => (
-                  <Text key={i} style={fsStyles.lineNum}>{i + 1}</Text>
-                ))}
-              </View>
-              {/* Code */}
-              <View style={fsStyles.codeLines}>
-                {rawLines.map((line, i) => (
-                  <View key={i} style={fsStyles.codeLine}>
-                    {tokenize(line, language).map((t, ti) => (
-                      <Text
-                        key={ti}
-                        style={[fsStyles.codeText, { color: t.color }, wordWrap && { flexWrap: 'wrap' }]}
-                      >
-                        {t.text}
-                      </Text>
-                    ))}
-                  </View>
-                ))}
-              </View>
-            </ScrollView>
-          </ScrollView>
-        )}
-      </SafeAreaView>
-    </Modal>
-  );
-});
-
-/* ────────────── MAIN CODE BLOCK ────────────── */
-export const CodeBlock = memo(function CodeBlock({
-  code,
-  language = 'code',
-  previewHtml,
-  fileName,
-}: CodeBlockProps) {
-  const [copied, setCopied] = useState(false);
-  const [expanded, setExpanded] = useState(false);
-  const [wordWrap, setWordWrap] = useState(false);
-  const [tab, setTab] = useState<'code' | 'preview'>('code');
-  const [fullScreen, setFullScreen] = useState(false);
-
-  const onCopy = useCallback(async () => {
-    await Clipboard.setStringAsync(code);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  }, [code]);
-
-  const canPreview = ['html', 'htm'].includes((language || '').toLowerCase()) || Boolean(previewHtml);
-  const htmlToPreview = previewHtml || code;
-
-  const rawLines = code.split('\n');
-  const lineCount = rawLines.length;
+  const lineCount = (code.match(/\n/g) || []).length + 1;
   const isLong = lineCount > 12;
-  const displayLines = !expanded && isLong ? rawLines.slice(0, 12) : rawLines;
+  const displayCode = (!expanded && isLong)
+    ? code.split('\n').slice(0, 12).join('\n')
+    : code;
+
+  const lines = buildLines(displayCode, language);
 
   return (
-    <>
-      <View style={styles.wrapper}>
-        {/* ── HEADER ── */}
-        <View style={styles.header}>
-          {/* Mac dots */}
-          <View style={styles.dots}>
-            <View style={[styles.dot, { backgroundColor: '#FF5F57' }]} />
-            <View style={[styles.dot, { backgroundColor: '#FEBC2E' }]} />
-            <View style={[styles.dot, { backgroundColor: '#28C840' }]} />
-          </View>
-
-          <Text style={styles.langLabel}>{fileName || language}</Text>
-
-          {/* Right icons */}
-          <View style={styles.headerRight}>
-            {/* Full-screen expand */}
-            <TouchableOpacity
-              style={styles.iconBtn}
-              onPress={() => setFullScreen(true)}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Ionicons name="expand-outline" size={15} color="#6272A4" />
-            </TouchableOpacity>
-
-            {/* Copy */}
-            <TouchableOpacity
-              style={styles.iconBtn}
-              onPress={onCopy}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Ionicons
-                name={copied ? 'checkmark-circle' : 'copy-outline'}
-                size={15}
-                color={copied ? '#50FA7B' : '#6272A4'}
-              />
-            </TouchableOpacity>
-
-            {/* Word wrap toggle (only in code tab) */}
-            {tab === 'code' && (
-              <TouchableOpacity
-                style={[styles.iconBtn, wordWrap && { backgroundColor: '#44475A' }]}
-                onPress={() => setWordWrap(w => !w)}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <Ionicons
-                  name="return-down-forward-outline"
-                  size={15}
-                  color={wordWrap ? '#BD93F9' : '#6272A4'}
-                />
-              </TouchableOpacity>
-            )}
-
-            {/* Code / Preview tabs */}
-            {canPreview && (
-              <View style={styles.tabs}>
-                <TouchableOpacity
-                  style={[styles.tab, tab === 'code' && styles.tabActive]}
-                  onPress={() => setTab('code')}
-                >
-                  <Text style={[styles.tabText, tab === 'code' && styles.tabTextActive]}>Code</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.tab, tab === 'preview' && styles.tabActive]}
-                  onPress={() => setTab('preview')}
-                >
-                  <Text style={[styles.tabText, tab === 'preview' && styles.tabTextActive]}>Preview</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
+    <View style={styles.wrapper}>
+      {/* HEADER */}
+      <View style={styles.header}>
+        <View style={styles.dots}>
+          <View style={[styles.dot, { backgroundColor: '#FF5F57' }]} />
+          <View style={[styles.dot, { backgroundColor: '#FEBC2E' }]} />
+          <View style={[styles.dot, { backgroundColor: '#28C840' }]} />
         </View>
-
-        {/* ── CONTENT ── */}
-        {tab === 'preview' && canPreview ? (
-          <View style={styles.previewContainer}>
-            <WebView
-              source={{ html: htmlToPreview }}
-              style={{ flex: 1, minHeight: 280, backgroundColor: '#FFF' }}
-              originWhitelist={['*']}
-              javaScriptEnabled
-              domStorageEnabled
-              scrollEnabled
-            />
-            {/* Preview All full-screen button */}
-            <TouchableOpacity
-              style={styles.previewAllBtn}
-              onPress={() => setFullScreen(true)}
-            >
-              <Ionicons name="expand-outline" size={14} color="#FFF" />
-              <Text style={styles.previewAllText}>Preview All</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <ScrollView
-            style={[styles.scrollArea, expanded ? styles.scrollExpanded : styles.scrollCollapsed]}
-            nestedScrollEnabled
-            showsVerticalScrollIndicator
-            persistentScrollbar
-            indicatorStyle="white"
-          >
-            <ScrollView
-              horizontal={!wordWrap}
-              showsHorizontalScrollIndicator={!wordWrap}
-              contentContainerStyle={[
-                styles.hContent,
-                wordWrap && { flexShrink: 1 },
-              ]}
-              indicatorStyle="white"
-            >
-              {/* Line numbers */}
-              <View style={styles.lineNumbers}>
-                {displayLines.map((_, i) => (
-                  <Text key={i} style={styles.lineNumber}>{i + 1}</Text>
-                ))}
-              </View>
-
-              {/* Code lines */}
-              <View style={[styles.codeLines, wordWrap && { flex: 1 }]}>
-                {displayLines.map((line, i) => (
-                  <View key={i} style={[styles.codeLine, wordWrap && { flexWrap: 'wrap' }]}>
-                    {tokenize(line, language).map((t, ti) => (
-                      <Text
-                        key={ti}
-                        style={[styles.codeText, { color: t.color }]}
-                      >
-                        {t.text}
-                      </Text>
-                    ))}
-                  </View>
-                ))}
-              </View>
-            </ScrollView>
-          </ScrollView>
-        )}
-
-        {/* ── SHOW MORE / LESS (code tab only) ── */}
-        {tab === 'code' && isLong && (
-          <TouchableOpacity style={styles.expandBtn} onPress={() => setExpanded(e => !e)}>
-            <Text style={styles.expandText}>
-              {expanded ? 'Show less ▲' : `Show all ${lineCount} lines ▼`}
-            </Text>
-          </TouchableOpacity>
-        )}
+        <Text style={styles.langLabel}>{language}</Text>
+        <TouchableOpacity onPress={onCopy} style={styles.copyBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <Ionicons
+            name={copied ? 'checkmark-circle' : 'copy-outline'}
+            size={15}
+            color={copied ? '#50FA7B' : '#888'}
+          />
+          <Text style={[styles.copyText, copied && styles.copiedText]}>
+            {copied ? 'Copied!' : 'Copy'}
+          </Text>
+        </TouchableOpacity>
       </View>
 
-      {/* Full-screen modal */}
-      <FullScreenModal
-        visible={fullScreen}
-        code={code}
-        language={language}
-        previewHtml={previewHtml}
-        fileName={fileName}
-        onClose={() => setFullScreen(false)}
-      />
-    </>
+      {/* CODE AREA — vertical scroll */}
+      <ScrollView
+        style={[styles.scrollArea, expanded ? styles.scrollExpanded : styles.scrollCollapsed]}
+        nestedScrollEnabled
+        showsVerticalScrollIndicator={true}
+        persistentScrollbar={true}
+        indicatorStyle="white"
+      >
+        {/* horizontal scroll inside */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={true}
+          contentContainerStyle={styles.hContent}
+          indicatorStyle="white"
+        >
+          {/* Line numbers */}
+          <View style={styles.lineNumbers}>
+            {lines.map(l => (
+              <Text key={l.lineNum} style={styles.lineNumber}>{l.lineNum}</Text>
+            ))}
+          </View>
+
+          {/* Code lines */}
+          <View style={styles.codeLines}>
+            {lines.map((l, i) => (
+              <View key={i} style={styles.codeLine}>
+                {l.tokens.map((t, ti) => (
+                  <Text key={ti} style={[styles.codeText, { color: t.color }]}>
+                    {t.text}
+                  </Text>
+                ))}
+              </View>
+            ))}
+          </View>
+        </ScrollView>
+      </ScrollView>
+
+      {/* SHOW MORE / LESS */}
+      {isLong && (
+        <TouchableOpacity style={styles.expandBtn} onPress={() => setExpanded(e => !e)}>
+          <Text style={styles.expandText}>
+            {expanded ? 'Show less ▲' : `Show all ${lineCount} lines ▼`}
+          </Text>
+        </TouchableOpacity>
+      )}
+    </View>
   );
 });
 
 /* ────────────── STYLES ────────────── */
+
 const styles = StyleSheet.create({
   wrapper: {
-    backgroundColor: D.bg,
+    backgroundColor: '#282A36',
     borderRadius: BorderRadius.md,
     overflow: 'hidden',
     marginVertical: 6,
     borderWidth: 1,
-    borderColor: D.border,
+    borderColor: '#44475A',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: D.header,
+    backgroundColor: '#21222C',
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: D.border,
-    gap: 6,
+    borderBottomColor: '#44475A',
+    gap: 8,
   },
-  dots: { flexDirection: 'row', gap: 5 },
-  dot: { width: 10, height: 10, borderRadius: 5 },
+  dots: {
+    flexDirection: 'row',
+    gap: 5,
+  },
+  dot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
   langLabel: {
     flex: 1,
     fontSize: 11,
-    color: D.lineNum,
+    color: '#6272A4',
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
     textAlign: 'center',
+    textTransform: 'lowercase',
   },
-  headerRight: {
+  copyBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
   },
-  iconBtn: {
-    padding: 4,
-    borderRadius: 6,
-    alignItems: 'center',
-    justifyContent: 'center',
+  copyText: {
+    fontSize: 12,
+    color: '#888',
   },
-  tabs: {
-    flexDirection: 'row',
-    backgroundColor: '#1A1B26',
-    borderRadius: 8,
-    padding: 2,
-    marginLeft: 4,
+  copiedText: {
+    color: '#50FA7B',
   },
-  tab: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
+  scrollArea: {
+    maxWidth: '100%',
   },
-  tabActive: {
-    backgroundColor: '#44475A',
+  scrollCollapsed: {
+    maxHeight: 240,
   },
-  tabText: {
-    fontSize: 11,
-    color: '#6272A4',
-    fontWeight: '600',
+  scrollExpanded: {
+    maxHeight: 480,
   },
-  tabTextActive: {
-    color: '#F8F8F2',
-  },
-  scrollArea: { maxWidth: '100%' },
-  scrollCollapsed: { maxHeight: 240 },
-  scrollExpanded: { maxHeight: 480 },
   hContent: {
     paddingHorizontal: 0,
     paddingVertical: 10,
@@ -521,18 +297,22 @@ const styles = StyleSheet.create({
     paddingLeft: 12,
     paddingRight: 8,
     borderRightWidth: 1,
-    borderRightColor: D.border,
+    borderRightColor: '#44475A',
     alignItems: 'flex-end',
     minWidth: 38,
   },
   lineNumber: {
     fontSize: 12,
     lineHeight: 18,
-    color: D.lineNum,
+    color: '#6272A4',
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
     includeFontPadding: false,
   },
-  codeLines: { paddingLeft: 12, paddingRight: 20 },
+  codeLines: {
+    paddingLeft: 12,
+    paddingRight: 20,
+    flex: 1,
+  },
   codeLine: {
     flexDirection: 'row',
     flexWrap: 'nowrap',
@@ -548,114 +328,13 @@ const styles = StyleSheet.create({
   expandBtn: {
     alignItems: 'center',
     paddingVertical: 8,
-    backgroundColor: D.header,
+    backgroundColor: '#21222C',
     borderTopWidth: 1,
-    borderTopColor: D.border,
+    borderTopColor: '#44475A',
   },
-  expandText: { fontSize: 12, color: D.purple, fontWeight: '600' },
-  previewContainer: {
-    height: 280,
-    position: 'relative',
-  },
-  previewAllBtn: {
-    position: 'absolute',
-    bottom: 12,
-    alignSelf: 'center',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: 'rgba(0,0,0,0.75)',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  previewAllText: {
-    color: '#FFF',
-    fontSize: 13,
+  expandText: {
+    fontSize: 12,
+    color: '#BD93F9',
     fontWeight: '600',
-  },
-});
-
-/* ── Full-screen modal styles ── */
-const fsStyles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: D.bg,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: D.header,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: D.border,
-    gap: 8,
-  },
-  iconBtn: {
-    padding: 6,
-    borderRadius: 6,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  fileName: {
-    flex: 1,
-    fontSize: 13,
-    color: '#F8F8F2',
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-    textAlign: 'center',
-  },
-  headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  tabs: {
-    flexDirection: 'row',
-    backgroundColor: '#1A1B26',
-    borderRadius: 8,
-    padding: 2,
-    marginLeft: 4,
-  },
-  tab: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  tabActive: { backgroundColor: '#44475A' },
-  tabText: { fontSize: 11, color: '#6272A4', fontWeight: '600' },
-  tabTextActive: { color: '#F8F8F2' },
-  codeContent: {
-    paddingVertical: 10,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    minWidth: '100%',
-  },
-  lineNumbers: {
-    paddingLeft: 12,
-    paddingRight: 8,
-    borderRightWidth: 1,
-    borderRightColor: D.border,
-    alignItems: 'flex-end',
-    minWidth: 44,
-  },
-  lineNum: {
-    fontSize: 13,
-    lineHeight: 20,
-    color: D.lineNum,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-    includeFontPadding: false,
-  },
-  codeLines: { paddingLeft: 12, paddingRight: 24 },
-  codeLine: {
-    flexDirection: 'row',
-    flexWrap: 'nowrap',
-    minHeight: 20,
-  },
-  codeText: {
-    fontSize: 14,
-    lineHeight: 20,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-    includeFontPadding: false,
   },
 });
