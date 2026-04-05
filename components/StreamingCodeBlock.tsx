@@ -878,4 +878,4 @@ const fsStyles = StyleSheet.create({
   },
 });
 
-hello ai can you please:In components/StreamingCodeBlock.tsx, add a real-time character-by-character typing animation as the AI streams code, showing a blinking cursor at the end of the last line being written, matching the StreamingText behavior for regular messages and fix when i ask for code creatre its show me error element type invalid expeted or a class/function and add icon logo of alll language.
+
