@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
   BackHandler,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import { BlurView } from 'expo-blur';
 import Animated, {
   useSharedValue,
@@ -66,6 +67,13 @@ export function ToolsModal({
   const [webMode, setWebMode] = useState<'auto' | 'off'>('auto');
   const [loading, setLoading] = useState<string | null>(null);
   const [rendered, setRendered] = useState(false);
+  const [selectedFilePreview, setSelectedFilePreview] = useState<{
+    name: string;
+    size: number;
+    mimeType: string;
+    uri: string;
+    isImage: boolean;
+  } | null>(null);
 
   const translateY = useSharedValue(SCREEN_HEIGHT);
   const opacity = useSharedValue(0);
@@ -196,6 +204,24 @@ export function ToolsModal({
     'txt','md','tsx','ts','js','jsx','html','css','json','xml','csv','py','rb','go','rs','java','kt','swift','sh','bash','yaml','yml','sql','graphql','r','lua','php','cs','cpp','c','dart','kotlin',
   ];
 
+  const formatBytes = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const getMimeIcon = (mime: string, ext: string) => {
+    if (mime.startsWith('image/')) return { icon: 'image-outline' as const, color: '#FF2D55' };
+    if (mime.includes('pdf')) return { icon: 'document-text-outline' as const, color: '#FF3B30' };
+    if (mime.includes('word') || ext === 'docx' || ext === 'doc') return { icon: 'document-outline' as const, color: '#2B5CE6' };
+    if (mime.includes('excel') || mime.includes('spreadsheet') || ext === 'xlsx') return { icon: 'grid-outline' as const, color: '#217346' };
+    if (mime.includes('powerpoint') || mime.includes('presentation') || ext === 'pptx') return { icon: 'easel-outline' as const, color: '#D24726' };
+    if (mime.includes('json') || mime.includes('xml')) return { icon: 'code-slash-outline' as const, color: '#CB7700' };
+    if (['js','ts','tsx','jsx','py','rb','go','rs','java','kt','swift','sh','css','html'].includes(ext)) return { icon: 'code-outline' as const, color: '#007AFF' };
+    if (mime.startsWith('text/') || ext === 'txt' || ext === 'md') return { icon: 'document-text-outline' as const, color: '#8E8E93' };
+    return { icon: 'attach-outline' as const, color: '#636366' };
+  };
+
   const handleFiles = async () => {
     setLoading('files');
     try {
@@ -218,20 +244,33 @@ export function ToolsModal({
           alert('File type not supported. Please upload documents, images, or code files.');
           return;
         }
-        onPickMedia([{
-          type: 'document',
+        const isImage = mime.startsWith('image/');
+        setSelectedFilePreview({
+          name: asset.name || 'file',
+          size: asset.size || 0,
+          mimeType: mime,
           uri: asset.uri,
-          name: asset.name,
-          mimeType: asset.mimeType,
-          size: asset.size,
-        }]);
-        onClose();
+          isImage,
+        });
       }
     } catch (e) {
       console.error('File picker error:', e);
     } finally {
       setLoading(null);
     }
+  };
+
+  const confirmSendFile = () => {
+    if (!selectedFilePreview) return;
+    onPickMedia([{
+      type: selectedFilePreview.isImage ? 'image' : 'document',
+      uri: selectedFilePreview.uri,
+      name: selectedFilePreview.name,
+      mimeType: selectedFilePreview.mimeType,
+      size: selectedFilePreview.size,
+    }]);
+    setSelectedFilePreview(null);
+    onClose();
   };
 
   const tools = [
@@ -312,6 +351,68 @@ export function ToolsModal({
                   );
                 })}
               </View>
+
+              {/* File Preview Section */}
+              {selectedFilePreview && (
+                <Animated.View entering={FadeInUp.duration(300)} style={fpStyles.previewCard}>
+                  <View style={fpStyles.previewHeader}>
+                    <Text style={fpStyles.previewTitle}>Ready to send</Text>
+                    <TouchableOpacity onPress={() => setSelectedFilePreview(null)}>
+                      <Ionicons name="close" size={18} color={GLASS.sub} />
+                    </TouchableOpacity>
+                  </View>
+                  <View style={fpStyles.previewBody}>
+                    {selectedFilePreview.isImage ? (
+                      <Image
+                        source={{ uri: selectedFilePreview.uri }}
+                        style={fpStyles.previewThumb}
+                        contentFit="cover"
+                      />
+                    ) : (
+                      <View style={[fpStyles.previewIconBox, { backgroundColor: getMimeIcon(selectedFilePreview.mimeType, selectedFilePreview.name.split('.').pop() || '').color + '22' }]}>
+                        <Ionicons
+                          name={getMimeIcon(selectedFilePreview.mimeType, selectedFilePreview.name.split('.').pop() || '').icon}
+                          size={36}
+                          color={getMimeIcon(selectedFilePreview.mimeType, selectedFilePreview.name.split('.').pop() || '').color}
+                        />
+                      </View>
+                    )}
+                    <View style={fpStyles.previewMeta}>
+                      <Text style={fpStyles.previewName} numberOfLines={2}>{selectedFilePreview.name}</Text>
+                      <Text style={fpStyles.previewSize}>{formatBytes(selectedFilePreview.size)}</Text>
+                      <Text style={fpStyles.previewMime}>{selectedFilePreview.mimeType.split('/')[1]?.toUpperCase() || 'FILE'}</Text>
+                    </View>
+                  </View>
+                  <TouchableOpacity style={fpStyles.sendBtn} onPress={confirmSendFile}>
+                    <Ionicons name="arrow-up-circle" size={18} color="#FFF" />
+                    <Text style={fpStyles.sendBtnText}>Attach to message</Text>
+                  </TouchableOpacity>
+                </Animated.View>
+              )}
+
+              {/* Accepted File Types Chips */}
+              {!selectedFilePreview && (
+                <Animated.View entering={FadeInUp.delay(300).duration(300)} style={fpStyles.chipsSection}>
+                  <Text style={fpStyles.chipsTitle}>Accepted file types</Text>
+                  <View style={fpStyles.chipsRow}>
+                    {[
+                      { label: 'Images', color: '#FF2D55', bg: 'rgba(255,45,85,0.15)', ext: 'PNG JPG WEBP SVG GIF' },
+                      { label: 'Documents', color: '#FF9500', bg: 'rgba(255,149,0,0.15)', ext: 'PDF DOCX XLSX PPTX' },
+                      { label: 'Code', color: '#007AFF', bg: 'rgba(0,122,255,0.15)', ext: 'JS TS PY GO SWIFT...' },
+                      { label: 'Text', color: '#30D158', bg: 'rgba(48,209,88,0.15)', ext: 'TXT MD CSV JSON XML' },
+                    ].map(chip => (
+                      <View key={chip.label} style={[fpStyles.chip, { backgroundColor: chip.bg, borderColor: chip.color + '55' }]}>
+                        <Text style={[fpStyles.chipLabel, { color: chip.color }]}>{chip.label}</Text>
+                        <Text style={fpStyles.chipExt}>{chip.ext}</Text>
+                      </View>
+                    ))}
+                  </View>
+                  <View style={fpStyles.limitRow}>
+                    <Ionicons name="information-circle-outline" size={14} color={GLASS.sub} />
+                    <Text style={fpStyles.limitText}>Max file size: 25 MB · No ZIP or video files</Text>
+                  </View>
+                </Animated.View>
+              )}
 
               {/* Web Search Row */}
               <Animated.View entering={FadeInUp.delay(340).duration(350)}>
@@ -429,4 +530,65 @@ const styles = StyleSheet.create({
   webOptionActive: { backgroundColor: 'rgba(0,122,255,0.15)' },
   webOptTitle: { fontSize: 15, fontWeight: '600', color: GLASS.text, marginBottom: 2 },
   webOptSub: { fontSize: 13, color: GLASS.sub },
+});
+
+const fpStyles = StyleSheet.create({
+  previewCard: {
+    backgroundColor: GLASS.surface,
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: GLASS.border,
+  },
+  previewHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  previewTitle: { fontSize: 13, fontWeight: '700', color: GLASS.text },
+  previewBody: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
+  previewThumb: { width: 64, height: 64, borderRadius: 10 },
+  previewIconBox: {
+    width: 64,
+    height: 64,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  previewMeta: { flex: 1, gap: 3 },
+  previewName: { fontSize: 14, fontWeight: '600', color: GLASS.text },
+  previewSize: { fontSize: 12, color: GLASS.sub },
+  previewMime: { fontSize: 11, color: GLASS.sub, fontWeight: '500' },
+  sendBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: GLASS.accent,
+    borderRadius: 10,
+    paddingVertical: 10,
+  },
+  sendBtnText: { fontSize: 14, fontWeight: '700', color: '#FFF' },
+  chipsSection: { marginBottom: 14 },
+  chipsTitle: { fontSize: 12, fontWeight: '600', color: GLASS.sub, marginBottom: 8, marginLeft: 2 },
+  chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chip: {
+    borderRadius: 10,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    minWidth: 80,
+  },
+  chipLabel: { fontSize: 12, fontWeight: '700', marginBottom: 2 },
+  chipExt: { fontSize: 10, color: 'rgba(255,255,255,0.45)', fontWeight: '500' },
+  limitRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginTop: 8,
+    marginLeft: 2,
+  },
+  limitText: { fontSize: 12, color: GLASS.sub },
 });

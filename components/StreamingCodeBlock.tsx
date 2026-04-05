@@ -387,39 +387,40 @@ export const CodeBlock = memo(function CodeBlock({
   const [tab, setTab] = useState<'code' | 'preview'>('code');
   const [fullScreen, setFullScreen] = useState(false);
 
-  // Streaming: show characters progressively
+  // Streaming: show characters progressively at natural typing pace
   const [displayedCode, setDisplayedCode] = useState(streaming ? '' : code);
   const streamRef = useRef<NodeJS.Timeout | null>(null);
   const charIndexRef = useRef(0);
+  const codeRef = useRef(code);
 
   useEffect(() => {
+    codeRef.current = code;
     if (!streaming) {
+      // Cancel any in-progress animation and show full code
+      if (streamRef.current) clearTimeout(streamRef.current);
       setDisplayedCode(code);
       charIndexRef.current = code.length;
       return;
     }
-    // Stream characters
-    charIndexRef.current = 0;
-    setDisplayedCode('');
+    // Reset and start character-by-character stream
+    charIndexRef.current = displayedCode.length; // continue from where we left off
     const tick = () => {
-      if (charIndexRef.current < code.length) {
-        const chunkSize = Math.max(1, Math.floor(code.length / 200));
-        const end = Math.min(charIndexRef.current + chunkSize, code.length);
-        setDisplayedCode(code.slice(0, end));
+      const current = charIndexRef.current;
+      const full = codeRef.current;
+      if (current < full.length) {
+        // Render 1-2 chars per tick for natural pace
+        const end = Math.min(current + 2, full.length);
+        setDisplayedCode(full.slice(0, end));
         charIndexRef.current = end;
+        // 18-22ms per tick gives ~50-55 chars/sec — natural reading pace
         streamRef.current = setTimeout(tick, speed);
       }
     };
-    streamRef.current = setTimeout(tick, 30);
+    if (charIndexRef.current < code.length) {
+      streamRef.current = setTimeout(tick, 0);
+    }
     return () => { if (streamRef.current) clearTimeout(streamRef.current); };
   }, [code, streaming, speed]);
-
-  // Once streaming stops, show full code
-  useEffect(() => {
-    if (!streaming) {
-      setDisplayedCode(code);
-    }
-  }, [streaming, code]);
 
   const onCopy = useCallback(async () => {
     await Clipboard.setStringAsync(code);
