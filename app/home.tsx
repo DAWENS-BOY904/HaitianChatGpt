@@ -1809,3 +1809,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
+hello ai dont skip:audit the toggleRecording function to re-check mic permissions on every tap, reset any stuck recording/processing state with a timeout guard, and add a 3-second max processing timeout that auto-resets to idle if transcription doesn't complete. audit the toggleRecording function to ensure mic permission is re-checked on every tap, the Audio session is freshly configured before each recording, and state transitions between idle → recording → processing are shown correctly with no stuck states.
