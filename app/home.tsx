@@ -1801,3 +1801,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
+In app/home.tsx, investigate and fix any errors that occur when the user types in the message input — check for any state update issues, undefined references in the onChangeText handler, or codeLangChips detection logic that may throw exceptions during text input.Implement real Apple Sign In in app/login.tsx using expo-apple-authentication package — replace the current placeholder with a native Apple auth flow that creates/signs in a Supabase user with the Apple identity token, including nonce generation and proper error handling. In app/login-password.tsx, ensure that when the user arrives from login.tsx with an email param, the email field is pre-filled and the user is taken directly to the password input without being asked for their email again.
