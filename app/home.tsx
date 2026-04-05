@@ -1779,4 +1779,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-In app/home.tsx and components/MessageItem.tsx, fix the 'element type is invalid' error that appears when AI creates code — ensure CodeBlock and StreamingCodeBlock are properly exported as named exports and all imports use the correct named import syntax.hello ai can you please:In components/StreamingCodeBlock.tsx, add a real-time character-by-character typing animation as the AI streams code, showing a blinking cursor at the end of the last line being written, matching the StreamingText behavior for regular messages and fix when i ask for code creatre its show me error element type invalid expeted or a class/function and add icon logo of alll language. In components/StreamingCodeBlock.tsx add language-specific colored icons (Python snake, JS yellow logo, HTML orange badge, CSS blue badge, TypeScript blue TS, Bash terminal, etc.) next to the language label in the header, using @expo/vector-icons or custom colored Text badges for each language.
+
