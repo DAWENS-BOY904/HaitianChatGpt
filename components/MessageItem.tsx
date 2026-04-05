@@ -23,7 +23,7 @@ import { useTheme } from '../hooks/useTheme';
 import { useAuth, useAlert } from '@/template';
 import { router } from 'expo-router';
 import { Spacing, Typography, BorderRadius } from '../constants/theme';
-import { StreamingCodeBlock } from './StreamingCodeBlock';
+import { CodeBlock, StreamingCodeBlock } from './StreamingCodeBlock';
 import { StreamingText } from './StreamingText';
 import { MessageActionsModal } from './MessageActionsModal';
 import { LinkSafetyModal } from './LinkSafetyModal';
@@ -659,10 +659,10 @@ export const MessageItem = memo(function MessageItem({
 
           if (part.type === 'code') {
             return (
-              <StreamingCodeBlock
+              <CodeBlock
                 key={`code-${index}`}
                 code={part.content}
-                language={part.language}
+                language={part.language || 'code'}
                 streaming={shouldStream}
                 speed={streamingSpeed}
               />

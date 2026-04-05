@@ -179,7 +179,23 @@ export function ToolsModal({
     }
   };
 
-  // ── REAL FILES ──
+  // ── REAL FILES (restricted types, no zip/video) ──
+  const ALLOWED_MIMES = [
+    'image/png','image/jpeg','image/jpg','image/webp','image/svg+xml','image/gif',
+    'application/pdf',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/msword','application/vnd.ms-excel','application/vnd.ms-powerpoint',
+    'text/plain','text/markdown','text/html','text/css','text/javascript',
+    'application/json','application/xml','text/xml','text/csv',
+  ];
+  const ALLOWED_EXTENSIONS = [
+    'png','jpg','jpeg','webp','svg','gif',
+    'pdf','docx','doc','pptx','ppt','xlsx','xls',
+    'txt','md','tsx','ts','js','jsx','html','css','json','xml','csv','py','rb','go','rs','java','kt','swift','sh','bash','yaml','yml','sql','graphql','r','lua','php','cs','cpp','c','dart','kotlin',
+  ];
+
   const handleFiles = async () => {
     setLoading('files');
     try {
@@ -190,6 +206,18 @@ export function ToolsModal({
       });
       if (!result.canceled && result.assets?.[0]) {
         const asset = result.assets[0];
+        const ext = (asset.name || '').split('.').pop()?.toLowerCase() || '';
+        const mime = (asset.mimeType || '').toLowerCase();
+        // Block zip and video
+        const isBlocked =
+          mime.startsWith('video/') ||
+          mime.includes('zip') || mime.includes('x-rar') || mime.includes('7z') ||
+          ext === 'zip' || ext === 'rar' || ext === '7z' || ext === 'tar' || ext === 'gz' ||
+          mime.startsWith('audio/');
+        if (isBlocked) {
+          alert('File type not supported. Please upload documents, images, or code files.');
+          return;
+        }
         onPickMedia([{
           type: 'document',
           uri: asset.uri,

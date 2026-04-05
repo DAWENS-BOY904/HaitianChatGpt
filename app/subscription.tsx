@@ -59,38 +59,25 @@ export default function SubscriptionScreen() {
 
   const handleUpgrade = async () => {
     if (selectedPlan === 'go') {
-      // Go plan: trigger Apple Pay / in-app purchase directly
-      // On iOS this would be StoreKit, for now open Stripe
-      Alert.alert(
-        'Dawinix Go',
-        'Subscribe for $8.00/month with Apple Pay',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Subscribe with Apple Pay',
-            onPress: () => {
-              // Open Stripe checkout
-              router.push({
-                pathname: '/stripe-checkout',
-                params: {
-                  priceId: 'price_go_800',
-                  planName: 'Dawinix Go',
-                  amount: '8',
-                },
-              });
-            },
-          },
-        ]
-      );
+      // Go plan: direct Stripe checkout (Apple Pay preferred on iOS)
+      router.push({
+        pathname: '/stripe-checkout',
+        params: {
+          priceId: 'price_go_800',
+          planName: 'Dawinix Go',
+          amount: '8',
+          method: Platform.OS === 'ios' ? 'apple_pay' : 'card',
+        },
+      });
     } else {
-      // Plus plan: open payment method selection
+      // Plus plan: choose payment method
       Alert.alert(
         'Dawinix Plus — $19.99/month',
         'Choose your payment method',
         [
           { text: 'Cancel', style: 'cancel' },
           {
-            text: 'Pay with Card (Stripe)',
+            text: Platform.OS === 'ios' ? 'Apple Pay' : 'Pay Now',
             onPress: () => {
               router.push({
                 pathname: '/stripe-checkout',
@@ -98,12 +85,13 @@ export default function SubscriptionScreen() {
                   priceId: 'price_1SjmtpE0VkO7z1Vn1lpvP0PC',
                   planName: 'Dawinix Plus',
                   amount: '19.99',
+                  method: Platform.OS === 'ios' ? 'apple_pay' : 'card',
                 },
               });
             },
           },
           {
-            text: 'Pay with Apple Pay',
+            text: 'Pay with Card',
             onPress: () => {
               router.push({
                 pathname: '/stripe-checkout',
@@ -111,7 +99,7 @@ export default function SubscriptionScreen() {
                   priceId: 'price_1SjmtpE0VkO7z1Vn1lpvP0PC',
                   planName: 'Dawinix Plus',
                   amount: '19.99',
-                  method: 'apple_pay',
+                  method: 'card',
                 },
               });
             },

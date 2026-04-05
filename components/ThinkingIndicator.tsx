@@ -1,14 +1,6 @@
-/**
- * THINKING INDICATOR - PRODUCTION READY
- * Shows real-time AI processing with beautiful animations
- * Changed from "Analyzing" to "Thinking" per requirements
- */
-
 import React, { useEffect, useRef, memo } from 'react';
 import { View, Text, StyleSheet, Animated, ViewStyle } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
-import { Spacing, Typography, BorderRadius } from '../constants/theme';
 
 type IntentType = 'message' | 'image' | 'file' | 'web_search';
 
@@ -16,9 +8,9 @@ interface ThinkingIndicatorProps {
   userMessage?: string;
   completed?: boolean;
   style?: ViewStyle;
+  mode?: string;
 }
 
-// Keywords mapped to intents
 const INTENT_KEYWORDS: Record<IntentType, string[]> = {
   image: ['logo', 'image', 'img', 'design', 'picture', 'photo', 'draw', 'generate', 'create image'],
   file: ['file', 'pdf', 'document', 'spreadsheet', 'excel', 'csv', 'download', 'chatbot', 'html', 'code', 'create', 'build', 'write'],
@@ -29,209 +21,97 @@ const INTENT_KEYWORDS: Record<IntentType, string[]> = {
 function detectIntent(message?: string): IntentType {
   if (!message) return 'message';
   const msg = message.toLowerCase();
-  
   for (const [intent, keywords] of Object.entries(INTENT_KEYWORDS)) {
-    if (keywords.some(kw => msg.includes(kw))) {
-      return intent as IntentType;
-    }
+    if (keywords.some(kw => msg.includes(kw))) return intent as IntentType;
   }
   return 'message';
 }
 
-function getStatusText(
-  intent: IntentType,
-  message?: string,
-  completed?: boolean
-): string {
-  const pastTense: Record<IntentType, string> = {
-    image: 'Image created ✨',
-    file: 'File ready 📄',
-    web_search: 'Search completed 🔍',
-    message: 'Done ✓',
-  };
-
-  const presentTense: Record<IntentType, string | ((msg?: string) => string)> = {
+function getStatusText(intent: IntentType, message?: string, completed?: boolean): string {
+  if (completed) {
+    const done: Record<IntentType, string> = {
+      image: 'Image created ✨', file: 'File ready 📄', web_search: 'Search completed 🔍', message: 'Done',
+    };
+    return done[intent];
+  }
+  const present: Record<IntentType, string | ((msg?: string) => string)> = {
     image: 'Creating image...',
     file: 'Analyzing...',
     web_search: (msg) => {
-      const query = msg?.replace(/search|find|look up|google|browse|web/gi, '').trim();
-      return query ? `Searching for ${query}...` : 'Searching web...';
+      const q = msg?.replace(/search|find|look up|google|browse|web/gi, '').trim();
+      return q ? `Searching for ${q}...` : 'Searching web...';
     },
-    message: 'Thinking...',
+    message: 'Analyzing...',
   };
-
-  if (completed) {
-    if (intent === 'image' && message?.toLowerCase().includes('logo')) {
-      return 'Logo created ✨';
-    }
-    return pastTense[intent];
-  }
-
-  const text = presentTense[intent];
-  return typeof text === 'function' ? text(message) : text;
+  const t = present[intent];
+  return typeof t === 'function' ? t(message) : t;
 }
 
-function getIcon(intent: IntentType): keyof typeof Ionicons.glyphMap {
-  const iconMap: Record<IntentType, keyof typeof Ionicons.glyphMap> = {
-    image: 'image',
-    file: 'code-slash',
-    web_search: 'search',
-    message: 'bulb',
-  };
-  return iconMap[intent];
-}
-
-// Memoized animated thinking component
-const ThinkingAnimation = memo(function ThinkingAnimation({
-  text,
-  icon,
-  color,
-  animate,
-}: {
-  text: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  color: string;
-  animate: boolean;
-}) {
-  const { colors } = useTheme();
-  const pulseAnim = useRef(new Animated.Value(0.6)).current;
-  const rotateAnim = useRef(new Animated.Value(0)).current;
-  const animationRef = useRef<Animated.CompositeAnimation | null>(null);
+// Simple 3-dot typing animation — no background, no container
+const ThinkingDots = memo(function ThinkingDots({ color }: { color: string }) {
+  const dot1 = useRef(new Animated.Value(0)).current;
+  const dot2 = useRef(new Animated.Value(0)).current;
+  const dot3 = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    if (!animate) {
-      pulseAnim.setValue(1);
-      rotateAnim.setValue(0);
-      animationRef.current?.stop();
-      return;
-    }
-
-    animationRef.current = Animated.parallel([
+    const animate = (dot: Animated.Value, delay: number) =>
       Animated.loop(
         Animated.sequence([
-          Animated.timing(pulseAnim, {
-            toValue: 1,
-            duration: 800,
-            useNativeDriver: true,
-          }),
-          Animated.timing(pulseAnim, {
-            toValue: 0.6,
-            duration: 800,
-            useNativeDriver: true,
-          }),
+          Animated.delay(delay),
+          Animated.timing(dot, { toValue: 1, duration: 350, useNativeDriver: true }),
+          Animated.timing(dot, { toValue: 0, duration: 350, useNativeDriver: true }),
+          Animated.delay(700 - delay),
         ])
-      ),
-      Animated.loop(
-        Animated.timing(rotateAnim, {
-          toValue: 1,
-          duration: 2000,
-          useNativeDriver: true,
-        })
-      ),
-    ]);
-
-    animationRef.current.start();
-
-    return () => {
-      animationRef.current?.stop();
-    };
-  }, [animate]);
-
-  const rotation = rotateAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
-  });
+      );
+    const a1 = animate(dot1, 0);
+    const a2 = animate(dot2, 200);
+    const a3 = animate(dot3, 400);
+    a1.start(); a2.start(); a3.start();
+    return () => { a1.stop(); a2.stop(); a3.stop(); };
+  }, []);
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.surface }]}>
-      <Animated.View 
-        style={[
-          styles.iconContainer,
-          { 
-            opacity: pulseAnim,
-            transform: [{ rotate: rotation }],
-          },
-        ]}
-      >
-        <Ionicons name={icon} size={20} color={color} />
-      </Animated.View>
-      
-      <Text style={[styles.text, { color: colors.text }]}>
-        {text}
-      </Text>
-      
-      {animate && (
-        <View style={styles.dotsContainer}>
-          <Animated.View style={[styles.dot, { backgroundColor: color, opacity: pulseAnim }]} />
-          <Animated.View style={[styles.dot, { backgroundColor: color, opacity: pulseAnim }]} />
-          <Animated.View style={[styles.dot, { backgroundColor: color, opacity: pulseAnim }]} />
-        </View>
-      )}
+    <View style={dotStyles.row}>
+      {[dot1, dot2, dot3].map((dot, i) => (
+        <Animated.View
+          key={i}
+          style={[dotStyles.dot, { backgroundColor: color, opacity: dot }]}
+        />
+      ))}
     </View>
   );
 });
 
-export function ThinkingIndicator({
-  userMessage = '',
-  completed = false,
-  style,
-}: ThinkingIndicatorProps) {
+const dotStyles = StyleSheet.create({
+  row: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  dot: { width: 6, height: 6, borderRadius: 3 },
+});
+
+export function ThinkingIndicator({ userMessage = '', completed = false, style }: ThinkingIndicatorProps) {
   const { colors } = useTheme();
   const intent = detectIntent(userMessage);
   const text = getStatusText(intent, userMessage, completed);
-  const icon = getIcon(intent);
-  const indicatorColor = completed ? colors.success : colors.primary;
+  const dotColor = colors.textSecondary || '#888';
 
   return (
     <View style={[styles.wrapper, style]}>
-      <ThinkingAnimation 
-        text={text} 
-        icon={icon}
-        color={indicatorColor} 
-        animate={!completed} 
-      />
+      <Text style={[styles.text, { color: colors.textSecondary }]}>{text}</Text>
+      {!completed && <ThinkingDots color={dotColor} />}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   wrapper: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs,
-    alignItems: 'flex-start',
-  },
-  container: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 6,
-    paddingHorizontal: 0,
-    backgroundColor: 'transparent',
-    minHeight: 36,
-  },
-  iconContainer: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: 'transparent',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: Spacing.sm,
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
   },
   text: {
-    ...Typography.body,
-    flex: 1,
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '500',
-  },
-  dotsContainer: {
-    flexDirection: 'row',
-    gap: 4,
-    marginLeft: Spacing.xs,
-  },
-  dot: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
+    fontStyle: 'italic',
   },
 });
-

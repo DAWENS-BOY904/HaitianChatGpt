@@ -708,6 +708,29 @@ export default function HomeScreen() {
   const handleSend = async () => {
     if ((!inputText.trim() && selectedMedia.length === 0) || sending) return;
 
+    // Auto-convert large pastes (>4000 chars) to a txt file attachment
+    let autoTxtFile: MediaFile | null = null;
+    let textToSend = inputText;
+    if (inputText.length > 4000 && selectedMedia.length === 0) {
+      try {
+        const fileName = `paste_${Date.now()}.txt`;
+        const fileUri = `${FileSystem.documentDirectory}${fileName}`;
+        await FileSystem.writeAsStringAsync(fileUri, inputText, {
+          encoding: FileSystem.EncodingType.UTF8,
+        });
+        autoTxtFile = {
+          type: 'document',
+          uri: fileUri,
+          name: fileName,
+          mimeType: 'text/plain',
+          size: inputText.length,
+        };
+        textToSend = `[Attached file: ${fileName}]\n\n${inputText.slice(0, 200)}...`;
+      } catch (e) {
+        // fallback: just truncate
+        textToSend = inputText.slice(0, 4000);
+      }
+    }
     if (!editingMessageId && !canSendMessage() && sessionBonusMessages <= 0) {
       if (!user) {
         showAlert(
@@ -743,8 +766,8 @@ export default function HomeScreen() {
     setSending(true);
     setGenerating(true);
     
-    const text = inputText;
-    const media = [...selectedMedia];
+    const text = autoTxtFile ? textToSend : inputText;
+    const media = autoTxtFile ? [autoTxtFile, ...selectedMedia] : [...selectedMedia];
     const editingId = editingMessageId;
     
     setInputText('');
@@ -1578,8 +1601,7 @@ export default function HomeScreen() {
               onChangeText={(txt) => {
                 setInputText(txt);
                 setCodeLangChips(/```\w*$/.test(txt));
-              }}
-              multiline
+              }}              multiline
               maxLength={4000}
               editable={!sending && !isRecording && !isProcessing}
               returnKeyType="default"
