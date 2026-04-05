@@ -1801,4 +1801,3 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-hello ai when i ask the ai for a image its send link but for the link only if user ask to send it in link the ai must display the image in home page clear and open in imageviewer modal real no demo make its better fix ai creation file and detect pipe-delimited markdown table syntax in AI responses (| col | col |) and render them as native React Native tables with ScrollView horizontal scroll, alternating row background colors, and bold header row.
