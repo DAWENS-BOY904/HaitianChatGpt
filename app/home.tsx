@@ -1809,3 +1809,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
+hello ai can you dont skip: please make change In StreamingCodeBlock and StreamingText, slow down the streaming animation for code blocks to match a natural reading pace — add a configurable delay of 15-25ms per character with proper character-by-character rendering and a blinking cursor at the end of the last typed line.In home, audit and fix the voice transcribe mic button so it reliably triggers recording on tap — ensure the toggleRecording function is properly connected, permissions are requested, and the button state transitions correctly between idle, recording, and processing states. In ToolsModal, redesign the file upload section with a better format: show accepted file types as colored chips, add a visual upload zone, display file size limits, and show a preview thumbnail after selection with file name and size displayed cleanly.
