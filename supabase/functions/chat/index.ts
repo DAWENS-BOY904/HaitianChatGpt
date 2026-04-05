@@ -640,7 +640,7 @@ Example format:
 STEP 4: AFTER CODE (MANDATORY FOLLOW-UP)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-You MUST add this section:
+Only if require depend the conversation not all time You MUST add this section if Require:
 
 🧠 What this DOES:
 ✓ [Explanation 1]
