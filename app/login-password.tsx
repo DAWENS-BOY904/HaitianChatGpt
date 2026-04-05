@@ -56,6 +56,29 @@ export default function LoginPasswordScreen() {
     });
   };
 
+  const handleForgotPassword = async () => {
+    if (!email?.trim()) {
+      showAlert('Error', 'Please go back and enter your email address first');
+      return;
+    }
+    try {
+      const supabase = (await import('@/template')).getSupabaseClient();
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: 'haitianchatgpt://reset-password',
+      });
+      if (error) {
+        showAlert('Error', error.message);
+      } else {
+        showAlert(
+          'Check your email',
+          `We sent a password reset link to ${email}. Check your inbox and follow the instructions.`
+        );
+      }
+    } catch (e: any) {
+      showAlert('Error', e?.message || 'Failed to send reset email');
+    }
+  };
+
   const styles = StyleSheet.create({
     container: {
       flex: 1,
@@ -234,6 +257,16 @@ export default function LoginPasswordScreen() {
         >
           <Text style={styles.continueButtonText}>
             {operationLoading ? 'Logging in...' : 'Continue'}
+          </Text>
+        </TouchableOpacity>
+
+        {/* Forgot Password */}
+        <TouchableOpacity
+          onPress={handleForgotPassword}
+          style={{ alignItems: 'center', marginBottom: Spacing.lg }}
+        >
+          <Text style={{ ...Typography.body, color: colors.text, textDecorationLine: 'underline', fontSize: 15 }}>
+            Forgot password?
           </Text>
         </TouchableOpacity>
 

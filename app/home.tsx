@@ -1809,4 +1809,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-hello my beatiful ai dont skip:Implement real Apple Sign In in app/login.tsx using expo-apple-authentication — replace the current placeholder with a native Apple auth flow using nonce generation, Apple identity token, and Supabase signInWithIdToken to create or sign in a user on iOS devices.Add a 'Forgot password?' link in app/login-password.tsx that sends a password reset email via Supabase auth.resetPasswordForEmail, then navigates to a confirmation screen telling the user to check their email.
+

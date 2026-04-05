@@ -72,7 +72,71 @@ export default function LoginScreen() {
   };
 
   const handleAppleSignIn = async () => {
-    showAlert('Coming Soon', 'Apple Sign In will be available soon');
+    if (Platform.OS !== 'ios') {
+      showAlert('Not Available', 'Apple Sign In is only available on iOS devices.');
+      return;
+    }
+    try {
+      const AppleAuthentication = await import('expo-apple-authentication');
+      const available = await AppleAuthentication.isAvailableAsync();
+      if (!available) {
+        showAlert('Not Available', 'Apple Sign In is not available on this device.');
+        return;
+      }
+
+      // Generate a random nonce
+      const generateNonce = (length: number) => {
+        const charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+        let nonce = '';
+        const randomValues = new Uint8Array(length);
+        for (let i = 0; i < length; i++) {
+          nonce += charset[Math.floor(Math.random() * charset.length)];
+        }
+        return nonce;
+      };
+
+      const rawNonce = generateNonce(32);
+
+      // SHA256 hash the nonce for Apple
+      const digestNonce = async (nonce: string): Promise<string> => {
+        const msgBuffer = new TextEncoder().encode(nonce);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+      };
+
+      const hashedNonce = await digestNonce(rawNonce);
+
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+        nonce: hashedNonce,
+      });
+
+      if (!credential.identityToken) {
+        showAlert('Error', 'Apple Sign In failed: no identity token returned.');
+        return;
+      }
+
+      const { getSupabaseClient } = await import('@/template');
+      const supabase = getSupabaseClient();
+
+      const { error } = await supabase.auth.signInWithIdToken({
+        provider: 'apple',
+        token: credential.identityToken,
+        nonce: rawNonce,
+      });
+
+      if (error) {
+        showAlert('Sign In Failed', error.message);
+      }
+      // AuthRouter will handle navigation on success
+    } catch (e: any) {
+      if (e?.code === 'ERR_REQUEST_CANCELED') return; // user cancelled
+      showAlert('Error', e?.message || 'Apple Sign In failed');
+    }
   };
 
   const styles = StyleSheet.create({
