@@ -1801,3 +1801,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
+Update supabase/functions/chat/index.ts and _shared/ai-providers.ts so that when the AI generates an image, it always returns the image URL in the imageUrl field (not embedded in text), and update MessageItem.tsx to display it cleanly with a loading skeleton before the image loads.
