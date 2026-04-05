@@ -1,5 +1,4 @@
-// StreamingCodeBlock.tsx - Code block with real-time typing animation
-import React, { useState, useEffect, useRef, memo } from 'react';
+add streaming code on that with icon and preview import React, { useState, memo, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -7,351 +6,875 @@ import {
   TouchableOpacity,
   ScrollView,
   Platform,
+  Modal,
+  SafeAreaView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
-import { useAlert } from '@/template';
+import { WebView } from 'react-native-webview';
 import { BorderRadius } from '../constants/theme';
 
-interface StreamingCodeBlockProps {
+interface CodeBlockProps {
   code: string;
   language?: string;
-  streaming?: boolean;
-  speed?: number; // lines per frame
+  /** If provided, the preview tab renders this HTML string instead of code */
+  previewHtml?: string;
+  /** file name shown in header */
+  fileName?: string;
+  /** Optional API version badge e.g. "Stripe v2025-03-31" */
+  apiVersion?: string;
 }
 
-/**
- * PRODUCTION-READY STREAMING CODE BLOCK
- * Displays code with syntax highlighting and real-time typing animation
- * 
- * Features:
- * - Line-by-line streaming animation
- * - Scrollable while streaming
- * - Dynamic syntax detection
- * - Copy functionality
- * - Production-quality syntax highlighting
- */
-export const StreamingCodeBlock = memo(function StreamingCodeBlock({
-  code,
-  language = 'code',
-  streaming = false,
-  speed = 1, // 1 line per frame
-}: StreamingCodeBlockProps) {
-  const { showAlert } = useAlert();
-  const [copied, setCopied] = useState(false);
-  const [displayedCode, setDisplayedCode] = useState('');
-  const scrollViewRef = useRef<ScrollView>(null);
-  const currentLine = useRef(0);
-  const frameRef = useRef<number>();
+/* ────────────── DRACULA PALETTE ────────────── */
+const D = {
+  bg:          '#282A36',
+  header:      '#21222C',
+  border:      '#44475A',
+  keyword:     '#FF79C6',
+  string:      '#F1FA8C',
+  comment:     '#6272A4',
+  number:      '#BD93F9',
+  operator:    '#FF79C6',
+  tag:         '#FF5555',
+  attr:        '#50FA7B',
+  attrVal:     '#F1FA8C',
+  type:        '#8BE9FD',
+  plain:       '#F8F8F2',
+  lineNum:     '#6272A4',
+  purple:      '#BD93F9',
+  placeholder: '#FFB86C',   // orange for API key placeholders
+  placeholderBg: 'rgba(255,184,108,0.15)',
+};
 
-  // Auto-detect language from code content
-  const detectedLanguage = language === 'code' ? detectLanguage(code) : language;
+/* ────────────── PLACEHOLDER PATTERNS ────────────── */
+const PLACEHOLDER_PATTERNS = [
+  /\bYOUR_API_KEY\b/g,
+  /\bYOUR_SECRET_KEY\b/g,
+  /\bYOUR_PUBLIC_KEY\b/g,
+  /\bAPI_KEY_HERE\b/g,
+  /\bSECRET_KEY_HERE\b/g,
+  /\bYOUR_TOKEN\b/g,
+  /\bYOUR_ACCESS_TOKEN\b/g,
+  /\bINSERT_API_KEY\b/g,
+  /\bPUT_YOUR_KEY_HERE\b/g,
+  /\bYOUR_OPENAI_KEY\b/g,
+  /\bYOUR_STRIPE_KEY\b/g,
+  /sk_test_[A-Za-z0-9]{4,}/g,
+  /sk_live_[A-Za-z0-9]{4,}/g,
+  /rk_test_[A-Za-z0-9]{4,}/g,
+  /pk_test_[A-Za-z0-9]{4,}/g,
+  /re_[A-Za-z0-9]{4,}/g,
+];
 
-  useEffect(() => {
-    if (!streaming || !code) {
-      setDisplayedCode(code);
-      return;
+function isPlaceholder(text: string): boolean {
+  return PLACEHOLDER_PATTERNS.some(re => { re.lastIndex = 0; return re.test(text); });
+}
+
+/* ────────────── TOKENISER ────────────── */
+type Token = { text: string; color: string; isPlaceholder?: boolean };
+
+function tokenize(line: string, lang: string): Token[] {
+  const l = (lang || '').toLowerCase();
+
+  // Helper: wrap tokens through placeholder detection
+  function checkPlaceholders(tokens: Token[]): Token[] {
+    const result: Token[] = [];
+    for (const token of tokens) {
+      // Split on placeholder patterns
+      let remaining = token.text;
+      let lastIdx = 0;
+      const combined = new RegExp(PLACEHOLDER_PATTERNS.map(r => r.source).join('|'), 'g');
+      let m: RegExpExecArray | null;
+      const parts: Token[] = [];
+      while ((m = combined.exec(remaining)) !== null) {
+        if (m.index > lastIdx) {
+          parts.push({ text: remaining.slice(lastIdx, m.index), color: token.color });
+        }
+        parts.push({ text: m[0], color: D.placeholder, isPlaceholder: true });
+        lastIdx = combined.lastIndex;
+      }
+      if (lastIdx < remaining.length) {
+        parts.push({ text: remaining.slice(lastIdx), color: token.color });
+      }
+      result.push(...(parts.length > 0 ? parts : [token]));
     }
+    return result;
+  }
 
-    const lines = code.split('\n');
-    currentLine.current = 0;
-    setDisplayedCode('');
-
-    const animate = () => {
-      if (currentLine.current < lines.length) {
-        const nextLine = currentLine.current + speed;
-        const displayLines = lines.slice(0, Math.min(nextLine, lines.length));
-        setDisplayedCode(displayLines.join('\n'));
-        currentLine.current = nextLine;
-        
-        // Auto-scroll to bottom
-        setTimeout(() => {
-          scrollViewRef.current?.scrollToEnd({ animated: true });
-        }, 50);
-        
-        frameRef.current = requestAnimationFrame(animate);
+  if (['html', 'xml'].includes(l)) {
+    const tokens: Token[] = [];
+    const re = /(<!--[\s\S]*?-->)|(<\/?[\w-]+)(\/?>)?|(\s[\w-:]+)(\s*=\s*)("[^"]*"|'[^']*')/g;
+    let last = 0, m: RegExpExecArray | null;
+    while ((m = re.exec(line)) !== null) {
+      if (m.index > last) tokens.push({ text: line.slice(last, m.index), color: D.plain });
+      if (m[1]) tokens.push({ text: m[1], color: D.comment });
+      else {
+        if (m[2]) tokens.push({ text: m[2], color: D.tag });
+        if (m[3]) tokens.push({ text: m[3], color: D.tag });
+        if (m[4]) tokens.push({ text: m[4], color: D.attr });
+        if (m[5]) tokens.push({ text: m[5], color: D.plain });
+        if (m[6]) tokens.push({ text: m[6], color: D.attrVal });
       }
-    };
+      last = re.lastIndex;
+    }
+    if (last < line.length) tokens.push({ text: line.slice(last), color: D.plain });
+    return checkPlaceholders(tokens);
+  }
 
-    frameRef.current = requestAnimationFrame(animate);
+  if (['js','ts','tsx','jsx','javascript','typescript'].includes(l)) {
+    const tokens: Token[] = [];
+    const re = /(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`[^`]*`)|(\b(?:const|let|var|function|return|import|export|default|from|if|else|for|while|class|extends|new|typeof|instanceof|async|await|try|catch|finally|throw|of|in|switch|case|break|continue|void|null|undefined|true|false|this|super|type|interface|enum)\b)|(\b[A-Z][a-zA-Z0-9_]*\b)|(\b\d+(?:\.\d+)?\b)/g;
+    let last = 0, m: RegExpExecArray | null;
+    while ((m = re.exec(line)) !== null) {
+      if (m.index > last) tokens.push({ text: line.slice(last, m.index), color: D.plain });
+      if (m[1])      tokens.push({ text: m[1], color: D.comment });
+      else if (m[2]) tokens.push({ text: m[2], color: D.string });
+      else if (m[3]) tokens.push({ text: m[3], color: D.keyword });
+      else if (m[4]) tokens.push({ text: m[4], color: D.type });
+      else if (m[5]) tokens.push({ text: m[5], color: D.number });
+      last = re.lastIndex;
+    }
+    if (last < line.length) tokens.push({ text: line.slice(last), color: D.plain });
+    return checkPlaceholders(tokens);
+  }
 
-    return () => {
-      if (frameRef.current) {
-        cancelAnimationFrame(frameRef.current);
-      }
-    };
-  }, [code, streaming, speed]);
+  if (['css','scss'].includes(l)) {
+    const tokens: Token[] = [];
+    const re = /(\/\*[\s\S]*?\*\/)|([.#]?[\w-]+\s*(?={))|([a-z-]+\s*(?=:))|(\b\d+(?:px|em|rem|%|vh|vw|s|ms)?\b)|("[^"]*"|'[^']*')/g;
+    let last = 0, m: RegExpExecArray | null;
+    while ((m = re.exec(line)) !== null) {
+      if (m.index > last) tokens.push({ text: line.slice(last, m.index), color: D.plain });
+      if (m[1])      tokens.push({ text: m[1], color: D.comment });
+      else if (m[2]) tokens.push({ text: m[2], color: D.tag });
+      else if (m[3]) tokens.push({ text: m[3], color: D.attr });
+      else if (m[4]) tokens.push({ text: m[4], color: D.number });
+      else if (m[5]) tokens.push({ text: m[5], color: D.string });
+      last = re.lastIndex;
+    }
+    if (last < line.length) tokens.push({ text: line.slice(last), color: D.plain });
+    return checkPlaceholders(tokens);
+  }
+
+  if (['python','py'].includes(l)) {
+    const tokens: Token[] = [];
+    const re = /(#[^\n]*)|("""[\s\S]*?"""|'''[\s\S]*?'''|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')|(\b(?:def|class|import|from|return|if|elif|else|for|while|in|not|and|or|is|True|False|None|lambda|with|as|try|except|finally|raise|pass|break|continue|yield)\b)|(\b[A-Z][a-zA-Z0-9_]*\b)|(\b\d+(?:\.\d+)?\b)/g;
+    let last = 0, m: RegExpExecArray | null;
+    while ((m = re.exec(line)) !== null) {
+      if (m.index > last) tokens.push({ text: line.slice(last, m.index), color: D.plain });
+      if (m[1])      tokens.push({ text: m[1], color: D.comment });
+      else if (m[2]) tokens.push({ text: m[2], color: D.string });
+      else if (m[3]) tokens.push({ text: m[3], color: D.keyword });
+      else if (m[4]) tokens.push({ text: m[4], color: D.type });
+      else if (m[5]) tokens.push({ text: m[5], color: D.number });
+      last = re.lastIndex;
+    }
+    if (last < line.length) tokens.push({ text: line.slice(last), color: D.plain });
+    return checkPlaceholders(tokens);
+  }
+
+  // Generic fallback — still check placeholders
+  return checkPlaceholders([{ text: line, color: D.plain }]);
+}
+
+/* ────────────── PLACEHOLDER WARNING BADGE ────────────── */
+function hasApiKeyPlaceholders(code: string): boolean {
+  return PLACEHOLDER_PATTERNS.some(re => { re.lastIndex = 0; return re.test(code); });
+}
+
+/* ────────────── FULL-SCREEN MODAL ────────────── */
+interface FullScreenProps {
+  visible: boolean;
+  code: string;
+  language: string;
+  previewHtml?: string;
+  fileName?: string;
+  apiVersion?: string;
+  onClose: () => void;
+}
+
+const FullScreenModal = memo(function FullScreenModal({
+  visible, code, language, previewHtml, fileName, apiVersion, onClose,
+}: FullScreenProps) {
+  const [tab, setTab] = useState<'code' | 'preview'>('code');
+  const [wordWrap, setWordWrap] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const canPreview = ['html', 'htm'].includes((language || '').toLowerCase()) || Boolean(previewHtml);
+  const htmlToPreview = previewHtml || code;
+  const hasPlaceholders = hasApiKeyPlaceholders(code);
 
   const onCopy = async () => {
     await Clipboard.setStringAsync(code);
     setCopied(true);
-    showAlert('Copied', 'Code copied to clipboard');
-    setTimeout(() => setCopied(false), 1200);
+    setTimeout(() => setCopied(false), 1500);
   };
 
-  const tokens = highlightSyntax(displayedCode, detectedLanguage);
+  const rawLines = code.split('\n');
 
   return (
-    <View style={styles.container}>
-      {/* HEADER */}
-      <View style={styles.header}>
-        <View style={styles.languageTag}>
-          <Ionicons name={getLanguageIcon(detectedLanguage)} size={14} color="#6A737D" />
-          <Text style={styles.lang}>{detectedLanguage}</Text>
-        </View>
-        <TouchableOpacity onPress={onCopy} style={styles.copyBtn} activeOpacity={0.7}>
-          <Ionicons
-            name={copied ? 'checkmark' : 'copy-outline'}
-            size={14}
-            color={copied ? '#10A37F' : '#6A737D'}
-          />
-          <Text style={[styles.copyText, copied && styles.copied]}>
-            {copied ? 'Copied' : 'Copy'}
-          </Text>
-        </TouchableOpacity>
-      </View>
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <SafeAreaView style={[fsStyles.container]}>
+        {/* Header */}
+        <View style={fsStyles.header}>
+          <TouchableOpacity onPress={onClose} style={fsStyles.iconBtn}>
+            <Ionicons name="close" size={22} color="#FFF" />
+          </TouchableOpacity>
 
-      {/* CODE - Scrollable */}
-      <ScrollView
-        ref={scrollViewRef}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        showsVerticalScrollIndicator={true}
-        style={styles.scrollContainer}
-        contentContainerStyle={styles.codeContent}
-        nestedScrollEnabled
-      >
-        <Text style={styles.codeText}>
-          {tokens.map((t, i) => (
-            <Text key={i} style={{ color: t.color }}>
-              {t.text}
+          <Text style={fsStyles.fileName} numberOfLines={1}>
+            {fileName || language || 'code'}
+          </Text>
+
+          <View style={fsStyles.headerRight}>
+            <TouchableOpacity style={fsStyles.iconBtn} onPress={() => {}}>
+              <Ionicons name="expand-outline" size={18} color="#AAA" />
+            </TouchableOpacity>
+
+            <TouchableOpacity style={fsStyles.iconBtn} onPress={onCopy}>
+              <Ionicons name={copied ? 'checkmark' : 'copy-outline'} size={18} color={copied ? '#50FA7B' : '#AAA'} />
+            </TouchableOpacity>
+
+            {tab === 'code' && (
+              <TouchableOpacity
+                style={[fsStyles.iconBtn, wordWrap && { backgroundColor: '#44475A' }]}
+                onPress={() => setWordWrap(w => !w)}
+              >
+                <Ionicons name="return-down-forward-outline" size={18} color={wordWrap ? '#BD93F9' : '#AAA'} />
+              </TouchableOpacity>
+            )}
+
+            {canPreview && (
+              <View style={fsStyles.tabs}>
+                <TouchableOpacity
+                  style={[fsStyles.tab, tab === 'code' && fsStyles.tabActive]}
+                  onPress={() => setTab('code')}
+                >
+                  <Text style={[fsStyles.tabText, tab === 'code' && fsStyles.tabTextActive]}>Code</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[fsStyles.tab, tab === 'preview' && fsStyles.tabActive]}
+                  onPress={() => setTab('preview')}
+                >
+                  <Text style={[fsStyles.tabText, tab === 'preview' && fsStyles.tabTextActive]}>Preview</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        </View>
+
+        {/* API version badge */}
+        {apiVersion ? (
+          <View style={fsStyles.apiBadgeRow}>
+            <View style={fsStyles.apiBadge}>
+              <Ionicons name="cube-outline" size={12} color="#BD93F9" />
+              <Text style={fsStyles.apiBadgeText}>{apiVersion}</Text>
+            </View>
+          </View>
+        ) : null}
+
+        {/* Placeholder warning */}
+        {hasPlaceholders && tab === 'code' && (
+          <View style={fsStyles.placeholderWarning}>
+            <Ionicons name="warning-outline" size={14} color={D.placeholder} />
+            <Text style={fsStyles.placeholderWarningText}>
+              Replace highlighted API keys before using this code
             </Text>
-          ))}
-        </Text>
-      </ScrollView>
-    </View>
+          </View>
+        )}
+
+        {/* Content */}
+        {tab === 'preview' && canPreview ? (
+          <WebView
+            source={{ html: htmlToPreview }}
+            style={{ flex: 1, backgroundColor: '#FFF' }}
+            originWhitelist={['*']}
+            javaScriptEnabled
+            domStorageEnabled
+          />
+        ) : (
+          <ScrollView
+            style={{ flex: 1, backgroundColor: D.bg }}
+            nestedScrollEnabled
+            showsVerticalScrollIndicator
+            indicatorStyle="white"
+          >
+            <ScrollView
+              horizontal={!wordWrap}
+              showsHorizontalScrollIndicator={!wordWrap}
+              indicatorStyle="white"
+              decelerationRate="fast"
+              contentContainerStyle={[
+                fsStyles.codeContent,
+                wordWrap && { flexShrink: 1, width: '100%' },
+              ]}
+            >
+              {/* Line numbers */}
+              <View style={fsStyles.lineNumbers}>
+                {rawLines.map((_, i) => (
+                  <Text key={i} style={fsStyles.lineNum}>{i + 1}</Text>
+                ))}
+              </View>
+              {/* Code */}
+              <View style={fsStyles.codeLines}>
+                {rawLines.map((line, i) => (
+                  <View key={i} style={fsStyles.codeLine}>
+                    {tokenize(line, language).map((t, ti) => (
+                      t.isPlaceholder ? (
+                        <View key={ti} style={fsStyles.placeholderToken}>
+                          <Text style={[fsStyles.codeText, { color: t.color }, wordWrap && { flexWrap: 'wrap' }]}>
+                            {t.text}
+                          </Text>
+                        </View>
+                      ) : (
+                        <Text
+                          key={ti}
+                          style={[fsStyles.codeText, { color: t.color }, wordWrap && { flexWrap: 'wrap' }]}
+                        >
+                          {t.text}
+                        </Text>
+                      )
+                    ))}
+                  </View>
+                ))}
+              </View>
+            </ScrollView>
+          </ScrollView>
+        )}
+      </SafeAreaView>
+    </Modal>
   );
 });
 
-/* ---------------- LANGUAGE DETECTION ---------------- */
+/* ────────────── MAIN CODE BLOCK ────────────── */
+export const CodeBlock = memo(function CodeBlock({
+  code,
+  language = 'code',
+  previewHtml,
+  fileName,
+  apiVersion,
+}: CodeBlockProps) {
+  const [copied, setCopied] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const [wordWrap, setWordWrap] = useState(false);
+  const [tab, setTab] = useState<'code' | 'preview'>('code');
+  const [fullScreen, setFullScreen] = useState(false);
 
-function detectLanguage(code: string): string {
-  const lowerCode = code.toLowerCase().trim();
-  
-  // React/JSX/TSX
-  if (lowerCode.includes('import react') || lowerCode.includes('<view') || lowerCode.includes('export default')) {
-    if (lowerCode.includes(': react.fc') || lowerCode.includes('interface ')) return 'tsx';
-    return 'jsx';
-  }
-  
-  // TypeScript
-  if (lowerCode.includes('interface ') || lowerCode.includes('type ') || lowerCode.includes(': string')) {
-    return 'typescript';
-  }
-  
-  // HTML
-  if (lowerCode.includes('<!doctype') || lowerCode.includes('<html')) return 'html';
-  
-  // CSS
-  if (lowerCode.includes('{') && (lowerCode.includes('color:') || lowerCode.includes('margin:'))) return 'css';
-  
-  // Python
-  if (lowerCode.includes('def ') || lowerCode.includes('import ') || lowerCode.includes('print(')) return 'python';
-  
-  // Bash
-  if (lowerCode.startsWith('#!') || lowerCode.includes('npm ') || lowerCode.includes('yarn ')) return 'bash';
-  
-  // JSON
-  if (lowerCode.startsWith('{') && lowerCode.includes('":')) return 'json';
-  
-  // JavaScript
-  if (lowerCode.includes('const ') || lowerCode.includes('function ') || lowerCode.includes('=>')) return 'javascript';
-  
-  return 'code';
-}
+  const onCopy = useCallback(async () => {
+    await Clipboard.setStringAsync(code);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }, [code]);
 
-function getLanguageIcon(language: string): any {
-  switch (language.toLowerCase()) {
-    case 'tsx':
-    case 'jsx':
-    case 'typescript':
-    case 'javascript':
-      return 'logo-react';
-    case 'python':
-      return 'logo-python';
-    case 'html':
-      return 'logo-html5';
-    case 'css':
-      return 'logo-css3';
-    case 'json':
-      return 'document-text-outline';
-    case 'bash':
-      return 'terminal-outline';
-    default:
-      return 'code-slash-outline';
-  }
-}
+  const canPreview = ['html', 'htm'].includes((language || '').toLowerCase()) || Boolean(previewHtml);
+  const htmlToPreview = previewHtml || code;
+  const hasPlaceholders = hasApiKeyPlaceholders(code);
 
-/* ---------------- SYNTAX HIGHLIGHTING ---------------- */
+  const rawLines = code.split('\n');
+  const lineCount = rawLines.length;
+  const isLong = lineCount > 12;
+  const displayLines = !expanded && isLong ? rawLines.slice(0, 12) : rawLines;
 
-function highlightSyntax(code: string, language: string) {
-  const tokens: { text: string; color: string }[] = [];
-  
-  // Enhanced syntax highlighting for multiple languages
-  if (language === 'tsx' || language === 'jsx' || language === 'typescript' || language === 'javascript') {
-    const regex =
-      /(\/\/.*?$|\/\*[\s\S]*?\*\/)|(import|export|const|let|var|function|class|interface|type|return|if|else|for|while|async|await|from|default)\b|(<\/?[A-Z][a-zA-Z0-9]*>?)|('[^']*'|"[^"]*"|`[^`]*`)|(\d+)/gm;
-    
-    let lastIndex = 0;
-    let match;
-    
-    while ((match = regex.exec(code)) !== null) {
-      if (match.index > lastIndex) {
-        tokens.push({ text: code.slice(lastIndex, match.index), color: '#24292e' });
-      }
-      
-      if (match[1]) tokens.push({ text: match[1], color: '#6A737D' }); // comment
-      else if (match[2]) tokens.push({ text: match[2], color: '#D73A49' }); // keyword
-      else if (match[3]) tokens.push({ text: match[3], color: '#22863A' }); // JSX tag
-      else if (match[4]) tokens.push({ text: match[4], color: '#032F62' }); // string
-      else if (match[5]) tokens.push({ text: match[5], color: '#005CC5' }); // number
-      
-      lastIndex = regex.lastIndex;
-    }
-    
-    if (lastIndex < code.length) {
-      tokens.push({ text: code.slice(lastIndex), color: '#24292e' });
-    }
-  } else if (language === 'html' || language === 'xml') {
-    const regex =
-      /(<!--[\s\S]*?-->)|(<\/?[a-zA-Z][^>\s]*)|([a-zA-Z-]+)(=)|("[^"]*"|'[^']*')/g;
-    
-    let lastIndex = 0;
-    let match;
-    
-    while ((match = regex.exec(code)) !== null) {
-      if (match.index > lastIndex) {
-        tokens.push({ text: code.slice(lastIndex, match.index), color: '#24292e' });
-      }
-      
-      if (match[1]) tokens.push({ text: match[1], color: '#6A737D' }); // comment
-      else if (match[2]) tokens.push({ text: match[2], color: '#D73A49' }); // tag
-      else if (match[3]) tokens.push({ text: match[3], color: '#6F42C1' }); // attr
-      else if (match[4]) tokens.push({ text: match[4], color: '#24292e' }); // =
-      else if (match[5]) tokens.push({ text: match[5], color: '#032F62' }); // string
-      
-      lastIndex = regex.lastIndex;
-    }
-    
-    if (lastIndex < code.length) {
-      tokens.push({ text: code.slice(lastIndex), color: '#24292e' });
-    }
-  } else if (language === 'python') {
-    const regex =
-      /(#.*?$)|(def|class|import|from|return|if|elif|else|for|while|try|except|with|as)\b|('[^']*'|"[^"]*")|(\d+)/gm;
-    
-    let lastIndex = 0;
-    let match;
-    
-    while ((match = regex.exec(code)) !== null) {
-      if (match.index > lastIndex) {
-        tokens.push({ text: code.slice(lastIndex, match.index), color: '#24292e' });
-      }
-      
-      if (match[1]) tokens.push({ text: match[1], color: '#6A737D' }); // comment
-      else if (match[2]) tokens.push({ text: match[2], color: '#D73A49' }); // keyword
-      else if (match[3]) tokens.push({ text: match[3], color: '#032F62' }); // string
-      else if (match[4]) tokens.push({ text: match[4], color: '#005CC5' }); // number
-      
-      lastIndex = regex.lastIndex;
-    }
-    
-    if (lastIndex < code.length) {
-      tokens.push({ text: code.slice(lastIndex), color: '#24292e' });
-    }
-  } else {
-    // Default: no highlighting
-    tokens.push({ text: code, color: '#24292e' });
-  }
-  
-  return tokens;
-}
+  return (
+    <>
+      <View style={styles.wrapper}>
 
-/* ---------------- STYLES ---------------- */
+        {/* ── API VERSION BADGE (above header) ── */}
+        {apiVersion ? (
+          <View style={styles.apiBadgeRow}>
+            <View style={styles.apiBadge}>
+              <Ionicons name="cube-outline" size={11} color="#BD93F9" />
+              <Text style={styles.apiBadgeText}>{apiVersion}</Text>
+            </View>
+          </View>
+        ) : null}
 
+        {/* ── PLACEHOLDER WARNING BADGE ── */}
+        {hasPlaceholders && tab === 'code' && (
+          <View style={styles.placeholderWarning}>
+            <Ionicons name="warning-outline" size={13} color={D.placeholder} />
+            <Text style={styles.placeholderWarningText}>
+              Replace highlighted placeholders with your real API keys
+            </Text>
+          </View>
+        )}
+
+        {/* ── HEADER ── */}
+        <View style={styles.header}>
+          {/* Mac dots */}
+          <View style={styles.dots}>
+            <View style={[styles.dot, { backgroundColor: '#FF5F57' }]} />
+            <View style={[styles.dot, { backgroundColor: '#FEBC2E' }]} />
+            <View style={[styles.dot, { backgroundColor: '#28C840' }]} />
+          </View>
+
+          <Text style={styles.langLabel}>{fileName || language}</Text>
+
+          {/* Right icons */}
+          <View style={styles.headerRight}>
+            {/* Full-screen expand */}
+            <TouchableOpacity
+              style={styles.iconBtn}
+              onPress={() => setFullScreen(true)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Ionicons name="expand-outline" size={15} color="#6272A4" />
+            </TouchableOpacity>
+
+            {/* Copy */}
+            <TouchableOpacity
+              style={styles.iconBtn}
+              onPress={onCopy}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Ionicons
+                name={copied ? 'checkmark-circle' : 'copy-outline'}
+                size={15}
+                color={copied ? '#50FA7B' : '#6272A4'}
+              />
+            </TouchableOpacity>
+
+            {/* Word wrap toggle */}
+            {tab === 'code' && (
+              <TouchableOpacity
+                style={[styles.iconBtn, wordWrap && { backgroundColor: '#44475A' }]}
+                onPress={() => setWordWrap(w => !w)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons
+                  name="return-down-forward-outline"
+                  size={15}
+                  color={wordWrap ? '#BD93F9' : '#6272A4'}
+                />
+              </TouchableOpacity>
+            )}
+
+            {/* Code / Preview tabs */}
+            {canPreview && (
+              <View style={styles.tabs}>
+                <TouchableOpacity
+                  style={[styles.tab, tab === 'code' && styles.tabActive]}
+                  onPress={() => setTab('code')}
+                >
+                  <Text style={[styles.tabText, tab === 'code' && styles.tabTextActive]}>Code</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.tab, tab === 'preview' && styles.tabActive]}
+                  onPress={() => setTab('preview')}
+                >
+                  <Text style={[styles.tabText, tab === 'preview' && styles.tabTextActive]}>Preview</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        </View>
+
+        {/* ── CONTENT ── */}
+        {tab === 'preview' && canPreview ? (
+          <View style={styles.previewContainer}>
+            <WebView
+              source={{ html: htmlToPreview }}
+              style={{ flex: 1, minHeight: 280, backgroundColor: '#FFF' }}
+              originWhitelist={['*']}
+              javaScriptEnabled
+              domStorageEnabled
+              scrollEnabled
+            />
+            <TouchableOpacity
+              style={styles.previewAllBtn}
+              onPress={() => setFullScreen(true)}
+            >
+              <Ionicons name="expand-outline" size={14} color="#FFF" />
+              <Text style={styles.previewAllText}>Preview All</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={[styles.scrollArea, expanded ? styles.scrollExpanded : styles.scrollCollapsed]}>
+            <ScrollView
+              style={{ flex: 1 }}
+              nestedScrollEnabled
+              showsVerticalScrollIndicator
+              indicatorStyle="white"
+              decelerationRate="fast"
+            >
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={!wordWrap}
+                persistentScrollbar={!wordWrap}
+                indicatorStyle="white"
+                decelerationRate={0.9}
+                bounces
+                contentContainerStyle={[
+                  styles.hContent,
+                  wordWrap && { flexShrink: 1, flexWrap: 'wrap' },
+                ]}
+                scrollEventThrottle={16}
+                directionalLockEnabled
+              >
+              {/* Line numbers */}
+              <View style={styles.lineNumbers}>
+                {displayLines.map((_, i) => (
+                  <Text key={i} style={styles.lineNumber}>{i + 1}</Text>
+                ))}
+              </View>
+
+              {/* Code lines */}
+              <View style={[styles.codeLines, wordWrap && { flex: 1 }]}>
+                {displayLines.map((line, i) => (
+                  <View key={i} style={[styles.codeLine, wordWrap && { flexWrap: 'wrap' }]}>
+                    {tokenize(line, language).map((t, ti) => (
+                      t.isPlaceholder ? (
+                        <View key={ti} style={styles.placeholderToken}>
+                          <Text style={[styles.codeText, { color: t.color }]}>{t.text}</Text>
+                        </View>
+                      ) : (
+                        <Text key={ti} style={[styles.codeText, { color: t.color }]}>
+                          {t.text}
+                        </Text>
+                      )
+                    ))}
+                  </View>
+                ))}
+              </View>
+              </ScrollView>
+            </ScrollView>
+          </View>
+        )}
+
+        {/* ── SHOW MORE / LESS ── */}
+        {tab === 'code' && isLong && (
+          <TouchableOpacity style={styles.expandBtn} onPress={() => setExpanded(e => !e)}>
+            <Text style={styles.expandText}>
+              {expanded ? 'Show less ▲' : `Show all ${lineCount} lines ▼`}
+            </Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Full-screen modal */}
+      <FullScreenModal
+        visible={fullScreen}
+        code={code}
+        language={language}
+        previewHtml={previewHtml}
+        fileName={fileName}
+        apiVersion={apiVersion}
+        onClose={() => setFullScreen(false)}
+      />
+    </>
+  );
+});
+
+/* ────────────── STYLES ────────────── */
 const styles = StyleSheet.create({
-  container: {
-    backgroundColor: '#FFFFFF',
+  wrapper: {
+    backgroundColor: D.bg,
     borderRadius: BorderRadius.md,
-    borderWidth: 1,
-    borderColor: '#E1E4E8',
-    marginVertical: 0,
     overflow: 'hidden',
+    marginVertical: 6,
+    borderWidth: 1,
+    borderColor: D.border,
   },
-  
-  scrollContainer: {
-    maxHeight: 400, // Allow scrolling for long code
-    flexGrow: 0,
-    flexShrink: 1,
+  apiBadgeRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    paddingBottom: 4,
+    backgroundColor: D.header,
+    borderBottomWidth: 1,
+    borderBottomColor: D.border,
   },
-  
+  apiBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(189,147,249,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(189,147,249,0.35)',
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  apiBadgeText: {
+    fontSize: 11,
+    color: '#BD93F9',
+    fontWeight: '600',
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+  },
+  placeholderWarning: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: 'rgba(255,184,108,0.10)',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,184,108,0.25)',
+  },
+  placeholderWarningText: {
+    fontSize: 11,
+    color: D.placeholder,
+    fontWeight: '500',
+    flex: 1,
+  },
+  placeholderToken: {
+    backgroundColor: D.placeholderBg,
+    borderRadius: 3,
+    borderWidth: 1,
+    borderColor: 'rgba(255,184,108,0.4)',
+  },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#F6F8FA',
+    backgroundColor: D.header,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#E1E4E8',
-  },
-  
-  languageTag: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    borderBottomColor: D.border,
     gap: 6,
   },
-  
-  lang: {
-    fontSize: 12,
-    color: '#6A737D',
+  dots: { flexDirection: 'row', gap: 5 },
+  dot: { width: 10, height: 10, borderRadius: 5 },
+  langLabel: {
+    flex: 1,
+    fontSize: 11,
+    color: D.lineNum,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    textAlign: 'center',
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  iconBtn: {
+    padding: 4,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabs: {
+    flexDirection: 'row',
+    backgroundColor: '#1A1B26',
+    borderRadius: 8,
+    padding: 2,
+    marginLeft: 4,
+  },
+  tab: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  tabActive: {
+    backgroundColor: '#44475A',
+  },
+  tabText: {
+    fontSize: 11,
+    color: '#6272A4',
     fontWeight: '600',
   },
-  
-  copyBtn: {
+  tabTextActive: {
+    color: '#F8F8F2',
+  },
+  scrollArea: {
+    maxWidth: '100%',
+    overflow: 'hidden',
+  },
+  scrollCollapsed: { height: 240 },
+  scrollExpanded: { height: 480 },
+  hContent: {
+    paddingHorizontal: 0,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    minWidth: '100%',
+  },
+  lineNumbers: {
+    paddingLeft: 12,
+    paddingRight: 8,
+    borderRightWidth: 1,
+    borderRightColor: D.border,
+    alignItems: 'flex-end',
+    minWidth: 38,
+  },
+  lineNumber: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: D.lineNum,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    includeFontPadding: false,
+  },
+  codeLines: { paddingLeft: 12, paddingRight: 20 },
+  codeLine: {
+    flexDirection: 'row',
+    flexWrap: 'nowrap',
+    minHeight: 18,
+    alignItems: 'flex-start',
+  },
+  codeText: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    includeFontPadding: false,
+  },
+  expandBtn: {
+    alignItems: 'center',
+    paddingVertical: 8,
+    backgroundColor: D.header,
+    borderTopWidth: 1,
+    borderTopColor: D.border,
+  },
+  expandText: { fontSize: 12, color: D.purple, fontWeight: '600' },
+  previewContainer: {
+    height: 280,
+    position: 'relative',
+  },
+  previewAllBtn: {
+    position: 'absolute',
+    bottom: 12,
+    alignSelf: 'center',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-    backgroundColor: 'rgba(0,0,0,0.03)',
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
   },
-  
-  copyText: {
-    fontSize: 12,
-    color: '#6A737D',
-    fontWeight: '500',
-  },
-  
-  copied: {
-    color: '#10A37F',
-  },
-  
-  codeContent: {
-    paddingHorizontal: 12,
-    paddingTop: 12,
-    paddingBottom: 12,
-    flexGrow: 0,
-  },
-  
-  codeText: {
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+  previewAllText: {
+    color: '#FFF',
     fontSize: 13,
-    lineHeight: 20,
-    padding: 0,
-    margin: 0,
-    includeFontPadding: false,
-    textAlignVertical: 'top',
+    fontWeight: '600',
   },
 });
+
+/* ── Full-screen modal styles ── */
+const fsStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: D.bg,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: D.header,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: D.border,
+    gap: 8,
+  },
+  iconBtn: {
+    padding: 6,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  fileName: {
+    flex: 1,
+    fontSize: 13,
+    color: '#F8F8F2',
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    textAlign: 'center',
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  tabs: {
+    flexDirection: 'row',
+    backgroundColor: '#1A1B26',
+    borderRadius: 8,
+    padding: 2,
+    marginLeft: 4,
+  },
+  tab: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  tabActive: { backgroundColor: '#44475A' },
+  tabText: { fontSize: 11, color: '#6272A4', fontWeight: '600' },
+  tabTextActive: { color: '#F8F8F2' },
+  apiBadgeRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: D.header,
+    borderBottomWidth: 1,
+    borderBottomColor: D.border,
+  },
+  apiBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(189,147,249,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(189,147,249,0.35)',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  apiBadgeText: {
+    fontSize: 12,
+    color: '#BD93F9',
+    fontWeight: '600',
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+  },
+  placeholderWarning: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: 'rgba(255,184,108,0.10)',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,184,108,0.25)',
+  },
+  placeholderWarningText: {
+    fontSize: 12,
+    color: D.placeholder,
+    fontWeight: '500',
+    flex: 1,
+  },
+  placeholderToken: {
+    backgroundColor: D.placeholderBg,
+    borderRadius: 3,
+    borderWidth: 1,
+    borderColor: 'rgba(255,184,108,0.4)',
+  },
+  codeContent: {
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    minWidth: '100%',
+  },
+  lineNumbers: {
+    paddingLeft: 12,
+    paddingRight: 8,
+    borderRightWidth: 1,
+    borderRightColor: D.border,
+    alignItems: 'flex-end',
+    minWidth: 44,
+  },
+  lineNum: {
+    fontSize: 13,
+    lineHeight: 20,
+    color: D.lineNum,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    includeFontPadding: false,
+  },
+  codeLines: { paddingLeft: 12, paddingRight: 24 },
+  codeLine: {
+    flexDirection: 'row',
+    flexWrap: 'nowrap',
+    minHeight: 20,
+    alignItems: 'flex-start',
+  },
+  codeText: {
+    fontSize: 14,
+    lineHeight: 20,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    includeFontPadding: false,
+  },
+});
+
