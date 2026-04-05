@@ -1599,13 +1599,10 @@ export default function HomeScreen() {
               placeholderTextColor={colors.textSecondary}
               value={inputText}
               onChangeText={(txt) => {
-                setInputText(txt);
+                const safeTxt = txt ?? '';
+                setInputText(safeTxt);
                 try {
-                  if (txt != null) {
-                    setCodeLangChips(/```\w*$/.test(txt));
-                  } else {
-                    setCodeLangChips(false);
-                  }
+                  setCodeLangChips(/```\w*$/.test(safeTxt));
                 } catch (_e) {
                   setCodeLangChips(false);
                 }
@@ -1627,17 +1624,20 @@ export default function HomeScreen() {
           </TouchableOpacity>
         )}
 
-        {showSendButton ? (
+        {sending ? (
+          <TouchableOpacity
+            style={[styles.sendButton, { backgroundColor: '#FF3B30' }]}
+            onPress={() => { setSending(false); setGenerating(false); }}
+          >
+            <View style={{ width: 12, height: 12, backgroundColor: '#FFFFFF', borderRadius: 2 }} />
+          </TouchableOpacity>
+        ) : showSendButton ? (
           <TouchableOpacity 
             style={[styles.sendButton, { backgroundColor: accentColor }]} 
             onPress={handleSend}
-            disabled={sending || isRecording || isProcessing}
+            disabled={isRecording || isProcessing}
           >
-            {sending ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
-            ) : (
-              <Ionicons name="arrow-up" size={20} color="#FFFFFF" />
-            )}
+            <Ionicons name="arrow-up" size={20} color="#FFFFFF" />
           </TouchableOpacity>
         ) : (
           <TouchableOpacity 
@@ -1809,4 +1809,3 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-hello ai dont skip:can you fix error cannot reaqd property lengt of undefined when i type a message and the icon voice transcribe not working in home page fix it and when i send a message alllow i can cancel with send button fix it and fix ypload model with a better format and make streaming tex better when its code fix streaming real and not to fst and Enable Apple as an OAuth provider in OnSpace Cloud Dashboard → Users → Auth Settings. Configure Apple Team ID, Key ID, Private Key, and Services ID so that Apple Sign In works end-to-end with the native expo-apple-authentication flow already implemented.
