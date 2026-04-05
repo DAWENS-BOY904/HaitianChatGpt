@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -25,6 +25,17 @@ export default function LoginPasswordScreen() {
 
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const passwordRef = useRef<TextInput>(null);
+
+  // Auto-focus password field when arriving with email pre-filled
+  useEffect(() => {
+    if (email) {
+      const timer = setTimeout(() => {
+        passwordRef.current?.focus();
+      }, 400);
+      return () => clearTimeout(timer);
+    }
+  }, [email]);
 
   const handleLogin = async () => {
     if (!password.trim()) {
@@ -191,6 +202,7 @@ export default function LoginPasswordScreen() {
           <View style={styles.inputWrapper}>
             <Text style={styles.inputLabel}>Password</Text>
             <TextInput
+              ref={passwordRef}
               style={styles.input}
               placeholder=""
               placeholderTextColor={colors.textSecondary}
@@ -198,6 +210,9 @@ export default function LoginPasswordScreen() {
               onChangeText={setPassword}
               secureTextEntry={!showPassword}
               editable={!operationLoading}
+              returnKeyType="go"
+              onSubmitEditing={handleLogin}
+              autoFocus={!email}
             />
           </View>
           <TouchableOpacity 

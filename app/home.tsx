@@ -1600,7 +1600,15 @@ export default function HomeScreen() {
               value={inputText}
               onChangeText={(txt) => {
                 setInputText(txt);
-                setCodeLangChips(/```\w*$/.test(txt));
+                try {
+                  if (txt != null) {
+                    setCodeLangChips(/```\w*$/.test(txt));
+                  } else {
+                    setCodeLangChips(false);
+                  }
+                } catch (_e) {
+                  setCodeLangChips(false);
+                }
               }}              multiline
               maxLength={4000}
               editable={!sending && !isRecording && !isProcessing}
@@ -1801,4 +1809,3 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-hello ai dont skip:In app/home.tsx, audit the onChangeText handler and codeLangChips detection logic (/```\w*$/.test(txt)) to ensure no exceptions can be thrown during text input — add try/catch and null guards around all regex operations.In app/login-password.tsx, ensure that when the user arrives from login.tsx with an email param via useLocalSearchParams, the email field is automatically pre-filled and focused on the password input so the user is not asked for their email again.
