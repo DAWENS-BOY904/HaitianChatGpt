@@ -492,3 +492,4 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 });
+hello ai dont skeep when click user name in side menu mst open settings and if user have perfile photo nan plas name lan phtoo perfile must apear little ron pa gro .
