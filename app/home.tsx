@@ -1809,4 +1809,3 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-hello ai: audit the toggleRecording function to ensure mic permission is re-checked on every tap, the Audio session is freshly configured before each recording, and state transitions between idle → recording → processing are shown correctly with no stuck states.
