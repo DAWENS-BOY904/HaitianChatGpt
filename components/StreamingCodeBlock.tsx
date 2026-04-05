@@ -1,4 +1,4 @@
-add streaming code on that with icon and preview import React, { useState, memo, useCallback, useRef } from 'react';
+import React, { useState, memo, useCallback, useRef } from 'react';
 import {
   View,
   Text,
