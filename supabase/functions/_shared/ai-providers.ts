@@ -287,7 +287,7 @@ export async function generateImageWithOnSpaceAI(prompt: string): Promise<{
   }
 
   try {
-    const response = await fetch(`${baseUrl}/v1/images/generations`, {
+    const response = await fetch(`${baseUrl}/images/generations`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
