@@ -70,8 +70,118 @@ const isImageUrl = (url: string): boolean => {
     lowerUrl.includes('oaidalleapiprodscus') ||
     lowerUrl.includes('replicate.delivery') ||
     lowerUrl.includes('storage.googleapis') ||
-    (lowerUrl.includes('supabase') && lowerUrl.includes('chat-images'))
+    (lowerUrl.includes('supabase') && lowerUrl.includes('chat-images')) ||
+    lowerUrl.includes('/images/generations') ||
+    lowerUrl.includes('cdn.openai.com') ||
+    lowerUrl.includes('image.onspace.ai')
   );
+};
+
+// ── Markdown Table Renderer ──
+const MarkdownTable = memo(function MarkdownTable({ tableText, colors }: { tableText: string; colors: any }) {
+  const rows = tableText
+    .split('\n')
+    .map(r => r.trim())
+    .filter(r => r.startsWith('|') && r.endsWith('|'));
+
+  if (rows.length < 2) return null;
+
+  // First row is header, second is separator, rest are data
+  const parseRow = (row: string) =>
+    row.split('|').map(c => c.trim()).filter((_, i, arr) => i > 0 && i < arr.length - 1);
+
+  const isSeparator = (row: string) => /^[\|\s\-:]+$/.test(row);
+  const headerRow = parseRow(rows[0]);
+  const dataRows = rows.slice(1).filter(r => !isSeparator(r)).map(parseRow);
+
+  return (
+    <ScrollView horizontal showsHorizontalScrollIndicator style={{ marginVertical: 8 }}>
+      <View style={{ borderRadius: 10, overflow: 'hidden', borderWidth: 1, borderColor: colors.border }}>
+        {/* Header */}
+        <View style={{ flexDirection: 'row', backgroundColor: colors.surface }}>
+          {headerRow.map((cell, ci) => (
+            <View key={ci} style={{
+              minWidth: 100, paddingHorizontal: 14, paddingVertical: 10,
+              borderRightWidth: ci < headerRow.length - 1 ? 1 : 0,
+              borderRightColor: colors.border,
+            }}>
+              <Text style={{ color: colors.text, fontWeight: '700', fontSize: 13 }}>{cell}</Text>
+            </View>
+          ))}
+        </View>
+        {/* Data rows */}
+        {dataRows.map((row, ri) => (
+          <View key={ri} style={{
+            flexDirection: 'row',
+            backgroundColor: ri % 2 === 0 ? colors.background : `${colors.surface}88`,
+            borderTopWidth: 1,
+            borderTopColor: colors.border,
+          }}>
+            {headerRow.map((_, ci) => (
+              <View key={ci} style={{
+                minWidth: 100, paddingHorizontal: 14, paddingVertical: 9,
+                borderRightWidth: ci < headerRow.length - 1 ? 1 : 0,
+                borderRightColor: colors.border,
+              }}>
+                <Text style={{ color: colors.text, fontSize: 13 }}>{row[ci] ?? ''}</Text>
+              </View>
+            ))}
+          </View>
+        ))}
+      </View>
+    </ScrollView>
+  );
+});
+
+// Extract image URLs embedded in text (AI sends image as URL in text)
+const extractInlineImages = (text: string): { text: string; images: string[] } => {
+  const images: string[] = [];
+  // Match markdown image syntax: ![alt](url)
+  const mdImgRegex = /!\[([^\]]*)\]\((https?:\/\/[^\)]+)\)/g;
+  let cleaned = text.replace(mdImgRegex, (_, _alt, url) => {
+    if (isImageUrl(url)) { images.push(url); return ''; }
+    return _;
+  });
+  // Match bare image URLs
+  const bareUrlRegex = /(https?:\/\/[^\s]+\.(?:jpg|jpeg|png|gif|webp|bmp)(?:\?[^\s]*)?)/gi;
+  cleaned = cleaned.replace(bareUrlRegex, (url) => {
+    if (isImageUrl(url)) { images.push(url); return ''; }
+    return url;
+  });
+  return { text: cleaned.trim(), images: [...new Set(images)] };
+};
+
+// Split text into table blocks and plain text
+const splitTablesFromText = (text: string): Array<{ type: 'text' | 'table'; content: string }> => {
+  const lines = text.split('\n');
+  const result: Array<{ type: 'text' | 'table'; content: string }> = [];
+  let currentText: string[] = [];
+  let currentTable: string[] = [];
+  let inTable = false;
+
+  for (const line of lines) {
+    const isTableRow = /^\s*\|.+\|\s*$/.test(line);
+    if (isTableRow) {
+      if (!inTable) {
+        if (currentText.length > 0) {
+          result.push({ type: 'text', content: currentText.join('\n') });
+          currentText = [];
+        }
+        inTable = true;
+      }
+      currentTable.push(line);
+    } else {
+      if (inTable) {
+        result.push({ type: 'table', content: currentTable.join('\n') });
+        currentTable = [];
+        inTable = false;
+      }
+      currentText.push(line);
+    }
+  }
+  if (inTable && currentTable.length > 0) result.push({ type: 'table', content: currentTable.join('\n') });
+  if (currentText.length > 0) result.push({ type: 'text', content: currentText.join('\n') });
+  return result;
 };
 
 const getFileIcon = (fileType?: string): keyof typeof Ionicons.glyphMap => {
@@ -389,7 +499,7 @@ export const MessageItem = memo(function MessageItem({
 
   // Parse content into text/code parts
   const contentParts = useMemo(() => {
-    const textToProcess = beforeCard;
+    const textToProcess = cleanedBeforeCard;
     const parts: Array<{ type: 'text' | 'code'; content: string; language?: string }> = [];
     const codeBlockRegex = /```(\w+)?\n([\s\S]*?)```/g;
     let lastIndex = 0;
@@ -430,6 +540,13 @@ export const MessageItem = memo(function MessageItem({
     () => Boolean(message.image_url && isImageUrl(message.image_url)),
     [message.image_url]
   );
+
+  // Extract inline images from AI text responses
+  const { inlineImages, cleanedBeforeCard } = useMemo(() => {
+    if (message.role !== 'assistant') return { inlineImages: [], cleanedBeforeCard: beforeCard };
+    const { text, images } = extractInlineImages(beforeCard);
+    return { inlineImages: images, cleanedBeforeCard: text };
+  }, [message.role, beforeCard]);
 
   const shouldStreamPart = useCallback(
     (isLastPart: boolean) => streaming && isGenerating && message.role === 'assistant' && isLastPart,
@@ -669,15 +786,10 @@ export const MessageItem = memo(function MessageItem({
             );
           }
 
-          const textParts = parseTextWithLinks(part.content);
+          // Split text into table blocks and plain text segments
+          const textSegments = splitTablesFromText(part.content);
           return (
-            <Text
-              key={`text-${index}`}
-              style={[
-                styles.messageText,
-                message.role === 'user' ? styles.userMessageText : styles.assistantMessageText,
-              ]}
-            >
+            <View key={`text-${index}`}>
               {shouldStream ? (
                 <StreamingText
                   text={part.content}
@@ -685,28 +797,70 @@ export const MessageItem = memo(function MessageItem({
                   variance={0.2}
                   chunkSize={4}
                   cursor={true}
-                  style={styles.assistantMessageText}
+                  style={[
+                    styles.messageText,
+                    message.role === 'user' ? styles.userMessageText : styles.assistantMessageText,
+                  ]}
                   onChunkRendered={onChunkRendered}
                 />
               ) : (
-                textParts.map((textPart, textIndex) => {
-                  if (textPart.type === 'link') {
-                    return (
-                      <Text
-                        key={`link-${textIndex}`}
-                        style={styles.linkText}
-                        onPress={() => handleLinkPress(textPart.url)}
-                      >
-                        {textPart.content}
-                      </Text>
-                    );
+                textSegments.map((seg, si) => {
+                  if (seg.type === 'table') {
+                    return <MarkdownTable key={`table-${si}`} tableText={seg.content} colors={colors} />;
                   }
-                  return <Text key={`txt-${textIndex}`}>{textPart.content}</Text>;
+                  const textParts = parseTextWithLinks(seg.content);
+                  return (
+                    <Text
+                      key={`seg-${si}`}
+                      style={[
+                        styles.messageText,
+                        message.role === 'user' ? styles.userMessageText : styles.assistantMessageText,
+                      ]}
+                    >
+                      {textParts.map((textPart, textIndex) => {
+                        if (textPart.type === 'link') {
+                          return (
+                            <Text
+                              key={`link-${textIndex}`}
+                              style={styles.linkText}
+                              onPress={() => handleLinkPress(textPart.url)}
+                            >
+                              {textPart.content}
+                            </Text>
+                          );
+                        }
+                        return <Text key={`txt-${textIndex}`}>{textPart.content}</Text>;
+                      })}
+                    </Text>
+                  );
                 })
               )}
-            </Text>
+            </View>
           );
         })}
+
+        {/* Inline AI-generated images from text */}
+        {inlineImages.length > 0 && inlineImages.map((imgUrl, i) => (
+          <TouchableOpacity
+            key={`inline-img-${i}`}
+            onPress={() => handleImagePress(imgUrl)}
+            activeOpacity={0.9}
+            style={{ borderRadius: BorderRadius.md, overflow: 'hidden', marginVertical: Spacing.sm }}
+          >
+            <Image
+              source={{ uri: imgUrl }}
+              style={styles.messageImage}
+              contentFit="cover"
+              transition={200}
+            />
+            <TouchableOpacity
+              style={styles.downloadButton}
+              onPress={(e) => { e.stopPropagation(); handleDownloadImage(imgUrl); }}
+            >
+              <Ionicons name="download" size={22} color="#fff" />
+            </TouchableOpacity>
+          </TouchableOpacity>
+        ))}
 
         {/* Download card (👉 Download your project) */}
         {downloadLabel && message.role === 'assistant' && (
