@@ -1801,4 +1801,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-
+hello ai :Update supabase/functions/chat/index.ts to detect image generation requests (keywords: 'generate image', 'create image', 'draw', 'make a logo') and call the OnSpace AI image generation API, returning the generated image URL so it displays inline in the chat as a real AI-created image.
