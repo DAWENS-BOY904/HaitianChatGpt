@@ -640,4 +640,4 @@ const fsStyles = StyleSheet.create({
   codeLine: { flexDirection: 'row', flexWrap: 'nowrap', minHeight: 20, alignItems: 'center' },
   codeText: { fontSize: 14, lineHeight: 20, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', includeFontPadding: false },
 });
-hello ai dont skip read and make change:In components/StreamingCodeBlock.tsx and components/StreamingText.tsx, slow down the streaming animation for code blocks to match a natural reading pace — add a configurable delay of 15-25ms per character with proper character-by-character rendering and a blinking cursor at the end of the last typed line.In app/home.tsx, audit and fix the voice transcribe mic button so it reliably triggers recording on tap — ensure the toggleRecording function is properly connected, permissions are requested, and the button state transitions correctly between idle, recording, and processing states. In components/ToolsModal.tsx, redesign the file upload section with a better format: show accepted file types as colored chips, add a visual upload zone, display file size limits, and show a preview thumbnail after selection with file name and size displayed cleanly.
+
