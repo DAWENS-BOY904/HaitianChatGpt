@@ -309,4 +309,3 @@ export default function LoginScreen() {
     </View>
   );
 }
-now add real apple login remove all demo fix when i click login and past email i still tell me to pass its and fix home page error when i tex.
