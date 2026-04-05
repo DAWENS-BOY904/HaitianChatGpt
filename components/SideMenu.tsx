@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { getSupabaseClient } from '@/template';
 import {
   View,
   Text,
@@ -12,6 +13,7 @@ import {
   Pressable,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -91,6 +93,21 @@ export function SideMenu({
 
   const [searchQuery, setSearchQuery] = useState('');
   const [searchActive, setSearchActive] = useState(false);
+  const [profilePhotoUrl, setProfilePhotoUrl] = useState<string | null>(null);
+
+  // Load profile photo
+  useEffect(() => {
+    if (!user?.id) return;
+    const supabase = getSupabaseClient();
+    supabase
+      .from('user_profiles')
+      .select('profile_photo_url')
+      .eq('id', user.id)
+      .single()
+      .then(({ data }) => {
+        if (data?.profile_photo_url) setProfilePhotoUrl(data.profile_photo_url);
+      });
+  }, [user?.id]);
 
   const accentColor = settings.accentColor || '#10A37F';
 
@@ -199,13 +216,19 @@ export function SideMenu({
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.profileBtn}
-                onPress={() => { onClose(); onProfile(); }}
+                onPress={() => { onClose(); router.push('/settings'); }}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
-                {user ? (
-                  <Text style={[styles.profileName, { color: colors.text }]} numberOfLines={1}>
-                    {getUserName()}
-                  </Text>
+                {profilePhotoUrl ? (
+                  <Image
+                    source={{ uri: profilePhotoUrl }}
+                    style={styles.profilePhoto}
+                    contentFit="cover"
+                  />
+                ) : user ? (
+                  <View style={[styles.avatarBtn, { backgroundColor: accentColor }]}>
+                    <Text style={styles.avatarText}>{getUserInitials()}</Text>
+                  </View>
                 ) : (
                   <View style={[styles.avatarBtn, { backgroundColor: accentColor }]}>
                     <Text style={styles.avatarText}>{getUserInitials()}</Text>
@@ -390,12 +413,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   profileBtn: {
-    maxWidth: 130,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(128,128,128,0.3)',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    overflow: 'hidden',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -491,5 +512,10 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '600',
   },
+  profilePhoto: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+  },
 });
-hello ai dont skeep when click user name in side menu mst open settings and if user have perfile photo nan plas name lan phtoo perfile must apear little ron pa gro .
+
