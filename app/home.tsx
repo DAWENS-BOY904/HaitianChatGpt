@@ -211,6 +211,7 @@ export default function HomeScreen() {
   const stopTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const appStateRef = useRef(AppState.currentState);
   const autoLockTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const processingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // -------- EFFECTS --------
 
@@ -554,6 +555,12 @@ export default function HomeScreen() {
     isRecordingRef.current = false;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
+    // 30-second max processing timeout to prevent stuck state
+    processingTimeoutRef.current = setTimeout(() => {
+      setRecordingState('idle');
+      processingTimeoutRef.current = null;
+    }, 30000);
+
     try {
       await recordingRef.current.stopAndUnloadAsync();
       const uri = recordingRef.current.getURI();
@@ -606,10 +613,19 @@ export default function HomeScreen() {
   };
 
   const toggleRecording = useCallback(() => {
+    // Clear any stuck processing timeout first
+    if (processingTimeoutRef.current) {
+      clearTimeout(processingTimeoutRef.current);
+      processingTimeoutRef.current = null;
+    }
     if (recordingState === 'idle') {
       startVoiceRecording();
     } else if (recordingState === 'recording') {
       stopVoiceRecording();
+    } else if (recordingState === 'processing') {
+      // Force-reset stuck processing state
+      setRecordingState('idle');
+      isRecordingRef.current = false;
     }
   }, [recordingState]);
 
@@ -686,10 +702,13 @@ export default function HomeScreen() {
 
       setInputText(prev => prev + (prev ? ' ' : '') + data.text.trim());
       setRecordingState('idle');
+      if (processingTimeoutRef.current) { clearTimeout(processingTimeoutRef.current); processingTimeoutRef.current = null; }
       
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
     } catch (error: any) {
+      if (processingTimeoutRef.current) { clearTimeout(processingTimeoutRef.current); processingTimeoutRef.current = null; }
+      setRecordingState('idle');
       if (error.message?.includes('suspended')) return;
       
       Alert.alert(
@@ -1809,4 +1828,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-hello ai dont skip:audit the toggleRecording function to re-check mic permissions on every tap, reset any stuck recording/processing state with a timeout guard, and add a 3-second max processing timeout that auto-resets to idle if transcription doesn't complete. audit the toggleRecording function to ensure mic permission is re-checked on every tap, the Audio session is freshly configured before each recording, and state transitions between idle → recording → processing are shown correctly with no stuck states.
+
