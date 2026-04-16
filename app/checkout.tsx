@@ -239,6 +239,7 @@ export default function CheckoutScreen() {
       paddingBottom: Spacing.sm,
       borderBottomWidth: 1,
       borderBottomColor: colors.border,
+      backgroundColor: colors.background,
     },
     backButton: {
       padding: Spacing.sm,
@@ -248,6 +249,7 @@ export default function CheckoutScreen() {
       fontSize: 20,
       marginLeft: Spacing.md,
       flex: 1,
+      color: colors.text,
     },
     content: {
       flex: 1,
@@ -259,6 +261,7 @@ export default function CheckoutScreen() {
       ...Typography.body,
       fontWeight: '600',
       marginBottom: Spacing.md,
+      color: colors.text,
     },
     orderSummary: {
       backgroundColor: colors.surface,
@@ -278,6 +281,7 @@ export default function CheckoutScreen() {
     summaryValue: {
       ...Typography.body,
       fontWeight: '600',
+      color: colors.text,
     },
     totalRow: {
       borderTopWidth: 1,
@@ -321,6 +325,7 @@ export default function CheckoutScreen() {
       ...Typography.caption,
       marginBottom: Spacing.xs,
       fontWeight: '600',
+      color: colors.text,
     },
     input: {
       backgroundColor: colors.surface,
@@ -377,6 +382,7 @@ export default function CheckoutScreen() {
     checkboxLabel: {
       ...Typography.body,
       flex: 1,
+      color: colors.text,
     },
     submitButton: {
       backgroundColor: colors.primary,
@@ -397,6 +403,17 @@ export default function CheckoutScreen() {
       textAlign: 'center',
       color: colors.textSecondary,
       marginTop: Spacing.sm,
+    },
+    paymentMethodText: {
+      ...Typography.caption,
+      marginTop: Spacing.xs,
+      fontWeight: '600',
+      color: colors.text,
+    },
+    countryText: {
+      ...Typography.body,
+      flex: 1,
+      color: colors.text,
     },
   });
 
