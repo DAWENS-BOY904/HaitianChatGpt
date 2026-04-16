@@ -2359,3 +2359,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
+hello ai  its me again dont skip make change read the message mmake all i write:Enhance the transcribe-audio edge function to auto-detect the spoken language (Haitian Creole, French, English, Spanish) and return it in the response, then display the detected language in the home UI next to the transcribed text in the input field and if someone says a bad word its show theme alert 20 time and get ban from supabase function ban user Debug and fix the voice recording flow specifically for Android in app/home: ensure Audio.setAudioModeAsync is called correctly before recording starts, use the correct m4a output format for Android, and test that the base64 audio is properly encoded before sending to the transcribe-audio edge function.
