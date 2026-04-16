@@ -77,9 +77,23 @@ export default function SubscriptionScreen() {
       // Dynamically import RevenueCat (react-native-purchases)
       const Purchases = require('react-native-purchases').default;
 
-      // Configure RevenueCat SDK
-      if (RC_API_KEY) {
-        Purchases.configure({ apiKey: RC_API_KEY });
+      // CRITICAL FIX: Always configure before ANY call — singleton guard
+      const apiKey = RC_API_KEY ||
+        (Platform.OS === 'ios'
+          ? (process.env.EXPO_PUBLIC_RC_IOS_KEY || '')
+          : (process.env.EXPO_PUBLIC_RC_ANDROID_KEY || ''));
+
+      if (!apiKey) {
+        // RC not configured — fall back to Stripe checkout
+        router.push({ pathname: '/checkout', params: { plan: planName } });
+        return;
+      }
+
+      // Safe configure — RevenueCat ignores duplicate configure calls
+      try {
+        Purchases.configure({ apiKey });
+      } catch (_configErr) {
+        // Already configured — fine to continue
       }
 
       // Fetch available offerings
@@ -190,13 +204,19 @@ export default function SubscriptionScreen() {
       // Try RevenueCat restore first
       try {
         const Purchases = require('react-native-purchases').default;
-        if (RC_API_KEY) Purchases.configure({ apiKey: RC_API_KEY });
-        const customerInfo = await Purchases.restorePurchases();
-        const hasActive = Object.keys(customerInfo.entitlements.active).length > 0;
-        if (hasActive && user?.id) {
-          await supabase.from('user_profiles').update({ subscription_tier: 'go' }).eq('id', user.id);
-          showAlert('Restored', 'Your subscription has been restored.');
-          return;
+        const apiKey = RC_API_KEY ||
+          (Platform.OS === 'ios'
+            ? (process.env.EXPO_PUBLIC_RC_IOS_KEY || '')
+            : (process.env.EXPO_PUBLIC_RC_ANDROID_KEY || ''));
+        if (apiKey) {
+          try { Purchases.configure({ apiKey }); } catch (_e) {}
+          const customerInfo = await Purchases.restorePurchases();
+          const hasActive = Object.keys(customerInfo.entitlements.active).length > 0;
+          if (hasActive && user?.id) {
+            await supabase.from('user_profiles').update({ subscription_tier: 'go' }).eq('id', user.id);
+            showAlert('Restored', 'Your subscription has been restored.');
+            return;
+          }
         }
       } catch (e) {
         // Fall through to context restore
