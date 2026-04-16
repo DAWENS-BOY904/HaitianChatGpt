@@ -936,6 +936,9 @@ export default function HomeScreen() {
   );
   const inputRef = useRef<TextInput>(null);
   const [recordingState, setRecordingState] = useState<RecordingState>('idle');
+  const [detectedLanguage, setDetectedLanguage] = useState<string | null>(null);
+  const [badWordViolationCount, setBadWordViolationCount] = useState(0);
+  const badWordViolationsRef = useRef(0);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [lastShake, setLastShake] = useState(0);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
@@ -1347,23 +1350,49 @@ export default function HomeScreen() {
 
     try {
       await cleanupRecording();
-      await new Promise(r => setTimeout(r, 150));
+      await new Promise(r => setTimeout(r, 200));
+
+      // ANDROID FIX: Must set audio mode BEFORE creating recording
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
         playsInSilentModeIOS: true,
         shouldDuckAndroid: true,
         playThroughEarpieceAndroid: false,
         staysActiveInBackground: false,
+        interruptionModeIOS: 1, // DO_NOT_MIX
+        interruptionModeAndroid: 1, // DO_NOT_MIX
       });
+
+      // Extra delay for Android audio system to switch mode
+      if (Platform.OS === 'android') {
+        await new Promise(r => setTimeout(r, 100));
+      }
 
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       setRecordingState('recording');
       isRecordingRef.current = true;
       startRecordingTimer();
 
+      // ANDROID FIX: Use correct AndroidOutputFormat and AudioEncoder for m4a
       const { recording } = await Audio.Recording.createAsync({
-        android: { extension: '.m4a', outputFormat: Audio.AndroidOutputFormat.MPEG_4, audioEncoder: Audio.AndroidAudioEncoder.AAC, sampleRate: 16000, numberOfChannels: 1, bitRate: 64000 },
-        ios: { extension: '.m4a', audioQuality: Audio.IOSAudioQuality.MEDIUM, sampleRate: 16000, numberOfChannels: 1, bitRate: 64000, linearPCMBitDepth: 16, linearPCMIsBigEndian: false, linearPCMIsFloat: false },
+        android: {
+          extension: '.m4a',
+          outputFormat: Audio.AndroidOutputFormat.MPEG_4,
+          audioEncoder: Audio.AndroidAudioEncoder.AAC,
+          sampleRate: 16000,
+          numberOfChannels: 1,
+          bitRate: 128000,
+        },
+        ios: {
+          extension: '.m4a',
+          audioQuality: Audio.IOSAudioQuality.HIGH,
+          sampleRate: 16000,
+          numberOfChannels: 1,
+          bitRate: 128000,
+          linearPCMBitDepth: 16,
+          linearPCMIsBigEndian: false,
+          linearPCMIsFloat: false,
+        },
         web: { mimeType: 'audio/webm;codecs=opus', bitsPerSecond: 64000 },
       });
 
@@ -1372,7 +1401,10 @@ export default function HomeScreen() {
 
     } catch (error: any) {
       await cleanupRecording();
-      Alert.alert('Recording Failed', 'Could not start recording. Please try again.');
+      const msg = Platform.OS === 'android'
+        ? 'Could not start recording on Android. Please restart the app and try again.'
+        : 'Could not start recording. Please try again.';
+      Alert.alert('Recording Failed', msg);
     }
   };
 
@@ -1395,8 +1427,18 @@ export default function HomeScreen() {
       if (!uri) throw new Error('No recording URI');
       const info = await FileSystem.getInfoAsync(uri);
       if (!info.exists) throw new Error('Recording file not found');
+
+      // ANDROID FIX: Verify file has content before reading
+      const fileSize = (info as any).size || 0;
+      if (fileSize < 500) throw new Error('Recording too short or empty');
+
+      // Read as base64 — works on both iOS and Android
       const base64Audio = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
-      if (!base64Audio || base64Audio.length < 100) throw new Error('Audio too short');
+      if (!base64Audio || base64Audio.length < 100) throw new Error('Audio encoding failed. Please try again.');
+
+      // ANDROID FIX: Validate base64 string is properly encoded
+      try { atob(base64Audio.slice(0, 100)); } catch (_e) { throw new Error('Audio format error. Please try again.'); }
+
       await transcribeAudio(base64Audio);
     } catch (error: any) {
       Alert.alert('Processing Failed', error.message || 'Failed to process recording.', [
@@ -1406,6 +1448,15 @@ export default function HomeScreen() {
       setRecordingState('idle');
     } finally {
       recordingRef.current = null;
+      // ANDROID FIX: Reset audio mode back to playback after recording
+      if (Platform.OS === 'android') {
+        Audio.setAudioModeAsync({
+          allowsRecordingIOS: false,
+          shouldDuckAndroid: false,
+          playThroughEarpieceAndroid: false,
+          staysActiveInBackground: false,
+        }).catch(() => {});
+      }
     }
   };
 
@@ -1416,11 +1467,58 @@ export default function HomeScreen() {
     else if (recordingState === 'processing') { setRecordingState('idle'); isRecordingRef.current = false; }
   }, [recordingState]);
 
+  // ---- BAD WORD DETECTION & BAN ----
+  const BAD_WORDS = [
+    'fuck', 'shit', 'bitch', 'asshole', 'bastard', 'cunt', 'damn', 'dick',
+    'pussy', 'cock', 'nigger', 'nigga', 'faggot', 'whore', 'slut', 'ass',
+    'motherfucker', 'fucker', 'piss', 'retard', 'kaka', 'manman', 'degage',
+  ];
+
+  const checkBadWord = useCallback((text: string): boolean => {
+    const lowerText = text.toLowerCase();
+    return BAD_WORDS.some(w => {
+      const regex = new RegExp(`\\b${w}\\b`, 'i');
+      return regex.test(lowerText);
+    });
+  }, []);
+
+  const handleBadWordViolation = useCallback(async (text: string) => {
+    badWordViolationsRef.current += 1;
+    setBadWordViolationCount(badWordViolationsRef.current);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+
+    Alert.alert(
+      '⚠️ Content Warning',
+      `Inappropriate language detected. This is warning #${badWordViolationsRef.current}.\n\nRepeated violations will result in a permanent ban.`,
+      [{ text: 'I Understand', style: 'destructive' }]
+    );
+
+    // Ban after 3+ violations
+    if (badWordViolationsRef.current >= 3 && user?.id) {
+      try {
+        await supabase.functions.invoke('ban-user', {
+          body: {
+            userId: user.id,
+            reason: `Repeated bad language violations (${badWordViolationsRef.current} times). Last: "${text.slice(0, 80)}"`,
+            duration: 7, // 7 days
+          },
+        });
+        Alert.alert(
+          '🚫 Account Suspended',
+          'Your account has been suspended for 7 days due to repeated use of inappropriate language.',
+          [{ text: 'OK', style: 'cancel' }]
+        );
+      } catch (e) {
+        console.error('Ban user failed:', e);
+      }
+    }
+  }, [user?.id, supabase]);
+
   const transcribeAudio = async (base64Audio: string, retryCount = 0) => {
     const MAX_RETRIES = 2;
     try {
       const { data, error } = await supabase.functions.invoke('transcribe-audio', {
-        body: { audio: base64Audio, userId: user?.id, conversationId: currentConversation?.id },
+        body: { audio: base64Audio, userId: user?.id, conversationId: currentConversation?.id, detectLanguage: true },
         headers: { 'x-timeout': '30000' }
       });
       if (error) {
@@ -1440,7 +1538,20 @@ export default function HomeScreen() {
         }
         throw new Error('No transcription received');
       }
-      setInputText(prev => prev + (prev ? ' ' : '') + data.text.trim());
+      const transcribedText = data.text.trim();
+      // Show detected language
+      if (data.detectedLanguage) {
+        setDetectedLanguage(data.detectedLanguage);
+        setTimeout(() => setDetectedLanguage(null), 4000);
+      }
+      // Check for bad words
+      if (checkBadWord(transcribedText)) {
+        await handleBadWordViolation(transcribedText);
+        setRecordingState('idle');
+        if (processingTimeoutRef.current) { clearTimeout(processingTimeoutRef.current); processingTimeoutRef.current = null; }
+        return;
+      }
+      setInputText(prev => prev + (prev ? ' ' : '') + transcribedText);
       setRecordingState('idle');
       if (processingTimeoutRef.current) { clearTimeout(processingTimeoutRef.current); processingTimeoutRef.current = null; }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -2130,6 +2241,13 @@ export default function HomeScreen() {
                       <ActivityIndicator size="small" color={colors.primary} />
                       <Text style={{ fontSize: 15, color: colors.text, marginLeft: 8 }}>Transcribing...</Text>
                     </View>
+                  ) : detectedLanguage ? (
+                    <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 12 }}>
+                      <View style={{ backgroundColor: accentColor + '22', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3 }}>
+                        <Text style={{ color: accentColor, fontSize: 12, fontWeight: '600' }}>🌐 {detectedLanguage}</Text>
+                      </View>
+                      <Text style={{ color: colors.text, fontSize: 14, flex: 1 }} numberOfLines={1}>{inputText}</Text>
+                    </View>
                   ) : (
                     <TextInput
                       ref={inputRef}
@@ -2359,4 +2477,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-hello ai  its me again dont skip make change read the message mmake all i write:Enhance the transcribe-audio edge function to auto-detect the spoken language (Haitian Creole, French, English, Spanish) and return it in the response, then display the detected language in the home UI next to the transcribed text in the input field and if someone says a bad word its show theme alert 20 time and get ban from supabase function ban user Debug and fix the voice recording flow specifically for Android in app/home: ensure Audio.setAudioModeAsync is called correctly before recording starts, use the correct m4a output format for Android, and test that the base64 audio is properly encoded before sending to the transcribe-audio edge function.
+

@@ -76,13 +76,25 @@ serve(async (req) => {
 
     // Build the language hint
     const langHint = language ? ` The audio is likely in ${language}.` : '';
+    const langDetectionInstructions = `
+LANGUAGE DETECTION: After transcribing, also identify which language was spoken.
+Supported languages to detect: English, Haitian Creole (Kreyòl ayisyen), French (Français), Spanish (Español), Portuguese, and others.
+Return your answer in this exact JSON format:
+{
+  "text": "<transcribed text here>",
+  "detectedLanguage": "<language name in English, e.g. Haitian Creole>",
+  "languageCode": "<ISO code, e.g. ht for Haitian Creole, fr for French, en for English, es for Spanish>"
+}
+Do NOT add any text outside the JSON.`;
 
-    // Call OnSpace AI with Gemini multimodal (audio → text)
-    // Gemini 3 flash supports audio input natively
+    // Call OnSpace AI with Gemini multimodal (audio → text + language detection)
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 55000);
 
     let transcribedText = '';
+    let detectedLanguage = 'auto';
+    let detectedLanguageCode = 'auto';
+
     try {
       const response = await fetch(`${ONSPACE_AI_BASE_URL}/chat/completions`, {
         method: 'POST',
@@ -95,33 +107,29 @@ serve(async (req) => {
           messages: [
             {
               role: 'system',
-              content: `You are a highly accurate speech transcription assistant. 
-Your ONLY job is to transcribe exactly what is spoken in the audio.
+              content: `You are a highly accurate speech transcription and language detection assistant.
+
+Your job:
+1. Transcribe exactly what is spoken in the audio
+2. Detect the language spoken
+
 Rules:
-- Output ONLY the transcribed text, nothing else
-- Do NOT add explanations, commentary, or notes
-- Do NOT add punctuation unless it was clearly spoken
-- Preserve the original language (English, Haitian Creole, French, Spanish, etc.)
-- If audio is silent or inaudible, output only: [SILENCE]
-- If speech is unclear, transcribe your best attempt${langHint}`,
+- Preserve the exact words spoken in the original language
+- Detect language from: English, Haitian Creole, French, Spanish, Portuguese, or other
+- If audio is silent or inaudible, use text: "[SILENCE]"
+- If speech is unclear, transcribe your best attempt
+${langHint}
+${langDetectionInstructions}`,
             },
             {
               role: 'user',
               content: [
-                {
-                  type: 'text',
-                  text: 'Please transcribe the speech in this audio file exactly as spoken:',
-                },
-                {
-                  type: 'image_url',
-                  image_url: {
-                    url: `data:audio/m4a;base64,${audio}`,
-                  },
-                },
+                { type: 'text', text: 'Transcribe this audio and detect the language. Return JSON only:' },
+                { type: 'image_url', image_url: { url: `data:audio/m4a;base64,${audio}` } },
               ],
             },
           ],
-          max_tokens: 1000,
+          max_tokens: 1200,
           temperature: 0.0,
         }),
         signal: controller.signal,
@@ -132,13 +140,26 @@ Rules:
       if (!response.ok) {
         const errText = await response.text();
         console.error('OnSpace AI transcription error:', response.status, errText);
-
-        // Fallback: try with a smaller, lighter model if the multimodal one fails
         throw new Error(`OnSpace AI error ${response.status}: ${errText}`);
       }
 
       const data = await response.json();
-      transcribedText = (data.choices?.[0]?.message?.content || '').trim();
+      const rawContent = (data.choices?.[0]?.message?.content || '').trim();
+
+      // Try to parse JSON response (language detection mode)
+      try {
+        // Extract JSON from markdown code block if wrapped
+        const jsonMatch = rawContent.match(/```(?:json)?\s*([\s\S]*?)```/) || rawContent.match(/(\{[\s\S]*\})/);
+        const jsonStr = jsonMatch ? jsonMatch[1].trim() : rawContent;
+        const parsed = JSON.parse(jsonStr);
+        transcribedText = parsed.text || parsed.transcription || rawContent;
+        detectedLanguage = parsed.detectedLanguage || parsed.language || 'auto';
+        detectedLanguageCode = parsed.languageCode || parsed.code || 'auto';
+      } catch (_parseErr) {
+        // Not JSON — treat as plain transcription text
+        transcribedText = rawContent;
+        detectedLanguage = language || 'auto';
+      }
 
     } catch (err: any) {
       clearTimeout(timeout);
@@ -150,7 +171,7 @@ Rules:
         );
       }
 
-      // If primary model failed, attempt fallback with gemini-2.5-flash-lite
+      // Fallback: gemini-2.5-flash-lite (no JSON, plain text only)
       console.log('Primary model failed, trying fallback model...');
       try {
         const fallbackController = new AbortController();
@@ -167,16 +188,13 @@ Rules:
             messages: [
               {
                 role: 'system',
-                content: `You are a speech transcription assistant. Transcribe ONLY what is spoken in the audio. Output only the transcription text, nothing else.${langHint}`,
+                content: `You are a speech transcription assistant. Transcribe ONLY what is spoken in the audio. Output only the transcription text.${langHint}`,
               },
               {
                 role: 'user',
                 content: [
                   { type: 'text', text: 'Transcribe this audio:' },
-                  {
-                    type: 'image_url',
-                    image_url: { url: `data:audio/m4a;base64,${audio}` },
-                  },
+                  { type: 'image_url', image_url: { url: `data:audio/m4a;base64,${audio}` } },
                 ],
               },
             ],
@@ -195,6 +213,7 @@ Rules:
 
         const fallbackData = await fallbackResponse.json();
         transcribedText = (fallbackData.choices?.[0]?.message?.content || '').trim();
+        detectedLanguage = language || 'auto';
 
       } catch (fallbackErr: any) {
         console.error('Fallback transcription also failed:', fallbackErr);
@@ -241,7 +260,9 @@ Rules:
       JSON.stringify({
         success: true,
         text: cleanText,
-        language: language || 'auto',
+        language: language || detectedLanguage || 'auto',
+        detectedLanguage: detectedLanguage !== 'auto' ? detectedLanguage : null,
+        languageCode: detectedLanguageCode !== 'auto' ? detectedLanguageCode : null,
         confidence: 0.92,
         provider: 'onspace-ai',
       }),
