@@ -8,6 +8,7 @@ import {
   Platform,
   Linking,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
@@ -16,6 +17,8 @@ import { useRouter } from 'expo-router';
 import { Spacing, Typography, BorderRadius } from '../constants/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAlert } from '@/template';
+import * as InAppPurchases from 'expo-in-app-purchases';
+import { supabase } from '../lib/supabase'; // Adjust path to your supabase client
 
 // ── Feature comparison rows ──
 const GO_FEATURES = [
@@ -36,9 +39,28 @@ const PLUS_FEATURES = [
   { label: 'More memory', free: false, plan: true },
 ];
 
-// Stripe checkout links (one-time links you can update)
-const STRIPE_PLUS_URL = 'https://buy.stripe.com/plus_19_99';
-const STRIPE_GO_URL = 'https://buy.stripe.com/go_8_00';
+// Product IDs from App Store Connect / Google Play Console
+const PRODUCT_IDS = {
+  go: Platform.select({
+    ios: 'com.dawinix.go.monthly',
+    android: 'com.dawinix.go.monthly',
+  }),
+  plus: Platform.select({
+    ios: 'com.dawinix.plus.monthly',
+    android: 'com.dawinix.plus.monthly',
+  }),
+  go_yearly: Platform.select({
+    ios: 'com.dawinix.go.yearly',
+    android: 'com.dawinix.go.yearly',
+  }),
+  plus_yearly: Platform.select({
+    ios: 'com.dawinix.plus.yearly',
+    android: 'com.dawinix.plus.yearly',
+  }),
+};
+
+// Supabase Edge Function URL
+const SUPABASE_FUNCTION_URL = 'https://njpuoozygqtpvlzhnjpu.supabase.co/functions/v1/verify-purchase';
 
 export default function SubscriptionScreen() {
   const { colors, isDark } = useTheme();
@@ -48,6 +70,8 @@ export default function SubscriptionScreen() {
   const insets = useSafeAreaInsets();
 
   const [selectedPlan, setSelectedPlan] = useState<'go' | 'plus'>('go');
+  const [isLoading, setIsLoading] = useState(false);
+  const [products, setProducts] = useState<InAppPurchases.IAPItemDetails[]>([]);
 
   const features = selectedPlan === 'go' ? GO_FEATURES : PLUS_FEATURES;
   const planColor = '#6B5CE7'; // Purple like ChatGPT
@@ -57,71 +81,198 @@ export default function SubscriptionScreen() {
     ? 'Keep chatting with expanded access'
     : 'Do more with advanced intelligence';
 
-  const handleUpgrade = async () => {
-    if (selectedPlan === 'go') {
-      // Go plan: direct Stripe checkout (Apple Pay preferred on iOS)
-      router.push({
-        pathname: '/stripe-checkout',
-        params: {
-          priceId: 'price_go_800',
-          planName: 'Dawinix Go',
-          amount: '8',
-          method: Platform.OS === 'ios' ? 'apple_pay' : 'card',
+  // Initialize IAP on mount
+  React.useEffect(() => {
+    initializeIAP();
+    return () => {
+      InAppPurchases.disconnectAsync();
+    };
+  }, []);
+
+  const initializeIAP = async () => {
+    try {
+      await InAppPurchases.connectAsync();
+      const { responseCode, results } = await InAppPurchases.getProductsAsync([
+        PRODUCT_IDS.go!,
+        PRODUCT_IDS.plus!,
+        PRODUCT_IDS.go_yearly!,
+        PRODUCT_IDS.plus_yearly!,
+      ]);
+      
+      if (responseCode === InAppPurchases.IAPResponseCode.OK && results) {
+        setProducts(results);
+      }
+    } catch (error) {
+      console.error('IAP initialization error:', error);
+    }
+  };
+
+  // Call Supabase Edge Function to verify purchase
+  const verifyPurchaseWithSupabase = async (
+    receipt: string,
+    transactionId: string,
+    productId: string,
+    isSandbox = false
+  ): Promise<boolean> => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session?.access_token) {
+        throw new Error('User not authenticated');
+      }
+
+      const response = await fetch(`${SUPABASE_FUNCTION_URL}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
         },
+        body: JSON.stringify({
+          platform: Platform.OS === 'ios' ? 'ios' : 'android',
+          receipt: receipt,
+          transactionId: transactionId,
+          productId: productId,
+          isSandbox: isSandbox || __DEV__, // Auto-detect sandbox in dev
+        }),
       });
-    } else {
-      // Plus plan: choose payment method
-      Alert.alert(
-        'Dawinix Plus — $19.99/month',
-        'Choose your payment method',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: Platform.OS === 'ios' ? 'Apple Pay' : 'Pay Now',
-            onPress: () => {
-              router.push({
-                pathname: '/stripe-checkout',
-                params: {
-                  priceId: 'price_1SjmtpE0VkO7z1Vn1lpvP0PC',
-                  planName: 'Dawinix Plus',
-                  amount: '19.99',
-                  method: Platform.OS === 'ios' ? 'apple_pay' : 'card',
-                },
+
+      const result = await response.json();
+
+      if (!result.success) {
+        console.error('Verification failed:', result.error);
+        showAlert('Verification Failed', result.error || 'Could not verify purchase');
+        return false;
+      }
+
+      console.log('✅ Purchase verified:', result);
+      
+      // Update local subscription state
+      // You might want to refresh the subscription context here
+      return true;
+      
+    } catch (error) {
+      console.error('Error calling verify function:', error);
+      showAlert('Error', 'Failed to verify purchase. Please try again.');
+      return false;
+    }
+  };
+
+  const handleUpgrade = async () => {
+    setIsLoading(true);
+    
+    try {
+      const productId = selectedPlan === 'go' ? PRODUCT_IDS.go : PRODUCT_IDS.plus;
+      
+      if (!productId) {
+        showAlert('Error', 'Product not available');
+        return;
+      }
+
+      // Start purchase flow
+      const { responseCode, results } = await InAppPurchases.requestPurchaseAsync(productId);
+
+      if (responseCode === InAppPurchases.IAPResponseCode.OK && results) {
+        const purchase = results[0];
+        
+        if (!purchase) {
+          showAlert('Error', 'Purchase failed');
+          return;
+        }
+
+        // Prepare receipt data based on platform
+        let receiptData: string;
+        
+        if (Platform.OS === 'ios') {
+          // iOS: transactionReceipt is base64 encoded
+          receiptData = purchase.transactionReceipt;
+        } else {
+          // Android: need to stringify the purchase object
+          receiptData = JSON.stringify({
+            productId: purchase.productId,
+            purchaseToken: purchase.purchaseToken,
+            orderId: purchase.orderId,
+          });
+        }
+
+        // Verify with Supabase Edge Function
+        const verified = await verifyPurchaseWithSupabase(
+          receiptData,
+          purchase.orderId || purchase.transactionId,
+          purchase.productId,
+          __DEV__ // Sandbox in development
+        );
+
+        if (verified) {
+          // Finish the transaction (acknowledge to Apple/Google)
+          await InAppPurchases.finishTransactionAsync(purchase, true);
+          
+          showAlert('Success', 'Your subscription is now active!');
+          router.back();
+        } else {
+          // Don't finish transaction if verification failed
+          // This allows retry
+        }
+      } else if (responseCode === InAppPurchases.IAPResponseCode.USER_CANCELED) {
+        // User cancelled, no action needed
+        console.log('User cancelled purchase');
+      } else {
+        showAlert('Error', 'Purchase failed. Please try again.');
+      }
+    } catch (error) {
+      console.error('Purchase error:', error);
+      showAlert('Error', 'Something went wrong. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleRestore = async () => {
+    setIsLoading(true);
+    try {
+      const { responseCode, results } = await InAppPurchases.getPurchaseHistoryAsync();
+      
+      if (responseCode === InAppPurchases.IAPResponseCode.OK && results) {
+        let restored = false;
+        
+        for (const purchase of results) {
+          const receiptData = Platform.OS === 'ios' 
+            ? purchase.transactionReceipt
+            : JSON.stringify({
+                productId: purchase.productId,
+                purchaseToken: purchase.purchaseToken,
+                orderId: purchase.orderId,
               });
-            },
-          },
-          {
-            text: 'Pay with Card',
-            onPress: () => {
-              router.push({
-                pathname: '/stripe-checkout',
-                params: {
-                  priceId: 'price_1SjmtpE0VkO7z1Vn1lpvP0PC',
-                  planName: 'Dawinix Plus',
-                  amount: '19.99',
-                  method: 'card',
-                },
-              });
-            },
-          },
-        ]
-      );
+
+          const verified = await verifyPurchaseWithSupabase(
+            receiptData,
+            purchase.orderId || purchase.transactionId,
+            purchase.productId,
+            __DEV__
+          );
+
+          if (verified) {
+            await InAppPurchases.finishTransactionAsync(purchase, true);
+            restored = true;
+          }
+        }
+
+        if (restored) {
+          showAlert('Success', 'Purchases restored successfully');
+        } else {
+          showAlert('Info', 'No active purchases found');
+        }
+      }
+    } catch (error) {
+      console.error('Restore error:', error);
+      showAlert('Error', 'Failed to restore purchases');
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const handlePurchaseOnWeb = () => {
     if (selectedPlan === 'plus') {
       Linking.openURL('https://dawinix.com/subscription');
-    }
-    // Go plan: no web purchase
-  };
-
-  const handleRestore = async () => {
-    const { error } = await restorePurchases();
-    if (error) {
-      showAlert('Error', error);
-    } else {
-      showAlert('Success', 'Purchases restored successfully');
     }
   };
 
@@ -200,12 +351,25 @@ export default function SubscriptionScreen() {
             </View>
           ))}
         </View>
+
+        {/* Restore Purchases Link */}
+        <TouchableOpacity onPress={handleRestore} style={styles.restoreBtn}>
+          <Text style={styles.restoreText}>Restore Purchases</Text>
+        </TouchableOpacity>
       </ScrollView>
 
       {/* Bottom CTA */}
       <View style={[styles.bottomCTA, { paddingBottom: insets.bottom + 20 }]}>
-        <TouchableOpacity style={styles.upgradeBtn} onPress={handleUpgrade}>
-          <Text style={styles.upgradeBtnText}>Upgrade for {planPrice}</Text>
+        <TouchableOpacity 
+          style={[styles.upgradeBtn, isLoading && styles.upgradeBtnDisabled]} 
+          onPress={handleUpgrade}
+          disabled={isLoading}
+        >
+          {isLoading ? (
+            <ActivityIndicator color="#000" />
+          ) : (
+            <Text style={styles.upgradeBtnText}>Upgrade for {planPrice}</Text>
+          )}
         </TouchableOpacity>
 
         {selectedPlan === 'plus' && (
@@ -349,6 +513,15 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.3)',
     lineHeight: 22,
   },
+  restoreBtn: {
+    marginTop: 8,
+    padding: 12,
+  },
+  restoreText: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.5)',
+    textDecorationLine: 'underline',
+  },
   bottomCTA: {
     position: 'absolute',
     bottom: 0,
@@ -365,6 +538,9 @@ const styles = StyleSheet.create({
     borderRadius: 50,
     paddingVertical: 17,
     alignItems: 'center',
+  },
+  upgradeBtnDisabled: {
+    opacity: 0.6,
   },
   upgradeBtnText: {
     fontSize: 17,
