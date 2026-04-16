@@ -43,10 +43,10 @@ const PRODUCT_IDS = {
   plus: Platform.select({ ios: 'com.dawinix.plus.monthly', android: 'com.dawinix.plus.monthly' }) || 'com.dawinix.plus.monthly',
 };
 
-// RevenueCat API key per platform — set via Expo env vars
+// RevenueCat API key per platform
 const RC_API_KEY = Platform.select({
-  ios: process.env.EXPO_PUBLIC_RC_IOS_KEY || '',
-  android: process.env.EXPO_PUBLIC_RC_ANDROID_KEY || '',
+  ios: 'appl_YOUR_REVENUECAT_IOS_KEY',
+  android: 'goog_YOUR_REVENUECAT_ANDROID_KEY',
   default: '',
 });
 

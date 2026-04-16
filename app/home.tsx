@@ -778,114 +778,8 @@ function WaveformAnimation({ isRecording }: { isRecording: boolean }) {
 }
 
 // ==========================================
-// PUSH NOTIFICATION PERMISSION MODAL
+// MAIN COMPONENT
 // ==========================================
-
-function NotificationPermissionModal({ visible, onAllow, onSkip }: {
-  visible: boolean;
-  onAllow: () => void;
-  onSkip: () => void;
-}) {
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const scaleAnim = useRef(new Animated.Value(0.85)).current;
-
-  useEffect(() => {
-    if (visible) {
-      Animated.parallel([
-        Animated.timing(fadeAnim, { toValue: 1, duration: 250, useNativeDriver: true }),
-        Animated.spring(scaleAnim, { toValue: 1, tension: 220, friction: 20, useNativeDriver: true }),
-      ]).start();
-    } else {
-      fadeAnim.setValue(0);
-      scaleAnim.setValue(0.85);
-    }
-  }, [visible]);
-
-  if (!visible) return null;
-
-  return (
-    <Modal visible={visible} transparent animationType="none" onRequestClose={onSkip}>
-      <View style={notifStyles.backdrop}>
-        <BlurView intensity={50} tint="dark" style={StyleSheet.absoluteFill} />
-        <Animated.View style={[notifStyles.card, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}>
-          <BlurView intensity={95} tint="dark" style={notifStyles.blurCard}>
-            {/* Bell icon */}
-            <View style={notifStyles.iconWrap}>
-              <Ionicons name="notifications" size={32} color="#FFFFFF" />
-            </View>
-            <Text style={notifStyles.title}>Stay informed</Text>
-            <Text style={notifStyles.body}>
-              Haitian AI can notify you when your AI response is ready — especially helpful for long tasks while the app is in the background.
-            </Text>
-            <View style={notifStyles.benefitRow}>
-              <Ionicons name="checkmark-circle" size={16} color="#34C759" />
-              <Text style={notifStyles.benefitText}>Know when AI finishes responding</Text>
-            </View>
-            <View style={notifStyles.benefitRow}>
-              <Ionicons name="checkmark-circle" size={16} color="#34C759" />
-              <Text style={notifStyles.benefitText}>Get alerts for long research tasks</Text>
-            </View>
-            <View style={notifStyles.benefitRow}>
-              <Ionicons name="checkmark-circle" size={16} color="#34C759" />
-              <Text style={notifStyles.benefitText}>No spam — only task completions</Text>
-            </View>
-            <TouchableOpacity style={notifStyles.allowBtn} onPress={onAllow}>
-              <Text style={notifStyles.allowBtnText}>Allow Notifications</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={notifStyles.skipBtn} onPress={onSkip}>
-              <Text style={notifStyles.skipBtnText}>Not Now</Text>
-            </TouchableOpacity>
-          </BlurView>
-        </Animated.View>
-      </View>
-    </Modal>
-  );
-}
-
-const notifStyles = StyleSheet.create({
-  backdrop: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 },
-  card: {
-    width: '100%',
-    maxWidth: 360,
-    borderRadius: 22,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.45,
-    shadowRadius: 24,
-    elevation: 24,
-  },
-  blurCard: { padding: 28, alignItems: 'center' },
-  iconWrap: {
-    width: 70,
-    height: 70,
-    borderRadius: 20,
-    backgroundColor: '#10A37F',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
-    shadowColor: '#10A37F',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-  },
-  title: { color: '#FFF', fontSize: 22, fontWeight: '700', marginBottom: 10, textAlign: 'center' },
-  body: { color: 'rgba(255,255,255,0.6)', fontSize: 14, textAlign: 'center', lineHeight: 21, marginBottom: 18 },
-  benefitRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8, width: '100%' },
-  benefitText: { color: 'rgba(255,255,255,0.8)', fontSize: 14 },
-  allowBtn: {
-    width: '100%',
-    backgroundColor: '#10A37F',
-    borderRadius: 14,
-    paddingVertical: 15,
-    alignItems: 'center',
-    marginTop: 20,
-    marginBottom: 10,
-  },
-  allowBtnText: { color: '#FFF', fontSize: 16, fontWeight: '700' },
-  skipBtn: { paddingVertical: 10, paddingHorizontal: 20 },
-  skipBtnText: { color: 'rgba(255,255,255,0.45)', fontSize: 14 },
-});
 
 export default function HomeScreen() {
   const { colors, isDark } = useTheme();
@@ -958,7 +852,6 @@ export default function HomeScreen() {
   const [renameModalVisible, setRenameModalVisible] = useState(false);
   const [archiveConfirmVisible, setArchiveConfirmVisible] = useState(false);
   const [groupStartModalVisible, setGroupStartModalVisible] = useState(false);
-  const [notifPermModalVisible, setNotifPermModalVisible] = useState(false);
 
   // Group chat mode
   const [groupChatMode, setGroupChatMode] = useState(false);
@@ -998,38 +891,6 @@ export default function HomeScreen() {
     const sub = AppState.addEventListener('change', s => { appStateForNotifRef.current = s; });
     return () => sub.remove();
   }, []);
-
-  // Show notification permission modal on first launch (after a short delay)
-  useEffect(() => {
-    if (Platform.OS === 'web') return;
-    const checkAndShowNotifModal = async () => {
-      try {
-        const { status } = await Notifications.getPermissionsAsync();
-        if (status === 'undetermined') {
-          // First launch — show polite modal after 2 s
-          const timer = setTimeout(() => setNotifPermModalVisible(true), 2000);
-          return () => clearTimeout(timer);
-        }
-      } catch (_e) {}
-    };
-    checkAndShowNotifModal();
-  }, []);
-
-  const handleAllowNotifications = useCallback(async () => {
-    setNotifPermModalVisible(false);
-    try {
-      const token = await registerForPushNotifications();
-      if (token && user?.id) {
-        pushTokenRef.current = token;
-        // Save push token to user_profiles for server-sent notifications
-        await supabase
-          .from('user_profiles')
-          .update({ push_token: token } as any)
-          .eq('id', user.id)
-          .catch(() => {}); // non-blocking — column may not exist yet
-      }
-    } catch (_e) {}
-  }, [user?.id, supabase]);
 
   // Send local notification when AI finishes while app is in background
   useEffect(() => {
@@ -2297,13 +2158,6 @@ export default function HomeScreen() {
               visible={inviteLinkVisible}
               onClose={() => setInviteLinkVisible(false)}
               isPlus={isUnlimited}
-            />
-
-            {/* Notification Permission Modal (first-launch) */}
-            <NotificationPermissionModal
-              visible={notifPermModalVisible}
-              onAllow={handleAllowNotifications}
-              onSkip={() => setNotifPermModalVisible(false)}
             />
 
             {/* Security Blur Overlay */}
