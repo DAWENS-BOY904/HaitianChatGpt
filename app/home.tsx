@@ -1843,4 +1843,3 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-Fix the 'cannot read property length of undefined' error in the TextInput onChangeText handler in home by adding a null coalescing guard: change `onChangeText={(txt) => { const safeTxt = txt ?? ''; ... }}` to ensure txt is never undefined before accessing its properties.Resize the empty state suggestion cards to be smaller and more compact, matching the ChatGPT-style layout (shorter height, tighter padding, smaller font). Also ensure the cards display properly on smaller screens.
