@@ -95,6 +95,17 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [currentConversation, setCurrentConversation] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
+  // Safety wrapper to ensure messages is always an array
+  const safeSetMessages = (updater: Message[] | ((prev: Message[]) => Message[])) => {
+    if (typeof updater === 'function') {
+      setMessages(prev => {
+        const result = updater(Array.isArray(prev) ? prev : []);
+        return Array.isArray(result) ? result : [];
+      });
+    } else {
+      setMessages(Array.isArray(updater) ? updater : []);
+    }
+  };
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null); // NEW
   const [loading, setLoading] = useState(false);
   
@@ -411,9 +422,9 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
         .order('updated_at', { ascending: false });
 
       if (!error && conversationsWithMessages) {
-        const validConversations = conversationsWithMessages
+        const validConversations = (conversationsWithMessages || [])
           .filter((c: any) => Array.isArray(c.messages) && c.messages.length > 0)
-          .map(c => ({
+          .map((c: any) => ({
             id: c.id,
             title: c.title,
             createdAt: c.created_at,
