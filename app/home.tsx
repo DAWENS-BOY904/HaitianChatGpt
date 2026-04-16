@@ -2359,3 +2359,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
+make the change id you read that:for the transcribe add real onspace edg function ai cloud instead of my api and i already add EXPO_PUBLIC_RC_IOS_KEY and EXPO_PUBLIC_RC_ANDROID_KEY to the .env file with your RevenueCat iOS and Android API keys so the Go plan purchase flow works end-to-end on device. move the smart suggestion cards in app/home to always render at the very bottom of the empty state (just above the input bar), with no vertical centering, matching the chatgot home page layout exactly.
