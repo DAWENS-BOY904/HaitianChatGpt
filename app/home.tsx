@@ -1408,6 +1408,56 @@ export default function HomeScreen() {
     { title: 'Summarize text', sub: 'paste any article' },
   ];
 
+  // Staggered entrance animations for suggestion cards
+  const suggestionAnims = useRef(suggestions.map(() => ({
+    opacity: new Animated.Value(0),
+    translateY: new Animated.Value(24),
+  }))).current;
+
+  useEffect(() => {
+    if (!hasMessages) {
+      // Reset
+      suggestionAnims.forEach(a => { a.opacity.setValue(0); a.translateY.setValue(24); });
+      // Stagger in
+      const animations = suggestionAnims.map((a, i) =>
+        Animated.parallel([
+          Animated.timing(a.opacity, { toValue: 1, duration: 300, delay: i * 80, useNativeDriver: true }),
+          Animated.timing(a.translateY, { toValue: 0, duration: 300, delay: i * 80, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+        ])
+      );
+      Animated.stagger(80, animations).start();
+    }
+  }, [hasMessages]);
+
+  const handleSuggestionTap = useCallback(async (suggestion: { title: string; sub: string }) => {
+    const text = `${suggestion.title} — ${suggestion.sub}`;
+    setInputText(text);
+    // slight delay so inputText state updates before send
+    setTimeout(async () => {
+      let conversationId = currentConversation?.id;
+      if (!conversationId) {
+        conversationId = await createConversation();
+        if (!conversationId) return;
+      }
+      setSending(true);
+      setGenerating(true);
+      setInputText('');
+      setThinkingMode('thinking');
+      try {
+        await sendMessage(text, undefined, undefined, false, currentAIModel);
+        setShowCompletionStatus(true);
+        setTimeout(() => setShowCompletionStatus(false), 2000);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } catch (e: any) {
+        showAlert('Error', e?.message || 'Failed to send');
+        setInputText(text);
+      } finally {
+        setSending(false);
+        setGenerating(false);
+      }
+    }, 50);
+  }, [currentConversation, createConversation, sendMessage, currentAIModel, showAlert]);
+
   return (
     <ErrorBoundary>
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -1540,16 +1590,22 @@ export default function HomeScreen() {
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={[styles.suggestionsRow, { gap: 10 }]}
               >
-                {suggestions.map((s) => (
-                  <TouchableOpacity
+                {suggestions.map((s, i) => (
+                  <Animated.View
                     key={s.title}
-                    style={styles.suggestionCard}
-                    activeOpacity={0.7}
-                    onPress={() => setInputText(s.title + ' — ' + s.sub)}
+                    style={[
+                      { opacity: suggestionAnims[i].opacity, transform: [{ translateY: suggestionAnims[i].translateY }] }
+                    ]}
                   >
-                    <Text style={styles.suggestionTitle}>{s.title}</Text>
-                    <Text style={styles.suggestionSub}>{s.sub}</Text>
-                  </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.suggestionCard}
+                      activeOpacity={0.7}
+                      onPress={() => handleSuggestionTap(s)}
+                    >
+                      <Text style={styles.suggestionTitle}>{s.title}</Text>
+                      <Text style={styles.suggestionSub}>{s.sub}</Text>
+                    </TouchableOpacity>
+                  </Animated.View>
                 ))}
               </ScrollView>
             </>
@@ -1843,4 +1899,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-fuckiong dont skip make change :Fix the 'cannot read property length of undefined' Add smooth entrance animations to the empty state suggestion cards on the home page — staggered fade-in and slide-up effects when the page loads with no conversation active and when click a suggestion auto send to the ai and ai thinking.
+
