@@ -5,26 +5,22 @@ import {
   TouchableOpacity,
   StyleSheet,
   Modal,
-  Dimensions,
   FlatList,
-  Alert,
   TextInput,
+  Share,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { useTheme } from '../hooks/useTheme';
-import { Spacing, Typography, BorderRadius } from '../constants/theme';
 import { getSupabaseClient } from '@/template';
+import { useConversation } from '../hooks/useConversation';
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-
-interface ChatItem {
+interface Conversation {
   id: string;
   title: string;
-  lastMessage: string;
-  timestamp: string;
-  isPinned: boolean;
-  messageCount: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface ChatHistoryModalProps {
@@ -33,6 +29,7 @@ interface ChatHistoryModalProps {
   onSelectChat: (chatId: string) => void;
   onNewChat: () => void;
   currentChatId?: string;
+  conversations?: Conversation[];
 }
 
 export function ChatHistoryModal({
@@ -41,398 +38,213 @@ export function ChatHistoryModal({
   onSelectChat,
   onNewChat,
   currentChatId,
+  conversations: propConversations,
 }: ChatHistoryModalProps) {
-  const { colors } = useTheme();
-  const [chats, setChats] = useState<ChatItem[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [editingChatId, setEditingChatId] = useState<string | null>(null);
-  const [editTitle, setEditTitle] = useState('');
+  const { colors, isDark } = useTheme();
+  const { conversations: ctxConversations, selectConversation, deleteConversation, archiveConversation, updateConversationTitle } = useConversation();
   const supabase = getSupabaseClient();
+
+  const conversations = propConversations || ctxConversations;
+
+  const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set());
+  const [renameId, setRenameId] = useState<string | null>(null);
+  const [renameText, setRenameText] = useState('');
 
   useEffect(() => {
     if (visible) {
-      loadChats();
+      supabase.from('conversations').select('id').eq('is_pinned', true)
+        .then(({ data }) => {
+          if (data) setPinnedIds(new Set(data.map((c: any) => c.id)));
+        });
     }
   }, [visible]);
 
-  const loadChats = async () => {
-    setLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from('conversations')
-        .select('*')
-        .order('updated_at', { ascending: false });
+  const sortedConvs = [...conversations].sort((a, b) => {
+    const aPinned = pinnedIds.has(a.id) ? 1 : 0;
+    const bPinned = pinnedIds.has(b.id) ? 1 : 0;
+    return bPinned - aPinned;
+  });
 
-      if (error) throw error;
+  const handlePin = async (id: string) => {
+    const newPinned = !pinnedIds.has(id);
+    await supabase.from('conversations').update({ is_pinned: newPinned }).eq('id', id);
+    setPinnedIds(prev => {
+      const next = new Set(prev);
+      newPinned ? next.add(id) : next.delete(id);
+      return next;
+    });
+  };
 
-      const formattedChats: ChatItem[] = data.map(chat => ({
-        id: chat.id,
-        title: chat.title || `Chat ${new Date(chat.created_at).toLocaleDateString()}`,
-        lastMessage: chat.last_message || 'No messages yet',
-        timestamp: new Date(chat.updated_at).toLocaleString(),
-        isPinned: chat.is_pinned || false,
-        messageCount: chat.message_count || 0,
-      }));
+  const handleArchive = async (id: string) => {
+    await archiveConversation(id);
+  };
 
-      setChats(formattedChats);
-    } catch (error) {
-      console.error('Error loading chats:', error);
-      Alert.alert('Error', 'Failed to load chat history');
-    } finally {
-      setLoading(false);
+  const handleDelete = (id: string) => {
+    Alert.alert('Delete Chat', 'Permanently delete this chat?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: () => deleteConversation(id) },
+    ]);
+  };
+
+  const handleShare = async (conv: Conversation) => {
+    await Share.share({ message: `Check out this conversation: ${conv.title}` });
+  };
+
+  const startRename = (conv: Conversation) => {
+    setRenameId(conv.id);
+    setRenameText(conv.title || '');
+  };
+
+  const confirmRename = async () => {
+    if (renameId && renameText.trim()) {
+      await updateConversationTitle(renameId, renameText.trim());
     }
+    setRenameId(null);
+    setRenameText('');
   };
 
-  const handleSelectChat = (chat: ChatItem) => {
-    onSelectChat(chat.id);
-    onClose();
-  };
+  const renderItem = ({ item }: { item: Conversation }) => {
+    const isActive = currentChatId === item.id;
+    const isPinned = pinnedIds.has(item.id);
 
-  const handlePinChat = async (chatId: string, isPinned: boolean) => {
-    try {
-      const { error } = await supabase
-        .from('conversations')
-        .update({ is_pinned: !isPinned })
-        .eq('id', chatId);
-
-      if (error) throw error;
-
-      setChats(prev => prev.map(chat =>
-        chat.id === chatId ? { ...chat, isPinned: !isPinned } : chat
-      ));
-    } catch (error) {
-      console.error('Error pinning chat:', error);
-      Alert.alert('Error', 'Failed to pin/unpin chat');
-    }
-  };
-
-  const handleDeleteChat = (chatId: string) => {
-    Alert.alert(
-      'Delete Chat',
-      'Are you sure you want to delete this chat? This action cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const { error } = await supabase
-                .from('conversations')
-                .delete()
-                .eq('id', chatId);
-
-              if (error) throw error;
-
-              setChats(prev => prev.filter(chat => chat.id !== chatId));
-            } catch (error) {
-              console.error('Error deleting chat:', error);
-              Alert.alert('Error', 'Failed to delete chat');
-            }
-          }
-        }
-      ]
+    return (
+      <TouchableOpacity
+        style={[
+          s.item,
+          isActive && { backgroundColor: isDark ? '#1C1C1E' : '#F2F2F7' },
+        ]}
+        activeOpacity={0.7}
+        onPress={() => { selectConversation(item.id); onSelectChat(item.id); onClose(); }}
+      >
+        <View style={s.itemLeft}>
+          {isPinned && <Ionicons name="pin" size={12} color="#7C6FF7" style={{ marginRight: 4 }} />}
+          {renameId === item.id ? (
+            <TextInput
+              style={[s.renameInput, { color: colors.text }]}
+              value={renameText}
+              onChangeText={setRenameText}
+              onBlur={confirmRename}
+              onSubmitEditing={confirmRename}
+              autoFocus
+            />
+          ) : (
+            <Text style={[s.itemTitle, { color: colors.text }]} numberOfLines={1}>
+              {item.title || 'New conversation'}
+            </Text>
+          )}
+        </View>
+        {/* Action row */}
+        <View style={s.actions}>
+          <TouchableOpacity onPress={() => handleShare(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Ionicons name="share-outline" size={16} color={colors.textSecondary} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => handlePin(item.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Ionicons name={isPinned ? 'pin' : 'pin-outline'} size={16} color={isPinned ? '#7C6FF7' : colors.textSecondary} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => startRename(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Ionicons name="pencil-outline" size={16} color={colors.textSecondary} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => handleArchive(item.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Ionicons name="archive-outline" size={16} color={colors.textSecondary} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => handleDelete(item.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Ionicons name="trash-outline" size={16} color="#FF453A" />
+          </TouchableOpacity>
+        </View>
+      </TouchableOpacity>
     );
   };
 
-  const handleRenameChat = async (chatId: string) => {
-    if (!editTitle.trim()) return;
-
-    try {
-      const { error } = await supabase
-        .from('conversations')
-        .update({ title: editTitle.trim() })
-        .eq('id', chatId);
-
-      if (error) throw error;
-
-      setChats(prev => prev.map(chat =>
-        chat.id === chatId ? { ...chat, title: editTitle.trim() } : chat
-      ));
-      setEditingChatId(null);
-      setEditTitle('');
-    } catch (error) {
-      console.error('Error renaming chat:', error);
-      Alert.alert('Error', 'Failed to rename chat');
-    }
-  };
-
-  const startEditing = (chat: ChatItem) => {
-    setEditingChatId(chat.id);
-    setEditTitle(chat.title);
-  };
-
-  const renderChatItem = ({ item }: { item: ChatItem }) => (
-    <TouchableOpacity
-      style={[
-        styles.chatItem,
-        {
-          backgroundColor: currentChatId === item.id ? colors.primary + '20' : colors.surface,
-          borderColor: currentChatId === item.id ? colors.primary : colors.border,
-        }
-      ]}
-      onPress={() => handleSelectChat(item)}
-    >
-      <View style={styles.chatContent}>
-        <View style={styles.chatHeader}>
-          {item.isPinned && (
-            <Ionicons name="pin" size={16} color={colors.primary} style={styles.pinIcon} />
-          )}
-          {editingChatId === item.id ? (
-            <TextInput
-              style={[styles.titleInput, { color: colors.text }]}
-              value={editTitle}
-              onChangeText={setEditTitle}
-              onBlur={() => handleRenameChat(item.id)}
-              onSubmitEditing={() => handleRenameChat(item.id)}
-              autoFocus
-              selectTextOnFocus
-            />
-          ) : (
-            <Text
-              style={[styles.chatTitle, { color: colors.text }]}
-              numberOfLines={1}
-            >
-              {item.title}
-            </Text>
-          )}
-        </View>
-        <Text
-          style={[styles.chatMessage, { color: colors.textSecondary }]}
-          numberOfLines={2}
-        >
-          {item.lastMessage}
-        </Text>
-        <View style={styles.chatFooter}>
-          <Text style={[styles.timestamp, { color: colors.textSecondary }]}>
-            {item.timestamp}
-          </Text>
-          <Text style={[styles.messageCount, { color: colors.textSecondary }]}>
-            {item.messageCount} messages
-          </Text>
-        </View>
-      </View>
-
-      <View style={styles.chatActions}>
-        <TouchableOpacity
-          style={styles.actionButton}
-          onPress={() => startEditing(item)}
-        >
-          <Ionicons name="pencil" size={20} color={colors.textSecondary} />
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.actionButton}
-          onPress={() => handlePinChat(item.id, item.isPinned)}
-        >
-          <Ionicons
-            name={item.isPinned ? "pin" : "pin-outline"}
-            size={20}
-            color={item.isPinned ? colors.primary : colors.textSecondary}
-          />
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.actionButton}
-          onPress={() => handleDeleteChat(item.id)}
-        >
-          <Ionicons name="trash-outline" size={20} color="#FF3B30" />
-        </TouchableOpacity>
-      </View>
-    </TouchableOpacity>
-  );
-
-  const pinnedChats = chats.filter(chat => chat.isPinned);
-  const unpinnedChats = chats.filter(chat => !chat.isPinned);
-
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="slide"
-      onRequestClose={onClose}
-    >
-      <BlurView intensity={20} style={styles.overlay}>
-        <View style={styles.container}>
-          <View style={[styles.header, { borderBottomColor: colors.border }]}>
-            <Text style={[styles.title, { color: colors.text }]}>
-              Chat History
-            </Text>
-            <View style={styles.headerActions}>
-              <TouchableOpacity
-                style={[styles.newChatButton, { backgroundColor: colors.primary }]}
-                onPress={() => {
-                  onNewChat();
-                  onClose();
-                }}
-              >
-                <Ionicons name="add" size={20} color="#FFFFFF" />
-                <Text style={styles.newChatText}>New Chat</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-                <Ionicons name="close" size={24} color={colors.textSecondary} />
-              </TouchableOpacity>
-            </View>
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={s.overlay}>
+        <BlurView intensity={20} tint="dark" style={StyleSheet.absoluteFill} />
+        <View style={[s.container, { backgroundColor: isDark ? '#0A0A0A' : '#F2F2F7' }]}>
+          {/* Header */}
+          <View style={[s.header, { borderBottomColor: isDark ? '#222' : '#DDD' }]}>
+            <Text style={[s.headerTitle, { color: colors.text }]}>Chats</Text>
+            <TouchableOpacity
+              style={[s.newBtn, { backgroundColor: '#7C6FF7' }]}
+              onPress={() => { onNewChat(); onClose(); }}
+            >
+              <Ionicons name="add" size={18} color="#FFF" />
+              <Text style={s.newBtnText}>New Chat</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={onClose} style={{ padding: 8 }}>
+              <Ionicons name="close" size={22} color={colors.textSecondary} />
+            </TouchableOpacity>
           </View>
 
-          {loading ? (
-            <View style={styles.loadingContainer}>
-              <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
-                Loading chats...
-              </Text>
-            </View>
-          ) : (
-            <FlatList
-              data={[...pinnedChats, ...unpinnedChats]}
-              renderItem={renderChatItem}
-              keyExtractor={(item) => item.id}
-              style={styles.chatList}
-              showsVerticalScrollIndicator={false}
-              ListEmptyComponent={
-                <View style={styles.emptyContainer}>
-                  <Ionicons name="chatbubble-outline" size={48} color={colors.textSecondary} />
-                  <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                    No chats yet
-                  </Text>
-                  <Text style={[styles.emptySubtext, { color: colors.textSecondary }]}>
-                    Start a new conversation to see it here
-                  </Text>
-                </View>
-              }
-            />
-          )}
+          <FlatList
+            data={sortedConvs}
+            renderItem={renderItem}
+            keyExtractor={item => item.id}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingVertical: 8 }}
+            ListEmptyComponent={
+              <View style={s.empty}>
+                <Ionicons name="chatbubble-outline" size={44} color={colors.textSecondary} />
+                <Text style={[s.emptyText, { color: colors.textSecondary }]}>No conversations yet</Text>
+              </View>
+            }
+          />
         </View>
-      </BlurView>
+      </View>
     </Modal>
   );
 }
 
-const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-  },
+const s = StyleSheet.create({
+  overlay: { flex: 1, justifyContent: 'flex-end' },
   container: {
     flex: 1,
-    backgroundColor: 'rgba(28, 28, 30, 0.98)',
-    marginTop: 50,
-    borderTopLeftRadius: BorderRadius.lg,
-    borderTopRightRadius: BorderRadius.lg,
+    marginTop: 60,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    overflow: 'hidden',
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    padding: Spacing.lg,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: 10,
+  },
+  headerTitle: { flex: 1, fontSize: 20, fontWeight: '700' },
+  newBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    gap: 4,
+  },
+  newBtnText: { color: '#FFF', fontSize: 14, fontWeight: '600' },
+  item: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+    marginHorizontal: 8,
+    borderRadius: 12,
+    marginBottom: 2,
+  },
+  itemLeft: { flex: 1, flexDirection: 'row', alignItems: 'center' },
+  itemTitle: { fontSize: 16, fontWeight: '400', flex: 1 },
+  renameInput: {
+    flex: 1,
+    fontSize: 16,
     borderBottomWidth: 1,
+    borderBottomColor: '#7C6FF7',
+    paddingVertical: 2,
   },
-  title: {
-    fontSize: Typography.h2.fontSize,
-    fontWeight: 'bold',
-  },
-  headerActions: {
+  actions: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 10,
+    marginLeft: 8,
   },
-  newChatButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    borderRadius: BorderRadius.md,
-    marginRight: Spacing.md,
-  },
-  newChatText: {
-    color: '#FFFFFF',
-    fontSize: Typography.body.fontSize,
-    fontWeight: '600',
-    marginLeft: Spacing.xs,
-  },
-  closeButton: {
-    padding: Spacing.sm,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    fontSize: Typography.body.fontSize,
-  },
-  chatList: {
-    flex: 1,
-    padding: Spacing.md,
-  },
-  chatItem: {
-    flexDirection: 'row',
-    padding: Spacing.md,
-    borderRadius: BorderRadius.md,
-    borderWidth: 1,
-    marginBottom: Spacing.sm,
-  },
-  chatContent: {
-    flex: 1,
-  },
-  chatHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: Spacing.xs,
-  },
-  pinIcon: {
-    marginRight: Spacing.xs,
-  },
-  chatTitle: {
-    fontSize: Typography.body.fontSize,
-    fontWeight: '600',
-    flex: 1,
-  },
-  titleInput: {
-    fontSize: Typography.body.fontSize,
-    fontWeight: '600',
-    flex: 1,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: BorderRadius.sm,
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: Spacing.xs,
-  },
-  chatMessage: {
-    fontSize: Typography.caption.fontSize,
-    marginBottom: Spacing.xs,
-    lineHeight: 18,
-  },
-  chatFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  timestamp: {
-    fontSize: Typography.caption.fontSize,
-  },
-  messageCount: {
-    fontSize: Typography.caption.fontSize,
-  },
-  chatActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginLeft: Spacing.sm,
-  },
-  actionButton: {
-    padding: Spacing.xs,
-    marginLeft: Spacing.xs,
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingTop: 100,
-  },
-  emptyText: {
-    fontSize: Typography.h2.fontSize,
-    fontWeight: '600',
-    marginTop: Spacing.md,
-    marginBottom: Spacing.xs,
-  },
-  emptySubtext: {
-    fontSize: Typography.body.fontSize,
-    textAlign: 'center',
-  },
+  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 80, gap: 12 },
+  emptyText: { fontSize: 16, fontWeight: '500' },
 });
