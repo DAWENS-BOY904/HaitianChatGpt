@@ -8,13 +8,31 @@ import {
   StatusBar,
   Platform,
 } from 'react-native';
-import { useAuth, useAlert } from '@/template';
+import { useAuth, useAlert, getSupabaseClient } from '@/template';
 import { useTheme } from '../hooks/useTheme';
 import { Spacing, Typography, BorderRadius } from '../constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as AppleAuthentication from 'expo-apple-authentication';
+
+// ── Helper: send login confirmation email ──
+async function sendLoginConfirmationEmail(userId: string, email: string) {
+  try {
+    const supabase = getSupabaseClient();
+    await supabase.functions.invoke('send-login-email', {
+      body: {
+        userId,
+        email,
+        platform: Platform.OS,
+        loginTime: new Date().toISOString(),
+      },
+    });
+  } catch (e) {
+    // Non-blocking – don't interrupt login flow
+    console.warn('Login email send failed:', e);
+  }
+}
 
 export default function LoginScreen() {
   const { colors } = useTheme();
@@ -62,9 +80,13 @@ export default function LoginScreen() {
   };
 
   const handleGoogleSignIn = async () => {
-    const { error } = await signInWithGoogle();
+    const { error, user } = await signInWithGoogle() as any;
     if (error) {
       showAlert('Error', error);
+      return;
+    }
+    if (user) {
+      sendLoginConfirmationEmail(user.id, user.email || email);
     }
   };
 
@@ -123,7 +145,7 @@ export default function LoginScreen() {
       const { getSupabaseClient } = await import('@/template');
       const supabase = getSupabaseClient();
 
-      const { error } = await supabase.auth.signInWithIdToken({
+      const { error, data } = await supabase.auth.signInWithIdToken({
         provider: 'apple',
         token: credential.identityToken,
         nonce: rawNonce,
@@ -131,6 +153,14 @@ export default function LoginScreen() {
 
       if (error) {
         showAlert('Sign In Failed', error.message);
+        return;
+      }
+      // Send login confirmation email
+      if (data?.user) {
+        const appleEmail = data.user.email ||
+          credential.email ||
+          `${credential.user}@privaterelay.appleid.com`;
+        sendLoginConfirmationEmail(data.user.id, appleEmail);
       }
       // AuthRouter will handle navigation on success
     } catch (e: any) {

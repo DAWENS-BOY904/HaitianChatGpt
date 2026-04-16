@@ -8,7 +8,7 @@ import {
   StatusBar,
   Platform,
 } from 'react-native';
-import { useAuth, useAlert } from '@/template';
+import { useAuth, useAlert, getSupabaseClient } from '@/template';
 import { useTheme } from '../hooks/useTheme';
 import { Spacing, Typography, BorderRadius } from '../constants/theme';
 import { Ionicons } from '@expo/vector-icons';
@@ -43,9 +43,24 @@ export default function LoginPasswordScreen() {
       return;
     }
 
-    const { error } = await signInWithPassword(email, password);
-    if (error) {
-      showAlert('Error', error);
+    const result = await signInWithPassword(email, password) as any;
+    if (result?.error) {
+      showAlert('Error', result.error);
+      return;
+    }
+    // Send login confirmation email (non-blocking)
+    if (result?.user) {
+      try {
+        const supabase = getSupabaseClient();
+        await supabase.functions.invoke('send-login-email', {
+          body: {
+            userId: result.user.id,
+            email: result.user.email || email,
+            platform: 'email',
+            loginTime: new Date().toISOString(),
+          },
+        });
+      } catch (_e) {}
     }
   };
 

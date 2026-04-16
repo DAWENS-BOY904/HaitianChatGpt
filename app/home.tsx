@@ -52,6 +52,48 @@ import { CalculatorModal, CalculatorCard, detectMathExpression } from '../compon
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
+import * as Notifications from 'expo-notifications';
+
+// ==========================================
+// PUSH NOTIFICATION SETUP
+// ==========================================
+
+if (Platform.OS !== 'web') {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+    }),
+  });
+}
+
+async function registerForPushNotifications(): Promise<string | null> {
+  try {
+    if (Platform.OS === 'web') return null;
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
+    if (existingStatus !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+    if (finalStatus !== 'granted') return null;
+    const tokenData = await Notifications.getExpoPushTokenAsync();
+    return tokenData.data;
+  } catch (e) {
+    return null;
+  }
+}
+
+async function sendLocalNotification(title: string, body: string) {
+  try {
+    if (Platform.OS === 'web') return;
+    await Notifications.scheduleNotificationAsync({
+      content: { title, body, sound: true, badge: 1 },
+      trigger: null,
+    });
+  } catch (_e) {}
+}
 
 // ==========================================
 // TYPE DEFINITIONS
@@ -97,6 +139,71 @@ const AUTO_LOCK_DELAY = 30000;
 
 // Accent colors per user slot in group
 const GROUP_ACCENT_COLORS = ['#007AFF', '#34C759', '#FF3B30', '#FF9500', '#AF52DE', '#5AC8FA', '#FF2D55'];
+
+// ==========================================
+// @ MENTION POPUP COMPONENT
+// ==========================================
+
+function MentionPopup({ members, onSelect, onClose }: {
+  members: GroupMember[];
+  onSelect: (member: GroupMember) => void;
+  onClose: () => void;
+}) {
+  const { colors, isDark } = useTheme();
+  if (members.length === 0) return null;
+  return (
+    <View style={[
+      mentionStyles.container,
+      { backgroundColor: isDark ? '#2C2C2E' : '#FFFFFF', borderColor: isDark ? '#3A3A3C' : '#E0E0E5' }
+    ]}>
+      <ScrollView keyboardShouldPersistTaps="always" showsVerticalScrollIndicator={false} style={{ maxHeight: 220 }}>
+        {members.map((m, i) => (
+          <TouchableOpacity
+            key={m.id}
+            style={[
+              mentionStyles.row,
+              i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: isDark ? '#3A3A3C' : '#E5E5EA' }
+            ]}
+            onPress={() => { onSelect(m); onClose(); }}
+            activeOpacity={0.7}
+          >
+            {m.profile_photo_url ? (
+              <Image source={{ uri: m.profile_photo_url }} style={mentionStyles.avatar} />
+            ) : (
+              <View style={[mentionStyles.avatarFallback, { backgroundColor: m.accent_color || '#888' }]}>
+                <Text style={mentionStyles.avatarLetter}>{(m.username?.[0] || '?').toUpperCase()}</Text>
+              </View>
+            )}
+            <Text style={[mentionStyles.name, { color: colors.text }]}>@{m.username}</Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+    </View>
+  );
+}
+
+const mentionStyles = StyleSheet.create({
+  container: {
+    position: 'absolute',
+    bottom: 70,
+    left: 60,
+    right: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    overflow: 'hidden',
+    zIndex: 100,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    elevation: 12,
+  },
+  row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 12, gap: 10 },
+  avatar: { width: 34, height: 34, borderRadius: 17 },
+  avatarFallback: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
+  avatarLetter: { color: '#FFF', fontSize: 15, fontWeight: '700' },
+  name: { fontSize: 15, fontWeight: '500' },
+});
 
 const SUPPORTED_AI_MODELS = {
   gemini: 'Gemini',
@@ -755,6 +862,16 @@ export default function HomeScreen() {
   const [groupRespondAuto, setGroupRespondAuto] = useState(true);
   const [groupMembers, setGroupMembers] = useState<GroupMember[]>([]);
 
+  // @ mention
+  const [mentionQuery, setMentionQuery] = useState('');
+  const [showMentionPopup, setShowMentionPopup] = useState(false);
+  const [filteredMentionMembers, setFilteredMentionMembers] = useState<GroupMember[]>([]);
+
+  // Push notification token
+  const pushTokenRef = useRef<string | null>(null);
+  const wasGeneratingRef = useRef(false);
+  const appStateForNotifRef = useRef(AppState.currentState);
+
   // User profile for avatar
   const [userProfilePhoto, setUserProfilePhoto] = useState<string | null>(null);
   
@@ -767,6 +884,40 @@ export default function HomeScreen() {
       });
     }
   }, [user?.id]);
+
+  // Register push notifications
+  useEffect(() => {
+    registerForPushNotifications().then(token => { pushTokenRef.current = token; });
+    const sub = AppState.addEventListener('change', s => { appStateForNotifRef.current = s; });
+    return () => sub.remove();
+  }, []);
+
+  // Send local notification when AI finishes while app is in background
+  useEffect(() => {
+    const isGeneratingNow = generating || sending;
+    if (wasGeneratingRef.current && !isGeneratingNow) {
+      if (appStateForNotifRef.current !== 'active') {
+        const msgs = messages || [];
+        const lastAI = [...msgs].reverse().find(m => m.role === 'assistant');
+        if (lastAI) {
+          const preview = lastAI.content.replace(/[#*`]/g, '').slice(0, 60);
+          const ttl = currentConversation?.title || 'Haitian AI';
+          sendLocalNotification(ttl, preview + (lastAI.content.length > 60 ? '\u2026' : ''));
+        }
+      }
+    }
+    wasGeneratingRef.current = isGeneratingNow;
+  }, [generating, sending, messages, currentConversation]);
+
+  // @ mention filtering
+  useEffect(() => {
+    if (showMentionPopup && groupChatMode) {
+      const q = mentionQuery.toLowerCase();
+      setFilteredMentionMembers(
+        groupMembers.filter(m => !q || m.username.toLowerCase().includes(q))
+      );
+    }
+  }, [mentionQuery, showMentionPopup, groupMembers, groupChatMode]);
 
   // ── Load smart suggestions from last 7 days messages ──
   useEffect(() => {
@@ -1220,10 +1371,23 @@ export default function HomeScreen() {
 
       // If respond auto is OFF in group mode, don't call AI
       if (groupChatMode && !groupRespondAuto) {
-        // Just save user message without AI response
+        // AI won't respond — group auto-response disabled
         setSending(false);
         setGenerating(false);
         return;
+      }
+
+      // If a user is @tagged in group chat, let the tagged person reply (skip AI)
+      const atTagMatch = finalText.match(/@(\w+)/);
+      if (groupChatMode && atTagMatch) {
+        const taggedName = atTagMatch[1].toLowerCase();
+        const isTaggedMember = groupMembers.some(m => m.username.toLowerCase() === taggedName);
+        if (isTaggedMember) {
+          // Don't invoke AI — the tagged human should reply
+          setSending(false);
+          setGenerating(false);
+          return;
+        }
       }
 
       await sendMessage(finalText, undefined, base64Image, false, currentAIModel);
@@ -1838,6 +2002,17 @@ export default function HomeScreen() {
                         const safeTxt = txt ?? '';
                         setInputText(safeTxt);
                         try { setCodeLangChips(/```\w*$/.test(safeTxt)); } catch (_e) { setCodeLangChips(false); }
+                        // @ mention detection in group chat
+                        if (groupChatMode) {
+                          const atMatch = safeTxt.match(/@(\w*)$/);
+                          if (atMatch !== null) {
+                            setMentionQuery(atMatch[1] || '');
+                            setShowMentionPopup(true);
+                          } else {
+                            setShowMentionPopup(false);
+                            setMentionQuery('');
+                          }
+                        }
                       }}
                       multiline
                       maxLength={4000}
@@ -1885,6 +2060,21 @@ export default function HomeScreen() {
                 ) : null}
               </View>
             </KeyboardAvoidingView>
+
+            {/* @ Mention Popup */}
+            {showMentionPopup && groupChatMode && filteredMentionMembers.length > 0 && (
+              <MentionPopup
+                members={filteredMentionMembers}
+                onSelect={(member) => {
+                  // Replace @query with @username
+                  const newText = inputText.replace(/@\w*$/, `@${member.username} `);
+                  setInputText(newText);
+                  setShowMentionPopup(false);
+                  setMentionQuery('');
+                }}
+                onClose={() => { setShowMentionPopup(false); setMentionQuery(''); }}
+              />
+            )}
 
             {/* Modals */}
             <ToolsModal
