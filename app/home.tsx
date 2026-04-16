@@ -658,7 +658,7 @@ export default function HomeScreen() {
   
   const { 
     conversations, 
-    messages: rawMessages, 
+    messages, 
     currentConversation, 
     sendMessage, 
     updateMessageAndRegenerate, 
@@ -670,9 +670,6 @@ export default function HomeScreen() {
     archiveConversation,
     selectConversation,
   } = useConversation();
-  // Safety: ensure messages is always an array and never undefined
-  const messages = Array.isArray(rawMessages) ? rawMessages : [];
-  const safeMessages = messages;
   
   const { showAlert } = useAlert();
   const router = useRouter();
@@ -1380,8 +1377,7 @@ export default function HomeScreen() {
     groupActionBtnText: { color: '#007AFF', fontSize: 15, fontWeight: '600' },
   }), [colors, insets]);
 
-  const safeMessages = Array.isArray(messages) ? messages : [];
-  const displayMessages = isSearchMode && searchQuery ? (Array.isArray(filteredMessages) ? filteredMessages : []) : safeMessages;
+  const displayMessages = isSearchMode && searchQuery ? filteredMessages : messages;
   const showSendButton = inputText.trim().length > 0 || selectedMedia.length > 0;
   const isRecording = recordingState === 'recording';
   const isProcessing = recordingState === 'processing';
@@ -1608,7 +1604,7 @@ export default function HomeScreen() {
                     </View>
                   ) : null}
                   ListFooterComponent={generating ? (
-                    <ThinkingIndicator userMessage={safeMessages.length > 0 ? safeMessages[safeMessages.length - 1].content : inputText} completed={showCompletionStatus} mode={thinkingMode} />
+                    <ThinkingIndicator userMessage={messages.length > 0 ? messages[messages.length - 1].content : inputText} completed={showCompletionStatus} mode={thinkingMode} />
                   ) : null}
                   onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
                   maxToRenderPerBatch={10}

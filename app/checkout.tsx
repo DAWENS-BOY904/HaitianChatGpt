@@ -248,7 +248,6 @@ export default function CheckoutScreen() {
       fontSize: 20,
       marginLeft: Spacing.md,
       flex: 1,
-      color: colors.text,
     },
     content: {
       flex: 1,
@@ -260,7 +259,6 @@ export default function CheckoutScreen() {
       ...Typography.body,
       fontWeight: '600',
       marginBottom: Spacing.md,
-      color: colors.text,
     },
     orderSummary: {
       backgroundColor: colors.surface,
@@ -280,7 +278,6 @@ export default function CheckoutScreen() {
     summaryValue: {
       ...Typography.body,
       fontWeight: '600',
-      color: colors.text,
     },
     totalRow: {
       borderTopWidth: 1,
@@ -312,12 +309,10 @@ export default function CheckoutScreen() {
       borderColor: colors.primary,
       backgroundColor: `${colors.primary}15`,
     },
-      _removed_paymentMethodText: {},
     paymentMethodText: {
       ...Typography.caption,
       marginTop: Spacing.xs,
       fontWeight: '600',
-      color: colors.text,
     },
     inputGroup: {
       marginBottom: Spacing.md,
@@ -326,7 +321,6 @@ export default function CheckoutScreen() {
       ...Typography.caption,
       marginBottom: Spacing.xs,
       fontWeight: '600',
-      color: colors.text,
     },
     input: {
       backgroundColor: colors.surface,
@@ -383,7 +377,6 @@ export default function CheckoutScreen() {
     checkboxLabel: {
       ...Typography.body,
       flex: 1,
-      color: colors.text,
     },
     submitButton: {
       backgroundColor: colors.primary,
@@ -404,12 +397,6 @@ export default function CheckoutScreen() {
       textAlign: 'center',
       color: colors.textSecondary,
       marginTop: Spacing.sm,
-    },
-    paymentMethodText: {
-      ...Typography.caption,
-      marginTop: Spacing.xs,
-      fontWeight: '600',
-      color: colors.text,
     },
   });
 
@@ -612,8 +599,8 @@ export default function CheckoutScreen() {
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>Phone Number</Text>
             <View style={{ flexDirection: 'row', gap: Spacing.sm }}>
-              <View style={[styles.input, { flex: 0, paddingHorizontal: 12, justifyContent: 'center' }]}>
-                <Text style={{ color: colors.text }}>{selectedCountry.dial}</Text>
+              <View style={[styles.input, { flex: 0, paddingHorizontal: 12 }]}>
+                <Text>{selectedCountry.dial}</Text>
               </View>
               <TextInput
                 style={[styles.input, { flex: 1 }]}
