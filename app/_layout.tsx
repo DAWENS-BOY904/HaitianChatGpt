@@ -6,27 +6,31 @@ import { SettingsProvider } from '../contexts/SettingsContext';
 import { SocialProvider } from '../contexts/SocialContext';
 import { SubscriptionProvider } from '../contexts/SubscriptionContext';
 import { GuestLimitsProvider } from '../contexts/GuestLimitsContext';
+import { useEffect } from 'react';
+import { Platform } from 'react-native';
 
-// Create a helper component
-const Compose = ({ providers, children }: { providers: React.ElementType[], children: React.ReactNode }) => {
-  return (
-    <>
-      {providers.reduceRight((acc, Provider) => <Provider>{acc}</Provider>, children)}
-    </>
-  );
-};
+// ── Configure RevenueCat once at startup ──
+function RevenueCatInit() {
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    try {
+      // Dynamic require to avoid web/SSR build errors
+      const Purchases = require('react-native-purchases').default;
+      const iosKey = process.env.EXPO_PUBLIC_RC_IOS_KEY;
+      const androidKey = process.env.EXPO_PUBLIC_RC_ANDROID_KEY;
+      const apiKey = Platform.OS === 'ios' ? iosKey : androidKey;
+      if (apiKey) {
+        Purchases.configure({ apiKey });
+        console.log('[RevenueCat] Configured successfully');
+      }
+    } catch (e) {
+      // react-native-purchases not linked yet — safe to ignore in dev
+      console.log('[RevenueCat] Module not available:', e);
+    }
+  }, []);
+  return null;
+}
 export default function RootLayout() {
-  const providers = [
-    AlertProvider,
-    AuthProvider,
-    SettingsProvider,
-    ThemeProvider,
-    SubscriptionProvider,
-    GuestLimitsProvider,
-    SocialProvider,
-    ConversationProvider,
-  ];
-  
   return (
     <AlertProvider>
       <AuthProvider>
@@ -36,7 +40,8 @@ export default function RootLayout() {
               <GuestLimitsProvider>
                 <SocialProvider>
                   <ConversationProvider>
-                  <Stack screenOptions={{ headerShown: false }}>
+                    <RevenueCatInit />
+                    <Stack screenOptions={{ headerShown: false }}>
                     <Stack.Screen name="index" />
                     <Stack.Screen name="login" />
                     <Stack.Screen name="login-password" />
@@ -100,7 +105,7 @@ export default function RootLayout() {
                     <Stack.Screen name="coding" />
                     <Stack.Screen name="voice-settings" />
                     <Stack.Screen name="revenuecat-setup" />
-                  </Stack>
+                    </Stack>
                   </ConversationProvider>
                 </SocialProvider>
               </GuestLimitsProvider>

@@ -559,16 +559,16 @@ const sendMessage = async (
   setMessages(prev => [...prev, tempUserMessage]);
 
   try {
-    const contextMessages = [...messages, tempUserMessage].map(m => {
-      if (m.image_url || m.role === 'user') {
-        return {
-          role: m.role,
-          content: m.content,
-          ...(m.image_url && { image_url: m.image_url })
-        };
-      }
-      return { role: m.role, content: m.content };
-    });
+    // CRITICAL FIX: Always send plain string content — never arrays
+    const contextMessages = [...messages, tempUserMessage].map(m => ({
+      role: m.role,
+      content: typeof m.content === 'string'
+        ? m.content
+        : Array.isArray(m.content)
+          ? (m.content as any[]).map((c: any) => (c && (c.text || c.content)) || '').join(' ')
+          : String(m.content || ''),
+      ...(m.image_url ? { image_url: m.image_url } : {}),
+    }));
 
     const requestBody: any = {
       messages: contextMessages,
