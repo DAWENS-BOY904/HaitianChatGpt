@@ -1843,4 +1843,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-
+fuckiong dont skip make change :Fix the 'cannot read property length of undefined' Add smooth entrance animations to the empty state suggestion cards on the home page — staggered fade-in and slide-up effects when the page loads with no conversation active and when click a suggestion auto send to the ai and ai thinking.
