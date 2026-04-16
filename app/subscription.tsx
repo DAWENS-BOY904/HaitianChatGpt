@@ -503,3 +503,113 @@ const styles = StyleSheet.create({
   webLink: { fontSize: 14, fontWeight: '600', color: '#FFF', textDecorationLine: 'underline', marginBottom: 10 },
   legalText: { fontSize: 12, color: 'rgba(255,255,255,0.5)', textAlign: 'center', marginTop: 8, lineHeight: 17 },
 });
+fix all this error make it better and safe [
+  {
+    "eventMessage": "POST | 400 | http://njpuoozygqtpvlzhnjpu.backend.onspace.ai/functions/v1/create-checkout-session | Bad Request",
+    "functionId": "create-checkout-session",
+    "id": "2a7129e9-8dc7-40e5-a681-14fb1686edb8",
+    "logLevel": "ERROR",
+    "method": "POST",
+    "statusCode": 400,
+    "timestamp": 1776357370
+  },
+  {
+    "eventMessage": "POST | 200 | http://njpuoozygqtpvlzhnjpu.backend.onspace.ai/functions/v1/transcribe-audio | OK",
+    "functionId": "transcribe-audio",
+    "id": "d768121f-f9ab-4cf3-887f-b1e7ea2e58d6",
+    "logLevel": "INFO",
+    "method": "POST",
+    "statusCode": 200,
+    "timestamp": 1776355969
+  },
+  {
+    "eventMessage": "POST | 200 | http://njpuoozygqtpvlzhnjpu.backend.onspace.ai/functions/v1/transcribe-audio | OK",
+    "functionId": "transcribe-audio",
+    "id": "2faeabe8-e2e6-4680-9e08-278a65a67909",
+    "logLevel": "INFO",
+    "method": "POST",
+    "statusCode": 200,
+    "timestamp": 1776355959
+  },
+  {
+    "eventMessage": "POST | 200 | http://njpuoozygqtpvlzhnjpu.backend.onspace.ai/functions/v1/transcribe-audio | OK",
+    "functionId": "transcribe-audio",
+    "id": "de4868f9-92a8-45d3-b25a-870ec1acf1b2",
+    "logLevel": "INFO",
+    "method": "POST",
+    "statusCode": 200,
+    "timestamp": 1776355937
+  },
+  {
+    "eventMessage": "POST | 200 | http://njpuoozygqtpvlzhnjpu.backend.onspace.ai/functions/v1/transcribe-audio | OK",
+    "functionId": "transcribe-audio",
+    "id": "e3118519-22fb-4b6e-84d4-0bf3870cbb43",
+    "logLevel": "INFO",
+    "method": "POST",
+    "statusCode": 200,
+    "timestamp": 1776355534
+  },
+  {
+    "eventMessage": "POST | 200 | http://njpuoozygqtpvlzhnjpu.backend.onspace.ai/functions/v1/chat | OK",
+    "functionId": "chat",
+    "id": "83a47f45-15d1-4a9f-b07f-9116ae0a602f",
+    "logLevel": "INFO",
+    "method": "POST",
+    "statusCode": 200,
+    "timestamp": 1776355528
+  },
+  {
+    "eventMessage": "POST | 500 | http://njpuoozygqtpvlzhnjpu.backend.onspace.ai/functions/v1/transcribe-audio | Internal Server Error",
+    "functionId": "transcribe-audio",
+    "id": "5992edd8-9195-49b7-a89f-623376ef7d9c",
+    "logLevel": "ERROR",
+    "method": "POST",
+    "statusCode": 500,
+    "timestamp": 1776354368
+  },
+  {
+    "eventMessage": "POST | 500 | http://njpuoozygqtpvlzhnjpu.backend.onspace.ai/functions/v1/transcribe-audio | Internal Server Error",
+    "functionId": "transcribe-audio",
+    "id": "89c35f84-ffe4-4801-bc22-6465b3bdfd22",
+    "logLevel": "ERROR",
+    "method": "POST",
+    "statusCode": 500,
+    "timestamp": 1776354360
+  },
+  {
+    "eventMessage": "POST | 500 | http://njpuoozygqtpvlzhnjpu.backend.onspace.ai/functions/v1/transcribe-audio | Internal Server Error",
+    "functionId": "transcribe-audio",
+    "id": "7fd8df93-68c9-4dc9-95d2-82e1483cefbe",
+    "logLevel": "ERROR",
+    "method": "POST",
+    "statusCode": 500,
+    "timestamp": 1776354358
+  },
+  {
+    "eventMessage": "POST | 500 | http://njpuoozygqtpvlzhnjpu.backend.onspace.ai/functions/v1/transcribe-audio | Internal Server Error",
+    "functionId": "transcribe-audio",
+    "id": "74707eda-ad35-4738-ba4f-7e79a173d4d4",
+    "logLevel": "ERROR",
+    "method": "POST",
+    "statusCode": 500,
+    "timestamp": 1776354350
+  },
+  {
+    "eventMessage": "POST | 500 | http://njpuoozygqtpvlzhnjpu.backend.onspace.ai/functions/v1/transcribe-audio | Internal Server Error",
+    "functionId": "transcribe-audio",
+    "id": "a1817acc-c2fa-4c4e-9db3-de089245910f",
+    "logLevel": "ERROR",
+    "method": "POST",
+    "statusCode": 500,
+    "timestamp": 1776354349
+  },
+  {
+    "eventMessage": "POST | 500 | http://njpuoozygqtpvlzhnjpu.backend.onspace.ai/functions/v1/transcribe-audio | Internal Server Error",
+    "functionId": "transcribe-audio",
+    "id": "4425e9c6-5d31-41fa-8044-09f21bd47f87",
+    "logLevel": "ERROR",
+    "method": "POST",
+    "statusCode": 500,
+    "timestamp": 1776354341
+  }
+].
