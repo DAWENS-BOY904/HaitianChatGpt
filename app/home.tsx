@@ -1462,6 +1462,7 @@ export default function HomeScreen() {
     <ErrorBoundary>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <GestureDetector gesture={swipeGesture}>
+          <View style={{ flex: 1 }}>
           <KeyboardAvoidingView 
             style={styles.container}
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -1864,6 +1865,7 @@ export default function HomeScreen() {
           </BlurView>
         </Animated.View>
       )}
+          </View>
     </GestureDetector>
     </GestureHandlerRootView>
     </ErrorBoundary>
@@ -1898,8 +1900,7 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     }
     return this.props.children;
   }
-}
-hello ai stop fuckibg skip make change:on the Home Page needs a fix. It’s currently showing the error:
+}:on the Home Page needs a fix. It’s currently showing the error:
 “Something went wrong.”
 
 Also, there is an issue with react-native-gesture-handler:
