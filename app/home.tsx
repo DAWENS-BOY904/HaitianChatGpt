@@ -1828,3 +1828,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
+hello ai dont fucking skip: fix home page make it better and Improve the home page empty state to show a centered 'Haitian AI' logo/title in the middle of the screen with suggestion cards at the bottom, matching the ChatGPT-style layout from the reference photo.Add an is_archived boolean column to the conversations table via SQL so the archived chats page actually filters and displays archived conversations correctly, and update the archiveConversation function in ConversationContext to set is_archived=true.
