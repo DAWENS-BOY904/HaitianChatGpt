@@ -1900,7 +1900,8 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     }
     return this.props.children;
   }
-}:on the Home Page needs a fix. It’s currently showing the error:
+}
+:on the Home Page needs a fix. It’s currently showing the error:
 “Something went wrong.”
 
 Also, there is an issue with react-native-gesture-handler:
