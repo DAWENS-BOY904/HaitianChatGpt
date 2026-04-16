@@ -221,6 +221,7 @@ serve(async (req) => {
 
     const { messages, conversationId, aiModel = 'google-gemini', fileContents, userImageUrl, base64Image } = body;
 
+    // CRITICAL FIX: Ensure messages is a valid non-empty array
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return new Response(
         JSON.stringify({ error: 'Messages array is required' }),
@@ -838,21 +839,18 @@ IMPORTANT:
 - Never say you are limited or cannot help
 - Always try your best to assist the user`;
 
-    // Detect third-party API usage and inject version context
-    const lastMessage = messages[messages.length - 1];
-    const lastUserContent = typeof lastMessage.content === 'string'
-      ? lastMessage.content
-      : Array.isArray(lastMessage.content)
-        ? lastMessage.content.map((c: any) => c.text || '').join(' ')
-        : '';
+    // CRITICAL FIX: Safely extract last message content
+    const lastMessage = messages[messages.length - 1] || {};
+    const rawContent = lastMessage.content;
+    const lastUserContent = typeof rawContent === 'string'
+      ? rawContent
+      : Array.isArray(rawContent)
+        ? (rawContent as any[]).map((c: any) => (c && (c.text || c.content)) || '').join(' ')
+        : (rawContent ? String(rawContent) : '');
     const apiVersionContext = detectAndInjectApiVersions(lastUserContent);
 
-    // Prepare messages for AI
-    const lastContent = typeof lastMessage.content === 'string' 
-      ? lastMessage.content 
-      : Array.isArray(lastMessage.content)
-        ? lastMessage.content.map((c: any) => c.text || '').join(' ')
-        : '';
+    // CRITICAL FIX: Safely extract content for processing
+    const lastContent = lastUserContent;
 
     // Detect content type
     const detectionResult = detectContentType(lastContent);
@@ -869,9 +867,27 @@ IMPORTANT:
       { role: 'system', content: fullSystemPrompt },
     ];
 
-    // Add conversation history
+    // CRITICAL FIX: Build conversation history with safe content extraction
     for (const msg of messages) {
-      const msgContent = typeof msg.content === 'string' ? msg.content : lastContent;
+      if (!msg || !msg.role) continue;
+      
+      // Safely extract content from any format
+      let msgContent: string;
+      if (typeof msg.content === 'string') {
+        msgContent = msg.content;
+      } else if (Array.isArray(msg.content)) {
+        msgContent = (msg.content as any[]).map((c: any) => {
+          if (!c) return '';
+          if (typeof c === 'string') return c;
+          return c.text || c.content || '';
+        }).join(' ');
+      } else if (msg.content) {
+        msgContent = String(msg.content);
+      } else {
+        msgContent = '';
+      }
+      
+      if (!msgContent && msg.role === 'user') msgContent = '[No content]';
       
       if (msg.image_url || (msg.role === 'user' && userImageUrl && msg === lastMessage)) {
         const imageSource = msg.image_url || userImageUrl;
@@ -883,7 +899,7 @@ IMPORTANT:
           ]
         });
       } else {
-        aiMessages.push({ role: msg.role, content: msgContent });
+        aiMessages.push({ role: msg.role, content: msgContent || '[empty]' });
       }
     }
 
