@@ -405,8 +405,9 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
     try {
       const { data: conversationsWithMessages, error } = await supabase
         .from('conversations')
-        .select(`id, title, created_at, updated_at, messages!inner (id)`)
+        .select(`id, title, created_at, updated_at, is_archived, messages!inner (id)`)
         .eq('user_id', user.id)
+        .or('is_archived.is.null,is_archived.eq.false')
         .order('updated_at', { ascending: false });
 
       if (!error && conversationsWithMessages) {
@@ -915,7 +916,7 @@ const sendMessage = async (
     try {
       await supabase
         .from('conversations')
-        .update({ is_archived: true, updated_at: new Date().toISOString() })
+        .update({ is_archived: true, updated_at: new Date().toISOString() } as any)
         .eq('id', id);
       
       setConversations(prev => prev.filter(c => c.id !== id));

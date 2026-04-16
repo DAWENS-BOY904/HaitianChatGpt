@@ -1342,6 +1342,11 @@ export default function HomeScreen() {
     recordingButton: { backgroundColor: '#FF3B30' },
     processingButton: { backgroundColor: colors.textSecondary },
     emptyState: { flex: 1, justifyContent: 'flex-end', paddingBottom: 24 },
+    emptyCenter: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingBottom: 40 },
+    emptyLogoCircle: { width: 72, height: 72, borderRadius: 36, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', marginBottom: 16, shadowColor: colors.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 12, elevation: 8 },
+    emptyLogoText: { color: '#FFF', fontSize: 32, fontWeight: '800' },
+    emptyCenterTitle: { color: colors.text, fontSize: 28, fontWeight: '700', marginBottom: 8 },
+    emptyCenterSub: { color: colors.textSecondary, fontSize: 15 },
     emptyIcon: { marginBottom: Spacing.md },
     emptyTitle: { ...Typography.heading, color: colors.text, marginBottom: Spacing.xs },
     emptyText: { ...Typography.body, color: colors.textSecondary, textAlign: 'center', lineHeight: 22 },
@@ -1500,11 +1505,11 @@ export default function HomeScreen() {
           <ActivityIndicator size="large" color={colors.primary} />
         </View>
       ) : displayMessages.length === 0 ? (
-        // Empty state - ChatGPT style (photo 6)
+        // Empty state - ChatGPT style
         <View style={styles.emptyState}>
-          {/* Group chat empty state */}
-          {groupChatMode && (
-            <View style={{ flex: 1, alignItems: 'center', paddingTop: 40, paddingHorizontal: 24 }}>
+          {groupChatMode ? (
+            // Group chat empty state
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 }}>
               <Text style={{ color: colors.textSecondary, fontSize: 14, textAlign: 'center', marginBottom: 20 }}>
                 <Text style={{ color: colors.text, fontWeight: '700' }}>{user?.email?.split('@')[0] || 'You'}</Text>
                 {' created the group chat.\n'}Your personal Haitian AI memory is never used in group chats.
@@ -1517,27 +1522,37 @@ export default function HomeScreen() {
                 <Text style={styles.groupActionBtnText}>Invite with link</Text>
               </TouchableOpacity>
             </View>
-          )}
+          ) : (
+            // Normal empty state: centered logo + suggestions at bottom
+            <>
+              {/* Centered logo/title */}
+              <View style={styles.emptyCenter}>
+                <View style={styles.emptyLogoCircle}>
+                  <Text style={styles.emptyLogoText}>H</Text>
+                </View>
+                <Text style={styles.emptyCenterTitle}>Haitian AI</Text>
+                <Text style={styles.emptyCenterSub}>Your intelligent assistant</Text>
+              </View>
 
-          {/* Suggestion cards scrollable */}
-          {!groupChatMode && (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={[styles.suggestionsRow, { gap: 10 }]}
-            >
-              {suggestions.map((s) => (
-                <TouchableOpacity
-                  key={s.title}
-                  style={styles.suggestionCard}
-                  activeOpacity={0.7}
-                  onPress={() => setInputText(s.title + ' — ' + s.sub)}
-                >
-                  <Text style={styles.suggestionTitle}>{s.title}</Text>
-                  <Text style={styles.suggestionSub}>{s.sub}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
+              {/* Suggestion cards - bottom */}
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={[styles.suggestionsRow, { gap: 10 }]}
+              >
+                {suggestions.map((s) => (
+                  <TouchableOpacity
+                    key={s.title}
+                    style={styles.suggestionCard}
+                    activeOpacity={0.7}
+                    onPress={() => setInputText(s.title + ' — ' + s.sub)}
+                  >
+                    <Text style={styles.suggestionTitle}>{s.title}</Text>
+                    <Text style={styles.suggestionSub}>{s.sub}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </>
           )}
         </View>
       ) : (
@@ -1828,4 +1843,3 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-hello ai dont fucking skip: fix home page make it better and Improve the home page empty state to show a centered 'Haitian AI' logo/title in the middle of the screen with suggestion cards at the bottom, matching the ChatGPT-style layout from the reference photo.Add an is_archived boolean column to the conversations table via SQL so the archived chats page actually filters and displays archived conversations correctly, and update the archiveConversation function in ConversationContext to set is_archived=true.
