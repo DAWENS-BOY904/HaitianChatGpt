@@ -1748,8 +1748,8 @@ export default function HomeScreen() {
             )}
           </TouchableOpacity>
         )}
-         </View>
-    </View> 
+      </View>
+      </KeyboardAvoidingView>
 
       {/* Modals */}
       <MenuModal visible={menuVisible} onClose={() => setMenuVisible(false)} />
@@ -1864,7 +1864,6 @@ export default function HomeScreen() {
           </BlurView>
         </Animated.View>
       )}
-    </KeyboardAvoidingView>
     </GestureDetector>
     </GestureHandlerRootView>
     </ErrorBoundary>
