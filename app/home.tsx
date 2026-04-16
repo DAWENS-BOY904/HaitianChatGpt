@@ -1458,15 +1458,15 @@ export default function HomeScreen() {
     }, 50);
   }, [currentConversation, createConversation, sendMessage, currentAIModel, showAlert]);
 
-  return (
+   return (
     <ErrorBoundary>
-    <GestureHandlerRootView style={{ flex: 1 }}>
-    <GestureDetector gesture={swipeGesture}>
-    <KeyboardAvoidingView 
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={0}
-    >
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <GestureDetector gesture={swipeGesture}>
+          <KeyboardAvoidingView 
+            style={styles.container}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            keyboardVerticalOffset={0}
+          >
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
       
       {isOffline && (
@@ -1748,7 +1748,8 @@ export default function HomeScreen() {
             )}
           </TouchableOpacity>
         )}
-      </View>
+         </View>
+    </View> 
 
       {/* Modals */}
       <MenuModal visible={menuVisible} onClose={() => setMenuVisible(false)} />
