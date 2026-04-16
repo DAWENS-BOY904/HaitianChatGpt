@@ -2213,4 +2213,3 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-Configure EXPO_PUBLIC_RC_IOS_KEY and EXPO_PUBLIC_RC_ANDROID_KEY in the .env file, call Purchases.configure() on app startup in app/_layout.tsx, and wire the real purchaseGoPlan() flow in app/subscription.tsx replacing the current Stripe redirect for the Go plan.Add a polite permission request modal on the home screen on first launch (using expo-notifications) that explains why push notifications are needed, then calls registerForPushNotifications() and saves the Expo push token to user_profiles for server-sent notifications.
