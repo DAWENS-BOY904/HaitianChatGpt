@@ -99,6 +99,7 @@ export default function RootLayout() {
                     <Stack.Screen name="buy-coins" />
                     <Stack.Screen name="coding" />
                     <Stack.Screen name="voice-settings" />
+                    <Stack.Screen name="revenuecat-setup" />
                   </Stack>
                   </ConversationProvider>
                 </SocialProvider>
