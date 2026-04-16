@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { getSupabaseClient } from '@/template';
 import {
@@ -278,7 +279,7 @@ export function SideMenu({
   const insets = useSafeAreaInsets();
   const supabase = getSupabaseClient();
 
-  const handleQuickAction = (action: any) => {
+  const handleQuickAction = (action: { id: string; route?: string; }) => { // Added type for action
     if (action.id === 'upgrade') { onClose(); router.push('/subscription'); return; }
     if (action.route) { onClose(); router.push(action.route); }
   };
@@ -382,7 +383,7 @@ export function SideMenu({
     if (action === 'share') {
       try {
         await Share.share({ message: `Check out this conversation: ${conv.title}` });
-      } catch (e) {}
+      } catch (e) { }
       return;
     }
     if (action === 'pin') {
@@ -500,7 +501,7 @@ export function SideMenu({
                   style={[
                     styles.quickActionBtn,
                     { backgroundColor: isDark ? '#1C1C1E' : '#F2F2F7' },
-                    (qa as any).isUpgrade && { borderColor: qa.color, borderWidth: 1 },
+                    qa.isUpgrade && { borderColor: qa.color, borderWidth: 1 }, // Changed (qa as any).isUpgrade to qa.isUpgrade
                   ]}
                   activeOpacity={0.7}
                   onPress={() => handleQuickAction(qa)}
@@ -508,9 +509,9 @@ export function SideMenu({
                   <Ionicons
                     name={qa.icon as any}
                     size={26}
-                    color={(qa as any).isUpgrade ? qa.color : colors.text}
+                    color={qa.isUpgrade ? qa.color : colors.text} // Changed (qa as any).isUpgrade to qa.isUpgrade
                   />
-                  <Text style={[styles.quickActionLabel, { color: (qa as any).isUpgrade ? qa.color : colors.text }]}>
+                  <Text style={[styles.quickActionLabel, { color: qa.isUpgrade ? qa.color : colors.text }]}> {/* Changed (qa as any).isUpgrade to qa.isUpgrade */}
                     {qa.label}
                   </Text>
                 </TouchableOpacity>
@@ -565,13 +566,7 @@ export function SideMenu({
                         {conv.title || 'New conversation'}
                       </Text>
                     </View>
-                    <TouchableOpacity
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                      onPress={() => handleConvLongPress(conv)}
-                      style={{ padding: 4 }}
-                    >
-                      <Ionicons name="ellipsis-horizontal" size={16} color={colors.textSecondary} />
-                    </TouchableOpacity>
+                    {/* No ... button — use long press only */}
                   </TouchableOpacity>
                 );
               })
