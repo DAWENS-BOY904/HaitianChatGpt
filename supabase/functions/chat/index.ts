@@ -219,10 +219,37 @@ serve(async (req) => {
       );
     }
 
-    const { messages, conversationId, aiModel = 'google-gemini', fileContents, userImageUrl, base64Image } = body;
+    const { messages: rawMessages, conversationId, aiModel = 'google-gemini', fileContents, userImageUrl, base64Image } = body;
+
+    // CRITICAL FIX: Normalize messages — handle any format (string, array, object)
+    const messages: Array<{ role: string; content: string; image_url?: string }> = [];
+    if (Array.isArray(rawMessages)) {
+      for (const m of rawMessages) {
+        if (!m || !m.role) continue;
+        let content = '';
+        if (typeof m.content === 'string') {
+          content = m.content;
+        } else if (Array.isArray(m.content)) {
+          content = m.content
+            .map((c: any) => {
+              if (!c) return '';
+              if (typeof c === 'string') return c;
+              if (c.type === 'text') return c.text || '';
+              if (c.text) return c.text;
+              if (c.content) return String(c.content);
+              return '';
+            })
+            .filter(Boolean)
+            .join(' ');
+        } else if (m.content !== null && m.content !== undefined) {
+          content = String(m.content);
+        }
+        messages.push({ role: m.role, content, image_url: m.image_url });
+      }
+    }
 
     // CRITICAL FIX: Ensure messages is a valid non-empty array
-    if (!messages || !Array.isArray(messages) || messages.length === 0) {
+    if (!messages || messages.length === 0) {
       return new Response(
         JSON.stringify({ error: 'Messages array is required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -867,39 +894,26 @@ IMPORTANT:
       { role: 'system', content: fullSystemPrompt },
     ];
 
-    // CRITICAL FIX: Build conversation history with safe content extraction
+    // Build conversation history — messages are already normalized above
     for (const msg of messages) {
       if (!msg || !msg.role) continue;
       
-      // Safely extract content from any format
-      let msgContent: string;
-      if (typeof msg.content === 'string') {
-        msgContent = msg.content;
-      } else if (Array.isArray(msg.content)) {
-        msgContent = (msg.content as any[]).map((c: any) => {
-          if (!c) return '';
-          if (typeof c === 'string') return c;
-          return c.text || c.content || '';
-        }).join(' ');
-      } else if (msg.content) {
-        msgContent = String(msg.content);
-      } else {
-        msgContent = '';
-      }
+      // content is already a clean string from normalization above
+      const msgContent = msg.content || (msg.role === 'user' ? '[No content]' : '[empty]');
       
-      if (!msgContent && msg.role === 'user') msgContent = '[No content]';
+      const isLastMsg = msg === messages[messages.length - 1];
+      const imgSrc = msg.image_url || (isLastMsg && userImageUrl ? userImageUrl : undefined);
       
-      if (msg.image_url || (msg.role === 'user' && userImageUrl && msg === lastMessage)) {
-        const imageSource = msg.image_url || userImageUrl;
+      if (imgSrc) {
         aiMessages.push({
           role: msg.role,
           content: [
             { type: 'text', text: msgContent || 'Please analyze this image' },
-            { type: 'image_url', image_url: { url: imageSource } }
+            { type: 'image_url', image_url: { url: imgSrc } }
           ]
         });
       } else {
-        aiMessages.push({ role: msg.role, content: msgContent || '[empty]' });
+        aiMessages.push({ role: msg.role, content: msgContent });
       }
     }
 
