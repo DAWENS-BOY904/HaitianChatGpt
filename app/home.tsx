@@ -2359,3 +2359,12 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
+hello ai make the change read my message: can you please fix suggestion plase yo anba olye de nn mitan and for purchase its give me error:there is no singleton instant.make sure you configured purchase before trying to get default instance more info here: https://errord.rev.cat/configuring-skd and fix {
+  "eventMessage": "POST | 500 | http://njpuoozygqtpvlzhnjpu.backend.onspace.ai/functions/v1/transcribe-audio | Internal Server Error",
+  "functionId": "transcribe-audio",
+  "id": "5992edd8-9195-49b7-a89f-623376ef7d9c",
+  "logLevel": "ERROR",
+  "method": "POST",
+  "statusCode": 500,
+  "timestamp": 1776354368
+}.
