@@ -504,3 +504,12 @@ const styles = StyleSheet.create({
   webLink: { fontSize: 14, fontWeight: '600', color: '#FFF', textDecorationLine: 'underline', marginBottom: 10 },
   legalText: { fontSize: 12, color: 'rgba(255,255,255,0.5)', textAlign: 'center', marginTop: 8, lineHeight: 17 },
 });
+In the subscription_plans table, add real Stripe price IDs (e.g. price_xxx from Stripe Dashboard) for the Go and Plus plans so the create-checkout-session function can resolve them correctly and redirect users to the Stripe payment page.{
+  "eventMessage": "POST | 400 | http://njpuoozygqtpvlzhnjpu.backend.onspace.ai/functions/v1/create-checkout-session | Bad Request",
+  "functionId": "create-checkout-session",
+  "id": "3d204411-fb83-407b-9f0b-05ec41b94b4a",
+  "logLevel": "ERROR",
+  "method": "POST",
+  "statusCode": 400,
+  "timestamp": 1776357807
+}Create a supabase/functions/stripe-webhook/index edge function to handle Stripe webhook events (checkout.session.completed, customer.subscription.deleted) so subscription_purchases table updates automatically after payment without manual polling.
