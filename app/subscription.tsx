@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -16,8 +16,7 @@ import { useSubscription } from '../hooks/useSubscription';
 import { useRouter } from 'expo-router';
 import { Spacing, Typography, BorderRadius } from '../constants/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useAlert } from '@/template';
-import { getSupabaseClient } from '@/template';
+import { useAlert, useAuth, getSupabaseClient } from '@/template';
 
 // ── Feature comparison rows ──
 const GO_FEATURES = [
@@ -40,105 +39,174 @@ const PLUS_FEATURES = [
 
 // Product IDs from App Store Connect / Google Play Console
 const PRODUCT_IDS = {
-  go: Platform.select({
-    ios: 'com.dawinix.go.monthly',
-    android: 'com.dawinix.go.monthly',
-  }),
-  plus: Platform.select({
-    ios: 'com.dawinix.plus.monthly',
-    android: 'com.dawinix.plus.monthly',
-  }),
-  go_yearly: Platform.select({
-    ios: 'com.dawinix.go.yearly',
-    android: 'com.dawinix.go.yearly',
-  }),
-  plus_yearly: Platform.select({
-    ios: 'com.dawinix.plus.yearly',
-    android: 'com.dawinix.plus.yearly',
-  }),
+  go: Platform.select({ ios: 'com.dawinix.go.monthly', android: 'com.dawinix.go.monthly' }) || 'com.dawinix.go.monthly',
+  plus: Platform.select({ ios: 'com.dawinix.plus.monthly', android: 'com.dawinix.plus.monthly' }) || 'com.dawinix.plus.monthly',
 };
 
-// Supabase Edge Function URL
-const SUPABASE_FUNCTION_URL = 'https://njpuoozygqtpvlzhnjpu.supabase.co/functions/v1/verify-purchase';
+// RevenueCat API key per platform
+const RC_API_KEY = Platform.select({
+  ios: 'appl_YOUR_REVENUECAT_IOS_KEY',
+  android: 'goog_YOUR_REVENUECAT_ANDROID_KEY',
+  default: '',
+});
 
 export default function SubscriptionScreen() {
   const { colors, isDark } = useTheme();
   const { tier, restorePurchases } = useSubscription();
   const { showAlert } = useAlert();
+  const { user } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const supabase = getSupabaseClient();
 
   const [selectedPlan, setSelectedPlan] = useState<'go' | 'plus'>('go');
   const [isLoading, setIsLoading] = useState(false);
-  const [products, setProducts] = useState<any[]>([]);
+  const [isRestoring, setIsRestoring] = useState(false);
 
   const features = selectedPlan === 'go' ? GO_FEATURES : PLUS_FEATURES;
-  const planColor = '#6B5CE7'; // Purple like ChatGPT
+  const planColor = '#6B5CE7';
   const planPrice = selectedPlan === 'go' ? '$8.00' : '$19.99';
   const planLabel = selectedPlan === 'go' ? 'Get Dawinix Go' : 'Get Dawinix Plus';
   const planSubtitle = selectedPlan === 'go'
     ? 'Keep chatting with expanded access'
     : 'Do more with advanced intelligence';
 
-  const supabase = getSupabaseClient();
-
-  // Call Supabase Edge Function to verify purchase
-  const verifyPurchaseWithSupabase = async (
-    receipt: string,
-    transactionId: string,
-    productId: string,
-    isSandbox = false
-  ): Promise<boolean> => {
+  // ── Attempt real IAP via RevenueCat for Go plan ──
+  const purchaseWithRevenueCat = async (productId: string, planName: string, priceStr: string) => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) throw new Error('User not authenticated');
+      // Dynamically import RevenueCat (react-native-purchases)
+      const Purchases = require('react-native-purchases').default;
+
+      // Configure RevenueCat SDK
+      if (RC_API_KEY) {
+        Purchases.configure({ apiKey: RC_API_KEY });
+      }
+
+      // Fetch available offerings
+      const offerings = await Purchases.getOfferings();
+      const offering = offerings.current;
+
+      if (!offering) {
+        throw new Error('No offerings available. Please try again later.');
+      }
+
+      // Find matching package
+      const pkg = offering.availablePackages.find(
+        (p: any) =>
+          p.product.productIdentifier === productId ||
+          p.product.identifier === productId
+      );
+
+      if (!pkg) {
+        throw new Error(`Product ${productId} not found. Check App Store/Play Console configuration.`);
+      }
+
+      // Make the purchase
+      const { customerInfo, productIdentifier } = await Purchases.purchasePackage(pkg);
+
+      // Get the latest receipt / transaction
+      const receipt: string = (customerInfo as any).latestExpirationDate
+        ? JSON.stringify(customerInfo)
+        : '';
+
+      const transactionId: string = (customerInfo as any).originalAppUserId || Date.now().toString();
+
+      // Verify with our backend
+      const { data: session } = await supabase.auth.getSession();
+      if (!session?.session?.access_token) throw new Error('User not authenticated');
+
       const { data, error } = await supabase.functions.invoke('verify-purchase', {
         body: {
           platform: Platform.OS === 'ios' ? 'ios' : 'android',
           receipt,
           transactionId,
-          productId,
-          isSandbox: isSandbox || __DEV__,
+          productId: productIdentifier,
+          isSandbox: __DEV__,
         },
       });
+
       if (error || !data?.success) {
-        showAlert('Verification Failed', data?.error || error?.message || 'Could not verify purchase');
-        return false;
+        throw new Error(data?.error || error?.message || 'Purchase verification failed');
       }
-      return true;
-    } catch (error: any) {
-      showAlert('Error', 'Failed to verify purchase. Please try again.');
-      return false;
+
+      // Update subscription_tier in user_profiles
+      if (user?.id) {
+        await supabase.from('user_profiles').update({
+          subscription_tier: planName === 'go' ? 'go' : 'plus',
+          subscription_expires_at: data.subscription?.expiresAt || null,
+        }).eq('id', user.id);
+      }
+
+      // Send confirmation email
+      const renewalDate = data.subscription?.expiresAt
+        ? new Date(data.subscription.expiresAt).toLocaleDateString()
+        : 'next month';
+
+      await supabase.functions.invoke('send-admin-email', {
+        body: {
+          recipientIds: user?.id ? [user.id] : [],
+          subject: `Welcome to Dawinix ${planName === 'go' ? 'Go' : 'Plus'}!`,
+          message: `Your subscription has been activated.\n\nPlan: Dawinix ${planName === 'go' ? 'Go' : 'Plus'}\nPrice: ${priceStr}/month\nNext renewal: ${renewalDate}\n\nThank you for subscribing!`,
+        },
+      }).catch(console.error); // Non-blocking
+
+      showAlert('Subscription Activated!', `Welcome to Dawinix ${planName === 'go' ? 'Go' : 'Plus'}! Your subscription is now active.`);
+      router.back();
+    } catch (err: any) {
+      // RevenueCat cancelled by user
+      if (err?.code === '1' || err?.message?.includes('cancel') || err?.userCancelled) {
+        return; // Silent cancel
+      }
+      // RevenueCat module not available (web/simulator) → fall back to Stripe checkout
+      if (err?.message?.includes('Cannot find module') || err?.message?.includes('NativeModule')) {
+        router.push({ pathname: '/checkout', params: { plan: planName } });
+        return;
+      }
+      throw err;
     }
   };
 
   const handleUpgrade = async () => {
+    if (isLoading) return;
     setIsLoading(true);
     try {
-      // Redirect to Stripe checkout for web/mobile
-      router.push({ pathname: '/checkout', params: { plan: selectedPlan } });
-    } catch (error) {
-      showAlert('Error', 'Something went wrong. Please try again.');
+      if (selectedPlan === 'go') {
+        // Go plan: use real IAP (RevenueCat)
+        await purchaseWithRevenueCat(PRODUCT_IDS.go, 'go', '$8.00');
+      } else {
+        // Plus plan: Stripe checkout (web)
+        router.push({ pathname: '/checkout', params: { plan: 'plus' } });
+      }
+    } catch (error: any) {
+      showAlert('Purchase Failed', error?.message || 'Something went wrong. Please try again.');
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleRestore = async () => {
-    setIsLoading(true);
+    setIsRestoring(true);
     try {
+      // Try RevenueCat restore first
+      try {
+        const Purchases = require('react-native-purchases').default;
+        if (RC_API_KEY) Purchases.configure({ apiKey: RC_API_KEY });
+        const customerInfo = await Purchases.restorePurchases();
+        const hasActive = Object.keys(customerInfo.entitlements.active).length > 0;
+        if (hasActive && user?.id) {
+          await supabase.from('user_profiles').update({ subscription_tier: 'go' }).eq('id', user.id);
+          showAlert('Restored', 'Your subscription has been restored.');
+          return;
+        }
+      } catch (e) {
+        // Fall through to context restore
+      }
       await restorePurchases();
       showAlert('Restored', 'Your purchases have been restored.');
     } catch (error) {
-      showAlert('Error', 'Failed to restore purchases');
+      showAlert('Error', 'Failed to restore purchases. Please contact support.');
     } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handlePurchaseOnWeb = () => {
-    if (selectedPlan === 'plus') {
-      Linking.openURL('https://dawinix.com/subscription');
+      setIsRestoring(false);
     }
   };
 
@@ -173,23 +241,18 @@ export default function SubscriptionScreen() {
             style={[styles.toggleBtn, selectedPlan === 'go' && styles.toggleBtnActive]}
             onPress={() => setSelectedPlan('go')}
           >
-            <Text style={[styles.toggleText, selectedPlan === 'go' && styles.toggleTextActive]}>
-              Go
-            </Text>
+            <Text style={[styles.toggleText, selectedPlan === 'go' && styles.toggleTextActive]}>Go</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.toggleBtn, selectedPlan === 'plus' && styles.toggleBtnActive]}
             onPress={() => setSelectedPlan('plus')}
           >
-            <Text style={[styles.toggleText, selectedPlan === 'plus' && styles.toggleTextActive]}>
-              Plus
-            </Text>
+            <Text style={[styles.toggleText, selectedPlan === 'plus' && styles.toggleTextActive]}>Plus</Text>
           </TouchableOpacity>
         </View>
 
         {/* Feature Comparison Table */}
         <View style={styles.featureCard}>
-          {/* Header row */}
           <View style={styles.featureRow}>
             <Text style={styles.featureHeaderLabel}>Features</Text>
             <Text style={styles.featureHeaderFree}>Free</Text>
@@ -197,12 +260,8 @@ export default function SubscriptionScreen() {
               {selectedPlan === 'go' ? 'Go' : 'Plus'}
             </Text>
           </View>
-
           {features.map((f, i) => (
-            <View
-              key={f.label}
-              style={[styles.featureRow, i < features.length - 1 && styles.featureRowBorder]}
-            >
+            <View key={f.label} style={[styles.featureRow, i < features.length - 1 && styles.featureRowBorder]}>
               <Text style={styles.featureLabel}>{f.label}</Text>
               <View style={styles.featureCheck}>
                 {f.free ? (
@@ -218,37 +277,39 @@ export default function SubscriptionScreen() {
           ))}
         </View>
 
-        {/* Restore Purchases Link */}
-        <TouchableOpacity onPress={handleRestore} style={styles.restoreBtn}>
-          <Text style={styles.restoreText}>Restore Purchases</Text>
+        {/* Restore Purchases */}
+        <TouchableOpacity onPress={handleRestore} style={styles.restoreBtn} disabled={isRestoring}>
+          {isRestoring ? (
+            <ActivityIndicator color="rgba(255,255,255,0.5)" size="small" />
+          ) : (
+            <Text style={styles.restoreText}>Restore Purchases</Text>
+          )}
         </TouchableOpacity>
       </ScrollView>
 
       {/* Bottom CTA */}
       <View style={[styles.bottomCTA, { paddingBottom: insets.bottom + 20 }]}>
-        <TouchableOpacity 
-          style={[styles.upgradeBtn, isLoading && styles.upgradeBtnDisabled]} 
+        <TouchableOpacity
+          style={[styles.upgradeBtn, isLoading && styles.upgradeBtnDisabled]}
           onPress={handleUpgrade}
           disabled={isLoading}
         >
           {isLoading ? (
             <ActivityIndicator color="#000" />
           ) : (
-            <Text style={styles.upgradeBtnText}>Upgrade for {planPrice}</Text>
+            <Text style={styles.upgradeBtnText}>Upgrade for {planPrice}/month</Text>
           )}
         </TouchableOpacity>
 
         {selectedPlan === 'plus' && (
-          <TouchableOpacity onPress={handlePurchaseOnWeb} style={{ marginTop: 12 }}>
-            <Text style={styles.webLink}>
-              Purchase on web {'↗'}
-            </Text>
+          <TouchableOpacity onPress={() => Linking.openURL('https://dawinix.com/subscription')} style={{ marginTop: 12 }}>
+            <Text style={styles.webLink}>Purchase on web ↗</Text>
           </TouchableOpacity>
         )}
 
         <Text style={styles.legalText}>
-          Auto-renews monthly. Cancel anytime.
-          {selectedPlan === 'go' ? '\nThis plan may include ads. ' : ' '}
+          Auto-renews monthly. Cancel anytime in Settings.{'\n'}
+          {selectedPlan === 'go' ? 'This plan may include ads. ' : ''}
           <Text style={[styles.legalText, { textDecorationLine: 'underline' }]}>Learn more</Text>
         </Text>
       </View>
@@ -257,9 +318,7 @@ export default function SubscriptionScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  container: { flex: 1 },
   closeBtn: {
     position: 'absolute',
     right: 20,
@@ -269,10 +328,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  scrollContent: {
-    alignItems: 'center',
-    paddingHorizontal: 24,
-  },
+  scrollContent: { alignItems: 'center', paddingHorizontal: 24 },
   iconWrap: {
     width: 64,
     height: 64,
@@ -286,20 +342,8 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     elevation: 8,
   },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#FFF',
-    textAlign: 'center',
-    marginBottom: 10,
-    letterSpacing: -0.5,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: 'rgba(255,255,255,0.55)',
-    textAlign: 'center',
-    marginBottom: 28,
-  },
+  title: { fontSize: 28, fontWeight: '700', color: '#FFF', textAlign: 'center', marginBottom: 10, letterSpacing: -0.5 },
+  subtitle: { fontSize: 16, color: 'rgba(255,255,255,0.55)', textAlign: 'center', marginBottom: 28 },
   toggle: {
     flexDirection: 'row',
     backgroundColor: '#1C1C1E',
@@ -308,24 +352,10 @@ const styles = StyleSheet.create({
     marginBottom: 28,
     width: '100%',
   },
-  toggleBtn: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 26,
-    alignItems: 'center',
-  },
-  toggleBtnActive: {
-    backgroundColor: '#2C2C2E',
-  },
-  toggleText: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: 'rgba(255,255,255,0.4)',
-  },
-  toggleTextActive: {
-    color: '#FFF',
-    fontWeight: '700',
-  },
+  toggleBtn: { flex: 1, paddingVertical: 12, borderRadius: 26, alignItems: 'center' },
+  toggleBtnActive: { backgroundColor: '#2C2C2E' },
+  toggleText: { fontSize: 16, fontWeight: '500', color: 'rgba(255,255,255,0.4)' },
+  toggleTextActive: { color: '#FFF', fontWeight: '700' },
   featureCard: {
     width: '100%',
     backgroundColor: '#111',
@@ -335,59 +365,16 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     marginBottom: 20,
   },
-  featureRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 15,
-  },
-  featureRowBorder: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(255,255,255,0.1)',
-  },
-  featureHeaderLabel: {
-    flex: 1,
-    fontSize: 13,
-    fontWeight: '600',
-    color: 'rgba(255,255,255,0.4)',
-  },
-  featureHeaderFree: {
-    width: 52,
-    textAlign: 'center',
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#FFF',
-  },
-  featureHeaderPlan: {
-    width: 52,
-    textAlign: 'center',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  featureLabel: {
-    flex: 1,
-    fontSize: 15,
-    color: '#FFF',
-    fontWeight: '400',
-  },
-  featureCheck: {
-    width: 52,
-    alignItems: 'center',
-  },
-  featureDash: {
-    fontSize: 18,
-    color: 'rgba(255,255,255,0.3)',
-    lineHeight: 22,
-  },
-  restoreBtn: {
-    marginTop: 8,
-    padding: 12,
-  },
-  restoreText: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.5)',
-    textDecorationLine: 'underline',
-  },
+  featureRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 15 },
+  featureRowBorder: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(255,255,255,0.1)' },
+  featureHeaderLabel: { flex: 1, fontSize: 13, fontWeight: '600', color: 'rgba(255,255,255,0.4)' },
+  featureHeaderFree: { width: 52, textAlign: 'center', fontSize: 13, fontWeight: '600', color: '#FFF' },
+  featureHeaderPlan: { width: 52, textAlign: 'center', fontSize: 13, fontWeight: '700' },
+  featureLabel: { flex: 1, fontSize: 15, color: '#FFF', fontWeight: '400' },
+  featureCheck: { width: 52, alignItems: 'center' },
+  featureDash: { fontSize: 18, color: 'rgba(255,255,255,0.3)', lineHeight: 22 },
+  restoreBtn: { marginTop: 8, padding: 12 },
+  restoreText: { fontSize: 14, color: 'rgba(255,255,255,0.5)', textDecorationLine: 'underline' },
   bottomCTA: {
     position: 'absolute',
     bottom: 0,
@@ -405,26 +392,8 @@ const styles = StyleSheet.create({
     paddingVertical: 17,
     alignItems: 'center',
   },
-  upgradeBtnDisabled: {
-    opacity: 0.6,
-  },
-  upgradeBtnText: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: '#000',
-  },
-  webLink: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#FFF',
-    textDecorationLine: 'underline',
-    marginBottom: 10,
-  },
-  legalText: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.4)',
-    textAlign: 'center',
-    marginTop: 8,
-    lineHeight: 17,
-  },
+  upgradeBtnDisabled: { opacity: 0.6 },
+  upgradeBtnText: { fontSize: 17, fontWeight: '700', color: '#000' },
+  webLink: { fontSize: 14, fontWeight: '600', color: '#FFF', textDecorationLine: 'underline', marginBottom: 10 },
+  legalText: { fontSize: 12, color: 'rgba(255,255,255,0.4)', textAlign: 'center', marginTop: 8, lineHeight: 17 },
 });

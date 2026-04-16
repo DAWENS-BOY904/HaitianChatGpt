@@ -342,113 +342,6 @@ const archStyles = StyleSheet.create({
 });
 
 // ==========================================
-// USER ACTION POPOVER (photo 7 style)
-// ==========================================
-
-function UserActionModal({ visible, user, onClose, onSetupProfile, onStartGroupChat }: {
-  visible: boolean;
-  user: any;
-  onClose: () => void;
-  onSetupProfile: () => void;
-  onStartGroupChat: () => void;
-}) {
-  const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
-  const supabase = getSupabaseClient();
-
-  useEffect(() => {
-    if (visible && user?.id) {
-      supabase.from('user_profiles').select('profile_photo_url,full_name,username').eq('id', user.id).single().then(({ data }) => {
-        if (data?.profile_photo_url) setProfilePhoto(data.profile_photo_url);
-      });
-    }
-  }, [visible, user?.id]);
-
-  return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onClose}>
-        <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
-      </TouchableOpacity>
-      <View style={uaStyles.container}>
-        <TouchableOpacity style={uaStyles.closeBtn} onPress={onClose}>
-          <BlurView intensity={60} tint="dark" style={uaStyles.closeBtnBlur}>
-            <Ionicons name="close" size={18} color="#FFF" />
-          </BlurView>
-        </TouchableOpacity>
-
-        <View style={uaStyles.centerContent}>
-          <Text style={uaStyles.heading}>Use Haitian AI together</Text>
-          <Text style={uaStyles.subheading}>Add people to your chats to plan, share ideas, and get creative.</Text>
-          <TouchableOpacity style={uaStyles.groupBtn} onPress={() => { onClose(); onStartGroupChat(); }}>
-            <Text style={uaStyles.groupBtnText}>Start group chat</Text>
-          </TouchableOpacity>
-        </View>
-
-        <TouchableOpacity style={uaStyles.profileCard} onPress={() => { onClose(); onSetupProfile(); }}>
-          <BlurView intensity={60} tint="dark" style={uaStyles.profileCardBlur}>
-            {profilePhoto ? (
-              <Image source={{ uri: profilePhoto }} style={uaStyles.profileAvatar} />
-            ) : (
-              <View style={uaStyles.profileAvatarPlaceholder}>
-                <Ionicons name="person" size={20} color="rgba(255,255,255,0.5)" />
-              </View>
-            )}
-            <View style={{ flex: 1 }}>
-              <Text style={uaStyles.profileCardTitle}>Set up your profile</Text>
-              <Text style={uaStyles.profileCardSub}>Choose a username and photo</Text>
-            </View>
-            <Ionicons name="pencil-outline" size={18} color="rgba(255,255,255,0.5)" />
-          </BlurView>
-        </TouchableOpacity>
-      </View>
-    </Modal>
-  );
-}
-
-const uaStyles = StyleSheet.create({
-  container: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'flex-end', paddingBottom: 30 },
-  closeBtn: {
-    position: 'absolute',
-    top: 80,
-    right: 20,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    overflow: 'hidden',
-    zIndex: 10,
-  },
-  closeBtnBlur: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  centerContent: { alignItems: 'center', paddingHorizontal: 40, marginBottom: 40 },
-  heading: { color: '#FFF', fontSize: 22, fontWeight: '700', textAlign: 'center', marginBottom: 10 },
-  subheading: { color: 'rgba(255,255,255,0.55)', fontSize: 15, textAlign: 'center', lineHeight: 22, marginBottom: 30 },
-  groupBtn: {
-    backgroundColor: '#FFF',
-    borderRadius: 30,
-    paddingVertical: 14,
-    paddingHorizontal: 40,
-  },
-  groupBtnText: { color: '#000', fontSize: 17, fontWeight: '600' },
-  profileCard: {
-    marginHorizontal: 16,
-    borderRadius: 16,
-    overflow: 'hidden',
-  },
-  profileCardBlur: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 14,
-    gap: 12,
-  },
-  profileAvatar: { width: 44, height: 44, borderRadius: 22 },
-  profileAvatarPlaceholder: {
-    width: 44, height: 44, borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  profileCardTitle: { color: '#FFF', fontSize: 16, fontWeight: '600' },
-  profileCardSub: { color: 'rgba(255,255,255,0.5)', fontSize: 13, marginTop: 2 },
-});
-
-// ==========================================
 // CUSTOMIZE AI MODAL
 // ==========================================
 
@@ -620,9 +513,6 @@ function ProfileSetupModal({ visible, user, onClose }: {
               placeholderTextColor="rgba(255,255,255,0.35)"
               autoCapitalize="none"
             />
-            <Text style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, textAlign: 'center', marginBottom: 20 }}>
-              Your profile helps people recognize you.
-            </Text>
             <TouchableOpacity
               style={{ backgroundColor: '#FFF', borderRadius: 14, paddingVertical: 14, alignItems: 'center', opacity: saving ? 0.7 : 1 }}
               onPress={handleSave}
@@ -639,6 +529,34 @@ function ProfileSetupModal({ visible, user, onClose }: {
     </Modal>
   );
 }
+
+// ==========================================
+// TEMPORARY CHAT BANNER
+// ==========================================
+
+function TemporaryChatBanner({ onClose }: { onClose: () => void }) {
+  return (
+    <View style={tmpStyles.banner}>
+      <Ionicons name="time-outline" size={18} color="rgba(255,255,255,0.6)" style={{ marginBottom: 8 }} />
+      <Text style={tmpStyles.title}>Temporary chat</Text>
+      <Text style={tmpStyles.body}>
+        This chat won't appear in history, use or update Haitian AI's memory, or be used to train our models.{'\n'}
+        For safety purposes, we may keep a copy of this chat for up to 30 days.
+      </Text>
+    </View>
+  );
+}
+
+const tmpStyles = StyleSheet.create({
+  banner: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 40,
+  },
+  title: { color: '#FFF', fontSize: 17, fontWeight: '600', marginBottom: 12, textAlign: 'center' },
+  body: { color: 'rgba(255,255,255,0.55)', fontSize: 14, textAlign: 'center', lineHeight: 21 },
+});
 
 // ==========================================
 // MAIN COMPONENT
@@ -712,14 +630,13 @@ export default function HomeScreen() {
   const [codeLangChips, setCodeLangChips] = useState(false);
 
   // Modals state
-  const [chatContextMenuVisible, setChatContextMenuVisible] = useState(false);
   const [renameModalVisible, setRenameModalVisible] = useState(false);
   const [archiveConfirmVisible, setArchiveConfirmVisible] = useState(false);
-  const [userActionVisible, setUserActionVisible] = useState(false);
   const [profileSetupVisible, setProfileSetupVisible] = useState(false);
 
   // Group chat mode
   const [groupChatMode, setGroupChatMode] = useState(false);
+  const [temporaryChatMode, setTemporaryChatMode] = useState(false);
   const [customizeAIVisible, setCustomizeAIVisible] = useState(false);
   const [inviteLinkVisible, setInviteLinkVisible] = useState(false);
   const [groupCustomInstructions, setGroupCustomInstructions] = useState('');
@@ -1172,6 +1089,7 @@ export default function HomeScreen() {
   const handleNewChat = useCallback(async () => {
     if (messages.length > 0) await createConversation();
     setInputText(''); setSelectedMedia([]); setEditingMessageId(null);
+    setGroupChatMode(false); setTemporaryChatMode(false);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   }, [createConversation, messages.length]);
 
@@ -1213,19 +1131,13 @@ export default function HomeScreen() {
     showAlert('Copied', 'Message copied to clipboard');
   }, [showAlert]);
 
-  const chatContextMenuItems = useMemo(() => {
-    const items: any[] = [];
-    if (currentConversation && messages.length > 0) {
-      items.push({ label: 'Share', icon: 'share-outline', onPress: handleShareConversation });
-      items.push({ label: 'Rename', icon: 'pencil-outline', onPress: () => setRenameModalVisible(true) });
-      items.push({ label: 'Archive', icon: 'archive-outline', onPress: () => setArchiveConfirmVisible(true) });
-      items.push({ label: 'Delete', icon: 'trash-outline', destructive: true, onPress: handleDeleteConversation });
-    } else {
-      items.push({ label: 'New Chat', icon: 'add-outline', onPress: handleNewChat });
-      items.push({ label: 'History', icon: 'time-outline', onPress: () => setChatHistoryVisible(true) });
-    }
-    return items;
-  }, [currentConversation, messages.length, handleShareConversation, handleDeleteConversation, handleNewChat]);
+  const handleAddPeople = useCallback(async () => {
+    setConversationMenuVisible(false);
+    showAlert('Adding people...', 'Setting up group chat...');
+    await new Promise(r => setTimeout(r, 1200));
+    setGroupChatMode(true);
+    showAlert('Group Chat Ready', 'You can now invite people with a link!');
+  }, [showAlert]);
 
   // -------- RENDER --------
 
@@ -1284,19 +1196,48 @@ export default function HomeScreen() {
       backgroundColor: colors.background,
       paddingTop: Platform.select({ ios: insets.top, android: StatusBar.currentHeight || 0, default: 0 }),
     },
-    header: {
+    // ── HEADER: Before Chat (No Messages) ──
+    headerEmpty: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      padding: Spacing.md,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border,
+      paddingHorizontal: 16,
+      paddingVertical: 12,
       backgroundColor: colors.background,
     },
-    headerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
-    headerRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-    headerButton: { padding: Spacing.xs, marginLeft: Spacing.xs, borderRadius: BorderRadius.sm },
-    headerTitle: { ...Typography.heading, color: colors.text, flex: 1, marginLeft: Spacing.sm, fontSize: 18 },
+    upgradeBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: '#2D2B5E',
+      borderRadius: 20,
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      gap: 6,
+    },
+    upgradeBtnText: { color: '#7C6FF7', fontSize: 15, fontWeight: '600' },
+    headerEmptyRight: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+    headerIconBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+    // ── HEADER: After Chat (Has Messages) ──
+    headerChat: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+      backgroundColor: colors.background,
+      gap: 12,
+    },
+    headerChatLeft: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+    headerChatTitle: { flex: 1, fontSize: 17, fontWeight: '600', color: colors.text },
+    headerChatRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    headerChatEditBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: isDark ? '#1C1C1E' : '#F2F2F7',
+      borderRadius: 20,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      gap: 6,
+    },
     blurOverlayContainer: { ...StyleSheet.absoluteFillObject, zIndex: 9999, justifyContent: 'center', alignItems: 'center' },
     blurView: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center' },
     blurContent: { alignItems: 'center', justifyContent: 'center' },
@@ -1306,39 +1247,49 @@ export default function HomeScreen() {
     inputContainer: {
       flexDirection: 'row',
       alignItems: 'center',
-      padding: Spacing.md,
-      paddingBottom: Platform.select({ ios: insets.bottom + Spacing.md, android: insets.bottom + Spacing.md, default: Spacing.md }),
-      borderTopWidth: 1,
-      borderTopColor: colors.border,
-      gap: Spacing.sm,
+      paddingHorizontal: 12,
+      paddingBottom: Platform.select({ ios: insets.bottom + 8, android: insets.bottom + 8, default: 8 }),
+      paddingTop: 8,
+      gap: 8,
       backgroundColor: colors.background,
     },
     inputWrapper: {
       flex: 1,
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: colors.inputBackground,
-      borderRadius: BorderRadius.lg,
-      paddingHorizontal: Spacing.md,
-      minHeight: 44,
+      backgroundColor: isDark ? '#1C1C1E' : '#F2F2F7',
+      borderRadius: 26,
+      paddingHorizontal: 16,
+      minHeight: 48,
       maxHeight: 120,
     },
-    input: { flex: 1, ...Typography.body, color: colors.text, paddingVertical: Spacing.sm, maxHeight: 100 },
+    input: { flex: 1, fontSize: 16, color: colors.text, paddingVertical: 12, maxHeight: 100 },
     recordingIndicator: { flexDirection: 'row', alignItems: 'center', flex: 1, gap: Spacing.sm },
     recordingDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#FF3B30' },
     recordingDotActive: { backgroundColor: '#FF3B30', shadowColor: '#FF3B30', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.8, shadowRadius: 6, elevation: 8 },
     recordingText: { ...Typography.body, color: '#FF3B30', fontWeight: '600' },
     recordingDuration: { ...Typography.caption, color: colors.textSecondary, marginLeft: 'auto' },
-    iconButton: { padding: Spacing.xs, borderRadius: BorderRadius.full },
+    addBtn: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      backgroundColor: isDark ? '#1C1C1E' : '#F2F2F7',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    micBtn: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
     sendButton: { backgroundColor: colors.primary, borderRadius: BorderRadius.full, width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
     recordingButton: { backgroundColor: '#FF3B30' },
     processingButton: { backgroundColor: colors.textSecondary },
-    emptyState: { flex: 1, justifyContent: 'flex-end', paddingBottom: 24 },
+    // Empty state
+    emptyState: { flex: 1 },
     emptyCenter: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingBottom: 40 },
-    emptyLogoCircle: { width: 72, height: 72, borderRadius: 36, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', marginBottom: 16, shadowColor: colors.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 12, elevation: 8 },
-    emptyLogoText: { color: '#FFF', fontSize: 32, fontWeight: '800' },
-    emptyCenterTitle: { color: colors.text, fontSize: 28, fontWeight: '700', marginBottom: 8 },
-    emptyCenterSub: { color: colors.textSecondary, fontSize: 15 },
     loadingContainer: { padding: Spacing.md, alignItems: 'center' },
     selectedMediaPreview: { flexDirection: 'row', gap: Spacing.xs, paddingHorizontal: Spacing.md, paddingBottom: Spacing.sm, maxHeight: 80 },
     mediaPreviewItem: { width: 60, height: 60, borderRadius: BorderRadius.sm, backgroundColor: colors.surface, position: 'relative', overflow: 'hidden' },
@@ -1352,41 +1303,38 @@ export default function HomeScreen() {
     offlineText: { color: '#FFFFFF', ...Typography.caption, fontWeight: '600' },
     limitBanner: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, borderTopWidth: 1, gap: Spacing.sm },
     limitBannerButton: { paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, borderRadius: BorderRadius.full },
-    searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, margin: Spacing.md, paddingHorizontal: Spacing.md, borderRadius: BorderRadius.lg, height: 40 },
-    searchInput: { flex: 1, ...Typography.body, color: colors.text, marginLeft: Spacing.sm },
     langChipsContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingHorizontal: Spacing.md, paddingVertical: 8, backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.border },
     langChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1 },
     langChipText: { fontSize: 13, fontWeight: '600', fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' },
     userAvatarBtn: { width: 34, height: 34, borderRadius: 17, overflow: 'hidden', backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
     userAvatar: { width: 34, height: 34, borderRadius: 17 },
-    ellipsisBtn: { padding: 6, borderRadius: 8 },
     suggestionsRow: { paddingHorizontal: 16, paddingBottom: 16 },
     suggestionCard: {
-      backgroundColor: colors.surface,
-      borderRadius: 12,
-      padding: 12,
-      width: 140,
-      minHeight: 60,
+      backgroundColor: isDark ? '#1C1C1E' : '#F2F2F7',
+      borderRadius: 16,
+      padding: 14,
+      width: 160,
+      minHeight: 70,
       justifyContent: 'flex-end',
-      borderWidth: 1,
-      borderColor: colors.border,
     },
-    suggestionTitle: { color: colors.text, fontWeight: '600', fontSize: 13, marginBottom: 1 },
-    suggestionSub: { color: colors.textSecondary, fontSize: 11 },
+    suggestionTitle: { color: colors.text, fontWeight: '700', fontSize: 14, marginBottom: 2 },
+    suggestionSub: { color: colors.textSecondary, fontSize: 12 },
     groupActionBtn: { borderRadius: 20, paddingHorizontal: 18, paddingVertical: 10, borderWidth: 1, borderColor: 'rgba(0,122,255,0.4)' },
     groupActionBtnText: { color: '#007AFF', fontSize: 15, fontWeight: '600' },
-  }), [colors, insets]);
+    searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, margin: Spacing.md, paddingHorizontal: Spacing.md, borderRadius: BorderRadius.lg, height: 40 },
+    searchInput: { flex: 1, ...Typography.body, color: colors.text, marginLeft: Spacing.sm },
+  }), [colors, insets, isDark]);
 
   const displayMessages = isSearchMode && searchQuery ? filteredMessages : messages;
   const showSendButton = inputText.trim().length > 0 || selectedMedia.length > 0;
   const isRecording = recordingState === 'recording';
   const isProcessing = recordingState === 'processing';
   const accentColor = settings.accentColor || colors.primary;
-  const hasMessages = messages.length > 0;
+  const hasMessages = (messages || []).length > 0;
 
   const suggestions = [
     { title: 'Create a cartoon', sub: 'illustration of my pet' },
-    { title: 'Make a recommendation', sub: 'based on my data' },
+    { title: 'Write an email', sub: 'to request a quote from local plumbers' },
     { title: 'Help with code', sub: 'debug or write code' },
     { title: 'Summarize text', sub: 'paste any article' },
   ];
@@ -1436,6 +1384,8 @@ export default function HomeScreen() {
     }, 50);
   }, [currentConversation, createConversation, sendMessage, currentAIModel, showAlert]);
 
+  const userName = user?.email?.split('@')[0] || 'You';
+
   return (
     <ErrorBoundary>
       <GestureHandlerRootView style={{ flex: 1 }}>
@@ -1476,43 +1426,74 @@ export default function HomeScreen() {
                 </View>
               )}
 
-              {/* Header */}
-              <View style={styles.header}>
-                <View style={styles.headerLeft}>
-                  <TouchableOpacity style={styles.headerButton} onPress={() => setSideMenuVisible(true)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                    <Ionicons name="menu" size={24} color={colors.text} />
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => setIsSearchMode(!isSearchMode)}>
-                    <Text style={styles.headerTitle} numberOfLines={1}>
-                      {isSearchMode ? 'Search...' : (groupChatMode ? 'Group Chat' : (currentConversation?.title || 'Haitian AI Chat'))}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-
-                <View style={styles.headerRight}>
-                  <TouchableOpacity style={styles.headerButton} onPress={() => setChatHistoryVisible(true)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                    <Ionicons name="time-outline" size={22} color={colors.text} />
+              {/* ══ HEADER ══ */}
+              {!hasMessages ? (
+                // Empty state header (Photo 2 style)
+                <View style={styles.headerEmpty}>
+                  <TouchableOpacity onPress={() => setSideMenuVisible(true)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                    <Ionicons name="menu" size={26} color={colors.text} />
                   </TouchableOpacity>
 
-                  {user && (
-                    <TouchableOpacity style={styles.userAvatarBtn} onPress={() => setUserActionVisible(true)}>
-                      {userProfilePhoto ? (
-                        <Image source={{ uri: userProfilePhoto }} style={styles.userAvatar} />
-                      ) : (
-                        <Ionicons name="person-add-outline" size={18} color={colors.textSecondary} />
-                      )}
+                  {/* Center: Upgrade button */}
+                  <TouchableOpacity style={styles.upgradeBtn} onPress={() => router.push('/subscription')}>
+                    <Ionicons name="sparkles" size={15} color="#7C6FF7" />
+                    <Text style={styles.upgradeBtnText}>Upgrade</Text>
+                  </TouchableOpacity>
+
+                  {/* Right: Group chat + Temporary chat icons */}
+                  <View style={styles.headerEmptyRight}>
+                    <TouchableOpacity
+                      style={styles.headerIconBtn}
+                      onPress={() => {
+                        setGroupChatMode(true);
+                        setTemporaryChatMode(false);
+                        handleNewChat();
+                      }}
+                    >
+                      <Ionicons name="person-add-outline" size={24} color={colors.text} />
                     </TouchableOpacity>
-                  )}
-
-                  <TouchableOpacity
-                    style={styles.ellipsisBtn}
-                    onPress={() => setChatContextMenuVisible(true)}
-                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                  >
-                    <Ionicons name="ellipsis-horizontal-circle" size={24} color={colors.text} />
-                  </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.headerIconBtn}
+                      onPress={() => {
+                        setTemporaryChatMode(true);
+                        setGroupChatMode(false);
+                      }}
+                    >
+                      <Ionicons name="timer-outline" size={24} color={colors.text} />
+                    </TouchableOpacity>
+                  </View>
                 </View>
-              </View>
+              ) : (
+                // Chat active header (Photo 5 style)
+                <View style={styles.headerChat}>
+                  <TouchableOpacity style={styles.headerChatLeft} onPress={() => setSideMenuVisible(true)}>
+                    <Ionicons name="menu" size={26} color={colors.text} />
+                  </TouchableOpacity>
+
+                  <Text style={styles.headerChatTitle} numberOfLines={1}>
+                    {groupChatMode ? 'Group Chat' : (temporaryChatMode ? 'Temporary chat' : (currentConversation?.title || 'Haitian AI'))}
+                  </Text>
+
+                  <View style={styles.headerChatRight}>
+                    {/* Pencil/New chat icon */}
+                    <TouchableOpacity
+                      style={styles.headerChatEditBtn}
+                      onPress={handleNewChat}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Ionicons name="create-outline" size={18} color={colors.text} />
+                    </TouchableOpacity>
+
+                    {/* Ellipsis menu */}
+                    <TouchableOpacity
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      onPress={() => setConversationMenuVisible(true)}
+                    >
+                      <Ionicons name="ellipsis-horizontal" size={22} color={colors.text} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
 
               {/* Search Bar */}
               {isSearchMode && (
@@ -1530,12 +1511,14 @@ export default function HomeScreen() {
                 <View style={styles.loadingContainer}>
                   <ActivityIndicator size="large" color={colors.primary} />
                 </View>
-              ) : displayMessages.length === 0 ? (
+              ) : (displayMessages || []).length === 0 ? (
                 <View style={styles.emptyState}>
-                  {groupChatMode ? (
+                  {temporaryChatMode ? (
+                    <TemporaryChatBanner onClose={() => setTemporaryChatMode(false)} />
+                  ) : groupChatMode ? (
                     <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 }}>
                       <Text style={{ color: colors.textSecondary, fontSize: 14, textAlign: 'center', marginBottom: 20 }}>
-                        <Text style={{ color: colors.text, fontWeight: '700' }}>{user?.email?.split('@')[0] || 'You'}</Text>
+                        <Text style={{ color: colors.text, fontWeight: '700' }}>{userName}</Text>
                         {' created the group chat.\n'}Your personal Haitian AI memory is never used in group chats.
                       </Text>
                       <TouchableOpacity style={styles.groupActionBtn} onPress={() => setCustomizeAIVisible(true)}>
@@ -1547,14 +1530,9 @@ export default function HomeScreen() {
                       </TouchableOpacity>
                     </View>
                   ) : (
-                    <>
-                      <View style={styles.emptyCenter}>
-                        <View style={styles.emptyLogoCircle}>
-                          <Text style={styles.emptyLogoText}>H</Text>
-                        </View>
-                        <Text style={styles.emptyCenterTitle}>Haitian AI</Text>
-                        <Text style={styles.emptyCenterSub}>Your intelligent assistant</Text>
-                      </View>
+                    // Normal empty state with suggestions
+                    <View style={{ flex: 1 }}>
+                      <View style={{ flex: 1 }} />
                       <ScrollView
                         horizontal
                         showsHorizontalScrollIndicator={false}
@@ -1572,25 +1550,25 @@ export default function HomeScreen() {
                           </Animated.View>
                         ))}
                       </ScrollView>
-                    </>
+                    </View>
                   )}
                 </View>
               ) : (
                 <FlatList
                   ref={flatListRef}
-                  data={displayMessages}
+                  data={displayMessages || []}
                   renderItem={renderMessage}
                   keyExtractor={item => item.id}
                   contentContainerStyle={{ paddingVertical: Spacing.md }}
-                  ListHeaderComponent={groupChatMode && messages.length > 0 ? (
+                  ListHeaderComponent={groupChatMode && (messages || []).length > 0 ? (
                     <View style={{ paddingHorizontal: 16, paddingBottom: 16, alignItems: 'center', gap: 10 }}>
                       <Text style={{ color: colors.textSecondary, fontSize: 13, textAlign: 'center' }}>
-                        <Text style={{ color: colors.text, fontWeight: '700' }}>{user?.email?.split('@')[0] || 'You'}</Text>
+                        <Text style={{ color: colors.text, fontWeight: '700' }}>{userName}</Text>
                         {' created the group chat.'}
                       </Text>
                       {groupCustomInstructions ? (
                         <Text style={{ color: colors.textSecondary, fontSize: 12 }}>
-                          {user?.email?.split('@')[0] || 'You'} set Haitian AI to {groupRespondAuto ? 'automatically respond' : 'only respond when mentioned'}.
+                          {userName} set Haitian AI to {groupRespondAuto ? 'automatically respond' : 'only respond when mentioned'}.
                         </Text>
                       ) : null}
                       <View style={{ flexDirection: 'row', gap: 10 }}>
@@ -1604,7 +1582,7 @@ export default function HomeScreen() {
                     </View>
                   ) : null}
                   ListFooterComponent={generating ? (
-                    <ThinkingIndicator userMessage={messages.length > 0 ? messages[messages.length - 1].content : inputText} completed={showCompletionStatus} mode={thinkingMode} />
+                    <ThinkingIndicator userMessage={(messages || []).length > 0 ? (messages || [])[messages.length - 1].content : inputText} completed={showCompletionStatus} mode={thinkingMode} />
                   ) : null}
                   onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
                   maxToRenderPerBatch={10}
@@ -1643,11 +1621,11 @@ export default function HomeScreen() {
               {/* Input Area */}
               <View style={styles.inputContainer}>
                 <TouchableOpacity
-                  style={styles.iconButton}
+                  style={styles.addBtn}
                   onPress={() => setToolsVisible(true)}
                   disabled={editingMessageId !== null || isRecording || isProcessing}
                 >
-                  <Ionicons name="add" size={28} color={editingMessageId || isRecording || isProcessing ? colors.textSecondary : colors.text} />
+                  <Ionicons name="add" size={26} color={editingMessageId || isRecording || isProcessing ? colors.textSecondary : colors.text} />
                 </TouchableOpacity>
 
                 <View style={styles.inputWrapper}>
@@ -1662,13 +1640,13 @@ export default function HomeScreen() {
                   ) : isProcessing ? (
                     <View style={styles.recordingIndicator}>
                       <ActivityIndicator size="small" color={colors.primary} />
-                      <Text style={{ ...Typography.body, color: colors.text, marginLeft: Spacing.sm }}>Transcribing...</Text>
+                      <Text style={{ fontSize: 16, color: colors.text, marginLeft: Spacing.sm }}>Transcribing...</Text>
                     </View>
                   ) : (
                     <TextInput
                       ref={inputRef}
                       style={styles.input}
-                      placeholder={editingMessageId ? 'Edit message...' : 'Ask anything'}
+                      placeholder={temporaryChatMode ? 'Temporary chat' : (editingMessageId ? 'Edit message...' : 'Ask anything')}
                       placeholderTextColor={colors.textSecondary}
                       value={inputText}
                       onChangeText={(txt) => {
@@ -1686,11 +1664,28 @@ export default function HomeScreen() {
                 </View>
 
                 {editingMessageId && (
-                  <TouchableOpacity style={styles.iconButton} onPress={handleCancelEdit}>
+                  <TouchableOpacity style={{ padding: 8 }} onPress={handleCancelEdit}>
                     <Ionicons name="close-circle-outline" size={24} color="#FF3B30" />
                   </TouchableOpacity>
                 )}
 
+                {/* Microphone button (standalone, orange/red) */}
+                <TouchableOpacity
+                  style={[
+                    styles.micBtn,
+                    { backgroundColor: isRecording ? '#FF3B30' : (isProcessing ? '#888' : '#E8460A') }
+                  ]}
+                  onPress={toggleRecording}
+                  disabled={editingMessageId !== null}
+                >
+                  {isProcessing ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Ionicons name={isRecording ? 'stop' : 'mic'} size={22} color="#FFFFFF" />
+                  )}
+                </TouchableOpacity>
+
+                {/* Send button (only when text) */}
                 {sending ? (
                   <TouchableOpacity style={[styles.sendButton, { backgroundColor: '#FF3B30' }]} onPress={() => { setSending(false); setGenerating(false); }}>
                     <View style={{ width: 12, height: 12, backgroundColor: '#FFFFFF', borderRadius: 2 }} />
@@ -1699,23 +1694,11 @@ export default function HomeScreen() {
                   <TouchableOpacity style={[styles.sendButton, { backgroundColor: accentColor }]} onPress={handleSend} disabled={isRecording || isProcessing}>
                     <Ionicons name="arrow-up" size={20} color="#FFFFFF" />
                   </TouchableOpacity>
-                ) : (
-                  <TouchableOpacity
-                    style={[styles.sendButton, isRecording && styles.recordingButton, isProcessing && styles.processingButton]}
-                    onPress={toggleRecording}
-                    disabled={editingMessageId !== null || isProcessing}
-                  >
-                    {isProcessing ? (
-                      <ActivityIndicator size="small" color="#FFFFFF" />
-                    ) : (
-                      <Ionicons name={isRecording ? 'stop' : 'mic'} size={20} color="#FFFFFF" />
-                    )}
-                  </TouchableOpacity>
-                )}
+                ) : null}
               </View>
             </KeyboardAvoidingView>
 
-            {/* Modals - outside KeyboardAvoidingView but inside GestureDetector's single View child */}
+            {/* Modals */}
             <MenuModal visible={menuVisible} onClose={() => setMenuVisible(false)} />
 
             <ToolsModal
@@ -1732,10 +1715,11 @@ export default function HomeScreen() {
               visible={conversationMenuVisible}
               onClose={() => setConversationMenuVisible(false)}
               onShare={handleShareConversation}
-              onRename={handleRenameConversation}
+              onRename={(title) => { setConversationMenuVisible(false); setRenameModalVisible(true); }}
               onReport={() => router.push('/bugreport')}
-              onArchive={() => archiveConversation(currentConversation?.id || '')}
-              onDelete={handleDeleteConversation}
+              onArchive={() => { setConversationMenuVisible(false); setArchiveConfirmVisible(true); }}
+              onDelete={() => { setConversationMenuVisible(false); handleDeleteConversation(); }}
+              onAddPeople={handleAddPeople}
               conversationTitle={currentConversation?.title}
             />
 
@@ -1757,20 +1741,12 @@ export default function HomeScreen() {
             <ChatHistoryModal
               visible={chatHistoryVisible}
               onClose={() => setChatHistoryVisible(false)}
-              onSelectChat={() => { setChatHistoryVisible(false); }}
+              onSelectChat={(id) => { setChatHistoryVisible(false); }}
               onNewChat={() => { handleNewChat(); setChatHistoryVisible(false); }}
               currentChatId={currentConversation?.id}
-              conversations={conversations}
             />
 
             <CalculatorModal visible={calcVisible} onClose={() => setCalcVisible(false)} initialExpression={calcExpression} initialResult={calcResult} />
-
-            <BlurContextMenu
-              visible={chatContextMenuVisible}
-              title={currentConversation?.title || undefined}
-              items={chatContextMenuItems}
-              onClose={() => setChatContextMenuVisible(false)}
-            />
 
             <RenameModal
               visible={renameModalVisible}
@@ -1783,14 +1759,6 @@ export default function HomeScreen() {
               visible={archiveConfirmVisible}
               onConfirm={() => { setArchiveConfirmVisible(false); handleArchiveConversation(); }}
               onCancel={() => setArchiveConfirmVisible(false)}
-            />
-
-            <UserActionModal
-              visible={userActionVisible}
-              user={user}
-              onClose={() => setUserActionVisible(false)}
-              onSetupProfile={() => setProfileSetupVisible(true)}
-              onStartGroupChat={() => { setGroupChatMode(true); handleNewChat(); }}
             />
 
             <ProfileSetupModal visible={profileSetupVisible} user={user} onClose={() => setProfileSetupVisible(false)} />
