@@ -1376,16 +1376,16 @@ export default function HomeScreen() {
     suggestionsRow: { paddingHorizontal: 16, paddingBottom: 16 },
     suggestionCard: {
       backgroundColor: colors.surface,
-      borderRadius: 16,
-      padding: 16,
-      width: 160,
-      minHeight: 80,
+      borderRadius: 12,
+      padding: 12,
+      width: 140,
+      minHeight: 60,
       justifyContent: 'flex-end',
       borderWidth: 1,
       borderColor: colors.border,
     },
-    suggestionTitle: { color: colors.text, fontWeight: '700', fontSize: 15, marginBottom: 2 },
-    suggestionSub: { color: colors.textSecondary, fontSize: 13 },
+    suggestionTitle: { color: colors.text, fontWeight: '600', fontSize: 13, marginBottom: 1 },
+    suggestionSub: { color: colors.textSecondary, fontSize: 11 },
     // Group chat banner
     groupBanner: { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 12 },
     groupBannerText: { color: colors.textSecondary, fontSize: 14, textAlign: 'center' },
@@ -1843,4 +1843,3 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-helloa ai stop fucking skip make change:Fix the 'cannot read property length of undefined' error in the TextInput onChangeText handler in home by adding a null coalescing guard: change `onChangeText={(txt) => { const safeTxt = txt ?? ''; ... }}` to ensure txt is never undefined before accessing its properties.Resize the empty state suggestion cards to be smaller and more compact, matching the ChatGPT-style layout (shorter height, tighter padding, smaller font). Also ensure the cards display properly on smaller screens.
