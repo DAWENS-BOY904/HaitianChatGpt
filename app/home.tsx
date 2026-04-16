@@ -369,14 +369,12 @@ function UserActionModal({ visible, user, onClose, onSetupProfile, onStartGroupC
         <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
       </TouchableOpacity>
       <View style={uaStyles.container}>
-        {/* X button floating */}
         <TouchableOpacity style={uaStyles.closeBtn} onPress={onClose}>
           <BlurView intensity={60} tint="dark" style={uaStyles.closeBtnBlur}>
             <Ionicons name="close" size={18} color="#FFF" />
           </BlurView>
         </TouchableOpacity>
 
-        {/* Start group chat centered */}
         <View style={uaStyles.centerContent}>
           <Text style={uaStyles.heading}>Use Haitian AI together</Text>
           <Text style={uaStyles.subheading}>Add people to your chats to plan, share ideas, and get creative.</Text>
@@ -385,7 +383,6 @@ function UserActionModal({ visible, user, onClose, onSetupProfile, onStartGroupC
           </TouchableOpacity>
         </View>
 
-        {/* Setup profile card at bottom */}
         <TouchableOpacity style={uaStyles.profileCard} onPress={() => { onClose(); onSetupProfile(); }}>
           <BlurView intensity={60} tint="dark" style={uaStyles.profileCardBlur}>
             {profilePhoto ? (
@@ -452,7 +449,7 @@ const uaStyles = StyleSheet.create({
 });
 
 // ==========================================
-// CUSTOMIZE AI MODAL (group chat - photo 9)
+// CUSTOMIZE AI MODAL
 // ==========================================
 
 function CustomizeAIModal({ visible, onClose, onSave }: {
@@ -566,7 +563,7 @@ function InviteLinkModal({ visible, onClose, isPlus }: {
 }
 
 // ==========================================
-// PROFILE SETUP MODAL (blur)
+// PROFILE SETUP MODAL
 // ==========================================
 
 function ProfileSetupModal({ visible, user, onClose }: {
@@ -706,7 +703,6 @@ export default function HomeScreen() {
   const [thinkingMode, setThinkingMode] = useState<'thinking' | 'creating_image' | 'analyzing' | 'editing_image'>('thinking');
   const [showCompletionStatus, setShowCompletionStatus] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
   const [isSearchMode, setIsSearchMode] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredMessages, setFilteredMessages] = useState<Message[]>([]);
@@ -715,7 +711,7 @@ export default function HomeScreen() {
   const [hasUsedNewChatBonus, setHasUsedNewChatBonus] = useState(false);
   const [codeLangChips, setCodeLangChips] = useState(false);
 
-  // New modals state
+  // Modals state
   const [chatContextMenuVisible, setChatContextMenuVisible] = useState(false);
   const [renameModalVisible, setRenameModalVisible] = useState(false);
   const [archiveConfirmVisible, setArchiveConfirmVisible] = useState(false);
@@ -734,7 +730,6 @@ export default function HomeScreen() {
   
   const runOnJS_setSideMenu = useCallback((val: boolean) => setSideMenuVisible(val), []);
 
-  // Load user profile photo
   useEffect(() => {
     if (user?.id) {
       supabase.from('user_profiles').select('profile_photo_url').eq('id', user.id).single().then(({ data }) => {
@@ -760,7 +755,8 @@ export default function HomeScreen() {
   }, [computeTimeUntilMidnight]);
 
   const swipeGesture = Gesture.Pan()
-    .activeOffsetX([10, 10000])
+    .activeOffsetX([20, 10000])
+    .failOffsetY([-10, 10])
     .onEnd((e) => {
       if (e.translationX > 60 && e.velocityX > 100 && !sideMenuVisible) {
         runOnJS(runOnJS_setSideMenu)(true);
@@ -1080,7 +1076,7 @@ export default function HomeScreen() {
           { text: 'Sign In', onPress: () => router.push('/login') },
         ]);
       } else {
-        showAlert('Credits Required', `You need credits to continue.`, [
+        showAlert('Credits Required', 'You need credits to continue.', [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Buy Credits', onPress: () => router.push('/buy-coins') },
         ]);
@@ -1117,7 +1113,6 @@ export default function HomeScreen() {
         }
       }
 
-      // Build final message with custom instructions if group mode
       let finalText = text || (base64Image ? '[Image]' : '');
       if (groupChatMode && groupCustomInstructions && groupRespondAuto) {
         finalText = `[System: ${groupCustomInstructions}]\n${finalText}`;
@@ -1218,9 +1213,8 @@ export default function HomeScreen() {
     showAlert('Copied', 'Message copied to clipboard');
   }, [showAlert]);
 
-  // Context menu items for chat options
   const chatContextMenuItems = useMemo(() => {
-    const items = [];
+    const items: any[] = [];
     if (currentConversation && messages.length > 0) {
       items.push({ label: 'Share', icon: 'share-outline', onPress: handleShareConversation });
       items.push({ label: 'Rename', icon: 'pencil-outline', onPress: () => setRenameModalVisible(true) });
@@ -1233,9 +1227,9 @@ export default function HomeScreen() {
     return items;
   }, [currentConversation, messages.length, handleShareConversation, handleDeleteConversation, handleNewChat]);
 
-  // -------- RENDER FUNCTIONS --------
+  // -------- RENDER --------
 
-  const renderMessage = useCallback(({ item, index }: { item: Message; index: number }) => {
+  const renderMessage = useCallback(({ item }: { item: Message; index: number }) => {
     const isStreaming = streamingMessageId === item.id;
     const mathData = item.role === 'assistant' ? detectMathExpression(item.content) : null;
     return (
@@ -1308,8 +1302,6 @@ export default function HomeScreen() {
     blurContent: { alignItems: 'center', justifyContent: 'center' },
     blurText: { fontSize: 24, fontWeight: 'bold', color: 'white', marginTop: 16 },
     blurSubtext: { fontSize: 14, color: 'rgba(255,255,255,0.7)', marginTop: 8 },
-    modelButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, paddingHorizontal: Spacing.sm, paddingVertical: 4, borderRadius: BorderRadius.sm, marginRight: Spacing.sm },
-    modelText: { ...Typography.caption, color: colors.text, fontSize: 11, marginRight: 4 },
     messagesContainer: { flex: 1 },
     inputContainer: {
       flexDirection: 'row',
@@ -1347,9 +1339,6 @@ export default function HomeScreen() {
     emptyLogoText: { color: '#FFF', fontSize: 32, fontWeight: '800' },
     emptyCenterTitle: { color: colors.text, fontSize: 28, fontWeight: '700', marginBottom: 8 },
     emptyCenterSub: { color: colors.textSecondary, fontSize: 15 },
-    emptyIcon: { marginBottom: Spacing.md },
-    emptyTitle: { ...Typography.heading, color: colors.text, marginBottom: Spacing.xs },
-    emptyText: { ...Typography.body, color: colors.textSecondary, textAlign: 'center', lineHeight: 22 },
     loadingContainer: { padding: Spacing.md, alignItems: 'center' },
     selectedMediaPreview: { flexDirection: 'row', gap: Spacing.xs, paddingHorizontal: Spacing.md, paddingBottom: Spacing.sm, maxHeight: 80 },
     mediaPreviewItem: { width: 60, height: 60, borderRadius: BorderRadius.sm, backgroundColor: colors.surface, position: 'relative', overflow: 'hidden' },
@@ -1368,11 +1357,9 @@ export default function HomeScreen() {
     langChipsContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingHorizontal: Spacing.md, paddingVertical: 8, backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.border },
     langChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1 },
     langChipText: { fontSize: 13, fontWeight: '600', fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' },
-    // User avatar button
     userAvatarBtn: { width: 34, height: 34, borderRadius: 17, overflow: 'hidden', backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
     userAvatar: { width: 34, height: 34, borderRadius: 17 },
     ellipsisBtn: { padding: 6, borderRadius: 8 },
-    // Suggestion cards (empty state)
     suggestionsRow: { paddingHorizontal: 16, paddingBottom: 16 },
     suggestionCard: {
       backgroundColor: colors.surface,
@@ -1386,9 +1373,6 @@ export default function HomeScreen() {
     },
     suggestionTitle: { color: colors.text, fontWeight: '600', fontSize: 13, marginBottom: 1 },
     suggestionSub: { color: colors.textSecondary, fontSize: 11 },
-    // Group chat banner
-    groupBanner: { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 12 },
-    groupBannerText: { color: colors.textSecondary, fontSize: 14, textAlign: 'center' },
     groupActionBtn: { borderRadius: 20, paddingHorizontal: 18, paddingVertical: 10, borderWidth: 1, borderColor: 'rgba(0,122,255,0.4)' },
     groupActionBtnText: { color: '#007AFF', fontSize: 15, fontWeight: '600' },
   }), [colors, insets]);
@@ -1400,7 +1384,6 @@ export default function HomeScreen() {
   const accentColor = settings.accentColor || colors.primary;
   const hasMessages = messages.length > 0;
 
-  // Suggestions for empty state
   const suggestions = [
     { title: 'Create a cartoon', sub: 'illustration of my pet' },
     { title: 'Make a recommendation', sub: 'based on my data' },
@@ -1408,7 +1391,6 @@ export default function HomeScreen() {
     { title: 'Summarize text', sub: 'paste any article' },
   ];
 
-  // Staggered entrance animations for suggestion cards
   const suggestionAnims = useRef(suggestions.map(() => ({
     opacity: new Animated.Value(0),
     translateY: new Animated.Value(24),
@@ -1416,9 +1398,7 @@ export default function HomeScreen() {
 
   useEffect(() => {
     if (!hasMessages) {
-      // Reset
       suggestionAnims.forEach(a => { a.opacity.setValue(0); a.translateY.setValue(24); });
-      // Stagger in
       const animations = suggestionAnims.map((a, i) =>
         Animated.parallel([
           Animated.timing(a.opacity, { toValue: 1, duration: 300, delay: i * 80, useNativeDriver: true }),
@@ -1431,8 +1411,6 @@ export default function HomeScreen() {
 
   const handleSuggestionTap = useCallback(async (suggestion: { title: string; sub: string }) => {
     const text = `${suggestion.title} — ${suggestion.sub}`;
-    setInputText(text);
-    // slight delay so inputText state updates before send
     setTimeout(async () => {
       let conversationId = currentConversation?.id;
       if (!conversationId) {
@@ -1458,416 +1436,394 @@ export default function HomeScreen() {
     }, 50);
   }, [currentConversation, createConversation, sendMessage, currentAIModel, showAlert]);
 
-   return (
+  return (
     <ErrorBoundary>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <GestureDetector gesture={swipeGesture}>
           <View style={{ flex: 1 }}>
-          <KeyboardAvoidingView 
-            style={styles.container}
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            keyboardVerticalOffset={0}
-          >
-      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
-      
-      {isOffline && (
-        <View style={styles.offlineBanner}>
-          <Text style={styles.offlineText}>No connection — some features unavailable</Text>
-        </View>
-      )}
-
-      {user && !isUnlimited && !isAdmin && !canSendMessage() && sessionBonusMessages <= 0 && (
-        <View style={[styles.limitBanner, { backgroundColor: colors.surface, borderColor: colors.border, flexWrap: 'wrap' }]}>
-          <View style={{ flex: 1, minWidth: 160 }}>
-            <Text style={{ color: colors.text, fontWeight: '600', fontSize: 14 }}>Daily limit reached</Text>
-            <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 2 }}>{timeUntilMidnight ? `Resets in ${timeUntilMidnight}` : 'Resets at midnight'}</Text>
-          </View>
-          <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
-            {!hasUsedNewChatBonus && (
-              <TouchableOpacity
-                style={[styles.limitBannerButton, { backgroundColor: colors.surfaceSecondary || '#2C2C2E', borderWidth: 1, borderColor: colors.border }]}
-                onPress={async () => { setHasUsedNewChatBonus(true); setSessionBonusMessages(100); await createConversation(); setInputText(''); setSelectedMedia([]); }}
-              >
-                <Text style={{ color: colors.text, fontWeight: '700', fontSize: 13 }}>New Chat</Text>
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity style={[styles.limitBannerButton, { backgroundColor: accentColor }]} onPress={() => router.push('/subscription')}>
-              <Text style={{ color: '#FFF', fontWeight: '700', fontSize: 13 }}>Get Plus</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
-      
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <TouchableOpacity style={styles.headerButton} onPress={() => setSideMenuVisible(true)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <Ionicons name="menu" size={24} color={colors.text} />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => setIsSearchMode(!isSearchMode)}>
-            <Text style={styles.headerTitle} numberOfLines={1}>
-              {isSearchMode ? 'Search...' : (groupChatMode ? 'Group Chat' : (currentConversation?.title || 'Haitian AI Chat'))}
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.headerRight}>
-          {/* History button */}
-          <TouchableOpacity style={styles.headerButton} onPress={() => setChatHistoryVisible(true)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <Ionicons name="time-outline" size={22} color={colors.text} />
-          </TouchableOpacity>
-
-          {/* User avatar button */}
-          {user && (
-            <TouchableOpacity style={styles.userAvatarBtn} onPress={() => setUserActionVisible(true)}>
-              {userProfilePhoto ? (
-                <Image source={{ uri: userProfilePhoto }} style={styles.userAvatar} />
-              ) : (
-                <Ionicons name="person-add-outline" size={18} color={colors.textSecondary} />
-              )}
-            </TouchableOpacity>
-          )}
-
-          {/* … ellipsis button (replaces old + new chat button) */}
-          <TouchableOpacity
-            style={styles.ellipsisBtn}
-            onPress={() => setChatContextMenuVisible(true)}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Ionicons name="ellipsis-horizontal-circle" size={24} color={colors.text} />
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* Search Bar */}
-      {isSearchMode && (
-        <View style={styles.searchContainer}>
-          <Ionicons name="search" size={20} color={colors.textSecondary} />
-          <TextInput style={styles.searchInput} placeholder="Search messages..." placeholderTextColor={colors.textSecondary} value={searchQuery} onChangeText={setSearchQuery} autoFocus />
-          <TouchableOpacity onPress={() => { setIsSearchMode(false); setSearchQuery(''); }}>
-            <Ionicons name="close" size={20} color={colors.textSecondary} />
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* Messages List */}
-      {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
-        </View>
-      ) : displayMessages.length === 0 ? (
-        // Empty state - ChatGPT style
-        <View style={styles.emptyState}>
-          {groupChatMode ? (
-            // Group chat empty state
-            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 }}>
-              <Text style={{ color: colors.textSecondary, fontSize: 14, textAlign: 'center', marginBottom: 20 }}>
-                <Text style={{ color: colors.text, fontWeight: '700' }}>{user?.email?.split('@')[0] || 'You'}</Text>
-                {' created the group chat.\n'}Your personal Haitian AI memory is never used in group chats.
-              </Text>
-              <TouchableOpacity style={styles.groupActionBtn} onPress={() => setCustomizeAIVisible(true)}>
-                <Text style={styles.groupActionBtnText}>Customize Haitian AI</Text>
-              </TouchableOpacity>
-              <View style={{ height: 12 }} />
-              <TouchableOpacity style={styles.groupActionBtn} onPress={() => setInviteLinkVisible(true)}>
-                <Text style={styles.groupActionBtnText}>Invite with link</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            // Normal empty state: centered logo + suggestions at bottom
-            <>
-              {/* Centered logo/title */}
-              <View style={styles.emptyCenter}>
-                <View style={styles.emptyLogoCircle}>
-                  <Text style={styles.emptyLogoText}>H</Text>
-                </View>
-                <Text style={styles.emptyCenterTitle}>Haitian AI</Text>
-                <Text style={styles.emptyCenterSub}>Your intelligent assistant</Text>
-              </View>
-
-              {/* Suggestion cards - bottom */}
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={[styles.suggestionsRow, { gap: 10 }]}
-              >
-                {suggestions.map((s, i) => (
-                  <Animated.View
-                    key={s.title}
-                    style={[
-                      { opacity: suggestionAnims[i].opacity, transform: [{ translateY: suggestionAnims[i].translateY }] }
-                    ]}
-                  >
-                    <TouchableOpacity
-                      style={styles.suggestionCard}
-                      activeOpacity={0.7}
-                      onPress={() => handleSuggestionTap(s)}
-                    >
-                      <Text style={styles.suggestionTitle}>{s.title}</Text>
-                      <Text style={styles.suggestionSub}>{s.sub}</Text>
-                    </TouchableOpacity>
-                  </Animated.View>
-                ))}
-              </ScrollView>
-            </>
-          )}
-        </View>
-      ) : (
-        <FlatList
-          ref={flatListRef}
-          data={displayMessages}
-          renderItem={renderMessage}
-          keyExtractor={item => item.id}
-          contentContainerStyle={{ paddingVertical: Spacing.md }}
-          ListHeaderComponent={groupChatMode && messages.length > 0 ? (
-            <View style={{ paddingHorizontal: 16, paddingBottom: 16, alignItems: 'center', gap: 10 }}>
-              <Text style={{ color: colors.textSecondary, fontSize: 13, textAlign: 'center' }}>
-                <Text style={{ color: colors.text, fontWeight: '700' }}>{user?.email?.split('@')[0] || 'You'}</Text>
-                {' created the group chat.'}
-              </Text>
-              {groupCustomInstructions ? (
-                <Text style={{ color: colors.textSecondary, fontSize: 12 }}>
-                  {user?.email?.split('@')[0] || 'You'} set Haitian AI to {groupRespondAuto ? 'automatically respond' : 'only respond when mentioned'}.
-                </Text>
-              ) : null}
-              <View style={{ flexDirection: 'row', gap: 10 }}>
-                <TouchableOpacity style={styles.groupActionBtn} onPress={() => setCustomizeAIVisible(true)}>
-                  <Text style={styles.groupActionBtnText}>Customize Haitian AI</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.groupActionBtn} onPress={() => setInviteLinkVisible(true)}>
-                  <Text style={styles.groupActionBtnText}>Invite with link</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          ) : null}
-          ListFooterComponent={generating ? (
-            <ThinkingIndicator userMessage={messages.length > 0 ? messages[messages.length - 1].content : inputText} completed={showCompletionStatus} mode={thinkingMode} />
-          ) : null}
-          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
-          maxToRenderPerBatch={10}
-          windowSize={10}
-          removeClippedSubviews={Platform.OS === 'android'}
-        />
-      )}
-
-      {/* Code language chips */}
-      {codeLangChips && (
-        <View style={styles.langChipsContainer}>
-          {['python', 'javascript', 'typescript', 'html', 'css', 'bash', 'json'].map(lang => (
-            <TouchableOpacity
-              key={lang}
-              style={[styles.langChip, { backgroundColor: colors.surface, borderColor: colors.border }]}
-              onPress={() => { setInputText(inputText.replace(/```\w*$/, '```' + lang + '\n')); setCodeLangChips(false); }}
+            <KeyboardAvoidingView
+              style={styles.container}
+              behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+              keyboardVerticalOffset={0}
             >
-              <Text style={[styles.langChipText, { color: colors.text }]}>{lang}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      )}
+              <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
 
-      {renderMediaPreview()}
+              {isOffline && (
+                <View style={styles.offlineBanner}>
+                  <Text style={styles.offlineText}>No connection — some features unavailable</Text>
+                </View>
+              )}
 
-      {editingMessageId && (
-        <View style={styles.editingIndicator}>
-          <Ionicons name="pencil" size={16} color={colors.primary} />
-          <Text style={styles.editingText}>Editing message...</Text>
-          <TouchableOpacity onPress={handleCancelEdit}>
-            <Text style={{ ...Typography.caption, color: colors.primary, fontWeight: '600' }}>Cancel</Text>
-          </TouchableOpacity>
-        </View>
-      )}
+              {user && !isUnlimited && !isAdmin && !canSendMessage() && sessionBonusMessages <= 0 && (
+                <View style={[styles.limitBanner, { backgroundColor: colors.surface, borderColor: colors.border, flexWrap: 'wrap' }]}>
+                  <View style={{ flex: 1, minWidth: 160 }}>
+                    <Text style={{ color: colors.text, fontWeight: '600', fontSize: 14 }}>Daily limit reached</Text>
+                    <Text style={{ color: colors.textSecondary, fontSize: 12, marginTop: 2 }}>{timeUntilMidnight ? `Resets in ${timeUntilMidnight}` : 'Resets at midnight'}</Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
+                    {!hasUsedNewChatBonus && (
+                      <TouchableOpacity
+                        style={[styles.limitBannerButton, { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }]}
+                        onPress={async () => { setHasUsedNewChatBonus(true); setSessionBonusMessages(100); await createConversation(); setInputText(''); setSelectedMedia([]); }}
+                      >
+                        <Text style={{ color: colors.text, fontWeight: '700', fontSize: 13 }}>New Chat</Text>
+                      </TouchableOpacity>
+                    )}
+                    <TouchableOpacity style={[styles.limitBannerButton, { backgroundColor: accentColor }]} onPress={() => router.push('/subscription')}>
+                      <Text style={{ color: '#FFF', fontWeight: '700', fontSize: 13 }}>Get Plus</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
 
-      {/* Input Area - ChatGPT style (+ on left, text input, mic on right) */}
-      <View style={styles.inputContainer}>
-        <TouchableOpacity 
-          style={styles.iconButton} 
-          onPress={() => setToolsVisible(true)} 
-          disabled={editingMessageId !== null || isRecording || isProcessing}
-        >
-          <Ionicons name="add" size={28} color={editingMessageId || isRecording || isProcessing ? colors.textSecondary : colors.text} />
-        </TouchableOpacity>
+              {/* Header */}
+              <View style={styles.header}>
+                <View style={styles.headerLeft}>
+                  <TouchableOpacity style={styles.headerButton} onPress={() => setSideMenuVisible(true)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                    <Ionicons name="menu" size={24} color={colors.text} />
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => setIsSearchMode(!isSearchMode)}>
+                    <Text style={styles.headerTitle} numberOfLines={1}>
+                      {isSearchMode ? 'Search...' : (groupChatMode ? 'Group Chat' : (currentConversation?.title || 'Haitian AI Chat'))}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
 
-        <View style={styles.inputWrapper}>
-          {isRecording ? (
-            <View style={styles.recordingIndicator}>
-              <Animated.View style={[styles.recordingDot, styles.recordingDotActive, { transform: [{ scale: pulseAnim }] }]} />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.recordingText}>Recording...</Text>
-                <Text style={styles.recordingDuration}>{formatDuration(recordingDuration)} / 1:00</Text>
+                <View style={styles.headerRight}>
+                  <TouchableOpacity style={styles.headerButton} onPress={() => setChatHistoryVisible(true)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                    <Ionicons name="time-outline" size={22} color={colors.text} />
+                  </TouchableOpacity>
+
+                  {user && (
+                    <TouchableOpacity style={styles.userAvatarBtn} onPress={() => setUserActionVisible(true)}>
+                      {userProfilePhoto ? (
+                        <Image source={{ uri: userProfilePhoto }} style={styles.userAvatar} />
+                      ) : (
+                        <Ionicons name="person-add-outline" size={18} color={colors.textSecondary} />
+                      )}
+                    </TouchableOpacity>
+                  )}
+
+                  <TouchableOpacity
+                    style={styles.ellipsisBtn}
+                    onPress={() => setChatContextMenuVisible(true)}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <Ionicons name="ellipsis-horizontal-circle" size={24} color={colors.text} />
+                  </TouchableOpacity>
+                </View>
               </View>
-            </View>
-          ) : isProcessing ? (
-            <View style={styles.recordingIndicator}>
-              <ActivityIndicator size="small" color={colors.primary} />
-              <Text style={{ ...Typography.body, color: colors.text, marginLeft: Spacing.sm }}>Transcribing...</Text>
-            </View>
-          ) : (
-            <TextInput
-              ref={inputRef}
-              style={styles.input}
-              placeholder={editingMessageId ? 'Edit message...' : 'Ask anything'}
-              placeholderTextColor={colors.textSecondary}
-              value={inputText}
-              onChangeText={(txt) => {
-                const safeTxt = txt ?? '';
-                setInputText(safeTxt);
-                try { setCodeLangChips(/```\w*$/.test(safeTxt)); } catch (_e) { setCodeLangChips(false); }
-              }}
-              multiline
-              maxLength={4000}
-              editable={!sending && !isRecording && !isProcessing}
-              returnKeyType="default"
-              blurOnSubmit={false}
+
+              {/* Search Bar */}
+              {isSearchMode && (
+                <View style={styles.searchContainer}>
+                  <Ionicons name="search" size={20} color={colors.textSecondary} />
+                  <TextInput style={styles.searchInput} placeholder="Search messages..." placeholderTextColor={colors.textSecondary} value={searchQuery} onChangeText={setSearchQuery} autoFocus />
+                  <TouchableOpacity onPress={() => { setIsSearchMode(false); setSearchQuery(''); }}>
+                    <Ionicons name="close" size={20} color={colors.textSecondary} />
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {/* Messages List */}
+              {loading ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="large" color={colors.primary} />
+                </View>
+              ) : displayMessages.length === 0 ? (
+                <View style={styles.emptyState}>
+                  {groupChatMode ? (
+                    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 }}>
+                      <Text style={{ color: colors.textSecondary, fontSize: 14, textAlign: 'center', marginBottom: 20 }}>
+                        <Text style={{ color: colors.text, fontWeight: '700' }}>{user?.email?.split('@')[0] || 'You'}</Text>
+                        {' created the group chat.\n'}Your personal Haitian AI memory is never used in group chats.
+                      </Text>
+                      <TouchableOpacity style={styles.groupActionBtn} onPress={() => setCustomizeAIVisible(true)}>
+                        <Text style={styles.groupActionBtnText}>Customize Haitian AI</Text>
+                      </TouchableOpacity>
+                      <View style={{ height: 12 }} />
+                      <TouchableOpacity style={styles.groupActionBtn} onPress={() => setInviteLinkVisible(true)}>
+                        <Text style={styles.groupActionBtnText}>Invite with link</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <>
+                      <View style={styles.emptyCenter}>
+                        <View style={styles.emptyLogoCircle}>
+                          <Text style={styles.emptyLogoText}>H</Text>
+                        </View>
+                        <Text style={styles.emptyCenterTitle}>Haitian AI</Text>
+                        <Text style={styles.emptyCenterSub}>Your intelligent assistant</Text>
+                      </View>
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={[styles.suggestionsRow, { gap: 10 }]}
+                      >
+                        {suggestions.map((s, i) => (
+                          <Animated.View
+                            key={s.title}
+                            style={{ opacity: suggestionAnims[i].opacity, transform: [{ translateY: suggestionAnims[i].translateY }] }}
+                          >
+                            <TouchableOpacity style={styles.suggestionCard} activeOpacity={0.7} onPress={() => handleSuggestionTap(s)}>
+                              <Text style={styles.suggestionTitle}>{s.title}</Text>
+                              <Text style={styles.suggestionSub}>{s.sub}</Text>
+                            </TouchableOpacity>
+                          </Animated.View>
+                        ))}
+                      </ScrollView>
+                    </>
+                  )}
+                </View>
+              ) : (
+                <FlatList
+                  ref={flatListRef}
+                  data={displayMessages}
+                  renderItem={renderMessage}
+                  keyExtractor={item => item.id}
+                  contentContainerStyle={{ paddingVertical: Spacing.md }}
+                  ListHeaderComponent={groupChatMode && messages.length > 0 ? (
+                    <View style={{ paddingHorizontal: 16, paddingBottom: 16, alignItems: 'center', gap: 10 }}>
+                      <Text style={{ color: colors.textSecondary, fontSize: 13, textAlign: 'center' }}>
+                        <Text style={{ color: colors.text, fontWeight: '700' }}>{user?.email?.split('@')[0] || 'You'}</Text>
+                        {' created the group chat.'}
+                      </Text>
+                      {groupCustomInstructions ? (
+                        <Text style={{ color: colors.textSecondary, fontSize: 12 }}>
+                          {user?.email?.split('@')[0] || 'You'} set Haitian AI to {groupRespondAuto ? 'automatically respond' : 'only respond when mentioned'}.
+                        </Text>
+                      ) : null}
+                      <View style={{ flexDirection: 'row', gap: 10 }}>
+                        <TouchableOpacity style={styles.groupActionBtn} onPress={() => setCustomizeAIVisible(true)}>
+                          <Text style={styles.groupActionBtnText}>Customize Haitian AI</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.groupActionBtn} onPress={() => setInviteLinkVisible(true)}>
+                          <Text style={styles.groupActionBtnText}>Invite with link</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ) : null}
+                  ListFooterComponent={generating ? (
+                    <ThinkingIndicator userMessage={messages.length > 0 ? messages[messages.length - 1].content : inputText} completed={showCompletionStatus} mode={thinkingMode} />
+                  ) : null}
+                  onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+                  maxToRenderPerBatch={10}
+                  windowSize={10}
+                  removeClippedSubviews={Platform.OS === 'android'}
+                />
+              )}
+
+              {/* Code language chips */}
+              {codeLangChips && (
+                <View style={styles.langChipsContainer}>
+                  {['python', 'javascript', 'typescript', 'html', 'css', 'bash', 'json'].map(lang => (
+                    <TouchableOpacity
+                      key={lang}
+                      style={[styles.langChip, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                      onPress={() => { setInputText(inputText.replace(/```\w*$/, '```' + lang + '\n')); setCodeLangChips(false); }}
+                    >
+                      <Text style={[styles.langChipText, { color: colors.text }]}>{lang}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+
+              {renderMediaPreview()}
+
+              {editingMessageId && (
+                <View style={styles.editingIndicator}>
+                  <Ionicons name="pencil" size={16} color={colors.primary} />
+                  <Text style={styles.editingText}>Editing message...</Text>
+                  <TouchableOpacity onPress={handleCancelEdit}>
+                    <Text style={{ ...Typography.caption, color: colors.primary, fontWeight: '600' }}>Cancel</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {/* Input Area */}
+              <View style={styles.inputContainer}>
+                <TouchableOpacity
+                  style={styles.iconButton}
+                  onPress={() => setToolsVisible(true)}
+                  disabled={editingMessageId !== null || isRecording || isProcessing}
+                >
+                  <Ionicons name="add" size={28} color={editingMessageId || isRecording || isProcessing ? colors.textSecondary : colors.text} />
+                </TouchableOpacity>
+
+                <View style={styles.inputWrapper}>
+                  {isRecording ? (
+                    <View style={styles.recordingIndicator}>
+                      <Animated.View style={[styles.recordingDot, styles.recordingDotActive, { transform: [{ scale: pulseAnim }] }]} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.recordingText}>Recording...</Text>
+                        <Text style={styles.recordingDuration}>{formatDuration(recordingDuration)} / 1:00</Text>
+                      </View>
+                    </View>
+                  ) : isProcessing ? (
+                    <View style={styles.recordingIndicator}>
+                      <ActivityIndicator size="small" color={colors.primary} />
+                      <Text style={{ ...Typography.body, color: colors.text, marginLeft: Spacing.sm }}>Transcribing...</Text>
+                    </View>
+                  ) : (
+                    <TextInput
+                      ref={inputRef}
+                      style={styles.input}
+                      placeholder={editingMessageId ? 'Edit message...' : 'Ask anything'}
+                      placeholderTextColor={colors.textSecondary}
+                      value={inputText}
+                      onChangeText={(txt) => {
+                        const safeTxt = txt ?? '';
+                        setInputText(safeTxt);
+                        try { setCodeLangChips(/```\w*$/.test(safeTxt)); } catch (_e) { setCodeLangChips(false); }
+                      }}
+                      multiline
+                      maxLength={4000}
+                      editable={!sending && !isRecording && !isProcessing}
+                      returnKeyType="default"
+                      blurOnSubmit={false}
+                    />
+                  )}
+                </View>
+
+                {editingMessageId && (
+                  <TouchableOpacity style={styles.iconButton} onPress={handleCancelEdit}>
+                    <Ionicons name="close-circle-outline" size={24} color="#FF3B30" />
+                  </TouchableOpacity>
+                )}
+
+                {sending ? (
+                  <TouchableOpacity style={[styles.sendButton, { backgroundColor: '#FF3B30' }]} onPress={() => { setSending(false); setGenerating(false); }}>
+                    <View style={{ width: 12, height: 12, backgroundColor: '#FFFFFF', borderRadius: 2 }} />
+                  </TouchableOpacity>
+                ) : showSendButton ? (
+                  <TouchableOpacity style={[styles.sendButton, { backgroundColor: accentColor }]} onPress={handleSend} disabled={isRecording || isProcessing}>
+                    <Ionicons name="arrow-up" size={20} color="#FFFFFF" />
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity
+                    style={[styles.sendButton, isRecording && styles.recordingButton, isProcessing && styles.processingButton]}
+                    onPress={toggleRecording}
+                    disabled={editingMessageId !== null || isProcessing}
+                  >
+                    {isProcessing ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <Ionicons name={isRecording ? 'stop' : 'mic'} size={20} color="#FFFFFF" />
+                    )}
+                  </TouchableOpacity>
+                )}
+              </View>
+            </KeyboardAvoidingView>
+
+            {/* Modals - outside KeyboardAvoidingView but inside GestureDetector's single View child */}
+            <MenuModal visible={menuVisible} onClose={() => setMenuVisible(false)} />
+
+            <ToolsModal
+              visible={toolsVisible}
+              onClose={() => setToolsVisible(false)}
+              onSelectTool={(tool) => setInputText(prev => `${prev}[${tool}] `)}
+              onPickMedia={handleMediaPicked}
+              onSelectAIModel={(model) => handleAIModelSelect(model as AIModelKey)}
+              onOpenCamera={() => router.push('/camera')}
+              currentModel={currentAIModel}
             />
-          )}
-        </View>
 
-        {editingMessageId && (
-          <TouchableOpacity style={styles.iconButton} onPress={handleCancelEdit}>
-            <Ionicons name="close-circle-outline" size={24} color="#FF3B30" />
-          </TouchableOpacity>
-        )}
+            <ConversationMenuModal
+              visible={conversationMenuVisible}
+              onClose={() => setConversationMenuVisible(false)}
+              onShare={handleShareConversation}
+              onRename={handleRenameConversation}
+              onReport={() => router.push('/bugreport')}
+              onArchive={() => archiveConversation(currentConversation?.id || '')}
+              onDelete={handleDeleteConversation}
+              conversationTitle={currentConversation?.title}
+            />
 
-        {sending ? (
-          <TouchableOpacity style={[styles.sendButton, { backgroundColor: '#FF3B30' }]} onPress={() => { setSending(false); setGenerating(false); }}>
-            <View style={{ width: 12, height: 12, backgroundColor: '#FFFFFF', borderRadius: 2 }} />
-          </TouchableOpacity>
-        ) : showSendButton ? (
-          <TouchableOpacity style={[styles.sendButton, { backgroundColor: accentColor }]} onPress={handleSend} disabled={isRecording || isProcessing}>
-            <Ionicons name="arrow-up" size={20} color="#FFFFFF" />
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity 
-            style={[styles.sendButton, isRecording && styles.recordingButton, isProcessing && styles.processingButton]} 
-            onPress={toggleRecording}
-            disabled={editingMessageId !== null || isProcessing}
-          >
-            {isProcessing ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
-            ) : (
-              <Ionicons name={isRecording ? 'stop' : 'mic'} size={20} color="#FFFFFF" />
+            <SideMenu
+              visible={sideMenuVisible}
+              onClose={() => setSideMenuVisible(false)}
+              currentProject={{ name: 'Haitian AI Chat' }}
+              currentAIMode={currentAIMode}
+              onSelectAIMode={handleSelectAIMode}
+              onNewChat={handleNewChat}
+              onChatHistory={() => { setSideMenuVisible(false); setChatHistoryVisible(true); }}
+              onSettings={() => { setSideMenuVisible(false); router.push('/settings'); }}
+              onProfile={() => { setSideMenuVisible(false); router.push('/profile'); }}
+              userCoins={coins}
+              isUnlimited={isUnlimited}
+              isAdmin={isAdmin}
+            />
+
+            <ChatHistoryModal
+              visible={chatHistoryVisible}
+              onClose={() => setChatHistoryVisible(false)}
+              onSelectChat={() => { setChatHistoryVisible(false); }}
+              onNewChat={() => { handleNewChat(); setChatHistoryVisible(false); }}
+              currentChatId={currentConversation?.id}
+              conversations={conversations}
+            />
+
+            <CalculatorModal visible={calcVisible} onClose={() => setCalcVisible(false)} initialExpression={calcExpression} initialResult={calcResult} />
+
+            <BlurContextMenu
+              visible={chatContextMenuVisible}
+              title={currentConversation?.title || undefined}
+              items={chatContextMenuItems}
+              onClose={() => setChatContextMenuVisible(false)}
+            />
+
+            <RenameModal
+              visible={renameModalVisible}
+              currentTitle={currentConversation?.title || ''}
+              onConfirm={async (title) => { setRenameModalVisible(false); await handleRenameConversation(title); }}
+              onCancel={() => setRenameModalVisible(false)}
+            />
+
+            <ArchiveConfirmModal
+              visible={archiveConfirmVisible}
+              onConfirm={() => { setArchiveConfirmVisible(false); handleArchiveConversation(); }}
+              onCancel={() => setArchiveConfirmVisible(false)}
+            />
+
+            <UserActionModal
+              visible={userActionVisible}
+              user={user}
+              onClose={() => setUserActionVisible(false)}
+              onSetupProfile={() => setProfileSetupVisible(true)}
+              onStartGroupChat={() => { setGroupChatMode(true); handleNewChat(); }}
+            />
+
+            <ProfileSetupModal visible={profileSetupVisible} user={user} onClose={() => setProfileSetupVisible(false)} />
+
+            <CustomizeAIModal
+              visible={customizeAIVisible}
+              onClose={() => setCustomizeAIVisible(false)}
+              onSave={(instructions, respondAuto) => { setGroupCustomInstructions(instructions); setGroupRespondAuto(respondAuto); }}
+            />
+
+            <InviteLinkModal visible={inviteLinkVisible} onClose={() => setInviteLinkVisible(false)} isPlus={isUnlimited} />
+
+            {/* Security Blur Overlay */}
+            {showBlurOverlay && (
+              <Animated.View style={[styles.blurOverlayContainer, { opacity: fadeAnim }]}>
+                <BlurView intensity={80} tint={isDark ? 'dark' : 'light'} style={styles.blurView}>
+                  <View style={styles.blurContent}>
+                    <Ionicons name="lock-closed" size={40} color="rgba(255,255,255,0.8)" />
+                    <Text style={styles.blurText}>Haitian AI Chat</Text>
+                    <Text style={styles.blurSubtext}>App locked for privacy</Text>
+                    <TouchableOpacity
+                      style={{ marginTop: Spacing.lg, backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md, borderRadius: BorderRadius.lg }}
+                      onPress={() => { setShowBlurOverlay(false); setIsAppActive(true); }}
+                    >
+                      <Text style={{ color: 'white', fontWeight: '600' }}>Unlock</Text>
+                    </TouchableOpacity>
+                  </View>
+                </BlurView>
+              </Animated.View>
             )}
-          </TouchableOpacity>
-        )}
-      </View>
-      </KeyboardAvoidingView>
-
-      {/* Modals */}
-      <MenuModal visible={menuVisible} onClose={() => setMenuVisible(false)} />
-      
-      <ToolsModal
-        visible={toolsVisible}
-        onClose={() => setToolsVisible(false)}
-        onSelectTool={(tool) => setInputText(prev => `${prev}[${tool}] `)}
-        onPickMedia={handleMediaPicked}
-        onSelectAIModel={(model) => handleAIModelSelect(model as AIModelKey)}
-        onOpenCamera={() => router.push('/camera')}
-        currentModel={currentAIModel}
-      />
-      
-      <ConversationMenuModal
-        visible={conversationMenuVisible}
-        onClose={() => setConversationMenuVisible(false)}
-        onShare={handleShareConversation}
-        onRename={handleRenameConversation}
-        onReport={() => router.push('/bugreport')}
-        onArchive={() => archiveConversation(currentConversation?.id || '')}
-        onDelete={handleDeleteConversation}
-        conversationTitle={currentConversation?.title}
-      />
-
-      <SideMenu
-        visible={sideMenuVisible}
-        onClose={() => setSideMenuVisible(false)}
-        currentProject={{ name: 'Haitian AI Chat' }}
-        currentAIMode={currentAIMode}
-        onSelectAIMode={handleSelectAIMode}
-        onNewChat={handleNewChat}
-        onChatHistory={() => { setSideMenuVisible(false); setChatHistoryVisible(true); }}
-        onSettings={() => { setSideMenuVisible(false); router.push('/settings'); }}
-        onProfile={() => { setSideMenuVisible(false); router.push('/profile'); }}
-        userCoins={coins}
-        isUnlimited={isUnlimited}
-        isAdmin={isAdmin}
-      />
-
-      <ChatHistoryModal
-        visible={chatHistoryVisible}
-        onClose={() => setChatHistoryVisible(false)}
-        onSelectChat={(chatId) => { setChatHistoryVisible(false); }}
-        onNewChat={() => { handleNewChat(); setChatHistoryVisible(false); }}
-        currentChatId={currentConversation?.id}
-        conversations={conversations}
-      />
-
-      <CalculatorModal visible={calcVisible} onClose={() => setCalcVisible(false)} initialExpression={calcExpression} initialResult={calcResult} />
-
-      {/* Blur Context Menu for … button */}
-      <BlurContextMenu
-        visible={chatContextMenuVisible}
-        title={currentConversation?.title || undefined}
-        items={chatContextMenuItems}
-        onClose={() => setChatContextMenuVisible(false)}
-      />
-
-      {/* Rename Modal */}
-      <RenameModal
-        visible={renameModalVisible}
-        currentTitle={currentConversation?.title || ''}
-        onConfirm={async (title) => { setRenameModalVisible(false); await handleRenameConversation(title); }}
-        onCancel={() => setRenameModalVisible(false)}
-      />
-
-      {/* Archive Confirm Modal */}
-      <ArchiveConfirmModal
-        visible={archiveConfirmVisible}
-        onConfirm={() => { setArchiveConfirmVisible(false); handleArchiveConversation(); }}
-        onCancel={() => setArchiveConfirmVisible(false)}
-      />
-
-      {/* User Action Modal (photo 7) */}
-      <UserActionModal
-        visible={userActionVisible}
-        user={user}
-        onClose={() => setUserActionVisible(false)}
-        onSetupProfile={() => setProfileSetupVisible(true)}
-        onStartGroupChat={() => { setGroupChatMode(true); handleNewChat(); }}
-      />
-
-      {/* Profile Setup Modal */}
-      <ProfileSetupModal visible={profileSetupVisible} user={user} onClose={() => setProfileSetupVisible(false)} />
-
-      {/* Customize AI Modal */}
-      <CustomizeAIModal
-        visible={customizeAIVisible}
-        onClose={() => setCustomizeAIVisible(false)}
-        onSave={(instructions, respondAuto) => { setGroupCustomInstructions(instructions); setGroupRespondAuto(respondAuto); }}
-      />
-
-      {/* Invite Link Modal */}
-      <InviteLinkModal visible={inviteLinkVisible} onClose={() => setInviteLinkVisible(false)} isPlus={isUnlimited} />
-
-      {/* Security Blur Overlay */}
-      {showBlurOverlay && (
-        <Animated.View style={[styles.blurOverlayContainer, { opacity: fadeAnim }]}>
-          <BlurView intensity={80} tint={isDark ? 'dark' : 'light'} style={styles.blurView}>
-            <View style={styles.blurContent}>
-              <Ionicons name="lock-closed" size={40} color="rgba(255,255,255,0.8)" />
-              <Text style={styles.blurText}>Haitian AI Chat</Text>
-              <Text style={styles.blurSubtext}>App locked for privacy</Text>
-              <TouchableOpacity
-                style={{ marginTop: Spacing.lg, backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md, borderRadius: BorderRadius.lg }}
-                onPress={() => { setShowBlurOverlay(false); setIsAppActive(true); }}
-              >
-                <Text style={{ color: 'white', fontWeight: '600' }}>Unlock</Text>
-              </TouchableOpacity>
-            </View>
-          </BlurView>
-        </Animated.View>
-      )}
           </View>
-    </GestureDetector>
-    </GestureHandlerRootView>
+        </GestureDetector>
+      </GestureHandlerRootView>
     </ErrorBoundary>
   );
 }
@@ -1901,13 +1857,3 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-:on the Home Page needs a fix. It’s currently showing the error:
-“Something went wrong.”
-
-Also, there is an issue with react-native-gesture-handler:
-GestureDetector got more than one view as a child.
-
-To fix this, make sure the GestureDetector wraps only a single parent view. If multiple views are needed, wrap them inside one common container (like a View) and attach the gesture to that parent.
-
-Please resolve both issues and ensure the Home Page AI works smoothly without errors.
-
