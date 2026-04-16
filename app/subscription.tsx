@@ -428,4 +428,3 @@ const styles = StyleSheet.create({
     lineHeight: 17,
   },
 });
-hello ai dont skip fuckind make change: for plan go when you click upgrade remove sending to checkout its must auto call verify-puchase edg function buy-itunes or google function for android and  After successful payment, receipt is sent to Supabase Edge Function and send a message email success real.
