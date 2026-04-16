@@ -542,12 +542,6 @@ export default function SettingsScreen() {
                 icon="lock-closed-outline"
                 title="Security"
                 onPress={() => router.push('/security')}
-              />
-              <SettingRow
-                icon="card-outline"
-                title="RevenueCat Setup Guide"
-                subtitle="Configure in-app purchases"
-                onPress={() => router.push('/revenuecat-setup')}
                 isLast={true}
               />
             </View>
