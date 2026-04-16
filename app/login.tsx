@@ -14,6 +14,7 @@ import { Spacing, Typography, BorderRadius } from '../constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as AppleAuthentication from 'expo-apple-authentication';
 
 export default function LoginScreen() {
   const { colors } = useTheme();
@@ -68,7 +69,7 @@ export default function LoginScreen() {
   };
 
   const handlePhoneLogin = () => {
-    router.push('/verify-code');
+    router.push('/phone-entry');
   };
 
   const handleAppleSignIn = async () => {
@@ -77,7 +78,6 @@ export default function LoginScreen() {
       return;
     }
     try {
-      const AppleAuthentication = await import('expo-apple-authentication');
       const available = await AppleAuthentication.isAvailableAsync();
       if (!available) {
         showAlert('Not Available', 'Apple Sign In is not available on this device.');
