@@ -1899,4 +1899,13 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
+hello ai stop fuckibg skip make change:on the Home Page needs a fix. It’s currently showing the error:
+“Something went wrong.”
+
+Also, there is an issue with react-native-gesture-handler:
+GestureDetector got more than one view as a child.
+
+To fix this, make sure the GestureDetector wraps only a single parent view. If multiple views are needed, wrap them inside one common container (like a View) and attach the gesture to that parent.
+
+Please resolve both issues and ensure the Home Page AI works smoothly without errors.
 
