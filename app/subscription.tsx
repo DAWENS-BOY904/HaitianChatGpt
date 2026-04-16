@@ -9,6 +9,8 @@ import {
   Linking,
   Alert,
   ActivityIndicator,
+  Image,
+  ImageBackground,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
@@ -50,6 +52,12 @@ const RC_API_KEY = Platform.select({
   default: '',
 });
 
+// ── IMAJ POU PLANN YO ──
+// Mete URL imaj ou isit la, oswa itilize require() pou lokal imaj
+const GO_PALM_IMAGE = 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=400&h=300&fit=crop'; // Plaj ak palmis
+const PLUS_PALM_IMAGE = 'https://images.unsplash.com/photo-1546484396-fb3fc6f95f98?w=400&h=300&fit=crop'; // Palmis pi bèl/luks
+const MAP_BACKGROUND = 'https://images.unsplash.com/photo-1524661135-423995f22d0b?w=600&h=800&fit=crop'; // Imaj kat/satelit
+
 export default function SubscriptionScreen() {
   const { colors, isDark } = useTheme();
   const { tier, restorePurchases } = useSubscription();
@@ -70,6 +78,9 @@ export default function SubscriptionScreen() {
   const planSubtitle = selectedPlan === 'go'
     ? 'Keep chatting with expanded access'
     : 'Do more with advanced intelligence';
+
+  // Chwazi imaj ki koresponn ak plan an
+  const currentPalmImage = selectedPlan === 'go' ? GO_PALM_IMAGE : PLUS_PALM_IMAGE;
 
   // ── Attempt real IAP via RevenueCat for Go plan ──
   const purchaseWithRevenueCat = async (productId: string, planName: string, priceStr: string) => {
@@ -231,14 +242,21 @@ export default function SubscriptionScreen() {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: '#000' }]}>
+    <ImageBackground 
+      source={{ uri: MAP_BACKGROUND }} 
+      style={styles.container}
+      imageStyle={styles.mapBackground}
+    >
+      {/* Overlay pou fè tèks li pi lisib sou kat la */}
+      <View style={styles.overlay} />
+
       {/* Close button */}
       <TouchableOpacity
         style={[styles.closeBtn, { top: insets.top + 12 }]}
         onPress={() => router.back()}
         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
       >
-        <Ionicons name="close" size={22} color="rgba(255,255,255,0.7)" />
+        <Ionicons name="close" size={22} color="#FFF" />
       </TouchableOpacity>
 
       <ScrollView
@@ -246,9 +264,19 @@ export default function SubscriptionScreen() {
         contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 56, paddingBottom: insets.bottom + 100 }]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Star icon */}
-        <View style={[styles.iconWrap, { backgroundColor: planColor }]}>
-          <Ionicons name="sparkles" size={28} color="#FFF" />
+        {/* Palm Tree Image - Ranplase ikon an */}
+        <View style={styles.imageContainer}>
+          <Image 
+            source={{ uri: currentPalmImage }} 
+            style={styles.palmImage}
+            resizeMode="cover"
+          />
+          {/* Badge sou imaj la */}
+          <View style={[styles.planBadge, { backgroundColor: planColor }]}>
+            <Text style={styles.planBadgeText}>
+              {selectedPlan === 'go' ? 'GO' : 'PLUS'}
+            </Text>
+          </View>
         </View>
 
         {/* Title */}
@@ -300,7 +328,7 @@ export default function SubscriptionScreen() {
         {/* Restore Purchases */}
         <TouchableOpacity onPress={handleRestore} style={styles.restoreBtn} disabled={isRestoring}>
           {isRestoring ? (
-            <ActivityIndicator color="rgba(255,255,255,0.5)" size="small" />
+            <ActivityIndicator color="rgba(255,255,255,0.8)" size="small" />
           ) : (
             <Text style={styles.restoreText}>Restore Purchases</Text>
           )}
@@ -333,12 +361,21 @@ export default function SubscriptionScreen() {
           <Text style={[styles.legalText, { textDecorationLine: 'underline' }]}>Learn more</Text>
         </Text>
       </View>
-    </View>
+    </ImageBackground>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: { 
+    flex: 1,
+  },
+  mapBackground: {
+    opacity: 0.3, // Fè kat la semi-transparent
+  },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.7)', // Sèv kòm overlay pou tèks la
+  },
   closeBtn: {
     position: 'absolute',
     right: 20,
@@ -347,30 +384,77 @@ const styles = StyleSheet.create({
     height: 32,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 16,
   },
-  scrollContent: { alignItems: 'center', paddingHorizontal: 24 },
-  iconWrap: {
-    width: 64,
-    height: 64,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
+  scrollContent: { 
+    alignItems: 'center', 
+    paddingHorizontal: 24,
+    zIndex: 1,
+  },
+  // Nouvo style pou imaj palmis yo
+  imageContainer: {
+    width: 200,
+    height: 140,
+    borderRadius: 20,
+    overflow: 'hidden',
     marginBottom: 20,
+    position: 'relative',
+    borderWidth: 3,
+    borderColor: '#6B5CE7',
     shadowColor: '#6B5CE7',
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.4,
+    shadowOpacity: 0.5,
     shadowRadius: 16,
-    elevation: 8,
+    elevation: 10,
   },
-  title: { fontSize: 28, fontWeight: '700', color: '#FFF', textAlign: 'center', marginBottom: 10, letterSpacing: -0.5 },
-  subtitle: { fontSize: 16, color: 'rgba(255,255,255,0.55)', textAlign: 'center', marginBottom: 28 },
+  palmImage: {
+    width: '100%',
+    height: '100%',
+  },
+  planBadge: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  planBadgeText: {
+    color: '#FFF',
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+  title: { 
+    fontSize: 28, 
+    fontWeight: '700', 
+    color: '#FFF', 
+    textAlign: 'center', 
+    marginBottom: 10, 
+    letterSpacing: -0.5,
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
+  },
+  subtitle: { 
+    fontSize: 16, 
+    color: 'rgba(255,255,255,0.8)', 
+    textAlign: 'center', 
+    marginBottom: 28,
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
   toggle: {
     flexDirection: 'row',
-    backgroundColor: '#1C1C1E',
+    backgroundColor: 'rgba(28,28,30,0.9)',
     borderRadius: 30,
     padding: 4,
     marginBottom: 28,
     width: '100%',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
   },
   toggleBtn: { flex: 1, paddingVertical: 12, borderRadius: 26, alignItems: 'center' },
   toggleBtnActive: { backgroundColor: '#2C2C2E' },
@@ -378,7 +462,7 @@ const styles = StyleSheet.create({
   toggleTextActive: { color: '#FFF', fontWeight: '700' },
   featureCard: {
     width: '100%',
-    backgroundColor: '#111',
+    backgroundColor: 'rgba(17,17,17,0.95)',
     borderRadius: 16,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.1)',
@@ -394,7 +478,7 @@ const styles = StyleSheet.create({
   featureCheck: { width: 52, alignItems: 'center' },
   featureDash: { fontSize: 18, color: 'rgba(255,255,255,0.3)', lineHeight: 22 },
   restoreBtn: { marginTop: 8, padding: 12 },
-  restoreText: { fontSize: 14, color: 'rgba(255,255,255,0.5)', textDecorationLine: 'underline' },
+  restoreText: { fontSize: 14, color: 'rgba(255,255,255,0.8)', textDecorationLine: 'underline' },
   bottomCTA: {
     position: 'absolute',
     bottom: 0,
@@ -402,8 +486,10 @@ const styles = StyleSheet.create({
     right: 0,
     paddingHorizontal: 24,
     paddingTop: 16,
-    backgroundColor: '#000',
+    backgroundColor: 'rgba(0,0,0,0.9)',
     alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.1)',
   },
   upgradeBtn: {
     width: '100%',
@@ -415,5 +501,5 @@ const styles = StyleSheet.create({
   upgradeBtnDisabled: { opacity: 0.6 },
   upgradeBtnText: { fontSize: 17, fontWeight: '700', color: '#000' },
   webLink: { fontSize: 14, fontWeight: '600', color: '#FFF', textDecorationLine: 'underline', marginBottom: 10 },
-  legalText: { fontSize: 12, color: 'rgba(255,255,255,0.4)', textAlign: 'center', marginTop: 8, lineHeight: 17 },
+  legalText: { fontSize: 12, color: 'rgba(255,255,255,0.5)', textAlign: 'center', marginTop: 8, lineHeight: 17 },
 });
