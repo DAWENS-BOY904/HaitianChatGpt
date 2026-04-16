@@ -428,4 +428,3 @@ const styles = StyleSheet.create({
     lineHeight: 17,
   },
 });
-hello dont fucking skip mke change:After a successful subscription purchase is verified by the Supabase verify-purchase edge function, automatically send a transactional success email to the user via the send-admin-email edge function with their plan name, price, and renewal date.For the Go plan on subscription.tsx, replace the Stripe checkout redirect with a real in-app purchase flow using react-native-purchases (RevenueCat) — call the appropriate iOS/Android purchase API, then send the receipt to the verify-purchase edge function, and on success update the user's subscription_tier in user_profiles and send a confirmation email via the send-admin-email edge function.
