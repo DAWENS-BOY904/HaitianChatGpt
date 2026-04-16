@@ -17,8 +17,7 @@ import { useRouter } from 'expo-router';
 import { Spacing, Typography, BorderRadius } from '../constants/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAlert } from '@/template';
-import * as InAppPurchases from 'expo-in-app-purchases';
-import { supabase } from '../lib/supabase'; // Adjust path to your supabase client
+import { getSupabaseClient } from '@/template';
 
 // ── Feature comparison rows ──
 const GO_FEATURES = [
@@ -71,7 +70,7 @@ export default function SubscriptionScreen() {
 
   const [selectedPlan, setSelectedPlan] = useState<'go' | 'plus'>('go');
   const [isLoading, setIsLoading] = useState(false);
-  const [products, setProducts] = useState<InAppPurchases.IAPItemDetails[]>([]);
+  const [products, setProducts] = useState<any[]>([]);
 
   const features = selectedPlan === 'go' ? GO_FEATURES : PLUS_FEATURES;
   const planColor = '#6B5CE7'; // Purple like ChatGPT
@@ -81,31 +80,7 @@ export default function SubscriptionScreen() {
     ? 'Keep chatting with expanded access'
     : 'Do more with advanced intelligence';
 
-  // Initialize IAP on mount
-  React.useEffect(() => {
-    initializeIAP();
-    return () => {
-      InAppPurchases.disconnectAsync();
-    };
-  }, []);
-
-  const initializeIAP = async () => {
-    try {
-      await InAppPurchases.connectAsync();
-      const { responseCode, results } = await InAppPurchases.getProductsAsync([
-        PRODUCT_IDS.go!,
-        PRODUCT_IDS.plus!,
-        PRODUCT_IDS.go_yearly!,
-        PRODUCT_IDS.plus_yearly!,
-      ]);
-      
-      if (responseCode === InAppPurchases.IAPResponseCode.OK && results) {
-        setProducts(results);
-      }
-    } catch (error) {
-      console.error('IAP initialization error:', error);
-    }
-  };
+  const supabase = getSupabaseClient();
 
   // Call Supabase Edge Function to verify purchase
   const verifyPurchaseWithSupabase = async (
@@ -116,42 +91,22 @@ export default function SubscriptionScreen() {
   ): Promise<boolean> => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session?.access_token) {
-        throw new Error('User not authenticated');
-      }
-
-      const response = await fetch(`${SUPABASE_FUNCTION_URL}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
+      if (!session?.access_token) throw new Error('User not authenticated');
+      const { data, error } = await supabase.functions.invoke('verify-purchase', {
+        body: {
           platform: Platform.OS === 'ios' ? 'ios' : 'android',
-          receipt: receipt,
-          transactionId: transactionId,
-          productId: productId,
-          isSandbox: isSandbox || __DEV__, // Auto-detect sandbox in dev
-        }),
+          receipt,
+          transactionId,
+          productId,
+          isSandbox: isSandbox || __DEV__,
+        },
       });
-
-      const result = await response.json();
-
-      if (!result.success) {
-        console.error('Verification failed:', result.error);
-        showAlert('Verification Failed', result.error || 'Could not verify purchase');
+      if (error || !data?.success) {
+        showAlert('Verification Failed', data?.error || error?.message || 'Could not verify purchase');
         return false;
       }
-
-      console.log('✅ Purchase verified:', result);
-      
-      // Update local subscription state
-      // You might want to refresh the subscription context here
       return true;
-      
-    } catch (error) {
-      console.error('Error calling verify function:', error);
+    } catch (error: any) {
       showAlert('Error', 'Failed to verify purchase. Please try again.');
       return false;
     }
@@ -159,67 +114,10 @@ export default function SubscriptionScreen() {
 
   const handleUpgrade = async () => {
     setIsLoading(true);
-    
     try {
-      const productId = selectedPlan === 'go' ? PRODUCT_IDS.go : PRODUCT_IDS.plus;
-      
-      if (!productId) {
-        showAlert('Error', 'Product not available');
-        return;
-      }
-
-      // Start purchase flow
-      const { responseCode, results } = await InAppPurchases.requestPurchaseAsync(productId);
-
-      if (responseCode === InAppPurchases.IAPResponseCode.OK && results) {
-        const purchase = results[0];
-        
-        if (!purchase) {
-          showAlert('Error', 'Purchase failed');
-          return;
-        }
-
-        // Prepare receipt data based on platform
-        let receiptData: string;
-        
-        if (Platform.OS === 'ios') {
-          // iOS: transactionReceipt is base64 encoded
-          receiptData = purchase.transactionReceipt;
-        } else {
-          // Android: need to stringify the purchase object
-          receiptData = JSON.stringify({
-            productId: purchase.productId,
-            purchaseToken: purchase.purchaseToken,
-            orderId: purchase.orderId,
-          });
-        }
-
-        // Verify with Supabase Edge Function
-        const verified = await verifyPurchaseWithSupabase(
-          receiptData,
-          purchase.orderId || purchase.transactionId,
-          purchase.productId,
-          __DEV__ // Sandbox in development
-        );
-
-        if (verified) {
-          // Finish the transaction (acknowledge to Apple/Google)
-          await InAppPurchases.finishTransactionAsync(purchase, true);
-          
-          showAlert('Success', 'Your subscription is now active!');
-          router.back();
-        } else {
-          // Don't finish transaction if verification failed
-          // This allows retry
-        }
-      } else if (responseCode === InAppPurchases.IAPResponseCode.USER_CANCELED) {
-        // User cancelled, no action needed
-        console.log('User cancelled purchase');
-      } else {
-        showAlert('Error', 'Purchase failed. Please try again.');
-      }
+      // Redirect to Stripe checkout for web/mobile
+      router.push({ pathname: '/checkout', params: { plan: selectedPlan } });
     } catch (error) {
-      console.error('Purchase error:', error);
       showAlert('Error', 'Something went wrong. Please try again.');
     } finally {
       setIsLoading(false);
@@ -229,41 +127,9 @@ export default function SubscriptionScreen() {
   const handleRestore = async () => {
     setIsLoading(true);
     try {
-      const { responseCode, results } = await InAppPurchases.getPurchaseHistoryAsync();
-      
-      if (responseCode === InAppPurchases.IAPResponseCode.OK && results) {
-        let restored = false;
-        
-        for (const purchase of results) {
-          const receiptData = Platform.OS === 'ios' 
-            ? purchase.transactionReceipt
-            : JSON.stringify({
-                productId: purchase.productId,
-                purchaseToken: purchase.purchaseToken,
-                orderId: purchase.orderId,
-              });
-
-          const verified = await verifyPurchaseWithSupabase(
-            receiptData,
-            purchase.orderId || purchase.transactionId,
-            purchase.productId,
-            __DEV__
-          );
-
-          if (verified) {
-            await InAppPurchases.finishTransactionAsync(purchase, true);
-            restored = true;
-          }
-        }
-
-        if (restored) {
-          showAlert('Success', 'Purchases restored successfully');
-        } else {
-          showAlert('Info', 'No active purchases found');
-        }
-      }
+      await restorePurchases();
+      showAlert('Restored', 'Your purchases have been restored.');
     } catch (error) {
-      console.error('Restore error:', error);
       showAlert('Error', 'Failed to restore purchases');
     } finally {
       setIsLoading(false);
