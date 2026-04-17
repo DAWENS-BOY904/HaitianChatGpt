@@ -371,3 +371,4 @@ const styles = StyleSheet.create({
   calcExpr: { fontSize: 18, color: 'rgba(255,255,255,0.5)', marginBottom: 4 },
   calcResult: { fontSize: 52, color: '#30D158', fontWeight: '300', letterSpacing: -1 },
 });
+fix this its apear in home page when i dont need it only when i need.
