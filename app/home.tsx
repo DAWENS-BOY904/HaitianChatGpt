@@ -1823,3 +1823,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
+The AI response shows 'response generated' instead of real content. Fix the ConversationContext sendMessage function to properly parse the SSE stream from the chat edge function — read each 'data:' line, parse the JSON token field, and append tokens to the message content in real time so the full AI response appears word by word.The MessageItem onEdit prop passes messageId and content but somewhere in the code there's a reference to 'editingId' that doesn't exist. Search all files for 'editingId' (without 'message' prefix) and replace with 'editingMessageId' to fix the TypeScript property error.
