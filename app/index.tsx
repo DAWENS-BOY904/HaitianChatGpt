@@ -6,6 +6,7 @@ import { useTheme } from '../hooks/useTheme';
 import { Ionicons } from '@expo/vector-icons';
 import { Spacing, Typography, BorderRadius } from '../constants/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { createClient } from '@supabase/supabase-js';
 
 const WELCOME_PHRASES = [
   "Let's brainstorm",
@@ -30,6 +31,26 @@ async function sendLoginConfirmationEmail(userId: string, email: string) {
   } catch (e) {
     console.warn('Login email send failed:', e);
   }
+}
+
+// ── Helper: get Apple-specific Supabase client (uses MY_SUPABASE_URL) ──
+function getAppleSupabaseClient() {
+  const supabaseUrl = process.env.MY_SUPABASE_URL || process.env.EXPO_PUBLIC_MY_SUPABASE_URL;
+  const supabaseKey = process.env.MY_SUPABASE_ANON_KEY || process.env.EXPO_PUBLIC_MY_SUPABASE_ANON_KEY;
+  
+  if (!supabaseUrl || !supabaseKey) {
+    console.error('MY_SUPABASE_URL or MY_SUPABASE_ANON_KEY not configured');
+    // Fallback to regular client if env vars not set
+    return getSupabaseClient();
+  }
+  
+  return createClient(supabaseUrl, supabaseKey, {
+    auth: {
+      autoRefreshToken: true,
+      persistSession: true,
+      detectSessionInUrl: false,
+    },
+  });
 }
 
 // ── Apple Sign-In (native only) ──
@@ -73,7 +94,8 @@ async function performAppleSignIn(
       return { user: null, error: 'Apple Sign In failed: no identity token returned.' };
     }
 
-    const supabase = getSupabaseClient();
+    // Use Apple-specific Supabase client with MY_SUPABASE_URL
+    const supabase = getAppleSupabaseClient();
     const { data, error } = await supabase.auth.signInWithIdToken({
       provider: 'apple',
       token: credential.identityToken,
