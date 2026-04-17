@@ -15,7 +15,7 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth, useAlert } from '@/template';
 import { getSupabaseClient } from '@/template';
-import QRCode from 'react-native-qrcode-svg';
+import { Image } from 'expo-image';
 
 export default function MFATOTPSetupScreen() {
   const router = useRouter();
@@ -97,7 +97,9 @@ export default function MFATOTPSetupScreen() {
     }
   };
 
-
+  const qrImageUrl = qrUri
+    ? `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrUri)}&bgcolor=1C1C1E&color=FFFFFF&format=png`
+    : '';
 
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: bg },
@@ -198,15 +200,8 @@ export default function MFATOTPSetupScreen() {
             </Text>
 
             <View style={styles.qrContainer}>
-              {qrUri ? (
-                <View style={[styles.qrImage, { alignItems: 'center', justifyContent: 'center', backgroundColor: '#000000', padding: 12, borderRadius: 12 }]}>
-                  <QRCode
-                    value={qrUri}
-                    size={176}
-                    color="#FFFFFF"
-                    backgroundColor="#000000"
-                  />
-                </View>
+              {qrImageUrl ? (
+                <Image source={{ uri: qrImageUrl }} style={styles.qrImage} contentFit="contain" />
               ) : (
                 <View style={[styles.qrImage, { alignItems: 'center', justifyContent: 'center' }]}>
                   <ActivityIndicator color={primaryText} />
