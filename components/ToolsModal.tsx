@@ -369,7 +369,7 @@ export function ToolsModal({
                         contentFit="cover"
                       />
                     ) : (
-                      <View style={[fpStyles.previewIconBox, { backgroundColor: getMimeIcon(selectedFilePreview.mimeType, selectedFilePreview.name.split('.').pop() || '').color + '18' }]}>
+                      <View style={[fpStyles.previewIconBox, { backgroundColor: getMimeIcon(selectedFilePreview.mimeType, selectedFilePreview.name.split('.').pop() || '').color + '22' }]}>
                         <Ionicons
                           name={getMimeIcon(selectedFilePreview.mimeType, selectedFilePreview.name.split('.').pop() || '').icon}
                           size={36}
@@ -390,27 +390,26 @@ export function ToolsModal({
                 </Animated.View>
               )}
 
-              {/* Accepted File Types — clean, no chip background colors */}
+              {/* Accepted File Types Chips */}
               {!selectedFilePreview && (
                 <Animated.View entering={FadeInUp.delay(300).duration(300)} style={fpStyles.chipsSection}>
-                  <Text style={fpStyles.chipsTitle}>Supported types</Text>
-                  <View style={fpStyles.typeRows}>
+                  <Text style={fpStyles.chipsTitle}>Accepted file types</Text>
+                  <View style={fpStyles.chipsRow}>
                     {[
-                      { icon: 'image-outline', color: '#FF2D55', label: 'Images', ext: 'PNG, JPG, WEBP, SVG, GIF' },
-                      { icon: 'document-text-outline', color: '#FF9500', label: 'Documents', ext: 'PDF, DOCX, XLSX, PPTX' },
-                      { icon: 'code-slash-outline', color: '#007AFF', label: 'Code', ext: 'JS, TS, PY, GO, SWIFT, HTML...' },
-                      { icon: 'text-outline', color: '#30D158', label: 'Text', ext: 'TXT, MD, CSV, JSON, XML' },
-                    ].map(item => (
-                      <View key={item.label} style={fpStyles.typeRow}>
-                        <Ionicons name={item.icon as any} size={16} color={item.color} />
-                        <Text style={fpStyles.typeLabel}>{item.label}</Text>
-                        <Text style={fpStyles.typeExt}>{item.ext}</Text>
+                      { label: 'Images', color: '#FF2D55', bg: 'rgba(255,45,85,0.15)', ext: 'PNG JPG WEBP SVG GIF' },
+                      { label: 'Documents', color: '#FF9500', bg: 'rgba(255,149,0,0.15)', ext: 'PDF DOCX XLSX PPTX' },
+                      { label: 'Code', color: '#007AFF', bg: 'rgba(0,122,255,0.15)', ext: 'JS TS PY GO SWIFT...' },
+                      { label: 'Text', color: '#30D158', bg: 'rgba(48,209,88,0.15)', ext: 'TXT MD CSV JSON XML' },
+                    ].map(chip => (
+                      <View key={chip.label} style={[fpStyles.chip, { backgroundColor: chip.bg, borderColor: chip.color + '55' }]}>
+                        <Text style={[fpStyles.chipLabel, { color: chip.color }]}>{chip.label}</Text>
+                        <Text style={fpStyles.chipExt}>{chip.ext}</Text>
                       </View>
                     ))}
                   </View>
                   <View style={fpStyles.limitRow}>
-                    <Ionicons name="information-circle-outline" size={13} color={GLASS.sub} />
-                    <Text style={fpStyles.limitText}>Max 25 MB · No ZIP or video files</Text>
+                    <Ionicons name="information-circle-outline" size={14} color={GLASS.sub} />
+                    <Text style={fpStyles.limitText}>Max file size: 25 MB · No ZIP or video files</Text>
                   </View>
                 </Animated.View>
               )}
@@ -572,38 +571,24 @@ const fpStyles = StyleSheet.create({
     paddingVertical: 10,
   },
   sendBtnText: { fontSize: 14, fontWeight: '700', color: '#FFF' },
-  // Clean type list (no colored chip backgrounds)
   chipsSection: { marginBottom: 14 },
-  chipsTitle: { fontSize: 12, fontWeight: '600', color: GLASS.sub, marginBottom: 10, marginLeft: 2 },
-  typeRows: { gap: 6, marginBottom: 10 },
-  typeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: 2,
+  chipsTitle: { fontSize: 12, fontWeight: '600', color: GLASS.sub, marginBottom: 8, marginLeft: 2 },
+  chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chip: {
+    borderRadius: 10,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    minWidth: 80,
   },
-  typeLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: GLASS.text,
-    width: 82,
-  },
-  typeExt: {
-    fontSize: 12,
-    color: GLASS.sub,
-    flex: 1,
-  },
+  chipLabel: { fontSize: 12, fontWeight: '700', marginBottom: 2 },
+  chipExt: { fontSize: 10, color: 'rgba(255,255,255,0.45)', fontWeight: '500' },
   limitRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    marginTop: 2,
+    marginTop: 8,
     marginLeft: 2,
   },
   limitText: { fontSize: 12, color: GLASS.sub },
-  // Legacy (unused but kept for safety)
-  chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: { borderRadius: 10, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 6, minWidth: 80 },
-  chipLabel: { fontSize: 12, fontWeight: '700', marginBottom: 2 },
-  chipExt: { fontSize: 10, color: 'rgba(255,255,255,0.45)', fontWeight: '500' },
 });

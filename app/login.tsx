@@ -7,8 +7,6 @@ import {
   StyleSheet,
   StatusBar,
   Platform,
-  ActivityIndicator,
-  Animated,
 } from 'react-native';
 import { useAuth, useAlert, getSupabaseClient } from '@/template';
 import { useTheme } from '../hooks/useTheme';
@@ -18,7 +16,6 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as LocalAuthentication from 'expo-local-authentication';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // ── Helper: send login confirmation email ──
 async function sendLoginConfirmationEmail(userId: string, email: string) {
@@ -51,12 +48,8 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [checkingPasskey, setCheckingPasskey] = useState(false);
-  const [showPasskeyPrompt, setShowPasskeyPrompt] = useState(false);
-  const [passkeyBiometricLabel, setPasskeyBiometricLabel] = useState('Biometrics');
-  const [passkeyLoading, setPasskeyLoading] = useState(false);
-  const [passkeyUserId, setPasskeyUserId] = useState<string | null>(null);
 
-  // On mount: check for existing passkeys and show biometric prompt card
+  // On mount: check for existing passkeys and offer biometric login
   useEffect(() => {
     checkForPasskeyLogin();
   }, []);
@@ -65,15 +58,10 @@ export default function LoginScreen() {
     if (Platform.OS === 'web') return;
     try {
       const supabase = getSupabaseClient();
-
-      // Check if logout explicitly cleared the passkey flag
-      const cleared = await AsyncStorage.getItem('passkey_session_active');
-      // If flag is explicitly 'false', skip prompt
-      if (cleared === 'false') return;
-
+      // Get current session to find user_id from stored token
       const { data: sessionData } = await supabase.auth.getSession();
       const userId = sessionData?.session?.user?.id;
-      if (!userId) return;
+      if (!userId) return; // no previous session
 
       const { data: passkeys } = await supabase
         .from('user_api_keys')
@@ -85,44 +73,31 @@ export default function LoginScreen() {
 
       if (!passkeys || passkeys.length === 0) return;
 
-      // Biometric hardware check
+      // Passkey found — prompt biometric
       const compatible = await LocalAuthentication.hasHardwareAsync();
       const enrolled = await LocalAuthentication.isEnrolledAsync();
       if (!compatible || !enrolled) return;
 
       const types = await LocalAuthentication.supportedAuthenticationTypesAsync();
-      let label = 'Biometrics';
-      if (types.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION)) label = 'Face ID';
-      else if (types.includes(LocalAuthentication.AuthenticationType.FINGERPRINT)) label = Platform.OS === 'ios' ? 'Touch ID' : 'Fingerprint';
+      let biometricLabel = 'Biometrics';
+      if (types.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION)) biometricLabel = 'Face ID';
+      else if (types.includes(LocalAuthentication.AuthenticationType.FINGERPRINT)) biometricLabel = Platform.OS === 'ios' ? 'Touch ID' : 'Fingerprint';
 
-      setPasskeyBiometricLabel(label);
-      setPasskeyUserId(userId);
-      setShowPasskeyPrompt(true);
-    } catch {
-      // silently ignore
-    }
-  };
-
-  const handlePasskeyAuthenticate = async () => {
-    setPasskeyLoading(true);
-    try {
+      setCheckingPasskey(true);
       const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: `Sign in with ${passkeyBiometricLabel}`,
+        promptMessage: `Sign in with ${biometricLabel}`,
         fallbackLabel: 'Use password instead',
         cancelLabel: 'Cancel',
         disableDeviceFallback: false,
       });
+      setCheckingPasskey(false);
+
       if (result.success) {
-        await AsyncStorage.setItem('passkey_session_active', 'true');
+        // Session already valid — navigate to home
         router.replace('/home');
-      } else {
-        // User tapped fallback or failed — dismiss prompt card
-        setShowPasskeyPrompt(false);
       }
     } catch {
-      setShowPasskeyPrompt(false);
-    } finally {
-      setPasskeyLoading(false);
+      setCheckingPasskey(false);
     }
   };
 
@@ -376,109 +351,9 @@ export default function LoginScreen() {
     },
   });
 
-  // ── Passkey prompt card styles (defined outside StyleSheet for readability) ──
-  const pkStyles = StyleSheet.create({
-    overlay: {
-      ...StyleSheet.absoluteFillObject,
-      backgroundColor: 'rgba(0,0,0,0.92)',
-      justifyContent: 'center',
-      alignItems: 'center',
-      zIndex: 999,
-      paddingHorizontal: 32,
-    },
-    card: {
-      width: '100%',
-      alignItems: 'center',
-      paddingVertical: 48,
-    },
-    iconWrap: {
-      width: 100,
-      height: 100,
-      borderRadius: 50,
-      backgroundColor: 'rgba(255,255,255,0.1)',
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginBottom: 28,
-      borderWidth: 1,
-      borderColor: 'rgba(255,255,255,0.15)',
-    },
-    title: {
-      fontSize: 26,
-      fontWeight: '700',
-      color: '#FFFFFF',
-      marginBottom: 10,
-      textAlign: 'center',
-    },
-    subtitle: {
-      fontSize: 15,
-      color: 'rgba(255,255,255,0.55)',
-      textAlign: 'center',
-      lineHeight: 22,
-      marginBottom: 48,
-    },
-    primaryBtn: {
-      width: '100%',
-      backgroundColor: '#FFFFFF',
-      borderRadius: 50,
-      paddingVertical: 16,
-      alignItems: 'center',
-      marginBottom: 14,
-    },
-    primaryBtnText: {
-      fontSize: 17,
-      fontWeight: '700',
-      color: '#000000',
-    },
-    secondaryBtn: {
-      paddingVertical: 12,
-      paddingHorizontal: 24,
-    },
-    secondaryBtnText: {
-      fontSize: 16,
-      color: 'rgba(255,255,255,0.5)',
-      fontWeight: '500',
-    },
-  });
-
   return (
     <View style={styles.container}>
       <StatusBar barStyle={colors.text === '#FFFFFF' ? 'light-content' : 'dark-content'} />
-
-      {/* ── Passkey full-screen biometric prompt card ── */}
-      {showPasskeyPrompt && (
-        <View style={pkStyles.overlay}>
-          <View style={pkStyles.card}>
-            <View style={pkStyles.iconWrap}>
-              <Ionicons
-                name={passkeyBiometricLabel === 'Face ID' ? 'scan-outline' : 'finger-print-outline'}
-                size={52}
-                color="#FFFFFF"
-              />
-            </View>
-            <Text style={pkStyles.title}>Sign in faster</Text>
-            <Text style={pkStyles.subtitle}>
-              Use {passkeyBiometricLabel} to sign in to your account
-            </Text>
-            <TouchableOpacity
-              style={pkStyles.primaryBtn}
-              onPress={handlePasskeyAuthenticate}
-              disabled={passkeyLoading}
-            >
-              {passkeyLoading ? (
-                <ActivityIndicator color="#000" />
-              ) : (
-                <Text style={pkStyles.primaryBtnText}>Sign in with {passkeyBiometricLabel}</Text>
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={pkStyles.secondaryBtn}
-              onPress={() => setShowPasskeyPrompt(false)}
-            >
-              <Text style={pkStyles.secondaryBtnText}>Use password instead</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
 
       <TouchableOpacity style={styles.closeButton} onPress={() => router.back()}>
         <Ionicons name="close" size={24} color={colors.text} />

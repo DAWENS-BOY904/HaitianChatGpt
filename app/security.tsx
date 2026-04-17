@@ -1,49 +1,17 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
-  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { getSupabaseClient } from '@/template';
 
 export default function SecurityScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const supabase = getSupabaseClient();
-
-  const [totpStatus, setTotpStatus] = useState<'On' | 'Off' | null>(null);
-  const [phoneStatus, setPhoneStatus] = useState<'On' | 'Off' | null>(null);
-  const [loadingFactors, setLoadingFactors] = useState(true);
-
-  useEffect(() => {
-    loadMFAStatus();
-  }, []);
-
-  const loadMFAStatus = async () => {
-    try {
-      const { data, error } = await supabase.auth.mfa.listFactors();
-      if (error || !data) {
-        setTotpStatus('Off');
-        setPhoneStatus('Off');
-        return;
-      }
-      const verified = (data.all || []).filter((f: any) => f.status === 'verified');
-      const hasTotp = verified.some((f: any) => f.factor_type === 'totp');
-      const hasPhone = verified.some((f: any) => f.factor_type === 'phone');
-      setTotpStatus(hasTotp ? 'On' : 'Off');
-      setPhoneStatus(hasPhone ? 'On' : 'Off');
-    } catch {
-      setTotpStatus('Off');
-      setPhoneStatus('Off');
-    } finally {
-      setLoadingFactors(false);
-    }
-  };
 
   const bg = '#000000';
   const cardBg = '#1C1C1E';
@@ -126,9 +94,7 @@ export default function SecurityScreen() {
           >
             <Text style={styles.rowLabel}>Authenticator app</Text>
             <View style={styles.rowRight}>
-              {loadingFactors
-                ? <ActivityIndicator size="small" color={secondaryText} style={{ marginRight: 4 }} />
-                : <Text style={[styles.rowValue, totpStatus === 'On' && { color: '#34C759' }]}>{totpStatus ?? 'Off'}</Text>}
+              <Text style={styles.rowValue}>Off</Text>
               <Ionicons name="chevron-forward" size={17} color={secondaryText} />
             </View>
           </TouchableOpacity>
@@ -138,9 +104,7 @@ export default function SecurityScreen() {
           >
             <Text style={styles.rowLabel}>Text messages</Text>
             <View style={styles.rowRight}>
-              {loadingFactors
-                ? <ActivityIndicator size="small" color={secondaryText} style={{ marginRight: 4 }} />
-                : <Text style={[styles.rowValue, phoneStatus === 'On' && { color: '#34C759' }]}>{phoneStatus ?? 'Off'}</Text>}
+              <Text style={styles.rowValue}>Off</Text>
               <Ionicons name="chevron-forward" size={17} color={secondaryText} />
             </View>
           </TouchableOpacity>

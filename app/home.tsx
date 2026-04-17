@@ -580,8 +580,6 @@ export default function HomeScreen() {
   const [thinkingMode, setThinkingMode] = useState<'thinking' | 'creating_image' | 'analyzing' | 'editing_image'>('thinking');
   const [showCompletionStatus, setShowCompletionStatus] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
-  const [isAtBottom, setIsAtBottom] = useState(true);
-  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [isSearchMode, setIsSearchMode] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredMessages, setFilteredMessages] = useState<Message[]>([]);
@@ -819,20 +817,12 @@ export default function HomeScreen() {
     }, [fadeAnim, slideAnim])
   );
 
-  const handleScrollEvent = useCallback((event: any) => {
-    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
-    const distanceFromBottom = contentSize.height - layoutMeasurement.height - contentOffset.y;
-    const atBottom = distanceFromBottom < 80;
-    setIsAtBottom(atBottom);
-    setShowScrollToBottom(!atBottom);
-  }, []);
-
   useEffect(() => {
-    if ((messages || []).length > 0 && !isSearchMode && isAtBottom) {
+    if ((messages || []).length > 0 && !isSearchMode) {
       const timer = setTimeout(() => { flatListRef.current?.scrollToEnd({ animated: true }); }, 100);
       return () => clearTimeout(timer);
     }
-  }, [messages, isSearchMode, isAtBottom]);
+  }, [messages, isSearchMode]);
 
   useEffect(() => {
     if (searchQuery.trim()) {
@@ -1410,8 +1400,6 @@ export default function HomeScreen() {
                       renderItem={renderMessage}
                       keyExtractor={item => item.id}
                       contentContainerStyle={{ paddingVertical: Spacing.md }}
-                      onScroll={handleScrollEvent}
-                      scrollEventThrottle={16}
                       ListHeaderComponent={groupChatMode && (messages || []).length > 0 ? (
                         <View style={{ paddingHorizontal: 16, paddingBottom: 16, alignItems: 'center', gap: 10 }}>
                           <Text style={{ color: colors.textSecondary, fontSize: 13, textAlign: 'center' }}>
@@ -1431,7 +1419,7 @@ export default function HomeScreen() {
                       ListFooterComponent={generating ? (
                         <ThinkingIndicator userMessage={(messages || []).length > 0 ? (messages || [])[(messages || []).length - 1].content : inputText} completed={showCompletionStatus} mode={thinkingMode} />
                       ) : null}
-                      onContentSizeChange={() => { if (isAtBottom) flatListRef.current?.scrollToEnd({ animated: true }); }}
+                      onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
                       maxToRenderPerBatch={10}
                       windowSize={10}
                       removeClippedSubviews={Platform.OS === 'android'}
@@ -1556,36 +1544,6 @@ export default function HomeScreen() {
                 onClose={() => { setShowMentionPopup(false); setMentionQuery(''); }}
               />
             ) : null}
-
-            {/* Scroll to Bottom floating button */}
-            {showScrollToBottom && hasMessages && (
-              <TouchableOpacity
-                style={{
-                  position: 'absolute',
-                  bottom: 90,
-                  right: 16,
-                  width: 36,
-                  height: 36,
-                  borderRadius: 18,
-                  backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  shadowColor: '#000',
-                  shadowOffset: { width: 0, height: 2 },
-                  shadowOpacity: 0.25,
-                  shadowRadius: 6,
-                  elevation: 6,
-                  zIndex: 50,
-                }}
-                onPress={() => {
-                  flatListRef.current?.scrollToEnd({ animated: true });
-                  setIsAtBottom(true);
-                  setShowScrollToBottom(false);
-                }}
-              >
-                <Ionicons name="chevron-down" size={20} color={colors.text} />
-              </TouchableOpacity>
-            )}
 
             <ToolsModal visible={toolsVisible} onClose={() => setToolsVisible(false)} onSelectTool={(tool) => setInputText(prev => `${prev}[${tool}] `)} onPickMedia={handleMediaPicked} onSelectAIModel={(model) => handleAIModelSelect(model as AIModelKey)} onOpenCamera={() => router.push('/camera')} currentModel={currentAIModel} />
 
