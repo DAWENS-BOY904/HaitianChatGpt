@@ -26,23 +26,33 @@ interface QuizAnswer {
   correct: boolean;
 }
 
+export interface QuizHistoryEntry {
+  topic: string;
+  difficulty: string;
+  score: number;
+  total: number;
+  created_at: string;
+}
+
 interface QuizViewProps {
   questions: QuizQuestion[];
   onClose: () => void;
   onViewResults: (answers: QuizAnswer[], questions: QuizQuestion[]) => void;
   onTryAnother: () => void;
   onHarderQuiz: () => void;
+  quizHistory?: QuizHistoryEntry[];
 }
 
 // ── Export for compatibility ──
 export interface QuizModalProps extends QuizViewProps {
   visible: boolean;
+  quizHistory?: QuizHistoryEntry[];
 }
 
 const OPTION_LABELS = ['A', 'B', 'C', 'D'];
 
 // ── Inline quiz widget that renders directly in the chat page ──
-export function QuizView({ questions, onClose, onViewResults, onTryAnother, onHarderQuiz }: QuizViewProps) {
+export function QuizView({ questions, onClose, onViewResults, onTryAnother, onHarderQuiz, quizHistory }: QuizViewProps) {
   const [currentQ, setCurrentQ] = useState(0);
   const [answers, setAnswers] = useState<QuizAnswer[]>([]);
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
@@ -139,6 +149,25 @@ export function QuizView({ questions, onClose, onViewResults, onTryAnother, onHa
     return `Room to improve! ${score}/${total} correct.`;
   };
 
+  const getDifficultyColor = (diff: string) => {
+    const map: Record<string, string> = {
+      Easy: '#34C759',
+      Medium: '#5AC8FA',
+      Hard: '#FF9F0A',
+      Expert: '#FF453A',
+    };
+    return map[diff] || '#8E8E93';
+  };
+
+  const formatDate = (iso: string) => {
+    try {
+      const d = new Date(iso);
+      return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    } catch {
+      return '';
+    }
+  };
+
   const getOptionBg = (idx: number) => {
     if (showFeedback === 'correct' && selectedOption === idx) return 'rgba(52,199,89,0.18)';
     if (showFeedback === 'wrong' && selectedOption === idx) return 'rgba(255,69,58,0.18)';
@@ -227,6 +256,32 @@ export function QuizView({ questions, onClose, onViewResults, onTryAnother, onHa
             <Text style={s.nextQuizLabel}>Next quiz</Text>
             <Text style={s.nextQuizSub}>Try another general knowledge quiz</Text>
           </TouchableOpacity>
+
+          {/* Quiz History */}
+          {quizHistory && quizHistory.length > 0 && (
+            <View style={s.historySection}>
+              <Text style={s.historySectionTitle}>My Quiz History</Text>
+              {quizHistory.slice(0, 5).map((entry, i) => (
+                <View key={i} style={s.historyRow}>
+                  <View style={s.historyLeft}>
+                    <Text style={s.historyTopic} numberOfLines={1}>{entry.topic}</Text>
+                    <View style={s.historyMeta}>
+                      <View style={[s.diffBadge, { backgroundColor: getDifficultyColor(entry.difficulty) + '22', borderColor: getDifficultyColor(entry.difficulty) + '55' }]}>
+                        <Text style={[s.diffBadgeText, { color: getDifficultyColor(entry.difficulty) }]}>{entry.difficulty}</Text>
+                      </View>
+                      <Text style={s.historyDate}>{formatDate(entry.created_at)}</Text>
+                    </View>
+                  </View>
+                  <View style={s.historyScore}>
+                    <Text style={[
+                      s.historyScoreText,
+                      { color: entry.score / entry.total >= 0.7 ? '#34C759' : entry.score / entry.total >= 0.4 ? '#FF9F0A' : '#FF453A' }
+                    ]}>{entry.score}/{entry.total}</Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
         </View>
       )}
 
@@ -245,7 +300,7 @@ export function QuizView({ questions, onClose, onViewResults, onTryAnother, onHa
 }
 
 // ── Backward compat wrapper (no-op modal, renders inline when visible) ──
-export function QuizModal({ visible, questions, onClose, onViewResults, onTryAnother, onHarderQuiz }: QuizModalProps) {
+export function QuizModal({ visible, questions, onClose, onViewResults, onTryAnother, onHarderQuiz, quizHistory }: QuizModalProps) {
   if (!visible) return null;
   return (
     <QuizView
@@ -254,6 +309,7 @@ export function QuizModal({ visible, questions, onClose, onViewResults, onTryAno
       onViewResults={onViewResults}
       onTryAnother={onTryAnother}
       onHarderQuiz={onHarderQuiz}
+      quizHistory={quizHistory}
     />
   );
 }
@@ -393,4 +449,48 @@ const s = StyleSheet.create({
   },
   aiMsgText: { color: 'rgba(255,255,255,0.7)', fontSize: 14, lineHeight: 21 },
   harderLink: { color: '#5AC8FA', textDecorationLine: 'underline', fontWeight: '600' },
+  historySection: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderRadius: 14,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.07)',
+  },
+  historySectionTitle: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    paddingHorizontal: 14,
+    paddingTop: 14,
+    paddingBottom: 8,
+  },
+  historyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(255,255,255,0.07)',
+  },
+  historyLeft: { flex: 1, marginRight: 10 },
+  historyTopic: { color: 'rgba(255,255,255,0.85)', fontSize: 14, fontWeight: '500' },
+  historyMeta: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 3 },
+  diffBadge: {
+    borderRadius: 20,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderWidth: 1,
+  },
+  diffBadgeText: { fontSize: 11, fontWeight: '600' },
+  historyDate: { color: 'rgba(255,255,255,0.35)', fontSize: 12 },
+  historyScore: {
+    minWidth: 44,
+    alignItems: 'flex-end',
+  },
+  historyScoreText: { fontSize: 16, fontWeight: '700' },
 });
