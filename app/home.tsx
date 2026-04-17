@@ -1634,7 +1634,6 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-hello ai fix this error Something went wrong / Cannot access 'cleanedBeforeCard' before initialization when i tex and fix that error when i login: {
   "eventMessage": "send-login-email error: TypeError: supabaseAdmin.from(...).insert(...).catch is not a function\n    at Object.handler (file:///models/njpuoozygqtpvlzhnjpu/send-login-email/index.ts:183:15)\n    at eventLoopTick (ext:core/01_core.js:168:7)\n    at async respond (ext:sb_core_main_js/js/http.js:197:14)\n",
   "functionId": "send-login-email",
   "id": "3e2171bc-20f6-4e69-8029-ffd6c06bb121",

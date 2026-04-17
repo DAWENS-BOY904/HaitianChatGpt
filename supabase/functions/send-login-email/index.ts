@@ -167,13 +167,17 @@ Deno.serve(async (req) => {
 
     // Log the login event in activity_logs
     if (userId) {
-      await supabaseAdmin.from('activity_logs').insert({
-        user_id: userId,
-        action: 'user_login',
-        action_type: 'auth',
-        details: { platform, loginTime, email },
-        created_at: new Date().toISOString(),
-      }).catch(() => {});
+      try {
+        await supabaseAdmin.from('activity_logs').insert({
+          user_id: userId,
+          action: 'user_login',
+          action_type: 'auth',
+          details: { platform, loginTime, email },
+          created_at: new Date().toISOString(),
+        });
+      } catch (_logErr) {
+        // Non-blocking — ignore logging errors
+      }
     }
 
     return new Response(
