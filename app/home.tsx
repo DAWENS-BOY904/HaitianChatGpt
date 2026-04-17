@@ -1684,4 +1684,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-dont fucking skip this:When the AI returns a code block, stream and reveal all lines from top to bottom as they arrive, showing each line sequentially so the user sees the code being written from line 1 to the last line in real time.Connect the StreamingText component in MessageItem to the actual SSE/streaming response from the chat edge function in home, so tokens appear word-by-word at the AI's real generation speed instead of a simulated animation.When the user taps the stop/send button while the AI is thinking or generating, immediately cancel the pending request so no new message is sent and the ThinkingIndicator disappears. Wire the handleStopGeneration and handleCancelGeneration callbacks in home.tsx to abort the active Supabase function invocation using an AbortController ref.
+
