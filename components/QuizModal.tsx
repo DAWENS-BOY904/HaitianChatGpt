@@ -394,3 +394,4 @@ const s = StyleSheet.create({
   aiMsgText: { color: 'rgba(255,255,255,0.7)', fontSize: 14, lineHeight: 21 },
   harderLink: { color: '#5AC8FA', textDecorationLine: 'underline', fontWeight: '600' },
 });
+Wire the quiz flow so that when the user connects Quizzes and clicks 'Connect Quizzes', the app sends a message to the AI asking it to generate 10 real quiz questions on a topic, parses the AI JSON response into QuizQuestion[] format, and displays them inline instead of using the hardcoded generateQuizQuestions fallback.
