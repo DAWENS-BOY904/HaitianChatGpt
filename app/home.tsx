@@ -36,7 +36,7 @@ import { useAlert, useAuth } from '@/template';
 import { Spacing, Typography, BorderRadius } from '../constants/theme';
 import { MenuModal } from '../components/MenuModal';
 import { ToolsModal } from '../components/ToolsModal';
-import { QuizModal, QuizView, QuizQuestion } from '../components/QuizModal';
+import { QuizModal, QuizView, QuizQuestion, QuizHistoryEntry } from '../components/QuizModal';
 import { PresetsModal } from '../components/PresetsModal';
 import { StreamingText } from '../components/StreamingText';
 import { ConversationMenuModal } from '../components/ConversationMenuModal';
@@ -574,6 +574,9 @@ export default function HomeScreen() {
   const [quizGenerating, setQuizGenerating] = useState(false);
   const [quizMode, setQuizMode] = useState(false);
   const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([]);
+  const [selectedDifficulty, setSelectedDifficulty] = useState('Medium');
+  const [customTopicInput, setCustomTopicInput] = useState('');
+  const [quizHistory, setQuizHistory] = useState<QuizHistoryEntry[]>([]);
   const [presetsModalVisible, setPresetsModalVisible] = useState(false);
   const [thinkingMode, setThinkingMode] = useState<'thinking' | 'creating_image' | 'analyzing' | 'editing_image'>('thinking');
   const [showCompletionStatus, setShowCompletionStatus] = useState(false);
@@ -1133,10 +1136,35 @@ export default function HomeScreen() {
     { question: 'Fastest land animal?', options: ['Lion', 'Cheetah', 'Horse', 'Leopard'], answer: 1, explanation: 'The cheetah can run up to 120 km/h.' },
   ];
 
+  // ── Fetch quiz history ──
+  const fetchQuizHistory = useCallback(async () => {
+    if (!user?.id) return;
+    try {
+      const { data } = await supabase
+        .from('quiz_scores')
+        .select('topic, difficulty, score, total, created_at')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(10);
+      if (data) setQuizHistory(data as QuizHistoryEntry[]);
+    } catch (_e) {}
+  }, [user?.id, supabase]);
+
+  useEffect(() => {
+    if (quizMode && user?.id) fetchQuizHistory();
+  }, [quizMode, user?.id]);
+
   // ── AI-powered quiz generation ──
-  const generateAIQuizQuestions = async (topic: string): Promise<QuizQuestion[]> => {
+  const generateAIQuizQuestions = async (topic: string, difficulty: string = 'Medium'): Promise<QuizQuestion[]> => {
     const topicLabel = topic || 'General Knowledge';
-    const prompt = `Generate exactly 10 multiple-choice quiz questions about ${topicLabel}. Return ONLY a valid JSON array with no extra text, markdown, or code fences. Use this exact format:\n[{"question":"...","options":["Option A","Option B","Option C","Option D"],"answer":0,"explanation":"..."}]\nThe "answer" field must be the 0-based index of the correct option.`;
+    const difficultyInstructions: Record<string, string> = {
+      Easy: 'Make the questions simple and beginner-friendly. Use straightforward facts and obvious distractors.',
+      Medium: 'Make the questions moderately challenging with plausible distractors. Suitable for general knowledge.',
+      Hard: 'Make the questions difficult and detailed, requiring deeper knowledge. Distractors should be close to the correct answer.',
+      Expert: 'Make the questions expert-level and very challenging. Include tricky edge cases, specialized knowledge, and very similar-looking options that require deep understanding.',
+    };
+    const difficultyHint = difficultyInstructions[difficulty] || difficultyInstructions.Medium;
+    const prompt = `Generate exactly 10 multiple-choice quiz questions about ${topicLabel}. Difficulty: ${difficulty}. ${difficultyHint} Return ONLY a valid JSON array with no extra text, markdown, or code fences. Use this exact format:\n[{"question":"...","options":["Option A","Option B","Option C","Option D"],"answer":0,"explanation":"..."}]\nThe "answer" field must be the 0-based index of the correct option.`;
     try {
       const { data, error } = await supabase.functions.invoke('chat', {
         body: {
@@ -1169,7 +1197,7 @@ export default function HomeScreen() {
     setQuizConnectDetailVisible(false);
     setQuizGenerating(true);
     try {
-      const questions = await generateAIQuizQuestions(topic);
+      const questions = await generateAIQuizQuestions(topic, selectedDifficulty);
       showInlineQuiz(questions);
     } catch (e) {
       showInlineQuiz(generateQuizQuestions(topic));
@@ -1189,10 +1217,25 @@ export default function HomeScreen() {
     setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 200);
   }, []);
 
-  const handleQuizViewResults = (answers: any[], questions: QuizQuestion[]) => {
+  const handleQuizViewResults = async (answers: any[], questions: QuizQuestion[]) => {
     setQuizModalVisible(false);
     setInlineQuizVisible(false);
     const correct = answers.filter(a => a.correct).length;
+
+    // Save score to database
+    if (user?.id) {
+      try {
+        await supabase.from('quiz_scores').insert({
+          user_id: user.id,
+          topic: customTopicInput.trim() || selectedQuizTopic || 'General Knowledge',
+          difficulty: selectedDifficulty,
+          score: correct,
+          total: questions.length,
+        });
+        fetchQuizHistory();
+      } catch (_e) {}
+    }
+
     const resultLines = questions.map((q, i) => {
       const ans = answers.find(a => a.questionIndex === i);
       const chosen = ans ? q.options[ans.chosenIndex] : 'Skipped';
@@ -1209,6 +1252,12 @@ export default function HomeScreen() {
     setQuizTopicVisible(false);
     setInputText('Make me a harder quiz');
     setTimeout(() => inputRef.current?.focus(), 100);
+  };
+
+  const handleTryAnotherQuiz = () => {
+    setSelectedQuizTopic('');
+    setCustomTopicInput('');
+    setQuizTopicVisible(true);
   };
   const handleEditMessage = useCallback((messageId: string, content: string) => { setEditingMessageId(messageId); setInputText(content); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }, []);
   const handleCancelEdit = useCallback(() => { setEditingMessageId(null); setInputText(''); }, []);
@@ -1568,8 +1617,9 @@ export default function HomeScreen() {
                               questions={inlineQuizQuestions}
                               onClose={() => setInlineQuizVisible(false)}
                               onViewResults={handleQuizViewResults}
-                              onTryAnother={() => { setQuizTopicVisible(true); }}
+                              onTryAnother={handleTryAnotherQuiz}
                               onHarderQuiz={handleHarderQuiz}
+                              quizHistory={quizHistory}
                             />
                           ) : null}
                           {streamingMessageId ? null : generating ? (
@@ -1821,60 +1871,117 @@ export default function HomeScreen() {
             <Modal visible={quizTopicVisible} transparent animationType="slide" onRequestClose={() => setQuizTopicVisible(false)}>
               <View style={{ flex: 1, justifyContent: 'flex-end' }}>
                 <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setQuizTopicVisible(false)} />
-                <View style={{ backgroundColor: '#1C1C1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: insets.bottom + 24 }}>
-                  <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.25)', alignSelf: 'center', marginBottom: 20 }} />
-                  <Text style={{ color: '#FFF', fontSize: 20, fontWeight: '700', textAlign: 'center', marginBottom: 6 }}>Choose a Quiz Topic</Text>
-                  <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14, textAlign: 'center', marginBottom: 20 }}>The AI will generate 10 real questions for you</Text>
-                  {quizGenerating ? (
-                    <View style={{ alignItems: 'center', paddingVertical: 32 }}>
-                      <ActivityIndicator size="large" color="#5AC8FA" />
-                      <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 15, marginTop: 14 }}>Generating your quiz...</Text>
-                    </View>
-                  ) : (
-                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'center', marginBottom: 16 }}>
-                      {[
-                        { label: '🌍 General Knowledge', value: 'General Knowledge' },
-                        { label: '🔬 Science', value: 'Science' },
-                        { label: '📜 History', value: 'History' },
-                        { label: '💻 Coding', value: 'Programming and Coding' },
-                        { label: '🗺️ Geography', value: 'Geography' },
-                        { label: '➗ Math', value: 'Mathematics' },
-                        { label: '🎬 Movies & Pop Culture', value: 'Movies and Pop Culture' },
-                        { label: '⚽ Sports', value: 'Sports' },
-                      ].map((t) => (
-                        <TouchableOpacity
-                          key={t.value}
+                <View style={{ backgroundColor: '#1C1C1E', borderTopLeftRadius: 24, borderTopRightRadius: 24 }}>
+                  <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 24, paddingBottom: insets.bottom + 24 }} keyboardShouldPersistTaps="handled">
+                    <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.25)', alignSelf: 'center', marginBottom: 20 }} />
+                    <Text style={{ color: '#FFF', fontSize: 20, fontWeight: '700', textAlign: 'center', marginBottom: 6 }}>Choose a Quiz Topic</Text>
+                    <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14, textAlign: 'center', marginBottom: 20 }}>The AI will generate 10 real questions for you</Text>
+
+                    {quizGenerating ? (
+                      <View style={{ alignItems: 'center', paddingVertical: 32 }}>
+                        <ActivityIndicator size="large" color="#5AC8FA" />
+                        <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 15, marginTop: 14 }}>Generating your quiz...</Text>
+                      </View>
+                    ) : (
+                      <>
+                        {/* Topic chips */}
+                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'center', marginBottom: 16 }}>
+                          {[
+                            { label: '\uD83C\uDF0D General Knowledge', value: 'General Knowledge' },
+                            { label: '\uD83D\uDD2C Science', value: 'Science' },
+                            { label: '\uD83D\uDCDC History', value: 'History' },
+                            { label: '\uD83D\uDCBB Coding', value: 'Programming and Coding' },
+                            { label: '\uD83D\uDDFA\uFE0F Geography', value: 'Geography' },
+                            { label: '\u2797 Math', value: 'Mathematics' },
+                            { label: '\uD83C\uDFAC Movies & Pop Culture', value: 'Movies and Pop Culture' },
+                            { label: '\u26BD Sports', value: 'Sports' },
+                          ].map((t) => (
+                            <TouchableOpacity
+                              key={t.value}
+                              style={{
+                                backgroundColor: selectedQuizTopic === t.value && !customTopicInput ? '#5AC8FA22' : 'rgba(255,255,255,0.07)',
+                                borderColor: selectedQuizTopic === t.value && !customTopicInput ? '#5AC8FA' : 'rgba(255,255,255,0.12)',
+                                borderWidth: 1.5,
+                                borderRadius: 50,
+                                paddingHorizontal: 16,
+                                paddingVertical: 10,
+                              }}
+                              activeOpacity={0.75}
+                              onPress={() => { setSelectedQuizTopic(t.value); setCustomTopicInput(''); }}
+                            >
+                              <Text style={{ color: selectedQuizTopic === t.value && !customTopicInput ? '#5AC8FA' : 'rgba(255,255,255,0.85)', fontSize: 14, fontWeight: '600' }}>{t.label}</Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+
+                        {/* Custom topic input */}
+                        <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, fontWeight: '600', marginBottom: 8 }}>Custom topic...</Text>
+                        <TextInput
                           style={{
-                            backgroundColor: selectedQuizTopic === t.value ? '#5AC8FA22' : 'rgba(255,255,255,0.07)',
-                            borderColor: selectedQuizTopic === t.value ? '#5AC8FA' : 'rgba(255,255,255,0.12)',
+                            backgroundColor: customTopicInput ? 'rgba(90,200,250,0.1)' : 'rgba(255,255,255,0.07)',
                             borderWidth: 1.5,
-                            borderRadius: 50,
+                            borderColor: customTopicInput ? '#5AC8FA' : 'rgba(255,255,255,0.12)',
+                            borderRadius: 14,
                             paddingHorizontal: 16,
-                            paddingVertical: 10,
+                            paddingVertical: 12,
+                            color: '#FFF',
+                            fontSize: 15,
+                            marginBottom: 20,
                           }}
-                          activeOpacity={0.75}
-                          onPress={() => setSelectedQuizTopic(t.value)}
+                          placeholder="e.g. JavaScript ES6, World War II battles..."
+                          placeholderTextColor="rgba(255,255,255,0.3)"
+                          value={customTopicInput}
+                          onChangeText={(txt) => { setCustomTopicInput(txt); if (txt) setSelectedQuizTopic(''); }}
+                          returnKeyType="done"
+                        />
+
+                        {/* Difficulty picker */}
+                        <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, fontWeight: '600', marginBottom: 10 }}>Difficulty</Text>
+                        <View style={{ flexDirection: 'row', gap: 8, marginBottom: 20 }}>
+                          {[
+                            { label: 'Easy', color: '#34C759' },
+                            { label: 'Medium', color: '#5AC8FA' },
+                            { label: 'Hard', color: '#FF9F0A' },
+                            { label: 'Expert', color: '#FF453A' },
+                          ].map((d) => {
+                            const isSelected = selectedDifficulty === d.label;
+                            return (
+                              <TouchableOpacity
+                                key={d.label}
+                                style={{
+                                  flex: 1,
+                                  alignItems: 'center',
+                                  paddingVertical: 10,
+                                  borderRadius: 12,
+                                  borderWidth: 1.5,
+                                  borderColor: isSelected ? d.color : 'rgba(255,255,255,0.1)',
+                                  backgroundColor: isSelected ? d.color + '22' : 'rgba(255,255,255,0.04)',
+                                }}
+                                activeOpacity={0.75}
+                                onPress={() => setSelectedDifficulty(d.label)}
+                              >
+                                <Text style={{ color: isSelected ? d.color : 'rgba(255,255,255,0.6)', fontSize: 13, fontWeight: '700' }}>{d.label}</Text>
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </View>
+
+                        {/* Start button */}
+                        <TouchableOpacity
+                          style={{
+                            backgroundColor: (selectedQuizTopic || customTopicInput.trim()) ? '#5AC8FA' : 'rgba(255,255,255,0.1)',
+                            borderRadius: 50,
+                            paddingVertical: 16,
+                            alignItems: 'center',
+                          }}
+                          disabled={!selectedQuizTopic && !customTopicInput.trim()}
+                          onPress={() => handleLaunchQuiz(customTopicInput.trim() || selectedQuizTopic)}
                         >
-                          <Text style={{ color: selectedQuizTopic === t.value ? '#5AC8FA' : 'rgba(255,255,255,0.85)', fontSize: 14, fontWeight: '600' }}>{t.label}</Text>
+                          <Text style={{ color: (selectedQuizTopic || customTopicInput.trim()) ? '#000' : 'rgba(255,255,255,0.4)', fontSize: 17, fontWeight: '700' }}>Start Quiz</Text>
                         </TouchableOpacity>
-                      ))}
-                    </View>
-                  )}
-                  {!quizGenerating && (
-                    <TouchableOpacity
-                      style={{
-                        backgroundColor: selectedQuizTopic ? '#5AC8FA' : 'rgba(255,255,255,0.1)',
-                        borderRadius: 50,
-                        paddingVertical: 16,
-                        alignItems: 'center',
-                        marginTop: 4,
-                      }}
-                      disabled={!selectedQuizTopic}
-                      onPress={() => handleLaunchQuiz(selectedQuizTopic)}
-                    >
-                      <Text style={{ color: selectedQuizTopic ? '#000' : 'rgba(255,255,255,0.4)', fontSize: 17, fontWeight: '700' }}>Start Quiz</Text>
-                    </TouchableOpacity>
-                  )}
+                      </>
+                    )}
+                  </ScrollView>
                 </View>
               </View>
             </Modal>
