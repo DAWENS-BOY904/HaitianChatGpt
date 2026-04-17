@@ -70,28 +70,40 @@ export default function MFATOTPSetupScreen() {
       showAlert('Error', 'Please enter a 6-digit code');
       return;
     }
+    if (!factorId) {
+      showAlert('Error', 'Setup not complete. Please restart the setup.');
+      return;
+    }
     setVerifying(true);
     try {
+      // Step 1: Create a challenge for this factor
       const { data: challengeData, error: challengeError } = await supabase.auth.mfa.challenge({ factorId });
       if (challengeError) throw challengeError;
 
-      const { error: verifyError } = await supabase.auth.mfa.verify({
+      // Step 2: Verify the challenge with the user's 6-digit TOTP code
+      const { data: verifyData, error: verifyError } = await supabase.auth.mfa.verify({
         factorId,
         challengeId: challengeData.id,
-        code,
+        code: code.trim(),
       });
       if (verifyError) throw verifyError;
 
-      // Save to security settings
+      // Step 3: Persist MFA enabled status in security_settings
       if (user) {
-        await supabase.from('security_settings').upsert({ user_id: user.id, mfa_enabled: true });
+        await supabase.from('security_settings').upsert(
+          { user_id: user.id, mfa_enabled: true },
+          { onConflict: 'user_id' }
+        );
       }
 
-      showAlert('Success', 'Authenticator app enabled! Your account is now protected with MFA.', [
-        { text: 'Done', onPress: () => router.replace('/security') },
-      ]);
+      showAlert(
+        '✅ Authenticator Enabled',
+        'Your account is now protected with two-factor authentication. Next time you log in, you will need to provide a code from your authenticator app.',
+        [{ text: 'Done', onPress: () => router.replace('/security') }]
+      );
     } catch (e: any) {
-      showAlert('Verification failed', e.message || 'Invalid code. Please try again.');
+      const msg = e.message || 'Invalid code. Please check your authenticator app and try again.';
+      showAlert('Verification Failed', msg);
     } finally {
       setVerifying(false);
     }

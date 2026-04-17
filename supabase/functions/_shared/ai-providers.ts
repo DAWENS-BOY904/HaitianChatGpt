@@ -558,12 +558,15 @@ export function detectContentType(userMessage: string): {
   const lowerMsg = userMessage.toLowerCase();
   
   const imageKeywords = [
-    'create a logo', 'create logo', 'generate logo', 'make a logo', 'design a logo',
-    'create an image', 'create image', 'generate image', 'make an image', 'design an image',
+    'create a logo', 'create logo', 'generate logo', 'make a logo', 'design a logo', 'build a logo',
+    'create an image', 'create image', 'generate image', 'make an image', 'design an image', 'generate a photo',
     'draw a', 'draw me', 'paint a', 'paint me', 'illustrate', 'sketch a',
-    'generate a picture', 'make a picture',
+    'generate a picture', 'make a picture', 'generate picture', 'create picture',
+    'create an icon', 'create icon', 'generate icon',
+    'create a banner', 'generate banner', 'make a banner',
+    'create art', 'generate art', 'make art', 'create artwork',
     'kreye yon logo', 'kreye logo', 'fe yon logo', 'fe logo', 'desine logo',
-    'kreye foto', 'kreye imaj', 'fe foto', 'fe imaj',
+    'kreye foto', 'kreye imaj', 'fe foto', 'fe imaj', 'kreye yon imaj',
   ];
   
   const editKeywords = [
