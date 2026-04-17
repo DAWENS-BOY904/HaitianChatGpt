@@ -444,5 +444,5 @@ const fpStyles = StyleSheet.create({
   chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: { borderRadius: 10, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 6, minWidth: 80 },
   chipLabel: { fontSize: 12, fontWeight: '700', marginBottom: 2 },
-  chipExt: { fontSize: 10, color: 'rgba(255,255,255,0.45)', fontWeight: '500' },
+  chipExt: { fontSize: 10, color: 'rgba(255,255,255,0.45)', fontWeight: '500' }
 });
