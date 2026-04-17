@@ -941,7 +941,39 @@ IMPORTANT:
         aiResponse = await callAI(aiModel, aiMessages, false);
         imageUrl = undefined;
       } else {
-        imageUrl = imageResult.imageUrl;
+        let resolvedImageUrl = imageResult.imageUrl;
+
+        // If it's a base64 data URL (e.g. from Gemini), upload to Supabase Storage
+        if (resolvedImageUrl.startsWith('data:image/')) {
+          try {
+            const matches = resolvedImageUrl.match(/^data:(image\/[a-z+]+);base64,(.+)$/);
+            if (matches) {
+              const mimeType = matches[1];
+              const ext = mimeType.split('/')[1]?.replace('+', '.') || 'png';
+              const base64Data = matches[2];
+              const binary = atob(base64Data);
+              const bytes = new Uint8Array(binary.length);
+              for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+              const fileName = `ai-gen/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+              const storageClient = createClient(
+                Deno.env.get('SUPABASE_URL') ?? '',
+                Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+              );
+              const { error: uploadErr } = await storageClient.storage
+                .from('chat-images')
+                .upload(fileName, bytes, { contentType: mimeType, upsert: true });
+              if (!uploadErr) {
+                const { data: urlData } = storageClient.storage.from('chat-images').getPublicUrl(fileName);
+                resolvedImageUrl = urlData.publicUrl;
+                console.log('[chat] Uploaded base64 image to storage:', resolvedImageUrl);
+              }
+            }
+          } catch (uploadErr) {
+            console.error('[chat] Failed to upload base64 image:', uploadErr);
+          }
+        }
+
+        imageUrl = resolvedImageUrl;
         aiResponse = {
           content: 'Here is your generated image! 🎨\n\nLet me know if you would like any changes to the style, colors, or composition.',
           model: imageResult.model,
@@ -982,23 +1014,49 @@ IMPORTANT:
       .update({ updated_at: new Date().toISOString() })
       .eq('id', conversationId);
 
-    return new Response(
-      JSON.stringify({
-        message: cleanMessage,
-        imageUrl: imageUrl || null,
-        thinkingMode: detectionResult.thinkingMode || 'thinking',
-        hasMessageCard,
-        fileUrl: null,
-        fileName: null,
-        fileType: null,
-      }),
-      {
-        headers: {
-          ...corsHeaders,
-          'Content-Type': 'application/json',
-        },
-      }
-    );
+    // ── STREAMING RESPONSE: send tokens via SSE ──
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      start(controller) {
+        // Send the full response as a series of small chunks to simulate streaming
+        // Edge functions don't support true token-level SSE from upstream, so we
+        // chunk the final response into word-level pieces for the client to animate.
+        const words = cleanMessage.split(/(\s+)/);
+        let i = 0;
+        function sendNext() {
+          if (i >= words.length) {
+            // Send final done event with imageUrl and metadata
+            const donePayload = JSON.stringify({
+              done: true,
+              imageUrl: imageUrl || null,
+              thinkingMode: detectionResult.thinkingMode || 'thinking',
+              hasMessageCard,
+            });
+            controller.enqueue(encoder.encode(`data: ${donePayload}\n\n`));
+            controller.close();
+            return;
+          }
+          // Send 1-3 words per chunk for natural pace
+          const chunkEnd = Math.min(i + 2, words.length);
+          const chunk = words.slice(i, chunkEnd).join('');
+          i = chunkEnd;
+          const payload = JSON.stringify({ token: chunk });
+          controller.enqueue(encoder.encode(`data: ${payload}\n\n`));
+          // Schedule next chunk — ~15ms per chunk gives natural streaming feel
+          setTimeout(sendNext, 12);
+        }
+        sendNext();
+      },
+    });
+
+    return new Response(stream, {
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'X-Accel-Buffering': 'no',
+      },
+    });
 
   } catch (error: any) {
     console.error('Unhandled error in chat function:', error);

@@ -41,6 +41,8 @@ interface ToolsModalProps {
   onSelectAIModel?: (model: string) => void;
   onOpenCamera?: () => void;
   currentModel?: string;
+  onOpenQuiz?: () => void;
+  onOpenPresets?: () => void;
 }
 
 const GLASS = {
@@ -60,6 +62,8 @@ export function ToolsModal({
   onSelectAIModel,
   onOpenCamera,
   currentModel = 'gemini',
+  onOpenQuiz,
+  onOpenPresets,
 }: ToolsModalProps) {
   const { colors } = useTheme();
   const router = useRouter();
@@ -129,29 +133,18 @@ export function ToolsModal({
     setLoading('camera');
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
-      if (status !== 'granted') {
-        alert('Camera permission is required.');
-        return;
-      }
+      if (status !== 'granted') { alert('Camera permission is required.'); return; }
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         quality: 0.85,
         base64: true,
       });
       if (!result.canceled && result.assets[0]) {
-        onPickMedia([{
-          type: 'image',
-          uri: result.assets[0].uri,
-          base64: result.assets[0].base64,
-          mimeType: 'image/jpeg',
-        }]);
+        onPickMedia([{ type: 'image', uri: result.assets[0].uri, base64: result.assets[0].base64, mimeType: 'image/jpeg' }]);
         onClose();
       }
-    } catch (e) {
-      console.error('Camera error:', e);
-    } finally {
-      setLoading(null);
-    }
+    } catch (e) { console.error('Camera error:', e); }
+    finally { setLoading(null); }
   };
 
   // ── REAL PHOTOS ──
@@ -159,10 +152,7 @@ export function ToolsModal({
     setLoading('photos');
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        alert('Photo library permission is required.');
-        return;
-      }
+      if (status !== 'granted') { alert('Photo library permission is required.'); return; }
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsMultipleSelection: true,
@@ -172,37 +162,13 @@ export function ToolsModal({
       });
       if (!result.canceled && result.assets.length > 0) {
         onPickMedia(result.assets.map((a) => ({
-          type: 'image',
-          uri: a.uri,
-          base64: a.base64,
-          mimeType: a.mimeType || 'image/jpeg',
-          name: a.fileName,
+          type: 'image', uri: a.uri, base64: a.base64, mimeType: a.mimeType || 'image/jpeg', name: a.fileName,
         })));
         onClose();
       }
-    } catch (e) {
-      console.error('Photo picker error:', e);
-    } finally {
-      setLoading(null);
-    }
+    } catch (e) { console.error('Photo picker error:', e); }
+    finally { setLoading(null); }
   };
-
-  // ── REAL FILES (restricted types, no zip/video) ──
-  const ALLOWED_MIMES = [
-    'image/png','image/jpeg','image/jpg','image/webp','image/svg+xml','image/gif',
-    'application/pdf',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    'application/msword','application/vnd.ms-excel','application/vnd.ms-powerpoint',
-    'text/plain','text/markdown','text/html','text/css','text/javascript',
-    'application/json','application/xml','text/xml','text/csv',
-  ];
-  const ALLOWED_EXTENSIONS = [
-    'png','jpg','jpeg','webp','svg','gif',
-    'pdf','docx','doc','pptx','ppt','xlsx','xls',
-    'txt','md','tsx','ts','js','jsx','html','css','json','xml','csv','py','rb','go','rs','java','kt','swift','sh','bash','yaml','yml','sql','graphql','r','lua','php','cs','cpp','c','dart','kotlin',
-  ];
 
   const formatBytes = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`;
@@ -225,79 +191,39 @@ export function ToolsModal({
   const handleFiles = async () => {
     setLoading('files');
     try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: '*/*',
-        copyToCacheDirectory: true,
-        multiple: false,
-      });
+      const result = await DocumentPicker.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true, multiple: false });
       if (!result.canceled && result.assets?.[0]) {
         const asset = result.assets[0];
         const ext = (asset.name || '').split('.').pop()?.toLowerCase() || '';
         const mime = (asset.mimeType || '').toLowerCase();
-        // Block zip and video
-        const isBlocked =
-          mime.startsWith('video/') ||
-          mime.includes('zip') || mime.includes('x-rar') || mime.includes('7z') ||
-          ext === 'zip' || ext === 'rar' || ext === '7z' || ext === 'tar' || ext === 'gz' ||
-          mime.startsWith('audio/');
-        if (isBlocked) {
-          alert('File type not supported. Please upload documents, images, or code files.');
-          return;
-        }
+        const isBlocked = mime.startsWith('video/') || mime.includes('zip') || mime.includes('x-rar') || mime.includes('7z')
+          || ext === 'zip' || ext === 'rar' || ext === '7z' || ext === 'tar' || ext === 'gz' || mime.startsWith('audio/');
+        if (isBlocked) { alert('File type not supported. Please upload documents, images, or code files.'); return; }
         const isImage = mime.startsWith('image/');
-        setSelectedFilePreview({
-          name: asset.name || 'file',
-          size: asset.size || 0,
-          mimeType: mime,
-          uri: asset.uri,
-          isImage,
-        });
+        setSelectedFilePreview({ name: asset.name || 'file', size: asset.size || 0, mimeType: mime, uri: asset.uri, isImage });
       }
-    } catch (e) {
-      console.error('File picker error:', e);
-    } finally {
-      setLoading(null);
-    }
+    } catch (e) { console.error('File picker error:', e); }
+    finally { setLoading(null); }
   };
 
   const confirmSendFile = () => {
     if (!selectedFilePreview) return;
-    onPickMedia([{
-      type: selectedFilePreview.isImage ? 'image' : 'document',
-      uri: selectedFilePreview.uri,
-      name: selectedFilePreview.name,
-      mimeType: selectedFilePreview.mimeType,
-      size: selectedFilePreview.size,
-    }]);
+    onPickMedia([{ type: selectedFilePreview.isImage ? 'image' : 'document', uri: selectedFilePreview.uri, name: selectedFilePreview.name, mimeType: selectedFilePreview.mimeType, size: selectedFilePreview.size }]);
     setSelectedFilePreview(null);
     onClose();
   };
 
+  // ── Tools — 3 cols × 2 rows (Quizzes replaces WeChat) ──
   const tools = [
-    { id: 'camera', label: 'Camera', icon: 'camera-outline', color: '#5856D6', action: handleCamera },
-    { id: 'photos', label: 'Photos', icon: 'image-outline', color: '#FF2D55', action: handlePhotos },
-    { id: 'files', label: 'Files', icon: 'document-outline', color: '#007AFF', action: handleFiles },
-    {
-      id: 'voice',
-      label: 'Call',
-      icon: 'call-outline',
-      color: '#34C759',
-      action: () => { router.push('/voice-control'); onClose(); },
-    },
-    {
-      id: 'presets',
-      label: 'Presets',
-      icon: 'cube-outline',
-      color: '#FF9500',
-      action: () => { onSelectTool?.('presets'); onClose(); },
-    },
-    {
-      id: 'wechat',
-      label: 'WeChat files',
-      icon: 'chatbubble-ellipses-outline',
-      color: '#30D158',
-      action: () => { onClose(); },
-    },
+    { id: 'camera',  label: 'Camera',  icon: 'camera-outline',  color: '#5856D6', action: handleCamera },
+    { id: 'photos',  label: 'Photos',  icon: 'image-outline',   color: '#FF2D55', action: handlePhotos },
+    { id: 'files',   label: 'Files',   icon: 'document-outline',color: '#007AFF', action: handleFiles  },
+    { id: 'quizzes', label: 'Quizzes', icon: 'albums-outline',  color: '#5AC8FA',
+      action: () => { onOpenQuiz?.(); onClose(); } },
+    { id: 'voice',   label: 'Call',    icon: 'call-outline',    color: '#34C759',
+      action: () => { router.push('/voice-control'); onClose(); } },
+    { id: 'presets', label: 'Presets', icon: 'cube-outline',    color: '#FF9500',
+      action: () => { onOpenPresets?.(); onClose(); } },
   ];
 
   if (!visible && !rendered) return null;
@@ -312,14 +238,9 @@ export function ToolsModal({
 
         <GestureDetector gesture={pan}>
           <Animated.View style={[styles.sheet, modalStyle]}>
-            {/* Handle */}
             <View style={styles.handleWrap}><View style={styles.handle} /></View>
 
-            <ScrollView
-              showsVerticalScrollIndicator={false}
-              bounces={false}
-              contentContainerStyle={styles.scrollContent}
-            >
+            <ScrollView showsVerticalScrollIndicator={false} bounces={false} contentContainerStyle={styles.scrollContent}>
               {/* 3×2 Grid */}
               <View style={styles.grid}>
                 {tools.map((tool, i) => {
@@ -352,7 +273,7 @@ export function ToolsModal({
                 })}
               </View>
 
-              {/* File Preview Section */}
+              {/* File Preview */}
               {selectedFilePreview && (
                 <Animated.View entering={FadeInUp.duration(300)} style={fpStyles.previewCard}>
                   <View style={fpStyles.previewHeader}>
@@ -363,18 +284,10 @@ export function ToolsModal({
                   </View>
                   <View style={fpStyles.previewBody}>
                     {selectedFilePreview.isImage ? (
-                      <Image
-                        source={{ uri: selectedFilePreview.uri }}
-                        style={fpStyles.previewThumb}
-                        contentFit="cover"
-                      />
+                      <Image source={{ uri: selectedFilePreview.uri }} style={fpStyles.previewThumb} contentFit="cover" />
                     ) : (
                       <View style={[fpStyles.previewIconBox, { backgroundColor: getMimeIcon(selectedFilePreview.mimeType, selectedFilePreview.name.split('.').pop() || '').color + '18' }]}>
-                        <Ionicons
-                          name={getMimeIcon(selectedFilePreview.mimeType, selectedFilePreview.name.split('.').pop() || '').icon}
-                          size={36}
-                          color={getMimeIcon(selectedFilePreview.mimeType, selectedFilePreview.name.split('.').pop() || '').color}
-                        />
+                        <Ionicons name={getMimeIcon(selectedFilePreview.mimeType, selectedFilePreview.name.split('.').pop() || '').icon} size={36} color={getMimeIcon(selectedFilePreview.mimeType, selectedFilePreview.name.split('.').pop() || '').color} />
                       </View>
                     )}
                     <View style={fpStyles.previewMeta}>
@@ -390,7 +303,7 @@ export function ToolsModal({
                 </Animated.View>
               )}
 
-              {/* Accepted File Types — clean, no chip background colors */}
+              {/* Supported types info */}
               {!selectedFilePreview && (
                 <Animated.View entering={FadeInUp.delay(300).duration(300)} style={fpStyles.chipsSection}>
                   <Text style={fpStyles.chipsTitle}>Supported types</Text>
@@ -415,13 +328,9 @@ export function ToolsModal({
                 </Animated.View>
               )}
 
-              {/* Web Search Row */}
+              {/* Web Search — full-width row */}
               <Animated.View entering={FadeInUp.delay(340).duration(350)}>
-                <TouchableOpacity
-                  style={styles.webRow}
-                  activeOpacity={0.7}
-                  onPress={() => setShowWebOptions(!showWebOptions)}
-                >
+                <TouchableOpacity style={styles.webRow} activeOpacity={0.7} onPress={() => setShowWebOptions(!showWebOptions)}>
                   <View style={styles.webLeft}>
                     <View style={[styles.webIcon, { backgroundColor: 'rgba(0,122,255,0.15)' }]}>
                       <Ionicons name="globe-outline" size={22} color={GLASS.accent} />
@@ -430,27 +339,17 @@ export function ToolsModal({
                   </View>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                     <Text style={styles.webBadge}>{webMode === 'auto' ? 'Auto' : 'Off'}</Text>
-                    <Ionicons
-                      name={showWebOptions ? 'chevron-down' : 'chevron-forward'}
-                      size={18}
-                      color={GLASS.sub}
-                    />
+                    <Ionicons name={showWebOptions ? 'chevron-down' : 'chevron-forward'} size={18} color={GLASS.sub} />
                   </View>
                 </TouchableOpacity>
-
                 {showWebOptions && (
                   <View style={styles.webOptions}>
                     {(['auto', 'off'] as const).map((mode) => (
-                      <TouchableOpacity
-                        key={mode}
-                        style={[styles.webOption, webMode === mode && styles.webOptionActive]}
-                        onPress={() => { setWebMode(mode); setTimeout(() => setShowWebOptions(false), 250); }}
-                      >
+                      <TouchableOpacity key={mode} style={[styles.webOption, webMode === mode && styles.webOptionActive]}
+                        onPress={() => { setWebMode(mode); setTimeout(() => setShowWebOptions(false), 250); }}>
                         <View>
                           <Text style={styles.webOptTitle}>{mode === 'auto' ? 'Auto' : 'Off'}</Text>
-                          <Text style={styles.webOptSub}>
-                            {mode === 'auto' ? 'Browses the web when needed' : 'No web access'}
-                          </Text>
+                          <Text style={styles.webOptSub}>{mode === 'auto' ? 'Browses the web when needed' : 'No web access'}</Text>
                         </View>
                         {webMode === mode && <Ionicons name="checkmark" size={20} color={GLASS.accent} />}
                       </TouchableOpacity>
@@ -497,14 +396,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: GLASS.border,
   },
-  iconWrap: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 10,
-  },
+  iconWrap: { width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
   cellLabel: { fontSize: 13, fontWeight: '600', color: GLASS.text, textAlign: 'center' },
   webRow: {
     flexDirection: 'row',
@@ -515,93 +407,40 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: GLASS.border,
+    marginBottom: 10,
   },
   webLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   webIcon: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   webLabel: { fontSize: 16, fontWeight: '600', color: GLASS.text },
   webBadge: { fontSize: 15, color: GLASS.sub, fontWeight: '500' },
   webOptions: { backgroundColor: 'rgba(0,0,0,0.25)', borderRadius: 12, padding: 4, marginTop: 8 },
-  webOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 12,
-    borderRadius: 8,
-  },
+  webOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 12, borderRadius: 8 },
   webOptionActive: { backgroundColor: 'rgba(0,122,255,0.15)' },
   webOptTitle: { fontSize: 15, fontWeight: '600', color: GLASS.text, marginBottom: 2 },
   webOptSub: { fontSize: 13, color: GLASS.sub },
 });
 
 const fpStyles = StyleSheet.create({
-  previewCard: {
-    backgroundColor: GLASS.surface,
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: GLASS.border,
-  },
-  previewHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
+  previewCard: { backgroundColor: GLASS.surface, borderRadius: 16, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: GLASS.border },
+  previewHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   previewTitle: { fontSize: 13, fontWeight: '700', color: GLASS.text },
   previewBody: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
   previewThumb: { width: 64, height: 64, borderRadius: 10 },
-  previewIconBox: {
-    width: 64,
-    height: 64,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  previewIconBox: { width: 64, height: 64, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   previewMeta: { flex: 1, gap: 3 },
   previewName: { fontSize: 14, fontWeight: '600', color: GLASS.text },
   previewSize: { fontSize: 12, color: GLASS.sub },
   previewMime: { fontSize: 11, color: GLASS.sub, fontWeight: '500' },
-  sendBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    backgroundColor: GLASS.accent,
-    borderRadius: 10,
-    paddingVertical: 10,
-  },
+  sendBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: GLASS.accent, borderRadius: 10, paddingVertical: 10 },
   sendBtnText: { fontSize: 14, fontWeight: '700', color: '#FFF' },
-  // Clean type list (no colored chip backgrounds)
   chipsSection: { marginBottom: 14 },
   chipsTitle: { fontSize: 12, fontWeight: '600', color: GLASS.sub, marginBottom: 10, marginLeft: 2 },
   typeRows: { gap: 6, marginBottom: 10 },
-  typeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: 2,
-  },
-  typeLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: GLASS.text,
-    width: 82,
-  },
-  typeExt: {
-    fontSize: 12,
-    color: GLASS.sub,
-    flex: 1,
-  },
-  limitRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    marginTop: 2,
-    marginLeft: 2,
-  },
+  typeRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 2 },
+  typeLabel: { fontSize: 13, fontWeight: '600', color: GLASS.text, width: 82 },
+  typeExt: { fontSize: 12, color: GLASS.sub, flex: 1 },
+  limitRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2, marginLeft: 2 },
   limitText: { fontSize: 12, color: GLASS.sub },
-  // Legacy (unused but kept for safety)
   chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: { borderRadius: 10, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 6, minWidth: 80 },
   chipLabel: { fontSize: 12, fontWeight: '700', marginBottom: 2 },

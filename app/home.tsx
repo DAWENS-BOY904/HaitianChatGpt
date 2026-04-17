@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo, Component } from 'react';
+import { Image as ExpoImage } from 'expo-image';
 import { 
   View, 
   Text, 
@@ -35,6 +36,8 @@ import { useAlert, useAuth } from '@/template';
 import { Spacing, Typography, BorderRadius } from '../constants/theme';
 import { MenuModal } from '../components/MenuModal';
 import { ToolsModal } from '../components/ToolsModal';
+import { QuizModal, QuizQuestion } from '../components/QuizModal';
+import { PresetsModal } from '../components/PresetsModal';
 import { StreamingText } from '../components/StreamingText';
 import { ConversationMenuModal } from '../components/ConversationMenuModal';
 import { MessageItem } from '../components/MessageItem';
@@ -125,8 +128,6 @@ interface GroupMember {
 const MAX_RECORDING_DURATION = 60;
 const SHAKE_THRESHOLD = 3.0;
 const SHAKE_COOLDOWN = 1000;
-const AUTO_LOCK_DELAY = 30000;
-const GROUP_ACCENT_COLORS = ['#007AFF', '#34C759', '#FF3B30', '#FF9500', '#AF52DE', '#5AC8FA', '#FF2D55'];
 
 function MentionPopup({ members, onSelect, onClose }: {
   members: GroupMember[];
@@ -167,21 +168,7 @@ function MentionPopup({ members, onSelect, onClose }: {
 }
 
 const mentionStyles = StyleSheet.create({
-  container: {
-    position: 'absolute',
-    bottom: 70,
-    left: 60,
-    right: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    overflow: 'hidden',
-    zIndex: 100,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.18,
-    shadowRadius: 12,
-    elevation: 12,
-  },
+  container: { position: 'absolute', bottom: 70, left: 60, right: 12, borderRadius: 14, borderWidth: 1, overflow: 'hidden', zIndex: 100, shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.18, shadowRadius: 12, elevation: 12 },
   row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 12, gap: 10 },
   avatar: { width: 34, height: 34, borderRadius: 17 },
   avatarFallback: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
@@ -200,14 +187,11 @@ const SUPPORTED_AI_MODELS = {
 
 type AIModelKey = keyof typeof SUPPORTED_AI_MODELS;
 
-interface BlurContextMenuProps {
-  visible: boolean;
-  title?: string;
-  items: Array<{ label: string; icon: string; color?: string; destructive?: boolean; onPress: () => void; }>;
+function BlurContextMenu({ visible, title, items, onClose }: {
+  visible: boolean; title?: string;
+  items: Array<{ label: string; icon: string; color?: string; destructive?: boolean; onPress: () => void }>;
   onClose: () => void;
-}
-
-function BlurContextMenu({ visible, title, items, onClose }: BlurContextMenuProps) {
+}) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.8)).current;
   useEffect(() => {
@@ -295,7 +279,7 @@ const renameStyles = StyleSheet.create({
   btnDivider: { width: 1, backgroundColor: 'rgba(255,255,255,0.15)' },
 });
 
-function ArchiveConfirmModal({ visible, onConfirm, onCancel }: { visible: boolean; onConfirm: () => void; onCancel: () => void; }) {
+function ArchiveConfirmModal({ visible, onConfirm, onCancel }: { visible: boolean; onConfirm: () => void; onCancel: () => void }) {
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
       <View style={archStyles.backdrop}>
@@ -424,9 +408,8 @@ const customStyles = StyleSheet.create({
   saveBtnText: { color: '#000', fontSize: 17, fontWeight: '600' },
 });
 
-function InviteLinkModal({ visible, onClose, isPlus, isGo }: { visible: boolean; onClose: () => void; isPlus: boolean; isGo?: boolean; }) {
-  const maxUsers = isPlus ? 30 : (isGo ? 10 : 3);
-  const link = `https://dawinix.com/invite`;
+function InviteLinkModal({ visible, onClose, isPlus }: { visible: boolean; onClose: () => void; isPlus: boolean }) {
+  const link = 'https://dawinix.com/invite';
   const handleShare = async () => { try { await Share.share({ message: `Join my Haitian AI group chat!\n\n${link}`, url: link }); } catch (e) {} onClose(); };
   const handleCopy = () => { Clipboard.setString(link); onClose(); };
   return (
@@ -495,7 +478,7 @@ function WaveformAnimation({ isRecording }: { isRecording: boolean }) {
   );
 }
 
-function NotificationPermissionModal({ visible, onAllow, onSkip }: { visible: boolean; onAllow: () => void; onSkip: () => void; }) {
+function NotificationPermissionModal({ visible, onAllow, onSkip }: { visible: boolean; onAllow: () => void; onSkip: () => void }) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.85)).current;
   useEffect(() => {
@@ -548,7 +531,13 @@ export default function HomeScreen() {
   const { settings, updateSetting } = useSettings();
   const { user } = useAuth();
   const { canSendMessage, coins, isUnlimited, incrementMessageCount, isAdmin } = useGuestLimits();
-  const { conversations, messages, currentConversation, sendMessage, updateMessageAndRegenerate, createConversation, deleteConversation, loading, streamingMessageId, updateConversationTitle, archiveConversation, selectConversation, temporaryMode: ctxTempMode, setTemporaryMode: ctxSetTempMode } = useConversation();
+  const {
+    conversations, messages, currentConversation,
+    sendMessage, updateMessageAndRegenerate, createConversation, deleteConversation,
+    loading, streamingMessageId, updateConversationTitle, archiveConversation,
+    selectConversation, temporaryMode: ctxTempMode, setTemporaryMode: ctxSetTempMode,
+    cancelSendMessage,
+  } = useConversation();
   const { showAlert } = useAlert();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -577,9 +566,15 @@ export default function HomeScreen() {
   const [calcVisible, setCalcVisible] = useState(false);
   const [calcExpression, setCalcExpression] = useState('');
   const [calcResult, setCalcResult] = useState('');
+  const [quizModalVisible, setQuizModalVisible] = useState(false);
+  const [quizConnectVisible, setQuizConnectVisible] = useState(false);
+  const [quizConnectDetailVisible, setQuizConnectDetailVisible] = useState(false);
+  const [quizMode, setQuizMode] = useState(false);
+  const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([]);
+  const [presetsModalVisible, setPresetsModalVisible] = useState(false);
   const [thinkingMode, setThinkingMode] = useState<'thinking' | 'creating_image' | 'analyzing' | 'editing_image'>('thinking');
   const [showCompletionStatus, setShowCompletionStatus] = useState(false);
-  const [isOffline, setIsOffline] = useState(false);
+  const [isOffline] = useState(false);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [isSearchMode, setIsSearchMode] = useState(false);
@@ -600,10 +595,7 @@ export default function HomeScreen() {
     setTemporaryChatModeLocal(val);
     if (ctxSetTempMode) ctxSetTempMode(val);
   };
-  // Keep local state in sync with context
-  useEffect(() => {
-    if (ctxSetTempMode) ctxSetTempMode(temporaryChatMode);
-  }, [temporaryChatMode]);
+  useEffect(() => { if (ctxSetTempMode) ctxSetTempMode(temporaryChatMode); }, [temporaryChatMode]);
   const [customizeAIVisible, setCustomizeAIVisible] = useState(false);
   const [inviteLinkVisible, setInviteLinkVisible] = useState(false);
   const [groupCustomInstructions, setGroupCustomInstructions] = useState('');
@@ -614,6 +606,7 @@ export default function HomeScreen() {
   const [mentionQuery, setMentionQuery] = useState('');
   const [showMentionPopup, setShowMentionPopup] = useState(false);
   const [filteredMentionMembers, setFilteredMentionMembers] = useState<GroupMember[]>([]);
+  const [userProfilePhoto, setUserProfilePhoto] = useState<string | null>(null);
   const pushTokenRef = useRef<string | null>(null);
 
   const handleInputChange = useCallback(async (txt: string) => {
@@ -629,28 +622,20 @@ export default function HomeScreen() {
         setSelectedMedia(prev => [...prev, newFile]);
         setInputText('');
         showAlert('Code file created', `Pasted code saved as "${fileName}" and attached.`);
-      } catch (e) {
-        setInputText(safeTxt);
-      }
+      } catch (e) { setInputText(safeTxt); }
       return;
     }
     setInputText(safeTxt);
     try { setCodeLangChips(/```\w*$/.test(safeTxt)); } catch (_e) { setCodeLangChips(false); }
     if (groupChatMode) {
       const atMatch = safeTxt.match(/@(\w*)$/);
-      if (atMatch !== null) {
-        setMentionQuery(atMatch[1] || '');
-        setShowMentionPopup(true);
-      } else {
-        setShowMentionPopup(false);
-        setMentionQuery('');
-      }
+      if (atMatch !== null) { setMentionQuery(atMatch[1] || ''); setShowMentionPopup(true); }
+      else { setShowMentionPopup(false); setMentionQuery(''); }
     }
   }, [groupChatMode, showAlert]);
 
   const wasGeneratingRef = useRef(false);
   const appStateForNotifRef = useRef(AppState.currentState);
-  const [userProfilePhoto, setUserProfilePhoto] = useState<string | null>(null);
   const runOnJS_setSideMenu = useCallback((val: boolean) => setSideMenuVisible(val), []);
 
   useEffect(() => {
@@ -740,8 +725,8 @@ export default function HomeScreen() {
       if (allText.includes('translate') || allText.includes('tradiksyon')) generated.push({ title: 'Translate to English', sub: 'from Haitian Creole' });
       if (allText.includes('image') || allText.includes('logo')) generated.push({ title: 'Create an image', sub: 'like we discussed' });
       if (generated.length < 4 && topics.length > 0) {
-        const title = topics[0].slice(0, 30);
-        if (title.length > 5) generated.push({ title: 'Continue: ' + title, sub: 'pick up from last time' });
+        const t = topics[0].slice(0, 30);
+        if (t.length > 5) generated.push({ title: 'Continue: ' + t, sub: 'pick up from last time' });
       }
       const merged = [...generated, ...fallback].slice(0, 4);
       setSmartSuggestions(merged.length > 0 ? merged : fallback);
@@ -874,9 +859,7 @@ export default function HomeScreen() {
         Animated.timing(pulseAnim, { toValue: 1.2, duration: 1000, useNativeDriver: true }),
         Animated.timing(pulseAnim, { toValue: 1, duration: 1000, useNativeDriver: true }),
       ])).start();
-    } else {
-      pulseAnim.setValue(1);
-    }
+    } else { pulseAnim.setValue(1); }
   }, [recordingState, pulseAnim]);
 
   const checkAudioPermissions = async () => {
@@ -929,7 +912,6 @@ export default function HomeScreen() {
       const { status } = await Audio.requestPermissionsAsync();
       audioPermissionRef.current = status === 'granted';
     } catch (e) { audioPermissionRef.current = false; }
-
     if (!audioPermissionRef.current) {
       Alert.alert('Microphone Required', 'Please enable microphone access in Settings.', [
         { text: 'Cancel', style: 'cancel' },
@@ -937,19 +919,10 @@ export default function HomeScreen() {
       ]);
       return;
     }
-
     try {
       await cleanupRecording();
       await new Promise(r => setTimeout(r, 200));
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-        shouldDuckAndroid: true,
-        playThroughEarpieceAndroid: false,
-        staysActiveInBackground: false,
-        interruptionModeIOS: 1,
-        interruptionModeAndroid: 1,
-      });
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true, shouldDuckAndroid: true, playThroughEarpieceAndroid: false, staysActiveInBackground: false, interruptionModeIOS: 1, interruptionModeAndroid: 1 });
       if (Platform.OS === 'android') await new Promise(r => setTimeout(r, 100));
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       setRecordingState('recording');
@@ -1058,9 +1031,14 @@ export default function HomeScreen() {
     }
   };
 
+  // ── handleSend: capture inputs before clearing state ──
   const handleSend = async () => {
-    if ((!inputText.trim() && selectedMedia.length === 0) || sending) return;
-    if (!editingMessageId && !canSendMessage() && sessionBonusMessages <= 0) {
+    const currentText = inputText.trim();
+    const currentMedia = [...selectedMedia];
+    const currentEditingId = editingMessageId;
+
+    if ((!currentText && currentMedia.length === 0) || sending) return;
+    if (!currentEditingId && !canSendMessage() && sessionBonusMessages <= 0) {
       if (!user) {
         showAlert('Sign In Required', 'Sign in to start chatting with AI.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Sign In', onPress: () => router.push('/login') }]);
       } else {
@@ -1068,38 +1046,104 @@ export default function HomeScreen() {
       }
       return;
     }
+
     let conversationId = currentConversation?.id;
-    if (!conversationId) { conversationId = await createConversation(); if (!conversationId) { showAlert('Error', 'Failed to create conversation'); return; } }
-    setSending(true); setGenerating(true);
-    const text = inputText; const media = [...selectedMedia]; const editingId = editingMessageId;
-    setInputText(''); setSelectedMedia([]); setEditingMessageId(null); setThinkingMode('thinking');
+    if (!conversationId) {
+      conversationId = await createConversation();
+      if (!conversationId) { showAlert('Error', 'Failed to create conversation'); return; }
+    }
+
+    // Clear input immediately
+    setInputText('');
+    setSelectedMedia([]);
+    setEditingMessageId(null);
+    setThinkingMode('thinking');
+    setSending(true);
+    setGenerating(true);
+
     try {
-      if (editingId) { await updateMessageAndRegenerate(editingId, text, currentAIModel); return; }
-      let base64Image: string | undefined;
-      if (media.length > 0 && media[0].type === 'image') {
-        if (media[0].base64) base64Image = media[0].base64;
-        else if (media[0].uri) { try { base64Image = await FileSystem.readAsStringAsync(media[0].uri, { encoding: FileSystem.EncodingType.Base64 }); } catch (e) {} }
+      if (currentEditingId) {
+        await updateMessageAndRegenerate(currentEditingId, currentText, currentAIModel);
+        return;
       }
-      let finalText = text || (base64Image ? '[Image]' : '');
-      if (groupChatMode && groupCustomInstructions && groupRespondAuto) finalText = `[System instruction: ${groupCustomInstructions}]\n\n${finalText}`;
+
+      let base64Image: string | undefined;
+      if (currentMedia.length > 0 && currentMedia[0].type === 'image') {
+        if (currentMedia[0].base64) {
+          base64Image = currentMedia[0].base64;
+        } else if (currentMedia[0].uri) {
+          try { base64Image = await FileSystem.readAsStringAsync(currentMedia[0].uri, { encoding: FileSystem.EncodingType.Base64 }); } catch (e) {}
+        }
+      }
+
+      let finalText = currentText || (base64Image ? '[Image]' : '');
+      if (groupChatMode && groupCustomInstructions && groupRespondAuto) {
+        finalText = `[System instruction: ${groupCustomInstructions}]\n\n${finalText}`;
+      }
       if (groupChatMode && !groupRespondAuto) { setSending(false); setGenerating(false); return; }
+
       const atTagMatch = finalText.match(/@(\w+)/);
       if (groupChatMode && atTagMatch) {
         const taggedName = atTagMatch[1].toLowerCase();
         if (groupMembers.some(m => m.username.toLowerCase() === taggedName)) { setSending(false); setGenerating(false); return; }
       }
+
       await sendMessage(finalText, undefined, base64Image, false, currentAIModel);
-      setShowCompletionStatus(true); setTimeout(() => setShowCompletionStatus(false), 2000);
-      if (user && !isUnlimited && !isAdmin) { if (sessionBonusMessages > 0) setSessionBonusMessages(prev => prev - 1); else await incrementMessageCount(); }
+      setShowCompletionStatus(true);
+      setTimeout(() => setShowCompletionStatus(false), 2000);
+      if (user && !isUnlimited && !isAdmin) {
+        if (sessionBonusMessages > 0) setSessionBonusMessages(prev => prev - 1);
+        else await incrementMessageCount();
+      }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error: any) {
-      showAlert('Error', error?.message || 'Failed to send message');
-      setInputText(text); setSelectedMedia(media);
-    } finally { setSending(false); setGenerating(false); }
+      if (error?.name !== 'AbortError') {
+        showAlert('Error', error?.message || 'Failed to send message');
+        setInputText(currentText);
+        setSelectedMedia(currentMedia);
+      }
+    } finally {
+      setSending(false);
+      setGenerating(false);
+    }
   };
 
-  const handleStopGeneration = useCallback(() => { setSending(false); setGenerating(false); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); }, []);
+  const handleStopGeneration = useCallback(() => {
+    cancelSendMessage();
+    setSending(false);
+    setGenerating(false);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  }, [cancelSendMessage]);
+
   const handleCancelGeneration = useCallback(() => { setGenerating(false); }, []);
+
+  const generateQuizQuestions = (_topic: string): QuizQuestion[] => [
+    { question: 'What is the capital of France?', options: ['Berlin', 'Madrid', 'Rome', 'Paris'], answer: 3 },
+    { question: 'Chemical symbol for Gold?', options: ['Go', 'Gd', 'Au', 'Ag'], answer: 2 },
+    { question: 'How many continents are there?', options: ['5', '6', '7', '8'], answer: 2 },
+    { question: 'Closest planet to the Sun?', options: ['Venus', 'Mercury', 'Earth', 'Mars'], answer: 1 },
+    { question: 'What is 5 x 6?', options: ['25', '30', '35', '36'], answer: 1 },
+    { question: 'Who wrote Romeo and Juliet?', options: ['Dickens', 'Hemingway', 'Tolkien', 'Shakespeare'], answer: 3 },
+    { question: 'What gas do plants absorb?', options: ['Oxygen', 'Nitrogen', 'Carbon dioxide', 'Hydrogen'], answer: 2 },
+    { question: 'Largest ocean?', options: ['Atlantic', 'Indian', 'Arctic', 'Pacific'], answer: 3 },
+    { question: 'Boiling point of water (C)?', options: ['90', '95', '100', '110'], answer: 2 },
+    { question: 'Fastest land animal?', options: ['Lion', 'Cheetah', 'Horse', 'Leopard'], answer: 1 },
+  ];
+
+  const handleQuizViewResults = (answers: any[], questions: QuizQuestion[]) => {
+    setQuizModalVisible(false);
+    const correct = answers.filter(a => a.correct).length;
+    const resultLines = questions.map((q, i) => {
+      const ans = answers.find(a => a.questionIndex === i);
+      const chosen = ans ? q.options[ans.chosenIndex] : 'Skipped';
+      const isCorrect = ans?.correct;
+      return `${i + 1}. **${q.question}**\n${isCorrect ? '\u2705' : '\u274c'} Your answer: ${chosen} \u2014 ${isCorrect ? 'Correct' : 'Incorrect'}${!isCorrect ? `\n\u2713 Correct: ${q.options[q.answer]}` : ''}`;
+    }).join('\n\n');
+    const finalMsg = `Here is how you did on the quiz:\n\n${resultLines}\n\n**Score: ${correct} / ${questions.length}**\n\nWant me to \u2192 make a harder quiz or one focused on a topic you like?`;
+    sendMessage(finalMsg, undefined, undefined, false, currentAIModel);
+  };
+
+  const handleHarderQuiz = () => { setQuizModalVisible(false); setInputText('Make me a harder quiz'); };
   const handleEditMessage = useCallback((messageId: string, content: string) => { setEditingMessageId(messageId); setInputText(content); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }, []);
   const handleCancelEdit = useCallback(() => { setEditingMessageId(null); setInputText(''); }, []);
   const handleMediaPicked = useCallback((media: MediaFile[]) => { if (media.length > 5) { showAlert('Limit', 'You can select a maximum of 5 files'); return; } setSelectedMedia(media); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }, [showAlert]);
@@ -1162,33 +1206,54 @@ export default function HomeScreen() {
     handleNewChat();
   }, [handleNewChat]);
 
-  const renderMessage = useCallback(({ item }: { item: Message }) => {
+  const renderMessage = useCallback(({ item }: { item: any }) => {
     const isStreaming = streamingMessageId === item.id;
     const mathData = item.role === 'assistant' ? detectMathExpression(item.content) : null;
     return (
       <View>
-        <MessageItem message={item} onCancel={handleCancelGeneration} onEdit={handleEditMessage} onCopy={() => handleCopyMessage(item.content)} isGenerating={isStreaming} streaming={isStreaming} isOffline={isOffline} onChunkRendered={() => { flatListRef.current?.scrollToEnd({ animated: false }); }} />
-        {mathData ? (<CalculatorCard expression={mathData.expression} result={mathData.result} onOpen={() => { setCalcExpression(mathData.expression); setCalcResult(mathData.result); setCalcVisible(true); }} />) : null}
+        <MessageItem
+          message={item}
+          onCancel={handleCancelGeneration}
+          onEdit={handleEditMessage}
+          onCopy={() => handleCopyMessage(item.content)}
+          isGenerating={isStreaming}
+          streaming={isStreaming}
+          streamingSpeed={isStreaming ? 18 : 0}
+          isOffline={isOffline}
+          onChunkRendered={() => { if (isAtBottom) flatListRef.current?.scrollToEnd({ animated: false }); }}
+        />
+        {mathData ? (
+          <CalculatorCard
+            expression={mathData.expression}
+            result={mathData.result}
+            onOpen={() => { setCalcExpression(mathData.expression); setCalcResult(mathData.result); setCalcVisible(true); }}
+          />
+        ) : null}
       </View>
     );
-  }, [streamingMessageId, handleCancelGeneration, handleEditMessage, handleCopyMessage, isOffline]);
+  }, [streamingMessageId, handleCancelGeneration, handleEditMessage, handleCopyMessage, isOffline, isAtBottom]);
 
   const renderMediaPreview = useCallback(() => {
     if (selectedMedia.length === 0) return null;
     return (
-      <View style={styles.selectedMediaPreview}>
+      <View style={{ paddingHorizontal: 16, paddingBottom: 8, paddingTop: 6 }}>
         {selectedMedia.map((media, index) => (
-          <View key={`${media.uri}-${index}`} style={styles.mediaPreviewItem}>
+          <View key={`${media.uri}-${index}`} style={{ position: 'relative', marginBottom: 6, alignSelf: 'flex-start' }}>
             {media.type === 'image' ? (
-              <Image source={{ uri: media.uri }} style={styles.mediaImage} resizeMode="cover" />
+              <View style={{ width: 160, height: 160, borderRadius: 16, overflow: 'hidden', backgroundColor: '#222' }}>
+                <ExpoImage source={{ uri: media.uri }} style={{ width: 160, height: 160 }} contentFit="cover" />
+              </View>
             ) : (
-              <View style={styles.documentPreview}>
+              <View style={[styles.documentPreview, { width: 160 }]}>
                 <Ionicons name="document-text" size={24} color={colors.textSecondary} />
                 <Text style={styles.documentName} numberOfLines={1}>{media.name || 'Document'}</Text>
               </View>
             )}
-            <TouchableOpacity style={styles.removeMediaButton} onPress={() => removeMedia(index)}>
-              <Ionicons name="close" size={12} color="#FFFFFF" />
+            <TouchableOpacity
+              style={{ position: 'absolute', top: -6, right: -6, backgroundColor: '#111', borderRadius: 16, width: 28, height: 28, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#222' }}
+              onPress={() => removeMedia(index)}
+            >
+              <Ionicons name="close" size={16} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
         ))}
@@ -1224,12 +1289,8 @@ export default function HomeScreen() {
     stopButton: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#FF3B30', alignItems: 'center', justifyContent: 'center' },
     emptyState: { flex: 1 },
     loadingContainer: { padding: Spacing.md, alignItems: 'center' },
-    selectedMediaPreview: { flexDirection: 'row', gap: Spacing.xs, paddingHorizontal: Spacing.md, paddingBottom: Spacing.sm, maxHeight: 80 },
-    mediaPreviewItem: { width: 60, height: 60, borderRadius: BorderRadius.sm, backgroundColor: colors.surface, position: 'relative', overflow: 'hidden' },
-    mediaImage: { width: '100%', height: '100%' },
     documentPreview: { width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', padding: 4 },
     documentName: { fontSize: 8, color: colors.textSecondary, marginTop: 2 },
-    removeMediaButton: { position: 'absolute', top: -6, right: -6, backgroundColor: '#FF3B30', borderRadius: BorderRadius.full, width: 20, height: 20, alignItems: 'center', justifyContent: 'center' },
     editingIndicator: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, backgroundColor: `${colors.primary}20`, borderBottomWidth: 1, borderBottomColor: colors.border },
     editingText: { fontSize: 12, color: colors.primary, flex: 1 },
     offlineBanner: { backgroundColor: '#FF9500', padding: Spacing.xs, alignItems: 'center' },
@@ -1252,7 +1313,7 @@ export default function HomeScreen() {
   const accentColor = settings.accentColor || colors.primary;
   const hasMessages = (messages || []).length > 0;
 
-  const suggestionAnims = useRef((smartSuggestions.length > 0 ? smartSuggestions : [1,2,3,4]).map(() => ({
+  const suggestionAnims = useRef((smartSuggestions.length > 0 ? smartSuggestions : [1, 2, 3, 4]).map(() => ({
     opacity: new Animated.Value(0),
     translateY: new Animated.Value(20),
   }))).current;
@@ -1356,7 +1417,6 @@ export default function HomeScreen() {
                 </View>
               )}
 
-              {/* Search Bar */}
               {isSearchMode ? (
                 <View style={styles.searchContainer}>
                   <Ionicons name="search" size={20} color={colors.textSecondary} />
@@ -1367,7 +1427,6 @@ export default function HomeScreen() {
                 </View>
               ) : null}
 
-              {/* Messages Area */}
               <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
                 <View style={styles.messagesContainer}>
                   {loading ? (
@@ -1448,7 +1507,6 @@ export default function HomeScreen() {
                 </View>
               </TouchableWithoutFeedback>
 
-              {/* Code language chips */}
               {codeLangChips ? (
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ maxHeight: 44 }} contentContainerStyle={{ paddingHorizontal: 12, gap: 6, alignItems: 'center' }}>
                   {['python', 'javascript', 'typescript', 'html', 'css', 'bash', 'json'].map(lang => (
@@ -1467,6 +1525,21 @@ export default function HomeScreen() {
                   <Text style={styles.editingText}>Editing message...</Text>
                   <TouchableOpacity onPress={handleCancelEdit}>
                     <Text style={{ fontSize: 12, color: colors.primary, fontWeight: '600' }}>Cancel</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : null}
+
+              {quizMode ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 6 }}>
+                  <TouchableOpacity
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#1A1A2E', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1, borderColor: 'rgba(90,200,250,0.3)' }}
+                    onPress={() => setQuizConnectVisible(true)}
+                  >
+                    <Ionicons name="albums-outline" size={16} color="#5AC8FA" />
+                    <Text style={{ color: '#FFF', fontSize: 14, fontWeight: '600' }}>Quizzes</Text>
+                    <TouchableOpacity onPress={() => setQuizMode(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                      <Ionicons name="close" size={14} color="rgba(255,255,255,0.5)" />
+                    </TouchableOpacity>
                   </TouchableOpacity>
                 </View>
               ) : null}
@@ -1551,7 +1624,6 @@ export default function HomeScreen() {
               </View>
             </KeyboardAvoidingView>
 
-            {/* @ Mention Popup */}
             {showMentionPopup && groupChatMode && filteredMentionMembers.length > 0 ? (
               <MentionPopup
                 members={filteredMentionMembers}
@@ -1565,47 +1637,120 @@ export default function HomeScreen() {
               />
             ) : null}
 
-            {/* Scroll to Bottom floating button */}
             {showScrollToBottom && hasMessages && (
               <TouchableOpacity
-                style={{
-                  position: 'absolute',
-                  bottom: 90,
-                  right: 16,
-                  width: 36,
-                  height: 36,
-                  borderRadius: 18,
-                  backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  shadowColor: '#000',
-                  shadowOffset: { width: 0, height: 2 },
-                  shadowOpacity: 0.25,
-                  shadowRadius: 6,
-                  elevation: 6,
-                  zIndex: 50,
-                }}
-                onPress={() => {
-                  flatListRef.current?.scrollToEnd({ animated: true });
-                  setIsAtBottom(true);
-                  setShowScrollToBottom(false);
-                }}
+                style={{ position: 'absolute', bottom: 90, right: 16, width: 36, height: 36, borderRadius: 18, backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA', alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 6, elevation: 6, zIndex: 50 }}
+                onPress={() => { flatListRef.current?.scrollToEnd({ animated: true }); setIsAtBottom(true); setShowScrollToBottom(false); }}
               >
                 <Ionicons name="chevron-down" size={20} color={colors.text} />
               </TouchableOpacity>
             )}
 
-            <ToolsModal visible={toolsVisible} onClose={() => setToolsVisible(false)} onSelectTool={(tool) => setInputText(prev => `${prev}[${tool}] `)} onPickMedia={handleMediaPicked} onSelectAIModel={(model) => handleAIModelSelect(model as AIModelKey)} onOpenCamera={() => router.push('/camera')} currentModel={currentAIModel} />
+            <ToolsModal
+              visible={toolsVisible}
+              onClose={() => setToolsVisible(false)}
+              onSelectTool={(tool) => setInputText(prev => `${prev}[${tool}] `)}
+              onPickMedia={handleMediaPicked}
+              onSelectAIModel={(model) => handleAIModelSelect(model as AIModelKey)}
+              onOpenCamera={() => router.push('/camera')}
+              currentModel={currentAIModel}
+              onOpenQuiz={() => { setQuizMode(true); setQuizConnectVisible(true); }}
+              onOpenPresets={() => setPresetsModalVisible(true)}
+            />
 
-            <ConversationMenuModal visible={conversationMenuVisible} onClose={() => setConversationMenuVisible(false)} onShare={handleShareConversation} onRename={(title) => { setConversationMenuVisible(false); setRenameModalVisible(true); }} onReport={() => router.push('/bugreport')} onArchive={() => { setConversationMenuVisible(false); setArchiveConfirmVisible(true); }} onDelete={() => { setConversationMenuVisible(false); handleDeleteConversation(); }} onAddPeople={handleAddPeople} conversationTitle={currentConversation?.title} />
+            <ConversationMenuModal visible={conversationMenuVisible} onClose={() => setConversationMenuVisible(false)} onShare={handleShareConversation} onRename={() => { setConversationMenuVisible(false); setRenameModalVisible(true); }} onReport={() => router.push('/bugreport')} onArchive={() => { setConversationMenuVisible(false); setArchiveConfirmVisible(true); }} onDelete={() => { setConversationMenuVisible(false); handleDeleteConversation(); }} onAddPeople={handleAddPeople} conversationTitle={currentConversation?.title} />
 
             <SideMenu visible={sideMenuVisible} onClose={() => setSideMenuVisible(false)} currentProject={{ name: 'Haitian AI Chat' }} currentAIMode={currentAIMode} onSelectAIMode={handleSelectAIMode} onNewChat={handleNewChat} onChatHistory={() => { setSideMenuVisible(false); setChatHistoryVisible(true); }} onSettings={() => { setSideMenuVisible(false); router.push('/settings'); }} onProfile={() => { setSideMenuVisible(false); router.push('/profile'); }} userCoins={coins} isUnlimited={isUnlimited} isAdmin={isAdmin} />
 
-            <ChatHistoryModal visible={chatHistoryVisible} onClose={() => setChatHistoryVisible(false)} onSelectChat={(id) => { setChatHistoryVisible(false); }} onNewChat={() => { handleNewChat(); setChatHistoryVisible(false); }} currentChatId={currentConversation?.id} />
+            <ChatHistoryModal visible={chatHistoryVisible} onClose={() => setChatHistoryVisible(false)} onSelectChat={() => { setChatHistoryVisible(false); }} onNewChat={() => { handleNewChat(); setChatHistoryVisible(false); }} currentChatId={currentConversation?.id} />
 
             <CalculatorModal visible={calcVisible} onClose={() => setCalcVisible(false)} initialExpression={calcExpression} initialResult={calcResult} />
 
-            {/* Expand Input Modal */}
+            {/* Quizzes Connect Prompt */}
+            <Modal visible={quizConnectVisible} transparent animationType="fade" onRequestClose={() => setQuizConnectVisible(false)}>
+              <View style={{ flex: 1, backgroundColor: '#000' }}>
+                <TouchableOpacity style={{ position: 'absolute', top: 60, right: 20, backgroundColor: 'rgba(52,199,89,0.85)', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8, zIndex: 10 }}
+                  onPress={() => { setQuizConnectVisible(false); setQuizConnectDetailVisible(true); }}>
+                  <Text style={{ color: '#FFF', fontSize: 14, fontWeight: '600' }}>Create a quiz</Text>
+                </TouchableOpacity>
+                <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 }}>
+                  <Text style={{ color: 'rgba(255,255,255,0.45)', fontSize: 13, marginBottom: 24 }}>Running app request</Text>
+                  <View style={{ backgroundColor: 'rgba(28,28,32,0.95)', borderRadius: 20, padding: 28, width: '100%', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' }}>
+                    <View style={{ marginBottom: 16 }}>
+                      <View style={{ width: 54, height: 54, borderRadius: 27, backgroundColor: '#1A3050', alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: '#5AC8FA' }}>
+                        <Ionicons name="albums-outline" size={26} color="#5AC8FA" />
+                      </View>
+                    </View>
+                    <Text style={{ color: '#FFF', fontSize: 17, fontWeight: '700', textAlign: 'center', marginBottom: 8 }}>Haitian AI wants to connect to Quizzes</Text>
+                    <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14, textAlign: 'center', marginBottom: 28 }}>Create quizzes to test your knowledge</Text>
+                    <View style={{ flexDirection: 'row', gap: 12, width: '100%' }}>
+                      <TouchableOpacity style={{ flex: 1, borderRadius: 50, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)', paddingVertical: 14, alignItems: 'center' }}
+                        onPress={() => { setQuizConnectVisible(false); setQuizMode(false); }}>
+                        <Text style={{ color: '#FFF', fontSize: 16, fontWeight: '600' }}>Not now</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={{ flex: 1, borderRadius: 50, backgroundColor: '#FFF', paddingVertical: 14, alignItems: 'center' }}
+                        onPress={() => { setQuizConnectVisible(false); setQuizConnectDetailVisible(true); }}>
+                        <Text style={{ color: '#000', fontSize: 16, fontWeight: '700' }}>Connect</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </View>
+              </View>
+            </Modal>
+
+            {/* Quizzes Connect Detail */}
+            <Modal visible={quizConnectDetailVisible} transparent animationType="slide" onRequestClose={() => setQuizConnectDetailVisible(false)}>
+              <View style={{ flex: 1, justifyContent: 'flex-end' }}>
+                <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setQuizConnectDetailVisible(false)} />
+                <View style={{ backgroundColor: '#1C1C1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 28, paddingBottom: insets.bottom + 24 }}>
+                  <TouchableOpacity style={{ position: 'absolute', top: 16, right: 16, width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center' }}
+                    onPress={() => setQuizConnectDetailVisible(false)}>
+                    <Ionicons name="close" size={16} color="rgba(255,255,255,0.7)" />
+                  </TouchableOpacity>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, marginBottom: 20 }}>
+                    <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: '#10A37F', alignItems: 'center', justifyContent: 'center' }}><Ionicons name="chatbubble-ellipses" size={22} color="#FFF" /></View>
+                    <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 18 }}>{String.fromCharCode(8226, 8226, 8226)}</Text>
+                    <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: '#1A3050', alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: '#5AC8FA' }}><Ionicons name="albums-outline" size={22} color="#5AC8FA" /></View>
+                  </View>
+                  <Text style={{ color: '#FFF', fontSize: 20, fontWeight: '700', textAlign: 'center', marginBottom: 20 }}>Connect Quizzes</Text>
+                  <View style={{ backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 14, padding: 16, marginBottom: 20 }}>
+                    {[
+                      { bold: 'Built by Dawinix', text: ' This app is developed and maintained by Dawinix.' },
+                      { bold: 'Works automatically', text: ' Haitian AI may use this app in chats when it is helpful.' },
+                      { bold: 'Manage anytime', text: ' Review or turn off this app in Settings, under Apps.' },
+                    ].map((item, i) => (
+                      <Text key={i} style={{ color: 'rgba(255,255,255,0.7)', fontSize: 14, lineHeight: 22, marginBottom: 8 }}>
+                        <Text style={{ fontWeight: '700', color: '#FFF' }}>{item.bold}</Text>{item.text}
+                      </Text>
+                    ))}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
+                      <Text style={{ color: '#FFF', fontSize: 14, fontWeight: '600', flex: 1, lineHeight: 20 }}>Reference memories and chats</Text>
+                      <Switch value={true} onValueChange={() => {}} trackColor={{ true: '#34C759', false: '#3A3A3C' }} thumbColor="#FFF" />
+                    </View>
+                  </View>
+                  <TouchableOpacity style={{ backgroundColor: '#FFF', borderRadius: 50, paddingVertical: 16, alignItems: 'center' }}
+                    onPress={() => { setQuizConnectDetailVisible(false); const qs = generateQuizQuestions(''); setQuizQuestions(qs); setQuizModalVisible(true); }}>
+                    <Text style={{ color: '#000', fontSize: 17, fontWeight: '700' }}>Connect Quizzes</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </Modal>
+
+            <QuizModal
+              visible={quizModalVisible}
+              questions={quizQuestions}
+              onClose={() => setQuizModalVisible(false)}
+              onViewResults={handleQuizViewResults}
+              onTryAnother={() => { const qs = generateQuizQuestions(''); setQuizQuestions(qs); }}
+              onHarderQuiz={handleHarderQuiz}
+            />
+
+            <PresetsModal
+              visible={presetsModalVisible}
+              onClose={() => setPresetsModalVisible(false)}
+              onSelectPreset={(phrase) => setInputText(phrase)}
+            />
+
             <Modal visible={expandInputVisible} animationType="slide" onRequestClose={() => setExpandInputVisible(false)}>
               <View style={{ flex: 1, backgroundColor: colors.background }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: insets.top + 12, paddingHorizontal: 16, paddingBottom: 12 }}>
@@ -1629,18 +1774,12 @@ export default function HomeScreen() {
             </Modal>
 
             <RenameModal visible={renameModalVisible} currentTitle={currentConversation?.title || ''} onConfirm={async (title) => { setRenameModalVisible(false); await handleRenameConversation(title); }} onCancel={() => setRenameModalVisible(false)} />
-
             <ArchiveConfirmModal visible={archiveConfirmVisible} onConfirm={() => { setArchiveConfirmVisible(false); handleArchiveConversation(); }} onCancel={() => setArchiveConfirmVisible(false)} />
-
             <GroupStartModal visible={groupStartModalVisible} user={user} profilePhotoUrl={userProfilePhoto} onClose={() => setGroupStartModalVisible(false)} onStartGroup={handleStartGroupChat} />
-
             <CustomizeAIModal visible={customizeAIVisible} onClose={() => setCustomizeAIVisible(false)} onSave={(instructions, respondAuto) => { setGroupCustomInstructions(instructions); setGroupRespondAuto(respondAuto); }} initialInstructions={groupCustomInstructions} initialRespondAuto={groupRespondAuto} />
-
             <InviteLinkModal visible={inviteLinkVisible} onClose={() => setInviteLinkVisible(false)} isPlus={isUnlimited} />
-
             <NotificationPermissionModal visible={notifPermModalVisible} onAllow={handleAllowNotifications} onSkip={() => setNotifPermModalVisible(false)} />
 
-            {/* Security Blur Overlay */}
             {showBlurOverlay ? (
               <Animated.View style={[styles.blurOverlayContainer, { opacity: fadeAnim }]}>
                 <BlurView intensity={80} tint={isDark ? 'dark' : 'light'} style={styles.blurView}>
@@ -1684,4 +1823,3 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-
