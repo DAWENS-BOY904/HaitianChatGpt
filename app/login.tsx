@@ -19,6 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as LocalAuthentication from 'expo-local-authentication';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { createClient } from '@supabase/supabase-js';
 
 // ── Helper: send login confirmation email ──
 async function sendLoginConfirmationEmail(userId: string, email: string) {
@@ -36,6 +37,26 @@ async function sendLoginConfirmationEmail(userId: string, email: string) {
     // Non-blocking – don't interrupt login flow
     console.warn('Login email send failed:', e);
   }
+}
+
+// ── Helper: get Apple-specific Supabase client (uses MY_SUPABASE_URL) ──
+function getAppleSupabaseClient() {
+  const supabaseUrl = process.env.MY_SUPABASE_URL || process.env.EXPO_PUBLIC_MY_SUPABASE_URL;
+  const supabaseKey = process.env.MY_SUPABASE_ANON_KEY || process.env.EXPO_PUBLIC_MY_SUPABASE_ANON_KEY;
+  
+  if (!supabaseUrl || !supabaseKey) {
+    console.error('MY_SUPABASE_URL or MY_SUPABASE_ANON_KEY not configured');
+    // Fallback to regular client if env vars not set
+    return getSupabaseClient();
+  }
+  
+  return createClient(supabaseUrl, supabaseKey, {
+    auth: {
+      autoRefreshToken: true,
+      persistSession: true,
+      detectSessionInUrl: false,
+    },
+  });
 }
 
 export default function LoginScreen() {
@@ -227,7 +248,8 @@ export default function LoginScreen() {
         return;
       }
 
-      const supabase = getSupabaseClient();
+      // Use Apple-specific Supabase client with MY_SUPABASE_URL
+      const supabase = getAppleSupabaseClient();
 
       // Sign in to Supabase with Apple ID token
       const { data, error } = await supabase.auth.signInWithIdToken({
