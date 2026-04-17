@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, memo } from 'react';
 import { View, Text, StyleSheet, Animated, ViewStyle } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
 
 type IntentType = 'message' | 'image' | 'file' | 'web_search';
@@ -90,13 +91,51 @@ const dotStyles = StyleSheet.create({
 export function ThinkingIndicator({ userMessage = '', completed = false, style }: ThinkingIndicatorProps) {
   const { colors } = useTheme();
   const intent = detectIntent(userMessage);
-  const text = getStatusText(intent, userMessage, completed);
   const dotColor = colors.textSecondary || '#888';
 
+  if (completed) {
+    const doneMap: Record<IntentType, string> = {
+      image: '✨ Image created',
+      file: '📄 File ready',
+      web_search: '🔍 Search complete',
+      message: '✓ Done',
+    };
+    return (
+      <View style={[styles.wrapper, style]}>
+        <Text style={[styles.text, { color: colors.textSecondary }]}>{doneMap[intent]}</Text>
+      </View>
+    );
+  }
+
+  if (intent === 'image') {
+    return (
+      <View style={[styles.imageWrapper, style]}>
+        <View style={[styles.iconCircle, { backgroundColor: `${colors.primary}15` }]}>
+          <Ionicons name="color-palette-outline" size={18} color={colors.primary} />
+        </View>
+        <Text style={[styles.text, { color: colors.textSecondary }]}>Creating image...</Text>
+        <ThinkingDots color={dotColor} />
+      </View>
+    );
+  }
+
+  if (intent === 'web_search') {
+    const q = userMessage?.replace(/search|find|look up|google|browse|web/gi, '').trim();
+    return (
+      <View style={[styles.wrapper, style]}>
+        <Ionicons name="globe-outline" size={15} color={colors.textSecondary} />
+        <Text style={[styles.text, { color: colors.textSecondary }]} numberOfLines={1}>
+          {q ? `Searching for ${q}...` : 'Searching web...'}
+        </Text>
+        <ThinkingDots color={dotColor} />
+      </View>
+    );
+  }
+
+  // Default thinking state — clean 3-dot animation
   return (
     <View style={[styles.wrapper, style]}>
-      <Text style={[styles.text, { color: colors.textSecondary }]}>{text}</Text>
-      {!completed && <ThinkingDots color={dotColor} />}
+      <ThinkingDots color={dotColor} />
     </View>
   );
 }
@@ -107,11 +146,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: 10,
+  },
+  imageWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  iconCircle: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   text: {
     fontSize: 14,
-    fontWeight: '500',
-    fontStyle: 'italic',
+    fontWeight: '400',
   },
 });
