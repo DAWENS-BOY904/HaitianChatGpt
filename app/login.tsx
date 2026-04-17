@@ -379,16 +379,18 @@ export default function LoginScreen() {
           <Text style={styles.oauthButtonText}>Continue with Google</Text>
         </TouchableOpacity>
 
-        {/* Apple Sign In — Black bg with white text per Apple HIG + visible border */}
-        <TouchableOpacity
-          style={styles.appleButton}
-          onPress={handleAppleSignIn}
-          accessibilityLabel="Sign in with Apple"
-          accessibilityRole="button"
-        >
-          <Ionicons name="logo-apple" size={20} color="#FFFFFF" />
-          <Text style={styles.appleButtonText}>Sign in with Apple</Text>
-        </TouchableOpacity>
+        {/* Apple Sign In — iOS only per Apple HIG */}
+        {Platform.OS === 'ios' && (
+          <TouchableOpacity
+            style={styles.appleButton}
+            onPress={handleAppleSignIn}
+            accessibilityLabel="Sign in with Apple"
+            accessibilityRole="button"
+          >
+            <Ionicons name="logo-apple" size={20} color="#FFFFFF" />
+            <Text style={styles.appleButtonText}>Sign in with Apple</Text>
+          </TouchableOpacity>
+        )}
 
         <TouchableOpacity
           style={styles.oauthButton}

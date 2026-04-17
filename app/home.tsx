@@ -4,6 +4,8 @@ import {
   Text, 
   TextInput, 
   TouchableOpacity, 
+  TouchableWithoutFeedback,
+  Keyboard,
   StyleSheet, 
   FlatList, 
   KeyboardAvoidingView, 
@@ -971,6 +973,8 @@ export default function HomeScreen() {
   const [groupCustomInstructions, setGroupCustomInstructions] = useState('');
   const [groupRespondAuto, setGroupRespondAuto] = useState(true);
   const [groupMembers, setGroupMembers] = useState<GroupMember[]>([]);
+  const [expandInputVisible, setExpandInputVisible] = useState(false);
+  const [expandedText, setExpandedText] = useState('');
 
   // @ mention
   const [mentionQuery, setMentionQuery] = useState('');
@@ -979,6 +983,39 @@ export default function HomeScreen() {
 
   // Push notification token
   const pushTokenRef = useRef<string | null>(null);
+
+  // Auto-create .txt for large code pastes
+  const handleInputChange = useCallback(async (txt: string) => {
+    const safeTxt = txt ?? '';
+    const byteLength = new TextEncoder().encode(safeTxt).length;
+    const looksLikeCode = /```|function |const |import |class |def |<\w+>|\{[\s\S]{40,}\}/.test(safeTxt);
+    if (byteLength > 4000 && looksLikeCode) {
+      try {
+        const fileName = `code_${Date.now()}.txt`;
+        const filePath = (FileSystem.cacheDirectory || '') + fileName;
+        await FileSystem.writeAsStringAsync(filePath, safeTxt, { encoding: FileSystem.EncodingType.UTF8 });
+        const newFile: MediaFile = { type: 'document', uri: filePath, name: fileName, mimeType: 'text/plain' };
+        setSelectedMedia(prev => [...prev, newFile]);
+        setInputText('');
+        showAlert('Code file created', `Pasted code saved as "${fileName}" and attached.`);
+      } catch (e) {
+        setInputText(safeTxt);
+      }
+      return;
+    }
+    setInputText(safeTxt);
+    try { setCodeLangChips(/```\w*$/.test(safeTxt)); } catch (_e) { setCodeLangChips(false); }
+    if (groupChatMode) {
+      const atMatch = safeTxt.match(/@(\w*)$/);
+      if (atMatch !== null) {
+        setMentionQuery(atMatch[1] || '');
+        setShowMentionPopup(true);
+      } else {
+        setShowMentionPopup(false);
+        setMentionQuery('');
+      }
+    }
+  }, [groupChatMode, showAlert]);
   const wasGeneratingRef = useRef(false);
   const appStateForNotifRef = useRef(AppState.currentState);
 
@@ -2070,7 +2107,7 @@ export default function HomeScreen() {
                     </TouchableOpacity>
                   </View>
                 </View>
-              ) : (
+              ) : displayMessages.length === 0 ? (
                 // Chat active header
                 <View style={styles.headerChat}>
                   <TouchableOpacity style={styles.headerChatLeft} onPress={() => setSideMenuVisible(true)}>
@@ -2110,7 +2147,8 @@ export default function HomeScreen() {
                 </View>
               )}
 
-              {/* Messages List */}
+              {/* Messages List - tap to dismiss keyboard */}
+              <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
               {loading ? (
                 <View style={styles.loadingContainer}>
                   <ActivityIndicator size="large" color={colors.primary} />
@@ -2133,7 +2171,7 @@ export default function HomeScreen() {
                         <Text style={styles.groupActionBtnText}>Invite with link</Text>
                       </TouchableOpacity>
                     </View>
-                  ) : (
+                  ) : displayMessages.length === 0 ? (
                     // Normal empty state - suggestions at bottom (Photo 1)
                     <View style={{ flex: 1 }}>
                       <View style={{ flex: 1 }} />
@@ -2160,7 +2198,7 @@ export default function HomeScreen() {
                     </View>
                   )}
                 </View>
-              ) : (
+              ) : displayMessages.length === 0 ? (
                 <FlatList
                   ref={flatListRef}
                   data={displayMessages}
@@ -2192,6 +2230,8 @@ export default function HomeScreen() {
                   removeClippedSubviews={Platform.OS === 'android'}
                 />
               )}
+
+              </TouchableWithoutFeedback>
 
               {/* Code language chips */}
               {codeLangChips && (
@@ -2248,35 +2288,29 @@ export default function HomeScreen() {
                       </View>
                       <Text style={{ color: colors.text, fontSize: 14, flex: 1 }} numberOfLines={1}>{inputText}</Text>
                     </View>
-                  ) : (
+                  ) : displayMessages.length === 0 ? (
                     <TextInput
                       ref={inputRef}
                       style={styles.input}
                       placeholder={temporaryChatMode ? 'Temporary chat' : (editingMessageId ? 'Edit message...' : 'Ask anything')}
                       placeholderTextColor={colors.textSecondary}
                       value={inputText}
-                      onChangeText={(txt) => {
-                        const safeTxt = txt ?? '';
-                        setInputText(safeTxt);
-                        try { setCodeLangChips(/```\w*$/.test(safeTxt)); } catch (_e) { setCodeLangChips(false); }
-                        // @ mention detection in group chat
-                        if (groupChatMode) {
-                          const atMatch = safeTxt.match(/@(\w*)$/);
-                          if (atMatch !== null) {
-                            setMentionQuery(atMatch[1] || '');
-                            setShowMentionPopup(true);
-                          } else {
-                            setShowMentionPopup(false);
-                            setMentionQuery('');
-                          }
-                        }
-                      }}
+                      onChangeText={handleInputChange}
                       multiline
-                      maxLength={4000}
+                      maxLength={8000}
                       editable={!sending && !isRecording && !isProcessing}
                       returnKeyType="default"
                       blurOnSubmit={false}
                     />
+                    {inputText.length > 120 && (
+                      <TouchableOpacity
+                        onPress={() => { setExpandedText(inputText); setExpandInputVisible(true); }}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        style={{ paddingLeft: 4 }}
+                      >
+                        <Ionicons name="expand-outline" size={20} color={colors.textSecondary} />
+                      </TouchableOpacity>
+                    )}
                   )}
                 </View>
 
@@ -2298,7 +2332,7 @@ export default function HomeScreen() {
                   >
                     {isProcessing ? (
                       <ActivityIndicator size="small" color="#FFFFFF" />
-                    ) : (
+                    ) : displayMessages.length === 0 ? (
                       <Ionicons name={isRecording ? 'stop' : 'mic'} size={21} color="#FFFFFF" />
                     )}
                   </TouchableOpacity>
@@ -2380,6 +2414,47 @@ export default function HomeScreen() {
             />
 
             <CalculatorModal visible={calcVisible} onClose={() => setCalcVisible(false)} initialExpression={calcExpression} initialResult={calcResult} />
+
+            {/* Expand Input Modal */}
+            <Modal visible={expandInputVisible} animationType="slide" onRequestClose={() => setExpandInputVisible(false)}>
+              <View style={{ flex: 1, backgroundColor: colors.background }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: insets.top + 12, paddingHorizontal: 16, paddingBottom: 12 }}>
+                  <TouchableOpacity onPress={() => { setInputText(expandedText); setExpandInputVisible(false); }}>
+                    <Ionicons name="chevron-down" size={24} color={colors.text} />
+                  </TouchableOpacity>
+                  <Text style={{ fontSize: 16, fontWeight: '600', color: colors.text }}>Message</Text>
+                  <TouchableOpacity
+                    onPress={() => {
+                      const txt = expandedText;
+                      setInputText(txt);
+                      setExpandInputVisible(false);
+                      setTimeout(() => handleSend(), 100);
+                    }}
+                  >
+                    <View style={{ backgroundColor: settings.accentColor || colors.primary, width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' }}>
+                      <Ionicons name="arrow-up" size={20} color="#FFF" />
+                    </View>
+                  </TouchableOpacity>
+                </View>
+                <TextInput
+                  style={{ flex: 1, fontSize: 16, color: colors.text, paddingHorizontal: 20, paddingTop: 8, textAlignVertical: 'top' }}
+                  value={expandedText}
+                  onChangeText={setExpandedText}
+                  multiline
+                  autoFocus
+                  placeholder="Type your message..."
+                  placeholderTextColor={colors.textSecondary}
+                />
+                <View style={{ paddingHorizontal: 20, paddingBottom: insets.bottom + 16 }}>
+                  <TouchableOpacity
+                    style={{ backgroundColor: settings.accentColor || colors.primary, borderRadius: 50, paddingVertical: 15, alignItems: 'center' }}
+                    onPress={() => { setInputText(expandedText); setExpandInputVisible(false); }}
+                  >
+                    <Text style={{ color: '#FFF', fontSize: 17, fontWeight: '700' }}>Done</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </Modal>
 
             <RenameModal
               visible={renameModalVisible}
