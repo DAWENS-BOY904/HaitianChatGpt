@@ -497,13 +497,6 @@ export const MessageItem = memo(function MessageItem({
 
   const { sources, analysisEntries, downloadLabel, hasCard, cardContent, beforeCard } = parsed;
 
-  // Extract inline images from AI text responses — must be before contentParts
-  const { inlineImages, cleanedBeforeCard } = useMemo(() => {
-    if (message.role !== 'assistant') return { inlineImages: [], cleanedBeforeCard: beforeCard };
-    const { text, images } = extractInlineImages(beforeCard);
-    return { inlineImages: images, cleanedBeforeCard: text };
-  }, [message.role, beforeCard]);
-
   // Parse content into text/code parts
   const contentParts = useMemo(() => {
     const textToProcess = cleanedBeforeCard;
@@ -548,7 +541,12 @@ export const MessageItem = memo(function MessageItem({
     [message.image_url]
   );
 
-
+  // Extract inline images from AI text responses
+  const { inlineImages, cleanedBeforeCard } = useMemo(() => {
+    if (message.role !== 'assistant') return { inlineImages: [], cleanedBeforeCard: beforeCard };
+    const { text, images } = extractInlineImages(beforeCard);
+    return { inlineImages: images, cleanedBeforeCard: text };
+  }, [message.role, beforeCard]);
 
   const shouldStreamPart = useCallback(
     (isLastPart: boolean) => streaming && isGenerating && message.role === 'assistant' && isLastPart,

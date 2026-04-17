@@ -51,13 +51,13 @@ export default function SettingsScreen() {
 
   const currentVersion = Constants.expoConfig?.version || '1.0.0';
 
-  const bg = isDark ? '#000000' : '#F2F2F7';
-  const cardBg = isDark ? '#1C1C1E' : '#FFFFFF';
-  const dividerColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
-  const primaryText = isDark ? '#FFFFFF' : '#000000';
+  const bg = '#000000';
+  const cardBg = isDark ? '#1C1C1E' : '#2C2C2E';
+  const dividerColor = 'rgba(255,255,255,0.08)';
+  const primaryText = '#FFFFFF';
   const secondaryText = '#8E8E93';
   const sectionLabelColor = '#8E8E93';
-  const switchTrackFalse = isDark ? '#3A3A3C' : '#E5E5EA';
+  const switchTrackFalse = '#3A3A3C';
 
   useEffect(() => {
     checkAdminAccess();
@@ -209,12 +209,10 @@ export default function SettingsScreen() {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      paddingTop: insets.top + 14,
-      paddingBottom: 14,
+      paddingTop: insets.top + 12,
+      paddingBottom: 12,
       paddingHorizontal: 20,
       backgroundColor: bg,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: dividerColor,
     },
     headerTitle: { fontSize: 17, fontWeight: '600', color: primaryText },
     closeButton: {
@@ -224,62 +222,48 @@ export default function SettingsScreen() {
       width: 32,
       height: 32,
       borderRadius: 16,
-      backgroundColor: isDark ? '#2C2C2E' : 'rgba(0,0,0,0.08)',
+      backgroundColor: '#2C2C2E',
       alignItems: 'center',
       justifyContent: 'center',
     },
     profileSection: {
       alignItems: 'center',
-      paddingVertical: 28,
+      paddingVertical: 24,
       paddingHorizontal: 20,
     },
     avatarWrap: {
       width: 80,
       height: 80,
       borderRadius: 40,
-      backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA',
+      backgroundColor: '#2C2C2E',
       overflow: 'hidden',
       alignItems: 'center',
       justifyContent: 'center',
       marginBottom: 12,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: isDark ? 0.4 : 0.12,
-      shadowRadius: 6,
-      elevation: 4,
     },
     avatarImg: { width: 80, height: 80, borderRadius: 40 },
     avatarInitial: { fontSize: 32, fontWeight: '600', color: primaryText },
     profileName: { fontSize: 24, fontWeight: '600', color: primaryText, marginBottom: 4 },
     profileUsername: { fontSize: 15, color: secondaryText, marginBottom: 14 },
     editBtn: {
-      paddingHorizontal: 20,
+      paddingHorizontal: 18,
       paddingVertical: 8,
       borderRadius: 20,
       borderWidth: 1,
-      borderColor: isDark ? '#3A3A3C' : 'rgba(0,0,0,0.15)',
-      backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
+      borderColor: '#3A3A3C',
+      backgroundColor: 'transparent',
     },
     editBtnText: { fontSize: 15, color: primaryText, fontWeight: '500' },
     sectionLabel: {
       fontSize: 13,
-      fontWeight: '500',
+      fontWeight: '600',
       color: sectionLabelColor,
       marginBottom: 8,
       marginLeft: 4,
-      letterSpacing: 0.1,
+      letterSpacing: 0.2,
     },
-    section: { marginTop: 24, paddingHorizontal: 16 },
-    card: {
-      backgroundColor: cardBg,
-      borderRadius: 14,
-      overflow: 'hidden',
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 1 },
-      shadowOpacity: isDark ? 0 : 0.06,
-      shadowRadius: 4,
-      elevation: isDark ? 0 : 1,
-    },
+    section: { marginTop: 28, paddingHorizontal: 16 },
+    card: { backgroundColor: cardBg, borderRadius: 14, overflow: 'hidden' },
     row: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -297,7 +281,7 @@ export default function SettingsScreen() {
       alignItems: 'center',
       justifyContent: 'center',
     },
-    rowLabel: { fontSize: 16, color: primaryText, fontWeight: '400', flex: 1 },
+    rowLabel: { fontSize: 16, color: primaryText, fontWeight: '400' },
     rowValue: { fontSize: 15, color: secondaryText, marginRight: 4 },
     rowChevron: {},
     logoutBtn: {
@@ -306,10 +290,8 @@ export default function SettingsScreen() {
       marginBottom: 8,
       paddingVertical: 14,
       borderRadius: 14,
-      backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF',
+      backgroundColor: '#3A3A3C',
       alignItems: 'center',
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: dividerColor,
     },
     logoutText: { fontSize: 17, color: '#FF453A', fontWeight: '600' },
     versionText: {
