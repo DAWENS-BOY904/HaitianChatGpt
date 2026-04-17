@@ -273,6 +273,15 @@ export function CalculatorCard({ expression, result, onOpen }: CalculatorCardPro
  * Detects if a message contains math and returns the expression + result.
  */
 export function detectMathExpression(text: string): { expression: string; result: string } | null {
+  // Only show calculator card for short, explicit math messages (not long AI responses)
+  const trimmed = text.trim();
+  const wordCount = trimmed.split(/\s+/).length;
+  if (wordCount > 25) return null; // Skip for long prose/AI messages
+  // Must look like a pure math expression, not just a number in a sentence
+  if (!/^[\d\s+\-*/×÷−().%^]+$/.test(trimmed) && !/^[\d\s+\-*/×÷−().%^]+=/.test(trimmed)) {
+    // Allow short lines that ARE math expressions embedded in text
+    if (wordCount > 5) return null;
+  }
   // Match patterns like "1+1", "32 + 32", "10 * 5 = 50" etc.
   const mathPattern = /(\d+[\s]*[+\-*/×÷−][\s]*\d+(?:[\s]*[+\-*/×÷−][\s]*\d+)*)/;
   const match = text.match(mathPattern);
@@ -371,4 +380,3 @@ const styles = StyleSheet.create({
   calcExpr: { fontSize: 18, color: 'rgba(255,255,255,0.5)', marginBottom: 4 },
   calcResult: { fontSize: 52, color: '#30D158', fontWeight: '300', letterSpacing: -1 },
 });
-fix this its apear in home page when i dont need it only when i need.
