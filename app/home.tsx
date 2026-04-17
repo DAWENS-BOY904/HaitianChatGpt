@@ -1676,4 +1676,3 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-fix temporary mode never save chat message in side menu conversation saveand mfa-totp-setup after the user verifies the 6-digit code, call supabase.auth.mfa.challengeAndVerify() with the real factorId and code, store the verified TOTP factor, and redirect back to security screen showing 'On' status.
