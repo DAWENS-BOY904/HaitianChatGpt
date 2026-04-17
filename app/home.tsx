@@ -1684,3 +1684,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
+hello  ai if see this read the message ,mak echnage :when the ai is thinking and you click sending button to cancel ai must not send message anymore koz u cancel thinking and add streaming tex connect with home page and ai real streaming speed but when the ai is coding streaming lan dwe show all code lap kreye yi komanse nn 1 rive nn denye kote lap fini an and real code generate make sure code yo always good and perfect.
