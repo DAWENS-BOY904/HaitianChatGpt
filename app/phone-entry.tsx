@@ -1,9 +1,9 @@
 /**
- * PHONE ENTRY - PRODUCTION PHONE AUTHENTICATION
- * Real Supabase Phone Auth with Country Detection & Auto-Formatting
+ * PHONE ENTRY - IMPROVED PHONE AUTHENTICATION
+ * Dynamic Country List, Auto-Detection & Better Formatting
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,8 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
+  FlatList,
+  ListRenderItem,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
@@ -22,59 +24,103 @@ import { useRouter } from 'expo-router';
 import { Spacing, Typography, BorderRadius } from '../constants/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getSupabaseClient } from '@/template';
+import * as Localization from 'expo-localization';
+import { parsePhoneNumberFromString, AsYouType, getCountries, getCountryCallingCode } from 'libphonenumber-js';
 
-// ==================== COUNTRY DATA ====================
+// ==================== TYPES ====================
 
 interface Country {
-  code: string;
-  name: string;
-  dialCode: string;
-  flag: string;
-  format?: string;
+  code: string;           // ISO 3166-1 alpha-2 (e.g., 'US', 'HT')
+  name: string;           // Country name
+  dialCode: string;       // E.164 calling code (e.g., '+1', '+509')
+  flag: string;           // Emoji flag
+  region: string;         // Continent/region for grouping
 }
 
-const COUNTRIES: Country[] = [
-  { code: 'US', name: 'United States', dialCode: '+1', flag: '🇺🇸', format: '(###) ###-####' },
-  { code: 'HT', name: 'Haiti', dialCode: '+509', flag: '🇭🇹', format: '## ## ####' },
-  { code: 'CA', name: 'Canada', dialCode: '+1', flag: '🇨🇦', format: '(###) ###-####' },
-  { code: 'GB', name: 'United Kingdom', dialCode: '+44', flag: '🇬🇧', format: '#### ######' },
-  { code: 'FR', name: 'France', dialCode: '+33', flag: '🇫🇷', format: '# ## ## ## ##' },
-  { code: 'DE', name: 'Germany', dialCode: '+49', flag: '🇩🇪', format: '### #######' },
-  { code: 'IT', name: 'Italy', dialCode: '+39', flag: '🇮🇹', format: '### ### ####' },
-  { code: 'ES', name: 'Spain', dialCode: '+34', flag: '🇪🇸', format: '### ## ## ##' },
-  { code: 'CN', name: 'China', dialCode: '+86', flag: '🇨🇳', format: '### #### ####' },
-  { code: 'JP', name: 'Japan', dialCode: '+81', flag: '🇯🇵', format: '##-####-####' },
-  { code: 'IN', name: 'India', dialCode: '+91', flag: '🇮🇳', format: '##### #####' },
-  { code: 'BR', name: 'Brazil', dialCode: '+55', flag: '🇧🇷', format: '(##) #####-####' },
-  { code: 'MX', name: 'Mexico', dialCode: '+52', flag: '🇲🇽', format: '### ### ####' },
-  { code: 'AU', name: 'Australia', dialCode: '+61', flag: '🇦🇺', format: '### ### ###' },
-  { code: 'RU', name: 'Russia', dialCode: '+7', flag: '🇷🇺', format: '(###) ###-##-##' },
-  { code: 'ZA', name: 'South Africa', dialCode: '+27', flag: '🇿🇦', format: '## ### ####' },
-  { code: 'NG', name: 'Nigeria', dialCode: '+234', flag: '🇳🇬', format: '### ### ####' },
-  { code: 'EG', name: 'Egypt', dialCode: '+20', flag: '🇪🇬', format: '### ### ####' },
-  { code: 'KR', name: 'South Korea', dialCode: '+82', flag: '🇰🇷', format: '##-####-####' },
-  { code: 'AR', name: 'Argentina', dialCode: '+54', flag: '🇦🇷', format: '## ####-####' },
-];
+// ==================== UTILITY FUNCTIONS ====================
 
-// ==================== PHONE FORMATTER ====================
+/**
+ * Convert country code to emoji flag
+ */
+function getFlagEmoji(countryCode: string): string {
+  const codePoints = countryCode
+    .toUpperCase()
+    .split('')
+    .map(char => 127397 + char.charCodeAt(0));
+  return String.fromCodePoint(...codePoints);
+}
 
-function formatPhoneNumber(number: string, format?: string): string {
-  if (!format) return number;
-  
-  const digits = number.replace(/\D/g, '');
-  let formatted = '';
-  let digitIndex = 0;
-  
-  for (let i = 0; i < format.length && digitIndex < digits.length; i++) {
-    if (format[i] === '#') {
-      formatted += digits[digitIndex];
-      digitIndex++;
-    } else {
-      formatted += format[i];
-    }
+/**
+ * Get country name from code using Intl API
+ */
+function getCountryName(code: string): string {
+  try {
+    const displayNames = new Intl.DisplayNames(['en'], { type: 'region' });
+    return displayNames.of(code) || code;
+  } catch {
+    return code;
   }
+}
+
+/**
+ * Build complete country list from libphonenumber-js
+ */
+function buildCountryList(): Country[] {
+  const countries = getCountries();
   
-  return formatted;
+  return countries.map(code => {
+    const dialCode = getCountryCallingCode(code);
+    return {
+      code,
+      name: getCountryName(code),
+      dialCode: `+${dialCode}`,
+      flag: getFlagEmoji(code),
+      region: getRegionForCountry(code),
+    };
+  }).sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * Get region/continent for grouping
+ */
+function getRegionForCountry(code: string): string {
+  const regions: Record<string, string[]> = {
+    'North America': ['US', 'CA', 'MX', 'HT', 'CU', 'DO', 'JM', 'PR', 'BS', 'BZ', 'CR', 'SV', 'GT', 'HN', 'NI', 'PA'],
+    'South America': ['BR', 'AR', 'CL', 'CO', 'PE', 'VE', 'EC', 'BO', 'PY', 'UY', 'GY', 'SR', 'GF'],
+    'Europe': ['GB', 'FR', 'DE', 'IT', 'ES', 'PT', 'NL', 'BE', 'CH', 'AT', 'SE', 'NO', 'DK', 'FI', 'PL', 'CZ', 'HU', 'RO', 'BG', 'HR', 'SI', 'SK', 'LT', 'LV', 'EE', 'IE', 'GR', 'CY', 'MT', 'LU', 'IS', 'AL', 'BA', 'MK', 'MD', 'ME', 'RS', 'UA', 'BY', 'RU', 'TR'],
+    'Africa': ['ZA', 'NG', 'EG', 'KE', 'ET', 'GH', 'UG', 'TZ', 'MZ', 'ZW', 'ZM', 'MW', 'NA', 'BW', 'SZ', 'LS', 'MG', 'MU', 'SC', 'KM', 'DZ', 'MA', 'TN', 'LY', 'SD', 'SS', 'CF', 'CM', 'TD', 'NE', 'ML', 'BF', 'SN', 'GM', 'GW', 'GN', 'SL', 'LR', 'CI', 'TG', 'BJ', 'GH', 'GQ', 'GA', 'CG', 'CD', 'AO', 'ST', 'ER', 'DJ', 'SO', 'RW', 'BI', 'UG', 'KE', 'TZ', 'MW', 'MZ', 'ZM', 'ZW', 'BW', 'NA', 'ZA', 'SZ', 'LS', 'MG', 'MU', 'KM', 'SC'],
+    'Asia': ['CN', 'JP', 'IN', 'KR', 'ID', 'TH', 'VN', 'MY', 'PH', 'SG', 'KH', 'LA', 'MM', 'BD', 'PK', 'LK', 'NP', 'BT', 'MV', 'AF', 'IR', 'IQ', 'SA', 'YE', 'OM', 'AE', 'QA', 'BH', 'KW', 'JO', 'LB', 'SY', 'IL', 'PS', 'TR', 'CY', 'AM', 'GE', 'AZ', 'KZ', 'UZ', 'TM', 'KG', 'TJ', 'MN', 'KP', 'TW', 'HK', 'MO'],
+    'Oceania': ['AU', 'NZ', 'PG', 'FJ', 'SB', 'VU', 'NC', 'PF', 'WS', 'TO', 'KI', 'TV', 'NR', 'PW', 'MH', 'FM', 'AS', 'CK', 'NU', 'TK', 'WF', 'PN', 'GU', 'MP'],
+  };
+
+  for (const [region, codes] of Object.entries(regions)) {
+    if (codes.includes(code)) return region;
+  }
+  return 'Other';
+}
+
+/**
+ * Format phone number as user types
+ */
+function formatAsYouType(number: string, countryCode: string): string {
+  try {
+    const asYouType = new AsYouType(countryCode as any);
+    return asYouType.input(number);
+  } catch {
+    return number;
+  }
+}
+
+/**
+ * Validate phone number
+ */
+function isValidPhoneNumber(number: string, countryCode: string): boolean {
+  try {
+    const phoneNumber = parsePhoneNumberFromString(number, countryCode as any);
+    return phoneNumber?.isValid() || false;
+  } catch {
+    return false;
+  }
 }
 
 // ==================== MAIN COMPONENT ====================
@@ -84,66 +130,154 @@ export default function PhoneEntryScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const supabase = getSupabaseClient();
-  
-  const [selectedCountry, setSelectedCountry] = useState<Country>(COUNTRIES[0]);
+
+  // State
+  const [countries, setCountries] = useState<Country[]>([]);
+  const [selectedCountry, setSelectedCountry] = useState<Country | null>(null);
   const [phoneNumber, setPhoneNumber] = useState('');
   const [formattedNumber, setFormattedNumber] = useState('');
   const [showCountryPicker, setShowCountryPicker] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState('');
 
   const phoneInputRef = useRef<TextInput>(null);
 
-  // Auto-detect country on mount
+  // Memoized filtered countries
+  const filteredCountries = useMemo(() => {
+    if (!searchQuery.trim()) return countries;
+    
+    const query = searchQuery.toLowerCase();
+    return countries.filter(country =>
+      country.name.toLowerCase().includes(query) ||
+      country.dialCode.includes(query) ||
+      country.code.toLowerCase().includes(query)
+    );
+  }, [countries, searchQuery]);
+
+  // Group countries by region for better UX
+  const groupedCountries = useMemo(() => {
+    const groups: Record<string, Country[]> = {};
+    
+    filteredCountries.forEach(country => {
+      if (!groups[country.region]) {
+        groups[country.region] = [];
+      }
+      groups[country.region].push(country);
+    });
+
+    // Sort regions
+    const regionOrder = ['North America', 'South America', 'Europe', 'Africa', 'Asia', 'Oceania', 'Other'];
+    return Object.entries(groups).sort(([a], [b]) => {
+      const indexA = regionOrder.indexOf(a);
+      const indexB = regionOrder.indexOf(b);
+      return (indexA === -1 ? 999 : indexA) - (indexB === -1 ? 999 : indexB);
+    });
+  }, [filteredCountries]);
+
+  // Initialize countries and detect user's country
   useEffect(() => {
-    detectCountry();
+    const initialize = async () => {
+      try {
+        // Build country list
+        const countryList = buildCountryList();
+        setCountries(countryList);
+
+        // Auto-detect country
+        await detectAndSetCountry(countryList);
+      } catch (err) {
+        console.error('Failed to initialize:', err);
+        // Fallback to US if detection fails
+        const us = buildCountryList().find(c => c.code === 'US');
+        if (us) setSelectedCountry(us);
+      } finally {
+        setInitialLoading(false);
+      }
+    };
+
+    initialize();
   }, []);
 
   // Auto-format phone number as user types
   useEffect(() => {
-    const digits = phoneNumber.replace(/\D/g, '');
-    const formatted = formatPhoneNumber(digits, selectedCountry.format);
+    if (!selectedCountry) return;
+    
+    const formatted = formatAsYouType(phoneNumber, selectedCountry.code);
     setFormattedNumber(formatted);
   }, [phoneNumber, selectedCountry]);
 
-  const detectCountry = () => {
-    // Try to detect country from locale
+  /**
+   * Auto-detect country from device locale
+   */
+  const detectAndSetCountry = async (countryList: Country[]) => {
     try {
-      const locale = Platform.OS === 'web' 
-        ? navigator.language 
-        : require('expo-localization').locale;
+      // Get locale from device
+      const locale = Localization.locale; // e.g., "en-US", "fr-FR", "ht-HT"
+      const regionCode = Localization.region; // e.g., "US", "FR", "HT"
       
-      const countryCode = locale.split('-')[1] || locale.split('_')[1];
-      
-      if (countryCode) {
-        const detectedCountry = COUNTRIES.find(c => c.code === countryCode.toUpperCase());
+      console.log('📍 Device locale:', locale, 'Region:', regionCode);
+
+      // Try region first (most accurate)
+      let detectedCode = regionCode;
+
+      // Fallback to parsing from locale string
+      if (!detectedCode && locale) {
+        const parts = locale.split(/[-_]/);
+        detectedCode = parts[parts.length - 1];
+      }
+
+      if (detectedCode) {
+        const detectedCountry = countryList.find(
+          c => c.code === detectedCode.toUpperCase()
+        );
+
         if (detectedCountry) {
           setSelectedCountry(detectedCountry);
           console.log('✅ Auto-detected country:', detectedCountry.name);
+          return;
         }
       }
+
+      // Final fallback to US
+      const usCountry = countryList.find(c => c.code === 'US');
+      if (usCountry) {
+        setSelectedCountry(usCountry);
+        console.log('⚠️ Could not detect country, defaulting to US');
+      }
     } catch (err) {
-      console.log('Could not auto-detect country:', err);
+      console.error('Country detection failed:', err);
+      // Default to US
+      const usCountry = countryList.find(c => c.code === 'US');
+      if (usCountry) setSelectedCountry(usCountry);
     }
   };
 
-  const handleCountrySelect = (country: Country) => {
+  const handleCountrySelect = useCallback((country: Country) => {
     setSelectedCountry(country);
     setShowCountryPicker(false);
     setSearchQuery('');
+    setPhoneNumber('');
+    setFormattedNumber('');
+    
+    // Focus phone input after selection
     setTimeout(() => phoneInputRef.current?.focus(), 100);
-  };
+  }, []);
 
   const handleContinue = async () => {
+    if (!selectedCountry) {
+      setError('Please select a country');
+      return;
+    }
+
     if (!phoneNumber.trim()) {
       setError('Please enter your phone number');
       return;
     }
 
-    const digits = phoneNumber.replace(/\D/g, '');
-    if (digits.length < 8) {
-      setError('Phone number is too short');
+    // Validate phone number
+    if (!isValidPhoneNumber(phoneNumber, selectedCountry.code)) {
+      setError('Please enter a valid phone number');
       return;
     }
 
@@ -151,10 +285,10 @@ export default function PhoneEntryScreen() {
     setError('');
 
     try {
-      const fullPhoneNumber = `${selectedCountry.dialCode}${digits}`;
+      const fullPhoneNumber = `${selectedCountry.dialCode}${phoneNumber.replace(/\D/g, '')}`;
       console.log('📞 Sending OTP to:', fullPhoneNumber);
 
-      // CRITICAL: Real Supabase Phone Auth
+      // Supabase Phone Auth
       const { data, error: otpError } = await supabase.auth.signInWithOtp({
         phone: fullPhoneNumber,
       });
@@ -166,12 +300,12 @@ export default function PhoneEntryScreen() {
 
       console.log('✅ OTP sent successfully');
 
-      // Navigate to OTP verification page
+      // Navigate to verification
       router.push({
         pathname: '/verify-code',
         params: {
           phone: fullPhoneNumber,
-          formattedPhone: `${selectedCountry.dialCode} ${formattedNumber}`,
+          formattedPhone: `${selectedCountry.flag} ${selectedCountry.dialCode} ${formattedNumber}`,
           countryCode: selectedCountry.code,
         },
       });
@@ -183,15 +317,55 @@ export default function PhoneEntryScreen() {
     }
   };
 
-  const filteredCountries = COUNTRIES.filter(country =>
-    country.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    country.dialCode.includes(searchQuery)
+  // Render country item
+  const renderCountryItem: ListRenderItem<Country> = useCallback(({ item: country }) => (
+    <TouchableOpacity
+      style={[
+        styles.countryItem,
+        selectedCountry?.code === country.code && styles.countryItemSelected,
+      ]}
+      onPress={() => handleCountrySelect(country)}
+    >
+      <Text style={styles.countryItemFlag}>{country.flag}</Text>
+      <View style={styles.countryItemInfo}>
+        <Text style={styles.countryItemName}>{country.name}</Text>
+        <Text style={styles.countryItemCode}>{country.dialCode}</Text>
+      </View>
+      {selectedCountry?.code === country.code && (
+        <Ionicons name="checkmark-circle" size={24} color={colors.primary} />
+      )}
+    </TouchableOpacity>
+  ), [selectedCountry, handleCountrySelect, colors.primary]);
+
+  // Render section header
+  const renderSectionHeader = (title: string) => (
+    <View style={styles.sectionHeader}>
+      <Text style={styles.sectionHeaderText}>{title}</Text>
+    </View>
   );
+
+  if (initialLoading) {
+    return (
+      <View style={[styles.container, styles.centered]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={styles.loadingText}>Loading countries...</Text>
+      </View>
+    );
+  }
 
   const styles = StyleSheet.create({
     container: {
       flex: 1,
       backgroundColor: colors.background,
+    },
+    centered: {
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    loadingText: {
+      ...Typography.body,
+      marginTop: Spacing.md,
+      color: colors.textSecondary,
     },
     header: {
       flexDirection: 'row',
@@ -234,6 +408,7 @@ export default function PhoneEntryScreen() {
       ...Typography.body,
       fontWeight: '600',
       marginBottom: Spacing.sm,
+      color: colors.text,
     },
     countrySelector: {
       flexDirection: 'row',
@@ -255,6 +430,7 @@ export default function PhoneEntryScreen() {
     countryName: {
       ...Typography.body,
       fontWeight: '600',
+      color: colors.text,
     },
     dialCode: {
       ...Typography.caption,
@@ -286,6 +462,11 @@ export default function PhoneEntryScreen() {
       color: colors.text,
       paddingVertical: Platform.OS === 'ios' ? Spacing.md : Spacing.sm,
     },
+    hintText: {
+      ...Typography.caption,
+      color: colors.textSecondary,
+      marginTop: Spacing.sm,
+    },
     errorText: {
       ...Typography.caption,
       color: colors.danger,
@@ -307,7 +488,7 @@ export default function PhoneEntryScreen() {
       fontWeight: '700',
       fontSize: 18,
     },
-    // Country Picker Modal
+    // Modal Styles
     modalOverlay: {
       flex: 1,
       backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -317,7 +498,7 @@ export default function PhoneEntryScreen() {
       backgroundColor: colors.background,
       borderTopLeftRadius: BorderRadius.xl,
       borderTopRightRadius: BorderRadius.xl,
-      maxHeight: '80%',
+      maxHeight: '85%',
       paddingTop: Spacing.md,
       paddingBottom: Math.max(insets.bottom, Spacing.md),
     },
@@ -338,14 +519,37 @@ export default function PhoneEntryScreen() {
       fontSize: 20,
       marginBottom: Spacing.md,
     },
-    searchInput: {
+    searchContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
       backgroundColor: colors.surface,
       borderRadius: BorderRadius.md,
-      padding: Spacing.md,
-      ...Typography.body,
-      color: colors.text,
+      paddingHorizontal: Spacing.md,
       borderWidth: 1,
       borderColor: colors.border,
+    },
+    searchIcon: {
+      marginRight: Spacing.sm,
+    },
+    searchInput: {
+      flex: 1,
+      ...Typography.body,
+      color: colors.text,
+      paddingVertical: Spacing.md,
+    },
+    sectionHeader: {
+      backgroundColor: colors.background,
+      paddingHorizontal: Spacing.md,
+      paddingVertical: Spacing.sm,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    sectionHeaderText: {
+      ...Typography.caption,
+      fontWeight: '700',
+      color: colors.primary,
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
     },
     countryList: {
       paddingHorizontal: Spacing.md,
@@ -372,6 +576,7 @@ export default function PhoneEntryScreen() {
     countryItemName: {
       ...Typography.body,
       fontWeight: '500',
+      color: colors.text,
     },
     countryItemCode: {
       ...Typography.caption,
@@ -381,6 +586,7 @@ export default function PhoneEntryScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={24} color={colors.text} />
@@ -395,22 +601,33 @@ export default function PhoneEntryScreen() {
         </Text>
 
         <View style={styles.inputGroup}>
+          {/* Country Selector */}
           <Text style={styles.label}>Country</Text>
           <TouchableOpacity
             style={styles.countrySelector}
             onPress={() => setShowCountryPicker(true)}
           >
-            <Text style={styles.flag}>{selectedCountry.flag}</Text>
+            <Text style={styles.flag}>{selectedCountry?.flag || '🌍'}</Text>
             <View style={styles.countryInfo}>
-              <Text style={styles.countryName}>{selectedCountry.name}</Text>
-              <Text style={styles.dialCode}>{selectedCountry.dialCode}</Text>
+              <Text style={styles.countryName}>
+                {selectedCountry?.name || 'Select Country'}
+              </Text>
+              <Text style={styles.dialCode}>
+                {selectedCountry?.dialCode || ''}
+              </Text>
             </View>
             <Ionicons name="chevron-down" size={20} color={colors.textSecondary} />
           </TouchableOpacity>
 
+          {/* Phone Input */}
           <Text style={styles.label}>Phone Number</Text>
-          <View style={[styles.phoneInputContainer]}>
-            <Text style={styles.dialCodePrefix}>{selectedCountry.dialCode}</Text>
+          <View style={[
+            styles.phoneInputContainer,
+            phoneNumber.length > 0 && styles.phoneInputContainerFocused
+          ]}>
+            <Text style={styles.dialCodePrefix}>
+              {selectedCountry?.dialCode || '+1'}
+            </Text>
             <TextInput
               ref={phoneInputRef}
               style={styles.phoneInput}
@@ -419,20 +636,33 @@ export default function PhoneEntryScreen() {
               keyboardType="phone-pad"
               value={formattedNumber}
               onChangeText={(text) => {
-                const digits = text.replace(/\D/g, '');
-                setPhoneNumber(digits);
+                // Only allow digits and formatting characters
+                const cleaned = text.replace(/[^\d\s\-\(\)\+]/g, '');
+                setPhoneNumber(cleaned);
               }}
               autoFocus
+              textContentType="telephoneNumber"
+              autoComplete="tel"
             />
           </View>
 
-          {error && <Text style={styles.errorText}>{error}</Text>}
+          {error ? (
+            <Text style={styles.errorText}>{error}</Text>
+          ) : (
+            <Text style={styles.hintText}>
+              Example: {selectedCountry?.dialCode} {formatAsYouType('5551234567', selectedCountry?.code || 'US').replace(/^\+\d+\s*/, '')}
+            </Text>
+          )}
         </View>
 
+        {/* Continue Button */}
         <TouchableOpacity
-          style={[styles.continueButton, (loading || !phoneNumber) && styles.continueButtonDisabled]}
+          style={[
+            styles.continueButton,
+            (loading || !phoneNumber || !selectedCountry) && styles.continueButtonDisabled
+          ]}
           onPress={handleContinue}
-          disabled={loading || !phoneNumber}
+          disabled={loading || !phoneNumber || !selectedCountry}
         >
           {loading ? (
             <ActivityIndicator color="#FFFFFF" />
@@ -459,35 +689,49 @@ export default function PhoneEntryScreen() {
             
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Select Country</Text>
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Search countries..."
-                placeholderTextColor={colors.textSecondary}
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-              />
+              <View style={styles.searchContainer}>
+                <Ionicons 
+                  name="search" 
+                  size={20} 
+                  color={colors.textSecondary} 
+                  style={styles.searchIcon}
+                />
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Search country or code..."
+                  placeholderTextColor={colors.textSecondary}
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  autoFocus
+                />
+                {searchQuery.length > 0 && (
+                  <TouchableOpacity onPress={() => setSearchQuery('')}>
+                    <Ionicons name="close-circle" size={20} color={colors.textSecondary} />
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
 
-            <ScrollView style={styles.countryList} showsVerticalScrollIndicator={false}>
-              {filteredCountries.map((country) => (
-                <TouchableOpacity
-                  key={country.code}
-                  style={[
-                    styles.countryItem,
-                    selectedCountry.code === country.code && styles.countryItemSelected,
-                  ]}
-                  onPress={() => handleCountrySelect(country)}
-                >
-                  <Text style={styles.countryItemFlag}>{country.flag}</Text>
-                  <View style={styles.countryItemInfo}>
-                    <Text style={styles.countryItemName}>{country.name}</Text>
-                    <Text style={styles.countryItemCode}>{country.dialCode}</Text>
-                  </View>
-                  {selectedCountry.code === country.code && (
-                    <Ionicons name="checkmark" size={24} color={colors.primary} />
-                  )}
-                </TouchableOpacity>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {groupedCountries.map(([region, countries]) => (
+                <View key={region}>
+                  {renderSectionHeader(region)}
+                  {countries.map(country => (
+                    <View key={country.code}>
+                      {renderCountryItem({ item: country, index: 0, separators: { highlight: () => {}, unhighlight: () => {}, updateProps: () => {} } })}
+                    </View>
+                  ))}
+                </View>
               ))}
+              
+              {filteredCountries.length === 0 && (
+                <View style={[styles.centered, { padding: Spacing.xl }]}>
+                  <Ionicons name="search-outline" size={48} color={colors.textSecondary} />
+                  <Text style={[styles.hintText, { marginTop: Spacing.md }]}>
+                    No countries found
+                  </Text>
+                </View>
+              )}
             </ScrollView>
           </View>
         </TouchableOpacity>
