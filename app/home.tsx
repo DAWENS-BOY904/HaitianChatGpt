@@ -1634,13 +1634,3 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-Hello AI, please don’t skip any part and make the following improvements:
-
-Chat Behavior Fix
-When sending messages in the chat, the page should automatically scroll to the newest message (bottom).
-If the user scrolls up to view older messages, it should stay in that position and not jump back down.
-By default, the chat should always remain focused on the latest messages unless the user manually scrolls up.
-Upload UI Improvements
-Remove the background color from the upload section and make it look clean and simple, especially on the category page.
-Upload Modal Redesign
-Redesign the upload modal to have a more modern and user-friendly layout with better spacing and overall appearance.
