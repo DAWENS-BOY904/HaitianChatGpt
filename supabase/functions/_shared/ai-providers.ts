@@ -287,6 +287,7 @@ export async function generateImageWithOnSpaceAI(prompt: string): Promise<{
   }
 
   try {
+    // Try image generation endpoint
     const response = await fetch(`${baseUrl}/images/generations`, {
       method: 'POST',
       headers: {
@@ -294,28 +295,55 @@ export async function generateImageWithOnSpaceAI(prompt: string): Promise<{
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-3-pro-image-preview',
+        model: 'google/gemini-2.0-flash-exp',
         prompt: prompt,
         n: 1,
         size: '1024x1024',
+        response_format: 'url',
       }),
     });
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      return { error: `OnSpace AI Image error: ${errorData.error?.message || response.statusText}` };
+      const errorText = await response.text().catch(() => response.statusText);
+      console.log('[OnSpace AI Image] Error:', response.status, errorText);
+      // Try alternative endpoint
+      const resp2 = await fetch(`${baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'google/gemini-2.0-flash-exp',
+          messages: [{ role: 'user', content: `Generate an image of: ${prompt}. Return ONLY the image URL, nothing else.` }],
+          temperature: 0.7,
+          max_tokens: 200,
+        }),
+      });
+      if (!resp2.ok) return { error: 'OnSpace AI image generation unavailable' };
+      const d2 = await resp2.json();
+      const urlFromText = d2.choices?.[0]?.message?.content;
+      if (urlFromText && (urlFromText.startsWith('http') || urlFromText.startsWith('data:image'))) {
+        return { imageUrl: urlFromText.trim() };
+      }
+      return { error: 'OnSpace AI image generation unavailable' };
     }
 
     const data = await response.json();
-    const imageUrl = data.data?.[0]?.url;
+    const imageUrl = data.data?.[0]?.url || data.data?.[0]?.b64_json;
     
     if (imageUrl) {
+      // If b64_json, convert to data URL
+      if (!imageUrl.startsWith('http') && !imageUrl.startsWith('data:')) {
+        return { imageUrl: `data:image/png;base64,${imageUrl}` };
+      }
       return { imageUrl };
     }
 
     return { error: 'No image URL received from OnSpace AI' };
 
   } catch (error: any) {
+    console.log('[OnSpace AI Image] Exception:', error.message);
     return { error: error.message || 'Unknown error during OnSpace AI image generation' };
   }
 }
@@ -334,37 +362,48 @@ export async function generateImageWithGemini(prompt: string): Promise<{
   }
 
   try {
+    // Try Gemini Imagen model
     const requestBody = {
       contents: [{
         role: 'user',
-        parts: [{ text: `Generate an image: ${prompt}` }]
+        parts: [{ text: `Generate a high quality image of: ${prompt}` }]
       }],
       generationConfig: {
-        responseModalities: ["TEXT", "IMAGE"]
+        responseModalities: ['TEXT', 'IMAGE']
       }
     };
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp-image-generation:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody),
+    // Try gemini-2.0-flash-exp-image-generation first, then fallback
+    const models = [
+      'gemini-2.0-flash-exp-image-generation',
+      'gemini-2.0-flash-preview-image-generation',
+      'gemini-1.5-flash',
+    ];
+
+    for (const modelName of models) {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestBody),
+        }
+      );
+
+      if (!response.ok) {
+        console.log(`[Gemini Image] ${modelName} failed:`, response.status);
+        continue;
       }
-    );
 
-    if (!response.ok) {
-      return { error: `Gemini Image error: ${response.statusText}` };
-    }
-
-    const data = await response.json();
-    const parts = data.candidates?.[0]?.content?.parts || [];
-    const imagePart = parts.find((p: any) => p.inlineData);
-    
-    if (imagePart?.inlineData?.data) {
-      const mimeType = imagePart.inlineData.mimeType || 'image/png';
-      const dataUrl = `data:${mimeType};base64,${imagePart.inlineData.data}`;
-      return { imageUrl: dataUrl };
+      const data = await response.json();
+      const parts = data.candidates?.[0]?.content?.parts || [];
+      const imagePart = parts.find((p: any) => p.inlineData);
+      
+      if (imagePart?.inlineData?.data) {
+        const mimeType = imagePart.inlineData.mimeType || 'image/png';
+        const dataUrl = `data:${mimeType};base64,${imagePart.inlineData.data}`;
+        return { imageUrl: dataUrl };
+      }
     }
 
     return { error: 'No image data received from Gemini' };
