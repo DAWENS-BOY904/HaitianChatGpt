@@ -354,27 +354,9 @@ export function SideMenu({
     return bPinned - aPinned;
   });
 
-  // Use searchConversations from context when available
-  const { searchConversations } = useConversation();
   const filteredConversations = searchQuery.trim()
-    ? searchConversations(searchQuery)
+    ? sortedConversations.filter((c) => (c.title || '').toLowerCase().includes(searchQuery.toLowerCase()))
     : sortedConversations;
-
-  // Highlight matching text in conversation title
-  const renderConvTitle = (title: string) => {
-    if (!searchQuery.trim()) return <Text style={[styles.convTitle, { color: colors.text }]} numberOfLines={1}>{title || 'New conversation'}</Text>;
-    const lowerTitle = (title || '').toLowerCase();
-    const lowerQuery = searchQuery.toLowerCase();
-    const idx = lowerTitle.indexOf(lowerQuery);
-    if (idx === -1) return <Text style={[styles.convTitle, { color: colors.text }]} numberOfLines={1}>{title || 'New conversation'}</Text>;
-    return (
-      <Text style={[styles.convTitle, { color: colors.text }]} numberOfLines={1}>
-        {title.slice(0, idx)}
-        <Text style={{ backgroundColor: '#10A37F33', color: '#10A37F', fontWeight: '700' }}>{title.slice(idx, idx + searchQuery.length)}</Text>
-        {title.slice(idx + searchQuery.length)}
-      </Text>
-    );
-  };
 
   const getUserInitials = () => {
     if (user?.email) {
@@ -573,7 +555,16 @@ export function SideMenu({
                       {isPinned && (
                         <Ionicons name="pin" size={12} color={accentColor} />
                       )}
-                      {renderConvTitle(conv.title || 'New conversation')}
+                      <Text
+                        style={[
+                          styles.convTitle,
+                          { color: colors.text },
+                          isActive && { fontWeight: '600' },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {conv.title || 'New conversation'}
+                      </Text>
                     </View>
                     {/* No ... button — use long press only */}
                   </TouchableOpacity>

@@ -1,4 +1,4 @@
-import React, { useState, memo, useCallback, useMemo, useEffect, useRef } from 'react';
+import React, { useState, memo, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -12,7 +12,6 @@ import {
   ScrollView,
   Share,
   Platform,
-  Animated,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -61,26 +60,6 @@ interface MessageItemProps {
   isOffline?: boolean;
 }
 
-// Blinking cursor for streaming
-const BlinkingCursor = memo(function BlinkingCursor({ color }: { color: string }) {
-  const blink = useRef(new Animated.Value(1)).current;
-  useEffect(() => {
-    const anim = Animated.loop(
-      Animated.sequence([
-        Animated.timing(blink, { toValue: 0, duration: 500, useNativeDriver: true }),
-        Animated.timing(blink, { toValue: 1, duration: 500, useNativeDriver: true }),
-      ])
-    );
-    anim.start();
-    return () => anim.stop();
-  }, []);
-  return (
-    <Animated.Text style={{ opacity: blink, color, fontSize: 16, fontWeight: '300', lineHeight: 22 }}>
-      {'▋'}
-    </Animated.Text>
-  );
-});
-
 // Detect if URL is an image
 const isImageUrl = (url: string): boolean => {
   if (!url) return false;
@@ -107,6 +86,7 @@ const MarkdownTable = memo(function MarkdownTable({ tableText, colors }: { table
 
   if (rows.length < 2) return null;
 
+  // First row is header, second is separator, rest are data
   const parseRow = (row: string) =>
     row.split('|').map(c => c.trim()).filter((_, i, arr) => i > 0 && i < arr.length - 1);
 
@@ -117,6 +97,7 @@ const MarkdownTable = memo(function MarkdownTable({ tableText, colors }: { table
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator style={{ marginVertical: 8 }}>
       <View style={{ borderRadius: 10, overflow: 'hidden', borderWidth: 1, borderColor: colors.border }}>
+        {/* Header */}
         <View style={{ flexDirection: 'row', backgroundColor: colors.surface }}>
           {headerRow.map((cell, ci) => (
             <View key={ci} style={{
@@ -128,6 +109,7 @@ const MarkdownTable = memo(function MarkdownTable({ tableText, colors }: { table
             </View>
           ))}
         </View>
+        {/* Data rows */}
         {dataRows.map((row, ri) => (
           <View key={ri} style={{
             flexDirection: 'row',
@@ -151,13 +133,16 @@ const MarkdownTable = memo(function MarkdownTable({ tableText, colors }: { table
   );
 });
 
+// Extract image URLs embedded in text (AI sends image as URL in text)
 const extractInlineImages = (text: string): { text: string; images: string[] } => {
   const images: string[] = [];
+  // Match markdown image syntax: ![alt](url)
   const mdImgRegex = /!\[([^\]]*)\]\((https?:\/\/[^\)]+)\)/g;
   let cleaned = text.replace(mdImgRegex, (_, _alt, url) => {
     if (isImageUrl(url)) { images.push(url); return ''; }
     return _;
   });
+  // Match bare image URLs
   const bareUrlRegex = /(https?:\/\/[^\s]+\.(?:jpg|jpeg|png|gif|webp|bmp)(?:\?[^\s]*)?)/gi;
   cleaned = cleaned.replace(bareUrlRegex, (url) => {
     if (isImageUrl(url)) { images.push(url); return ''; }
@@ -166,6 +151,7 @@ const extractInlineImages = (text: string): { text: string; images: string[] } =
   return { text: cleaned.trim(), images: [...new Set(images)] };
 };
 
+// Split text into table blocks and plain text
 const splitTablesFromText = (text: string): Array<{ type: 'text' | 'table'; content: string }> => {
   const lines = text.split('\n');
   const result: Array<{ type: 'text' | 'table'; content: string }> = [];
@@ -208,6 +194,7 @@ const getFileIcon = (fileType?: string): keyof typeof Ionicons.glyphMap => {
   return iconMap[fileType?.toLowerCase() || ''] || iconMap.default;
 };
 
+// Detect if content has a message card
 const extractMessageCard = (content: string): { hasCard: boolean; cardContent: string; beforeCard: string } => {
   const startTag = '[MESSAGE_CARD]';
   const endTag = '[/MESSAGE_CARD]';
@@ -223,19 +210,44 @@ const extractMessageCard = (content: string): { hasCard: boolean; cardContent: s
   return { hasCard: false, cardContent: '', beforeCard: content };
 };
 
-const DownloadLinkCard = memo(function DownloadLinkCard({ label, colors }: { label: string; colors: any }) {
+// ── Project/file download link card ──
+const DownloadLinkCard = memo(function DownloadLinkCard({
+  label,
+  colors,
+}: {
+  label: string;
+  colors: any;
+}) {
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6, marginBottom: 2 }}>
-      <Text style={{ fontSize: 18 }}>{'👉'}</Text>
-      <Text style={{ fontSize: 15, color: colors.primary, textDecorationLine: 'underline', fontWeight: '500' }}>
+    <View style={{
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      marginTop: 6,
+      marginBottom: 2,
+    }}>
+      <Text style={{ fontSize: 18 }}>👉</Text>
+      <Text style={{
+        fontSize: 15,
+        color: colors.primary,
+        textDecorationLine: 'underline',
+        fontWeight: '500',
+      }}>
         {label}
       </Text>
-      <Text style={{ fontSize: 14, color: colors.primary }}>{'↗'}</Text>
+      <Text style={{ fontSize: 14, color: colors.primary }}>↗</Text>
     </View>
   );
 });
 
-const MessageCard = memo(function MessageCard({ content, colors }: { content: string; colors: any }) {
+// Styled Message Card Component
+const MessageCard = memo(function MessageCard({
+  content,
+  colors,
+}: {
+  content: string;
+  colors: any;
+}) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedContent, setEditedContent] = useState(content);
   const [copied, setCopied] = useState(false);
@@ -251,13 +263,19 @@ const MessageCard = memo(function MessageCard({ content, colors }: { content: st
     try {
       const fileName = `message_${Date.now()}.txt`;
       const fileUri = `${FileSystem.documentDirectory}${fileName}`;
-      await FileSystem.writeAsStringAsync(fileUri, editedContent, { encoding: FileSystem.EncodingType.UTF8 });
+      await FileSystem.writeAsStringAsync(fileUri, editedContent, {
+        encoding: FileSystem.EncodingType.UTF8,
+      });
       if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(fileUri, { mimeType: 'text/plain', dialogTitle: 'Save Message', UTI: 'public.plain-text' });
+        await Sharing.shareAsync(fileUri, {
+          mimeType: 'text/plain',
+          dialogTitle: 'Save Message',
+          UTI: 'public.plain-text',
+        });
       } else {
         await Share.share({ message: editedContent, title: 'Message' });
       }
-    } catch {
+    } catch (error) {
       showAlert('Error', 'Failed to download message');
     }
   };
@@ -330,6 +348,7 @@ const MessageCard = memo(function MessageCard({ content, colors }: { content: st
   );
 });
 
+// ── Parse [DOWNLOAD_CARD] from AI content ──
 function parseDownloadCard(content: string): { text: string; downloadLabel?: string } {
   const startTag = '[DOWNLOAD_CARD]';
   const endTag = '[/DOWNLOAD_CARD]';
@@ -340,46 +359,6 @@ function parseDownloadCard(content: string): { text: string; downloadLabel?: str
   const before = content.substring(0, start).trim();
   const after = content.substring(end + endTag.length).trim();
   return { text: [before, after].filter(Boolean).join('\n\n'), downloadLabel: label };
-}
-
-// ── Inline markdown renderer (bold, italic, code) ──
-function renderInlineMarkdown(text: string, baseStyle: any, colors: any): React.ReactNode {
-  // Split by bold (**text**), italic (*text*), inline code (`code`)
-  const parts: React.ReactNode[] = [];
-  const regex = /(\*\*([^*]+)\*\*|\*([^*]+)\*|`([^`]+)`)/g;
-  let lastIndex = 0;
-  let match;
-  let keyIdx = 0;
-
-  while ((match = regex.exec(text)) !== null) {
-    if (match.index > lastIndex) {
-      parts.push(<Text key={`t${keyIdx++}`}>{text.slice(lastIndex, match.index)}</Text>);
-    }
-    if (match[2]) {
-      // Bold
-      parts.push(<Text key={`b${keyIdx++}`} style={{ fontWeight: '700' }}>{match[2]}</Text>);
-    } else if (match[3]) {
-      // Italic
-      parts.push(<Text key={`i${keyIdx++}`} style={{ fontStyle: 'italic' }}>{match[3]}</Text>);
-    } else if (match[4]) {
-      // Inline code
-      parts.push(
-        <Text key={`c${keyIdx++}`} style={{
-          fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-          fontSize: 13,
-          backgroundColor: 'rgba(120,120,128,0.2)',
-          color: colors.primary,
-          paddingHorizontal: 4,
-          borderRadius: 4,
-        }}>{match[4]}</Text>
-      );
-    }
-    lastIndex = match.index + match[0].length;
-  }
-  if (lastIndex < text.length) {
-    parts.push(<Text key={`t${keyIdx++}`}>{text.slice(lastIndex)}</Text>);
-  }
-  return parts.length > 0 ? parts : text;
 }
 
 export const MessageItem = memo(function MessageItem({
@@ -518,13 +497,14 @@ export const MessageItem = memo(function MessageItem({
 
   const { sources, analysisEntries, downloadLabel, hasCard, cardContent, beforeCard } = parsed;
 
+  // Extract inline images from AI text responses — must be before contentParts
   const { inlineImages, cleanedBeforeCard } = useMemo(() => {
     if (message.role !== 'assistant') return { inlineImages: [], cleanedBeforeCard: beforeCard };
     const { text, images } = extractInlineImages(beforeCard);
     return { inlineImages: images, cleanedBeforeCard: text };
   }, [message.role, beforeCard]);
 
-  // Parse content into text/code parts — uses cleanedBeforeCard
+  // Parse content into text/code parts
   const contentParts = useMemo(() => {
     const textToProcess = cleanedBeforeCard;
     const parts: Array<{ type: 'text' | 'code'; content: string; language?: string }> = [];
@@ -542,8 +522,9 @@ export const MessageItem = memo(function MessageItem({
       parts.push({ type: 'text', content: textToProcess.substring(lastIndex) });
     }
     return parts.length > 0 ? parts : [{ type: 'text' as const, content: textToProcess }];
-  }, [cleanedBeforeCard]);
+  }, [beforeCard]);
 
+  // Parse text with links
   const parseTextWithLinks = useCallback((text: string) => {
     const urlRegex = /(https?:\/\/[^\s]+)/g;
     const parts: any[] = [];
@@ -566,6 +547,8 @@ export const MessageItem = memo(function MessageItem({
     () => Boolean(message.image_url && isImageUrl(message.image_url)),
     [message.image_url]
   );
+
+
 
   const shouldStreamPart = useCallback(
     (isLastPart: boolean) => streaming && isGenerating && message.role === 'assistant' && isLastPart,
@@ -717,9 +700,6 @@ export const MessageItem = memo(function MessageItem({
     },
   }), [colors, message.role]);
 
-  // Determine if we're currently streaming THIS message
-  const isStreaming = streaming && isGenerating && message.role === 'assistant';
-
   return (
     <>
       <Pressable
@@ -729,7 +709,7 @@ export const MessageItem = memo(function MessageItem({
           message.role === 'user' ? styles.userMessage : styles.assistantMessage,
         ]}
       >
-        {/* User uploaded image */}
+        {/* User uploaded image — clean, no background */}
         {message.role === 'user' && message.image_url && (
           <TouchableOpacity
             onPress={() => handleImagePress(message.image_url!)}
@@ -791,62 +771,72 @@ export const MessageItem = memo(function MessageItem({
           </TouchableOpacity>
         )}
 
-        {/* Message Content — render directly from message.content (real-time SSE updates) */}
+        {/* Message Content */}
         {contentParts.map((part, index) => {
           const isLastPart = index === contentParts.length - 1 && !hasCard;
           const shouldStream = shouldStreamPart(isLastPart);
 
           if (part.type === 'code') {
             return (
-              <View key={`code-${index}`}>
-                <CodeBlock
-                  code={part.content}
-                  language={part.language || 'code'}
-                  streaming={shouldStream}
-                  speed={streamingSpeed}
-                />
-              </View>
+              <CodeBlock
+                key={`code-${index}`}
+                code={part.content}
+                language={part.language || 'code'}
+                streaming={shouldStream}
+                speed={streamingSpeed}
+              />
             );
           }
 
+          // Split text into table blocks and plain text segments
           const textSegments = splitTablesFromText(part.content);
           return (
             <View key={`text-${index}`}>
-              {textSegments.map((seg, si) => {
-                if (seg.type === 'table') {
-                  return <MarkdownTable key={`table-${si}`} tableText={seg.content} colors={colors} />;
-                }
-                const textParts = parseTextWithLinks(seg.content);
-                return (
-                  <Text
-                    key={`seg-${si}`}
-                    selectable
-                    style={[
-                      styles.messageText,
-                      message.role === 'user' ? styles.userMessageText : styles.assistantMessageText,
-                    ]}
-                  >
-                    {textParts.map((textPart, textIndex) => {
-                      if (textPart.type === 'link') {
-                        return (
-                          <Text
-                            key={`link-${textIndex}`}
-                            style={styles.linkText}
-                            onPress={() => handleLinkPress(textPart.url)}
-                          >
-                            {textPart.content}
-                          </Text>
-                        );
-                      }
-                      return <Text key={`txt-${textIndex}`}>{textPart.content}</Text>;
-                    })}
-                    {/* Blinking cursor on last part while streaming */}
-                    {isStreaming && isLastPart && si === textSegments.length - 1 ? (
-                      <BlinkingCursor color={colors.textSecondary} />
-                    ) : null}
-                  </Text>
-                );
-              })}
+              {shouldStream ? (
+                <StreamingText
+                  text={part.content}
+                  speed={streamingSpeed}
+                  variance={0.2}
+                  chunkSize={4}
+                  cursor={true}
+                  style={[
+                    styles.messageText,
+                    message.role === 'user' ? styles.userMessageText : styles.assistantMessageText,
+                  ]}
+                  onChunkRendered={onChunkRendered}
+                />
+              ) : (
+                textSegments.map((seg, si) => {
+                  if (seg.type === 'table') {
+                    return <MarkdownTable key={`table-${si}`} tableText={seg.content} colors={colors} />;
+                  }
+                  const textParts = parseTextWithLinks(seg.content);
+                  return (
+                    <Text
+                      key={`seg-${si}`}
+                      style={[
+                        styles.messageText,
+                        message.role === 'user' ? styles.userMessageText : styles.assistantMessageText,
+                      ]}
+                    >
+                      {textParts.map((textPart, textIndex) => {
+                        if (textPart.type === 'link') {
+                          return (
+                            <Text
+                              key={`link-${textIndex}`}
+                              style={styles.linkText}
+                              onPress={() => handleLinkPress(textPart.url)}
+                            >
+                              {textPart.content}
+                            </Text>
+                          );
+                        }
+                        return <Text key={`txt-${textIndex}`}>{textPart.content}</Text>;
+                      })}
+                    </Text>
+                  );
+                })
+              )}
             </View>
           );
         })}
@@ -874,7 +864,7 @@ export const MessageItem = memo(function MessageItem({
           </TouchableOpacity>
         ))}
 
-        {/* Download card */}
+        {/* Download card (👉 Download your project) */}
         {downloadLabel && message.role === 'assistant' && (
           <DownloadLinkCard label={downloadLabel} colors={colors} />
         )}
@@ -896,7 +886,20 @@ export const MessageItem = memo(function MessageItem({
           </Text>
         )}
 
-        {/* Action Buttons — assistant only, hide while streaming */}
+        {/* Generating Indicator */}
+        {message.role === 'assistant' && isGenerating && (
+          <View style={styles.generatingIndicator}>
+            <ActivityIndicator size="small" color={colors.textSecondary} />
+            <Text style={styles.generatingText}>Thinking...</Text>
+            {onCancel && (
+              <TouchableOpacity style={styles.cancelButton} onPress={onCancel}>
+                <Text style={styles.cancelButtonText}>Stop</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+
+        {/* Action Buttons — assistant only */}
         {message.role === 'assistant' && !isGenerating && (
           <View style={styles.actionsContainer}>
             <TouchableOpacity style={styles.actionButton} onPress={handleCopy}>
@@ -925,6 +928,7 @@ export const MessageItem = memo(function MessageItem({
               />
             </TouchableOpacity>
 
+            {/* Terminal icon — opens analysis modal */}
             {analysisEntries.length > 0 && (
               <TerminalButton onPress={() => setAnalysisVisible(true)} />
             )}
