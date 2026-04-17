@@ -344,15 +344,6 @@ export default function PhoneEntryScreen() {
     </View>
   );
 
-  if (initialLoading) {
-    return (
-      <View style={[styles.container, styles.centered]}>
-        <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={styles.loadingText}>Loading countries...</Text>
-      </View>
-    );
-  }
-
   const styles = StyleSheet.create({
     container: {
       flex: 1,
@@ -584,6 +575,15 @@ export default function PhoneEntryScreen() {
     },
   });
 
+  if (initialLoading) {
+    return (
+      <View style={[styles.container, styles.centered]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={styles.loadingText}>Loading countries...</Text>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -739,18 +739,3 @@ export default function PhoneEntryScreen() {
     </View>
   );
 }
-if you see this make change fix this error:Cannot access 'styles' before initialization
-2026-04-16 21:42:23
-Dismiss
-Fix now
-Type:
-Uncaught Error
-File:
-app/phone-entry.tsx(349:21)
-Cannot access 'styles' before initialization
-     at PhoneEntryScreen (app/phone-entry.tsx:349:21).
-     at performWorkOnRoot (node_modules/.pnpm/react-dom@19.0.0_react@19.0.0/node_modules/react-dom/cjs/react-dom-client.development.js:14384:44)
-     at performSyncWorkOnRoot (node_modules/.pnpm/react-dom@19.0.0_react@19.0.0/node_modules/react-dom/cjs/react-dom-client.development.js:15946:7)
-     at flushSyncWorkAcrossRoots_impl (node_modules/.pnpm/react-dom@19.0.0_react@19.0.0/node_modules/react-dom/cjs/react-dom-client.development.js:15807:21)
-     at processRootScheduleInMicrotask (node_modules/.pnpm/react-dom@19.0.0_react@19.0.0/node_modules/react-dom/cjs/react-dom-client.development.js:15841:7)
-     at scheduleMicrotask$argument_0 (node_modules/.pnpm/react-dom@19.0.0_react@19.0.0/node_modules/react-dom/cjs/react.
