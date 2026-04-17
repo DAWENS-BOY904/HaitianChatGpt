@@ -63,8 +63,7 @@ interface ConversationContextType {
   checkAccountStatus: () => Promise<void>;
   createConversation: () => Promise<string | null>;
   selectConversation: (id: string) => Promise<void>;
-  sendMessage: (content: string, imageUrl?: string, base64Image?: string, isImageGeneration?: boolean, aiModel?: string, abortSignal?: AbortSignal) => Promise<void>;
-  cancelSendMessage: () => void;
+  sendMessage: (content: string, imageUrl?: string, base64Image?: string, isImageGeneration?: boolean, aiModel?: string) => Promise<void>;
   sendAudioMessage: (audioBase64: string, duration: number, transcription?: string) => Promise<void>;
   updateMessage: (messageId: string, newContent: string) => Promise<void>;
   updateMessageAndRegenerate: (messageId: string, newContent: string, aiModel?: string) => Promise<void>;
@@ -488,294 +487,292 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
     setMessages([]);
   };
 
-  // ── AbortController ref for cancellation ──
-  const abortControllerRef = useRef<AbortController | null>(null);
+ // ==================== FIXED SEND MESSAGE ====================
+const sendMessage = async (
+  content: string, 
+  imageUrl?: string, 
+  base64Image?: string,
+  isImageGeneration: boolean = false, 
+  aiModel?: string
+) => {
+  if (!user) return;
+  if (accountStatus.isSuspended) {
+    throw new Error(`Account suspended: ${accountStatus.reason || 'Contact support'}`);
+  }
 
-  // expose a cancel method consumed by home.tsx
-  const cancelSendMessage = useCallback(() => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-    }
-    setStreamingMessageId(null);
-  }, []);
+  const contentCheck = await checkContentViolation(content);
+  if (contentCheck.isViolation) {
+    await handleContentViolation('TEXT_CONTENT_VIOLATION', contentCheck.severity || 'medium', contentCheck.reason);
+    throw new Error('Message blocked: Content violates usage policies.');
+  }
 
-  // ==================== SEND MESSAGE WITH REAL SSE STREAMING ====================
-  const sendMessage = async (
-    content: string,
-    imageUrl?: string,
-    base64Image?: string,
-    isImageGeneration: boolean = false,
-    aiModel?: string,
-    abortSignal?: AbortSignal,
-  ) => {
-    if (!user) return;
-    if (accountStatus.isSuspended) {
-      throw new Error(`Account suspended: ${accountStatus.reason || 'Contact support'}`);
-    }
-
-    const contentCheck = await checkContentViolation(content);
-    if (contentCheck.isViolation) {
-      await handleContentViolation('TEXT_CONTENT_VIOLATION', contentCheck.severity || 'medium', contentCheck.reason);
-      throw new Error('Message blocked: Content violates usage policies.');
-    }
-
-    // TEMPORARY MODE: use in-memory only, no DB persistence
-    if (temporaryMode) {
-      const tempUserId = `temp-user-${Date.now()}`;
-      const tempAiId = `temp-ai-${Date.now() + 1}`;
-      const tempUserMsg: Message = { id: tempUserId, role: 'user', content, image_url: imageUrl, created_at: new Date().toISOString() };
-      setMessages(prev => [...prev, tempUserMsg]);
-      setStreamingMessageId(tempAiId);
-      try {
-        let tempConvId = currentConversation?.id;
-        if (!tempConvId) {
-          const { data, error } = await supabase.from('conversations').insert([{ user_id: user.id, title: 'Temporary Chat', is_temporary: true }]).select().single();
-          if (!error && data) {
-            tempConvId = data.id;
-            setCurrentConversation({ id: data.id, title: 'Temporary Chat', createdAt: data.created_at, updatedAt: data.updated_at });
-          } else {
-            tempConvId = 'temp-' + Date.now();
-          }
+  // TEMPORARY MODE: use in-memory only, no DB persistence
+  if (temporaryMode) {
+    const tempUserId = `temp-user-${Date.now()}`;
+    const tempAiId = `temp-ai-${Date.now() + 1}`;
+    const tempUserMsg: Message = { id: tempUserId, role: 'user', content, image_url: imageUrl, created_at: new Date().toISOString() };
+    setMessages(prev => [...prev, tempUserMsg]);
+    setStreamingMessageId(tempAiId);
+    try {
+      // Need a temp conversationId for the backend
+      let tempConvId = currentConversation?.id;
+      if (!tempConvId) {
+        // Create a real conversation in DB just to call the edge function, but don't expose it in list
+        const { data, error } = await supabase.from('conversations').insert([{ user_id: user.id, title: 'Temporary Chat', is_temporary: true }]).select().single();
+        if (!error && data) {
+          tempConvId = data.id;
+          setCurrentConversation({ id: data.id, title: 'Temporary Chat', createdAt: data.created_at, updatedAt: data.updated_at });
+        } else {
+          tempConvId = 'temp-' + Date.now();
         }
-        // Use raw fetch for SSE streaming
-        const { data: { session } } = await supabase.auth.getSession();
-        const token = session?.access_token;
-        const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
-        const ctrl = new AbortController();
-        abortControllerRef.current = ctrl;
-        const signal = abortSignal || ctrl.signal;
-        const resp = await fetch(`${supabaseUrl}/functions/v1/chat`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ messages: [{ role: 'user', content }], conversationId: tempConvId, aiModel: aiModel || 'onspace-ai' }),
-          signal,
+      }
+      const requestBody: any = { messages: [{ role: 'user', content }], conversationId: tempConvId, aiModel: aiModel || 'onspace-ai' };
+      if (base64Image) requestBody.base64Image = base64Image;
+      const { data: aiResponse, error: aiError } = await supabase.functions.invoke('chat', { body: requestBody });
+      if (aiError) throw aiError;
+      let cleanMessage = aiResponse.message || 'Response generated';
+      cleanMessage = cleanMessage.replace(/\[Using [^\]]+\]\s*/gi, '').replace(/\[Model:[^\]]+\]\s*/gi, '').trim();
+      const tempAiMsg: Message = { id: tempAiId, role: 'assistant', content: cleanMessage, image_url: aiResponse.imageUrl || undefined, created_at: new Date().toISOString() };
+      setMessages(prev => [...prev, tempAiMsg]);
+    } catch (e: any) {
+      setMessages(prev => prev.filter(m => m.id !== tempUserId));
+      throw e;
+    } finally {
+      setTimeout(() => setStreamingMessageId(null), 2000);
+    }
+    return;
+  }
+
+  let conversationId = currentConversation?.id;
+  if (!conversationId) {
+    conversationId = await createConversation();
+    if (!conversationId) throw new Error('Failed to create conversation');
+  }
+
+  const userMessageId = `temp-user-${Date.now()}`;
+  const aiMessageId = `temp-ai-${Date.now() + 1}`;
+
+  // CRITICAL FIX: Always upload image to storage first
+  let finalImageUrl = imageUrl;
+  
+  if (base64Image) {
+    try {
+      const fileName = `${Date.now()}.jpg`;
+      const filePath = `${user.id}/${conversationId}/${fileName}`;
+      
+      // Convert base64 to Uint8Array for upload
+      const binaryStr = atob(base64Image);
+      const bytes = new Uint8Array(binaryStr.length);
+      for (let i = 0; i < binaryStr.length; i++) {
+        bytes[i] = binaryStr.charCodeAt(i);
+      }
+      
+      const { error: uploadError } = await supabase.storage
+        .from('chat-images')
+        .upload(filePath, bytes, {
+          contentType: 'image/jpeg',
+          upsert: true,
         });
-        let streamedText = '';
-        let finalImageUrl2: string | undefined;
-        const reader = resp.body?.getReader();
-        if (reader) {
-          const dec = new TextDecoder();
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            const chunk = dec.decode(value);
-            const lines = chunk.split('\n');
-            for (const line of lines) {
-              if (!line.startsWith('data:')) continue;
-              try {
-                const parsed = JSON.parse(line.slice(5).trim());
-                if (parsed.token) {
-                  streamedText += parsed.token;
-                  setMessages(prev => prev.map(m => m.id === tempAiId ? { ...m, content: streamedText } : m));
-                } else if (parsed.done) {
-                  finalImageUrl2 = parsed.imageUrl;
-                }
-              } catch {}
-            }
-          }
-        } else {
-          const json = await resp.json();
-          streamedText = json.message || '';
-          finalImageUrl2 = json.imageUrl;
-        }
-        const tempAiMsg: Message = { id: tempAiId, role: 'assistant', content: streamedText || 'Response generated', image_url: finalImageUrl2, created_at: new Date().toISOString() };
-        setMessages(prev => [...prev.filter(m => m.id !== tempAiId), tempAiMsg]);
-      } catch (e: any) {
-        if (e?.name !== 'AbortError') {
-          setMessages(prev => prev.filter(m => m.id !== tempUserId));
-          throw e;
-        }
-      } finally {
-        setStreamingMessageId(null);
-        abortControllerRef.current = null;
+
+      if (!uploadError) {
+        const { data: urlData } = supabase.storage
+          .from('chat-images')
+          .getPublicUrl(filePath);
+        finalImageUrl = urlData.publicUrl;
+        console.log('📸 Image uploaded to storage:', finalImageUrl);
+      } else {
+        console.error('Image upload failed:', uploadError);
       }
-      return;
+    } catch (uploadErr) {
+      console.error('Image upload error:', uploadErr);
     }
+  }
 
-    let conversationId = currentConversation?.id;
-    if (!conversationId) {
-      conversationId = await createConversation();
-      if (!conversationId) throw new Error('Failed to create conversation');
-    }
+  const tempUserMessage: Message = {
+    id: userMessageId,
+    role: 'user',
+    content,
+    image_url: finalImageUrl,
+    created_at: new Date().toISOString(),
+  };
 
-    const userMessageId = `temp-user-${Date.now()}`;
-    const aiMessageId = `temp-ai-${Date.now() + 1}`;
+  // CRITICAL: Add user message AND set streaming immediately
+  setMessages(prev => [...prev, tempUserMessage]);
 
-    // Upload image to storage first
-    let finalImageUrl = imageUrl;
+  try {
+    // CRITICAL FIX: Always send plain string content — never arrays
+    const contextMessages = [...messages, tempUserMessage].map(m => ({
+      role: m.role,
+      content: typeof m.content === 'string'
+        ? m.content
+        : Array.isArray(m.content)
+          ? (m.content as any[]).map((c: any) => (c && (c.text || c.content)) || '').join(' ')
+          : String(m.content || ''),
+      ...(m.image_url ? { image_url: m.image_url } : {}),
+    }));
+
+    const requestBody: any = {
+      messages: contextMessages,
+      conversationId: conversationId,
+      aiModel: aiModel || 'google-gemini',
+      userImageUrl: finalImageUrl, // CRITICAL: Send image URL to backend
+    };
+
     if (base64Image) {
-      try {
-        const fileName = `${Date.now()}.jpg`;
-        const filePath = `${user.id}/${conversationId}/${fileName}`;
-        const binaryStr = atob(base64Image);
-        const bytes = new Uint8Array(binaryStr.length);
-        for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
-        const { error: uploadError } = await supabase.storage.from('chat-images').upload(filePath, bytes, { contentType: 'image/jpeg', upsert: true });
-        if (!uploadError) {
-          const { data: urlData } = supabase.storage.from('chat-images').getPublicUrl(filePath);
-          finalImageUrl = urlData.publicUrl;
-          console.log('📸 Image uploaded:', finalImageUrl);
-        } else {
-          console.error('Image upload failed:', uploadError);
-        }
-      } catch (uploadErr) {
-        console.error('Image upload error:', uploadErr);
-      }
+      requestBody.base64Image = base64Image;
+      console.log('📸 Sending with base64 image, length:', base64Image.length);
+    }
+    if (isImageGeneration && base64Image) requestBody.isImageGeneration = true;
+
+    console.log('📤 Sending message with model:', aiModel || 'google-gemini');
+
+    const { data: aiResponse, error: aiError } = await supabase.functions.invoke('chat', {
+      body: requestBody,
+    });
+
+    if (aiError) throw aiError;
+
+    // Clean message
+    let cleanMessage = aiResponse.message || 'Response generated';
+    cleanMessage = cleanMessage.replace(/\[Using [^\]]+\]\s*/gi, '');
+    cleanMessage = cleanMessage.replace(/\[Model:[^\]]+\]\s*/gi, '');
+    cleanMessage = cleanMessage.replace(/\[Fallback:[^\]]+\]\s*/gi, '');
+    cleanMessage = cleanMessage.replace(/\[.*?unavailable.*?\]\s*/gi, '');
+    cleanMessage = cleanMessage.replace(/google-gemini unavailable/gi, '');
+    cleanMessage = cleanMessage.replace(/groq-llama/gi, '');
+    cleanMessage = cleanMessage.replace(/claude unavailable/gi, '');
+    cleanMessage = cleanMessage.replace(/openai unavailable/gi, '');
+    cleanMessage = cleanMessage.replace(/gemini unavailable/gi, '');
+    cleanMessage = cleanMessage.replace(/using [a-z-]+ -/gi, '');
+    cleanMessage = cleanMessage.replace(/\(fallback\)/gi, '');
+    cleanMessage = cleanMessage.trim();
+
+    if (cleanMessage.match(/\[Using|unavailable|fallback|groq|claude/i)) {
+      const sentences = cleanMessage.split(/\n\n/);
+      cleanMessage = sentences.find(s => !s.match(/\[Using|unavailable|fallback|groq|claude/i)) || cleanMessage;
     }
 
-    const tempUserMessage: Message = { id: userMessageId, role: 'user', content, image_url: finalImageUrl, created_at: new Date().toISOString() };
-    // Add placeholder AI message immediately for streaming
-    const tempAIMessage: Message = { id: aiMessageId, role: 'assistant', content: '', created_at: new Date().toISOString() };
-    setMessages(prev => [...prev, tempUserMessage, tempAIMessage]);
+    const tempAIMessage: Message = {
+      id: aiMessageId,
+      role: 'assistant',
+      content: cleanMessage,
+      image_url: aiResponse.imageUrl || undefined,
+      file_url: aiResponse.fileUrl || undefined,
+      file_name: aiResponse.fileName || undefined,
+      file_type: aiResponse.fileType || undefined,
+      created_at: new Date().toISOString(),
+    };
+
+    // CRITICAL FIX: Set streaming ID to enable animation
     setStreamingMessageId(aiMessageId);
 
-    // Create fresh AbortController
-    const ctrl = new AbortController();
-    abortControllerRef.current = ctrl;
-    const signal = abortSignal || ctrl.signal;
+    // CRITICAL FIX: Save user message IMMEDIATELY after creation (before AI response)
+    const { data: savedUserMessage, error: saveUserError } = await supabase
+      .from('messages')
+      .insert({
+        conversation_id: conversationId,
+        role: 'user',
+        content,
+        image_url: finalImageUrl || null,
+      })
+      .select()
+      .single();
 
-    try {
-      const contextMessages = [...messages, tempUserMessage].map(m => ({
-        role: m.role,
-        content: typeof m.content === 'string' ? m.content : String(m.content || ''),
-        ...(m.image_url ? { image_url: m.image_url } : {}),
-      }));
-
-      const requestBody: any = {
-        messages: contextMessages,
-        conversationId,
-        aiModel: aiModel || 'google-gemini',
-        userImageUrl: finalImageUrl,
-      };
-      if (base64Image) requestBody.base64Image = base64Image;
-
-      // ── REAL SSE STREAMING via raw fetch ──
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
-
-      const resp = await fetch(`${supabaseUrl}/functions/v1/chat`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(requestBody),
-        signal,
-      });
-
-      if (!resp.ok) {
-        throw new Error(`Chat function error: ${resp.status}`);
-      }
-
-      let streamedContent = '';
-      let finalAiImageUrl: string | undefined;
-      let thinkingMode = 'thinking';
-
-      const reader = resp.body?.getReader();
-      if (reader) {
-        const dec = new TextDecoder();
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          if (signal.aborted) break;
-          const chunk = dec.decode(value);
-          const lines = chunk.split('\n');
-          for (const line of lines) {
-            if (!line.startsWith('data:')) continue;
-            try {
-              const jsonStr = line.slice(5).trim();
-              if (!jsonStr) continue;
-              const parsed = JSON.parse(jsonStr);
-              if (parsed.token !== undefined) {
-                streamedContent += parsed.token;
-                // Update the streaming message in real time
-                setMessages(prev =>
-                  prev.map(m =>
-                    m.id === aiMessageId ? { ...m, content: streamedContent } : m
-                  )
-                );
-              } else if (parsed.done) {
-                finalAiImageUrl = parsed.imageUrl;
-                thinkingMode = parsed.thinkingMode || 'thinking';
-              }
-            } catch { /* ignore partial JSON */ }
-          }
-        }
-      } else {
-        // Fallback: non-streaming response
-        const json = await resp.json();
-        streamedContent = json.message || '';
-        finalAiImageUrl = json.imageUrl;
-        setMessages(prev => prev.map(m => m.id === aiMessageId ? { ...m, content: streamedContent } : m));
-      }
-
-      if (signal.aborted) {
-        // Cleanup aborted state
-        setMessages(prev => prev.filter(m => m.id !== aiMessageId && m.id !== userMessageId));
-        setStreamingMessageId(null);
-        abortControllerRef.current = null;
-        return;
-      }
-
-      // Save user message to DB
-      const { data: savedUserMessage } = await supabase
-        .from('messages')
-        .insert({ conversation_id: conversationId, role: 'user', content, image_url: finalImageUrl || null })
-        .select().single();
-      if (savedUserMessage) {
-        setMessages(prev => prev.map(m => m.id === userMessageId ? { ...savedUserMessage } : m));
-      }
-
-      // Save AI message to DB
-      const { data: savedAIMessage } = await supabase
-        .from('messages')
-        .insert({
-          conversation_id: conversationId,
-          role: 'assistant',
-          content: streamedContent,
-          image_url: finalAiImageUrl || null,
-        })
-        .select().single();
-      if (savedAIMessage) {
-        setMessages(prev => prev.map(m => m.id === aiMessageId ? { ...savedAIMessage } : m));
-      }
-
-      // Update conversation metadata
-      if (messages.length === 0) {
-        let title = content.slice(0, 50);
-        if (finalAiImageUrl) title = content.includes('logo') ? '🎨 Logo Design' : '🖼️ Image Generation';
-        else if (content.length > 50) title = content.slice(0, 47) + '...';
-        await updateConversationTitle(conversationId, title);
-        const newConv: Conversation = { id: conversationId, title, createdAt: currentConversation?.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() };
-        setConversations(prev => [newConv, ...prev]);
-      } else {
-        await supabase.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id', conversationId);
-        setConversations(prev => {
-          const updated = prev.map(c => c.id === conversationId ? { ...c, updatedAt: new Date().toISOString() } : c);
-          const current = updated.find(c => c.id === conversationId);
-          const others = updated.filter(c => c.id !== conversationId);
-          return current ? [current, ...others] : updated;
-        });
-      }
-
-    } catch (error: any) {
-      if (error?.name === 'AbortError') {
-        // User stopped generation — remove placeholder messages
-        setMessages(prev => prev.filter(m => m.id !== aiMessageId));
-      } else {
-        setMessages(prev => prev.filter(m => m.id !== userMessageId && !m.id.startsWith('temp-ai-')));
-        if (error.message?.includes('violation') || error.message?.includes('suspended')) {
-          await handleContentViolation('AI_RESPONSE_VIOLATION', 'high', error.message);
-        }
-        throw error;
-      }
-    } finally {
-      setStreamingMessageId(null);
-      abortControllerRef.current = null;
+    if (saveUserError) {
+      console.error('Failed to save user message:', saveUserError);
+    } else if (savedUserMessage) {
+      // CRITICAL: Replace temp message with saved message immediately
+      setMessages(prev => prev.map(m => 
+        m.id === userMessageId ? { ...savedUserMessage } : m
+      ));
     }
-  };
+
+    // CRITICAL FIX: Save AI message to database
+    const { data: savedAIMessage, error: saveAIError } = await supabase
+      .from('messages')
+      .insert({
+        conversation_id: conversationId,
+        role: 'assistant',
+        content: cleanMessage,
+        image_url: aiResponse.imageUrl || undefined,
+        file_url: aiResponse.fileUrl || undefined,
+        file_name: aiResponse.fileName || undefined,
+        file_type: aiResponse.fileType || undefined,
+      })
+      .select()
+      .single();
+
+    if (saveAIError) {
+      console.error('Failed to save AI message:', saveAIError);
+    }
+
+    // Update messages - Replace ONLY temp AI messages
+    setMessages(prev => {
+      // Filter out ONLY temp AI messages (keep user messages including saved one)
+      const withoutTempAI = prev.filter(m => 
+        m.id !== aiMessageId
+      );
+      
+      // Add final AI message
+      const finalAIMessage = savedAIMessage || tempAIMessage;
+      
+      return [...withoutTempAI, finalAIMessage];
+    });
+
+    // Update title if first message
+    if (messages.length === 0) {
+      let title = content.slice(0, 50);
+      if (aiResponse.imageUrl) {
+        title = content.includes('logo') ? '🎨 Logo Design' : '🖼️ Image Generation';
+      } else if (aiResponse.fileName) {
+        title = `📄 File: ${aiResponse.fileName}`;
+      } else if (content.length > 50) {
+        title = content.slice(0, 47) + '...';
+      }
+      
+      await updateConversationTitle(conversationId, title);
+      
+      const newConv: Conversation = {
+        id: conversationId,
+        title: title,
+        createdAt: currentConversation?.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      setConversations(prev => [newConv, ...prev]);
+    } else {
+      await supabase
+        .from('conversations')
+        .update({ updated_at: new Date().toISOString() })
+        .eq('id', conversationId);
+      
+      setConversations(prev => {
+        const updated = prev.map(c => 
+          c.id === conversationId ? { ...c, updatedAt: new Date().toISOString() } : c
+        );
+        const current = updated.find(c => c.id === conversationId);
+        const others = updated.filter(c => c.id !== conversationId);
+        return current ? [current, ...others] : updated;
+      });
+    }
+
+    // CRITICAL FIX: Clear streaming ID after animation completes
+    setTimeout(() => {
+      setStreamingMessageId(null);
+    }, 2000);
+
+  } catch (error: any) {
+    // CRITICAL FIX: Sèlman retire mesaj temp yo, pa tout mesaj yo
+    setMessages(prev => prev.filter(m => 
+      m.id !== userMessageId && 
+      !m.id.startsWith('temp-ai-')
+    ));
+    
+    if (error.message?.includes('violation') || error.message?.includes('suspended')) {
+      await handleContentViolation('AI_RESPONSE_VIOLATION', 'high', error.message);
+    }
+    throw error;
+  }
+};
 
   const sendAudioMessage = async (audioBase64: string, duration: number, transcription?: string): Promise<void> => {
     if (!user) return;
@@ -985,7 +982,6 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
       createConversation,
       selectConversation,
       sendMessage,
-      cancelSendMessage,
       sendAudioMessage,
       updateMessage,
       updateMessageAndRegenerate,

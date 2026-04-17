@@ -783,7 +783,7 @@ export const MessageItem = memo(function MessageItem({
                 code={part.content}
                 language={part.language || 'code'}
                 streaming={shouldStream}
-                speed={shouldStream ? 16 : 0}
+                speed={streamingSpeed}
               />
             );
           }
