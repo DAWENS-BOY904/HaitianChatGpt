@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,16 +7,12 @@ import {
   ScrollView,
   Switch,
   Platform,
-  Modal,
-  TextInput,
-  ActivityIndicator,
-  Animated,
-  Pressable,
-  Linking,
+  Image,
   Alert,
+  Linking,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Image } from 'expo-image';
 import { useTheme } from '../hooks/useTheme';
 import { useSettings } from '../hooks/useSettings';
 import { useSubscription } from '../hooks/useSubscription';
@@ -24,8 +20,16 @@ import { useAuth, useAlert } from '@/template';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getSupabaseClient } from '@/template';
-import * as ImagePicker from 'expo-image-picker';
 import Constants from 'expo-constants';
+
+const APP_STORE_ID = 'YOUR_APP_STORE_ID';
+const APP_STORE_LINK = `https://apps.apple.com/app/id${APP_STORE_ID}`;
+const ITUNES_LOOKUP_URL = `https://itunes.apple.com/lookup?id=${APP_STORE_ID}`;
+
+const getCurrentVersion = (): string => {
+  const version = Constants.expoConfig?.version || Constants.manifest?.version;
+  return version || '1.0.0';
+};
 
 export default function SettingsScreen() {
   const { colors, isDark } = useTheme();
@@ -40,28 +44,27 @@ export default function SettingsScreen() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [profilePhoto, setProfilePhoto] = useState('');
   const [username, setUsername] = useState('');
-  const [fullName, setFullName] = useState('');
-  const [editModalVisible, setEditModalVisible] = useState(false);
-  const [editName, setEditName] = useState('');
-  const [editUsername, setEditUsername] = useState('');
-  const [editPhoto, setEditPhoto] = useState('');
-  const [savingProfile, setSavingProfile] = useState(false);
-  const [usernameLastChanged, setUsernameLastChanged] = useState<string | null>(null);
-  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [currentVersion, setCurrentVersion] = useState('1.0.0');
+  const [latestVersion, setLatestVersion] = useState(null);
+  const [isCheckingVersion, setIsCheckingVersion] = useState(false);
 
-  const currentVersion = Constants.expoConfig?.version || '1.0.0';
-
-  const bg = '#000000';
-  const cardBg = isDark ? '#1C1C1E' : '#2C2C2E';
-  const dividerColor = 'rgba(255,255,255,0.08)';
-  const primaryText = '#FFFFFF';
-  const secondaryText = '#8E8E93';
-  const sectionLabelColor = '#8E8E93';
-  const switchTrackFalse = '#3A3A3C';
+  // ── Theme-aware color tokens ──
+  const bg = isDark ? '#000000' : '#F2F2F7';
+  const modalBg = isDark ? '#1C1C1E' : '#FFFFFF';
+  const cardBg = isDark ? '#2C2C2E' : '#F9F9F9';
+  const dividerColor = isDark ? '#3A3A3C' : '#E0E0E5';
+  const primaryText = isDark ? '#FFFFFF' : '#000000';
+  const secondaryText = isDark ? '#8E8E93' : '#6C6C70';
+  const iconColor = isDark ? '#FFFFFF' : '#1C1C1E';
+  const closeButtonBg = isDark ? '#2C2C2E' : '#E5E5EA';
+  const editButtonBorder = isDark ? '#3A3A3C' : '#C7C7CC';
+  const appearanceChipBg = isDark ? '#3A3A3C' : '#E5E5EA';
+  const switchTrackFalse = isDark ? '#3A3A3C' : '#D1D1D6';
 
   useEffect(() => {
     checkAdminAccess();
     loadProfile();
+    setCurrentVersion(getCurrentVersion());
   }, [user]);
 
   const checkAdminAccess = async () => {
@@ -74,113 +77,56 @@ export default function SettingsScreen() {
     if (!user) return;
     const { data } = await supabase
       .from('user_profiles')
-      .select('username, profile_photo_url, full_name, username_last_changed')
+      .select('username, profile_photo_url')
       .eq('id', user.id)
       .single();
+
     if (data) {
       setUsername(data.username || '');
-      setFullName(data.full_name || '');
       setProfilePhoto(data.profile_photo_url || '');
-      setUsernameLastChanged(data.username_last_changed || null);
     }
   };
 
-  const canChangeUsername = (): boolean => {
-    if (!usernameLastChanged) return true;
-    const lastChanged = new Date(usernameLastChanged);
-    const now = new Date();
-    const daysDiff = (now.getTime() - lastChanged.getTime()) / (1000 * 60 * 60 * 24);
-    return daysDiff >= 14;
-  };
-
-  const daysUntilUsernameChange = (): number => {
-    if (!usernameLastChanged) return 0;
-    const lastChanged = new Date(usernameLastChanged);
-    const now = new Date();
-    const daysDiff = (now.getTime() - lastChanged.getTime()) / (1000 * 60 * 60 * 24);
-    return Math.max(0, Math.ceil(14 - daysDiff));
-  };
-
-  const openEditModal = () => {
-    setEditName(fullName || username || '');
-    setEditUsername(username || '');
-    setEditPhoto(profilePhoto || '');
-    setEditModalVisible(true);
-  };
-
-  const pickEditPhoto = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      showAlert('Permission needed', 'Please allow photo access to change your profile picture.');
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-      base64: true,
-    });
-    if (!result.canceled && result.assets[0]) {
-      setUploadingPhoto(true);
-      try {
-        const asset = result.assets[0];
-        const base64 = asset.base64;
-        if (!base64) throw new Error('No base64');
-        const arrayBuffer = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
-        const ext = asset.uri.split('.').pop()?.toLowerCase() || 'jpg';
-        const mimeType = ext === 'png' ? 'image/png' : 'image/jpeg';
-        const filePath = `${user!.id}/avatar_${Date.now()}.${ext}`;
-        const { error: uploadError } = await supabase.storage
-          .from('profile-images')
-          .upload(filePath, arrayBuffer, { contentType: mimeType, upsert: true });
-        if (uploadError) throw uploadError;
-        const { data: urlData } = supabase.storage
-          .from('profile-images')
-          .getPublicUrl(filePath);
-        setEditPhoto(urlData.publicUrl);
-      } catch (e) {
-        showAlert('Upload failed', 'Could not upload photo. Try again.');
-      } finally {
-        setUploadingPhoto(false);
-      }
-    }
-  };
-
-  const saveProfile = async () => {
-    if (!user) return;
-    setSavingProfile(true);
+  const checkForUpdates = useCallback(async () => {
+    if (isCheckingVersion) return;
+    setIsCheckingVersion(true);
     try {
-      const updates: any = {
-        full_name: editName,
-        profile_photo_url: editPhoto,
-      };
-      const usernameChanged = editUsername !== username;
-      if (usernameChanged) {
-        if (!canChangeUsername()) {
-          showAlert('Username locked', `You can change your username in ${daysUntilUsernameChange()} days.`);
-          setSavingProfile(false);
-          return;
+      const response = await fetch(ITUNES_LOOKUP_URL);
+      const data = await response.json();
+      if (data.resultCount > 0) {
+        const appStoreVersion = data.results[0].version;
+        setLatestVersion(appStoreVersion);
+        const current = currentVersion.split('.').map(Number);
+        const latest = appStoreVersion.split('.').map(Number);
+        let isUpdateAvailable = false;
+        for (let i = 0; i < Math.max(current.length, latest.length); i++) {
+          const currentPart = current[i] || 0;
+          const latestPart = latest[i] || 0;
+          if (latestPart > currentPart) { isUpdateAvailable = true; break; }
+          else if (latestPart < currentPart) break;
         }
-        updates.username = editUsername;
-        updates.username_last_changed = new Date().toISOString();
+        if (isUpdateAvailable) {
+          Alert.alert(
+            'Update Available',
+            `A new version (${appStoreVersion}) is available. You are currently on version ${currentVersion}.`,
+            [
+              { text: 'Later', style: 'cancel' },
+              { text: 'Update Now', onPress: () => Linking.openURL(APP_STORE_LINK) },
+            ]
+          );
+        } else {
+          Alert.alert('Up to Date', `You have the latest version (${currentVersion}).`, [{ text: 'OK' }]);
+        }
       }
-      const { error } = await supabase.from('user_profiles').update(updates).eq('id', user.id);
-      if (error) throw error;
-      setFullName(editName);
-      setUsername(editUsername);
-      setProfilePhoto(editPhoto);
-      if (usernameChanged) setUsernameLastChanged(new Date().toISOString());
-      setEditModalVisible(false);
-    } catch (e: any) {
-      showAlert('Error', e.message || 'Failed to save profile');
+    } catch (error) {
+      Alert.alert('Check Failed', 'Unable to check for updates.', [{ text: 'OK' }]);
     } finally {
-      setSavingProfile(false);
+      setIsCheckingVersion(false);
     }
-  };
+  }, [currentVersion, isCheckingVersion]);
 
-  const handleLogout = () => {
-    showAlert('Log Out', 'Are you sure you want to log out?', [
+  const handleLogout = async () => {
+    showAlert('Confirm', 'Are you sure you want to log out?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Log Out',
@@ -193,418 +139,595 @@ export default function SettingsScreen() {
     ]);
   };
 
-  const tierLabel = () => {
-    if (tier === 'lifetime') return 'Lifetime Pro';
-    if (tier === 'premium_monthly' || tier === 'premium_yearly') return 'Plus';
-    return 'Free Plan';
+  const tierNames = {
+    free: 'Free Plan',
+    premium_monthly: 'Premium',
+    premium_yearly: 'Premium',
+    lifetime: 'Lifetime Pro',
   };
 
-  const displayName = fullName || username || user?.email?.split('@')[0] || 'User';
-  const displayUsername = username || '';
-  const initials = (displayName[0] || 'U').toUpperCase();
-
   const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: bg },
+    backgroundContainer: {
+      flex: 1,
+      backgroundColor: bg,
+    },
+    modalContainer: {
+      flex: 1,
+      backgroundColor: modalBg,
+      borderTopLeftRadius: 20,
+      borderTopRightRadius: 20,
+      marginTop: 40,
+      overflow: 'hidden',
+    },
     header: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      paddingTop: insets.top + 12,
-      paddingBottom: 12,
+      paddingTop: 16,
+      paddingBottom: 10,
       paddingHorizontal: 20,
-      backgroundColor: bg,
-    },
-    headerTitle: { fontSize: 17, fontWeight: '600', color: primaryText },
-    closeButton: {
-      position: 'absolute',
-      right: 16,
-      top: insets.top + 8,
-      width: 32,
-      height: 32,
-      borderRadius: 16,
-      backgroundColor: '#2C2C2E',
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    profileSection: {
-      alignItems: 'center',
-      paddingVertical: 24,
-      paddingHorizontal: 20,
-    },
-    avatarWrap: {
-      width: 80,
-      height: 80,
-      borderRadius: 40,
-      backgroundColor: '#2C2C2E',
-      overflow: 'hidden',
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginBottom: 12,
-    },
-    avatarImg: { width: 80, height: 80, borderRadius: 40 },
-    avatarInitial: { fontSize: 32, fontWeight: '600', color: primaryText },
-    profileName: { fontSize: 24, fontWeight: '600', color: primaryText, marginBottom: 4 },
-    profileUsername: { fontSize: 15, color: secondaryText, marginBottom: 14 },
-    editBtn: {
-      paddingHorizontal: 18,
-      paddingVertical: 8,
-      borderRadius: 20,
-      borderWidth: 1,
-      borderColor: '#3A3A3C',
-      backgroundColor: 'transparent',
-    },
-    editBtnText: { fontSize: 15, color: primaryText, fontWeight: '500' },
-    sectionLabel: {
-      fontSize: 13,
-      fontWeight: '600',
-      color: sectionLabelColor,
-      marginBottom: 8,
-      marginLeft: 4,
-      letterSpacing: 0.2,
-    },
-    section: { marginTop: 28, paddingHorizontal: 16 },
-    card: { backgroundColor: cardBg, borderRadius: 14, overflow: 'hidden' },
-    row: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      paddingVertical: 13,
-      paddingHorizontal: 16,
+      position: 'relative',
+      backgroundColor: modalBg,
       borderBottomWidth: StyleSheet.hairlineWidth,
       borderBottomColor: dividerColor,
     },
-    rowLast: { borderBottomWidth: 0 },
-    rowLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, gap: 12 },
-    rowIcon: {
-      width: 24,
-      height: 24,
+    closeButton: {
+      position: 'absolute',
+      right: 16,
+      top: 12,
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      backgroundColor: closeButtonBg,
       alignItems: 'center',
       justifyContent: 'center',
     },
-    rowLabel: { fontSize: 16, color: primaryText, fontWeight: '400' },
-    rowValue: { fontSize: 15, color: secondaryText, marginRight: 4 },
-    rowChevron: {},
-    logoutBtn: {
-      marginHorizontal: 16,
-      marginTop: 32,
+    headerTitle: {
+      fontSize: 17,
+      fontWeight: '600',
+      color: primaryText,
+    },
+    profileSection: {
+      alignItems: 'center',
+      paddingVertical: 20,
+      paddingHorizontal: 20,
+      backgroundColor: modalBg,
+    },
+    avatarContainer: {
+      width: 80,
+      height: 80,
+      borderRadius: 40,
+      backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA',
+      overflow: 'hidden',
+      marginBottom: 12,
+    },
+    avatarImage: {
+      width: '100%',
+      height: '100%',
+    },
+    avatarText: {
+      fontSize: 32,
+      fontWeight: '600',
+      color: primaryText,
+    },
+    profileName: {
+      fontSize: 22,
+      fontWeight: '600',
+      color: primaryText,
+      marginBottom: 4,
+    },
+    profileUsername: {
+      fontSize: 15,
+      color: secondaryText,
+      marginBottom: 12,
+    },
+    editProfileButton: {
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      borderRadius: 20,
+      backgroundColor: 'transparent',
+      borderWidth: 1,
+      borderColor: editButtonBorder,
+    },
+    editProfileText: {
+      fontSize: 15,
+      color: primaryText,
+      fontWeight: '500',
+    },
+    scrollContent: {
+      flex: 1,
+    },
+    section: {
+      marginTop: 24,
+      paddingHorizontal: 16,
+    },
+    sectionTitle: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: secondaryText,
       marginBottom: 8,
-      paddingVertical: 14,
-      borderRadius: 14,
-      backgroundColor: '#3A3A3C',
+      marginLeft: 16,
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+    },
+    card: {
+      backgroundColor: cardBg,
+      borderRadius: 12,
+      overflow: 'hidden',
+      borderWidth: isDark ? 0 : StyleSheet.hairlineWidth,
+      borderColor: dividerColor,
+    },
+    settingItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+      borderBottomWidth: 0.5,
+      borderBottomColor: dividerColor,
+      backgroundColor: cardBg,
+    },
+    settingItemLast: {
+      borderBottomWidth: 0,
+    },
+    settingLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flex: 1,
+      gap: 12,
+    },
+    settingIcon: {
+      width: 28,
+      height: 28,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    settingTextContainer: {
+      flex: 1,
+    },
+    settingTitle: {
+      fontSize: 16,
+      color: primaryText,
+      fontWeight: '400',
+    },
+    settingSubtitle: {
+      fontSize: 13,
+      color: secondaryText,
+      marginTop: 2,
+    },
+    settingValue: {
+      fontSize: 16,
+      color: secondaryText,
+      marginRight: 4,
+    },
+    chevron: {
+      marginLeft: 4,
+    },
+    switchContainer: {
+      flexDirection: 'row',
       alignItems: 'center',
     },
-    logoutText: { fontSize: 17, color: '#FF453A', fontWeight: '600' },
+    colorOptions: {
+      flexDirection: 'row',
+      gap: 8,
+      marginTop: 8,
+    },
+    colorOption: {
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+      borderWidth: 2,
+      borderColor: 'transparent',
+    },
+    colorOptionSelected: {
+      borderColor: isDark ? '#FFFFFF' : '#000000',
+    },
+    appearanceOptions: {
+      flexDirection: 'row',
+      gap: 8,
+      marginTop: 8,
+    },
+    appearanceOption: {
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 8,
+      backgroundColor: appearanceChipBg,
+    },
+    appearanceOptionSelected: {
+      backgroundColor: '#0A84FF',
+    },
+    appearanceText: {
+      fontSize: 13,
+      color: primaryText,
+    },
+    appearanceTextSelected: {
+      fontSize: 13,
+      color: '#FFFFFF',
+    },
+    logoutButton: {
+      marginHorizontal: 16,
+      marginTop: 32,
+      marginBottom: 40,
+      paddingVertical: 14,
+      borderRadius: 12,
+      backgroundColor: '#FF3B30',
+      alignItems: 'center',
+    },
+    logoutText: {
+      fontSize: 17,
+      color: '#FFFFFF',
+      fontWeight: '600',
+    },
     versionText: {
       fontSize: 12,
       color: secondaryText,
       textAlign: 'center',
-      marginBottom: 40,
-      marginTop: 8,
+      marginBottom: 20,
     },
-    // Edit Modal
-    modalOverlay: {
-      flex: 1,
-      backgroundColor: 'rgba(0,0,0,0.6)',
-      justifyContent: 'flex-end',
+    loadingIndicator: {
+      marginRight: 8,
     },
-    editModal: {
-      backgroundColor: '#1C1C1E',
-      borderTopLeftRadius: 20,
-      borderTopRightRadius: 20,
-      paddingHorizontal: 20,
-      paddingTop: 20,
-      paddingBottom: insets.bottom + 20,
-    },
-    editAvatarWrap: {
-      alignSelf: 'center',
-      width: 90,
-      height: 90,
-      borderRadius: 45,
-      backgroundColor: '#2C2C2E',
-      overflow: 'hidden',
-      marginBottom: 24,
-    },
-    editAvatarImg: { width: 90, height: 90 },
-    cameraIcon: {
-      position: 'absolute',
-      bottom: 0,
-      right: 0,
-      width: 28,
-      height: 28,
-      borderRadius: 14,
-      backgroundColor: '#3A3A3C',
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    editLabel: { fontSize: 13, color: secondaryText, marginBottom: 6, marginLeft: 2 },
-    editInput: {
-      backgroundColor: '#2C2C2E',
-      borderRadius: 12,
-      paddingHorizontal: 16,
-      paddingVertical: 14,
-      fontSize: 16,
-      color: primaryText,
-      marginBottom: 16,
-    },
-    editHint: { fontSize: 12, color: secondaryText, textAlign: 'center', marginBottom: 20, lineHeight: 18 },
-    saveBtn: {
-      backgroundColor: '#FFFFFF',
-      borderRadius: 50,
-      paddingVertical: 15,
-      alignItems: 'center',
-      marginBottom: 10,
-    },
-    saveBtnText: { fontSize: 17, fontWeight: '700', color: '#000' },
-    cancelBtn: { alignItems: 'center', paddingVertical: 12 },
-    cancelBtnText: { fontSize: 17, color: secondaryText },
-    inlineChildren: { flex: 1 },
-    colorRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
-    colorDot: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: 'transparent' },
-    colorDotSelected: { borderColor: '#FFFFFF' },
-    appearRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
-    appearChip: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 8, backgroundColor: '#3A3A3C' },
-    appearChipActive: { backgroundColor: '#0A84FF' },
-    appearChipText: { fontSize: 13, color: primaryText },
-    appearChipTextActive: { fontSize: 13, color: '#FFFFFF' },
   });
 
-  const Row = ({ icon, label, value = '', onPress = null as any, isLast = false, rightEl = null as any }) => (
+  const SettingRow = ({
+    icon,
+    title,
+    subtitle,
+    value,
+    onPress,
+    rightElement,
+    isLast = false,
+    isLoading = false,
+  }) => (
     <TouchableOpacity
-      style={[styles.row, isLast && styles.rowLast]}
+      style={[styles.settingItem, isLast && styles.settingItemLast]}
       onPress={onPress}
-      disabled={!onPress}
-      activeOpacity={onPress ? 0.6 : 1}
+      activeOpacity={0.6}
+      disabled={!onPress && !rightElement}
     >
-      <View style={styles.rowLeft}>
-        <View style={styles.rowIcon}>
-          <Ionicons name={icon as any} size={20} color={secondaryText} />
+      <View style={styles.settingLeft}>
+        <View style={styles.settingIcon}>
+          <Ionicons name={icon} size={22} color={iconColor} />
         </View>
-        <Text style={styles.rowLabel}>{label}</Text>
+        <View style={styles.settingTextContainer}>
+          <Text style={styles.settingTitle}>{title}</Text>
+          {subtitle && <Text style={styles.settingSubtitle}>{subtitle}</Text>}
+        </View>
       </View>
-      {rightEl ? rightEl : (
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          {value ? <Text style={styles.rowValue}>{value}</Text> : null}
-          {onPress ? <Ionicons name="chevron-forward" size={17} color={secondaryText} /> : null}
-        </View>
-      )}
+      <View style={styles.switchContainer}>
+        {isLoading ? (
+          <ActivityIndicator size="small" color={secondaryText} style={styles.loadingIndicator} />
+        ) : (
+          <>
+            {value && <Text style={styles.settingValue}>{value}</Text>}
+            {rightElement || (onPress && (
+              <Ionicons name="chevron-forward" size={20} color={secondaryText} style={styles.chevron} />
+            ))}
+          </>
+        )}
+      </View>
     </TouchableOpacity>
   );
 
-  const SwitchRow = ({ icon, label, value, onChange, isLast = false }) => (
-    <View style={[styles.row, isLast && styles.rowLast]}>
-      <View style={styles.rowLeft}>
-        <View style={styles.rowIcon}>
-          <Ionicons name={icon as any} size={20} color={secondaryText} />
+  const SwitchRow = ({ icon, title, value, onValueChange, isLast = false }) => (
+    <View style={[styles.settingItem, isLast && styles.settingItemLast]}>
+      <View style={styles.settingLeft}>
+        <View style={styles.settingIcon}>
+          <Ionicons name={icon} size={22} color={iconColor} />
         </View>
-        <Text style={styles.rowLabel}>{label}</Text>
+        <Text style={styles.settingTitle}>{title}</Text>
       </View>
       <Switch
         value={value}
-        onValueChange={onChange}
+        onValueChange={onValueChange}
         trackColor={{ true: '#34C759', false: switchTrackFalse }}
-        thumbColor={Platform.OS === 'ios' ? undefined : '#FFFFFF'}
+        thumbColor={Platform.OS === 'ios' ? undefined : value ? '#FFFFFF' : secondaryText}
       />
     </View>
   );
 
-  const InlineRow = ({ icon, label, children, isLast = false }) => (
-    <View style={[styles.row, isLast && styles.rowLast, { flexDirection: 'column', alignItems: 'flex-start' }]}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 0 }}>
-        <View style={styles.rowIcon}>
-          <Ionicons name={icon as any} size={20} color={secondaryText} />
+  const InlineSettingRow = ({ icon, title, children }) => (
+    <View style={styles.settingItem}>
+      <View style={styles.settingLeft}>
+        <View style={styles.settingIcon}>
+          <Ionicons name={icon} size={22} color={iconColor} />
         </View>
-        <Text style={styles.rowLabel}>{label}</Text>
+        <View style={styles.settingTextContainer}>
+          <Text style={styles.settingTitle}>{title}</Text>
+          {children}
+        </View>
       </View>
-      <View style={{ paddingLeft: 36 }}>{children}</View>
     </View>
   );
 
   const accentColors = ['#10A37F', '#0084FF', '#FF3B30', '#FF9500', '#5856D6'];
-  const appearOptions = ['System', 'Light', 'Dark'];
+  const appearanceOptions = ['System', 'Light', 'Dark'];
 
   return (
-    <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Settings</Text>
-        <TouchableOpacity style={styles.closeButton} onPress={() => router.back()}>
-          <Ionicons name="close" size={18} color={primaryText} />
-        </TouchableOpacity>
-      </View>
-
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Profile */}
-        <View style={styles.profileSection}>
-          <View style={styles.avatarWrap}>
-            {profilePhoto ? (
-              <Image source={{ uri: profilePhoto }} style={styles.avatarImg} contentFit="cover" />
-            ) : (
-              <Text style={styles.avatarInitial}>{initials}</Text>
-            )}
-          </View>
-          <Text style={styles.profileName}>{displayName}</Text>
-          {displayUsername ? <Text style={styles.profileUsername}>{displayUsername}</Text> : null}
-          <TouchableOpacity style={styles.editBtn} onPress={openEditModal}>
-            <Text style={styles.editBtnText}>Edit profile</Text>
+    <View style={styles.backgroundContainer}>
+      <View style={styles.modalContainer}>
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>Settings</Text>
+          <TouchableOpacity style={styles.closeButton} onPress={() => router.back()}>
+            <Ionicons name="close" size={20} color={primaryText} />
           </TouchableOpacity>
         </View>
 
-        {/* Account */}
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>Account</Text>
-          <View style={styles.card}>
-            <Row icon="mail-outline" label="Email" value={user?.email?.length ?? 0 > 22 ? user?.email?.slice(0,20) + '...' : user?.email || ''} />
-            <Row icon="add-circle-outline" label="Subscription" value={tierLabel()} />
-            <Row icon="arrow-up-circle-outline" label="Upgrade to Dawinix Plus" onPress={() => router.push('/subscription')} />
-            <Row icon="refresh-outline" label="Restore purchases" onPress={() => router.push('/subscription')} />
-            <Row icon="receipt-outline" label="Orders" onPress={() => router.push('/orders')} />
-            <Row icon="person-circle-outline" label="Personalization" onPress={() => router.push('/personalization')} />
-            <Row icon="notifications-outline" label="Notifications" onPress={() => router.push('/notifications')} />
-            <Row icon="apps-outline" label="Apps" onPress={() => {}} />
-            <Row icon="people-outline" label="Parental controls" onPress={() => router.push('/parental-controls')} />
-            <Row icon="document-lock-outline" label="Data controls" onPress={() => router.push('/data-controls')} />
-            <Row icon="megaphone-outline" label="Ads controls" onPress={() => router.push('/ads-controls')} />
-            <Row icon="archive-outline" label="Archived chats" onPress={() => router.push('/archived-chats')} isLast />
-          </View>
-        </View>
-
-        {/* App Settings */}
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>App Settings</Text>
-          <View style={styles.card}>
-            <InlineRow icon="contrast-outline" label="Appearance">
-              <View style={styles.appearRow}>
-                {appearOptions.map(opt => {
-                  const active = settings.appearance === opt;
-                  return (
-                    <TouchableOpacity key={opt} onPress={() => updateSetting('appearance', opt)}
-                      style={[styles.appearChip, active && styles.appearChipActive]}>
-                      <Text style={active ? styles.appearChipTextActive : styles.appearChipText}>{opt}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </InlineRow>
-            <InlineRow icon="color-palette-outline" label="Accent color">
-              <View style={styles.colorRow}>
-                {accentColors.map(c => (
-                  <TouchableOpacity key={c} onPress={() => updateSetting('accentColor', c)}
-                    style={[styles.colorDot, { backgroundColor: c }, settings.accentColor === c && styles.colorDotSelected]} />
-                ))}
-              </View>
-            </InlineRow>
-            <SwitchRow icon="phone-portrait-outline" label="Haptic feedback"
-              value={settings.hapticFeedback} onChange={v => updateSetting('hapticFeedback', v)} />
-            <SwitchRow icon="text-outline" label="Auto spelling correction"
-              value={settings.autoSpelling} onChange={v => updateSetting('autoSpelling', v)} />
-            <Row icon="globe-outline" label="App language" value={settings.appLanguage} onPress={() => router.push('/languages')} />
-            <Row icon="language-outline" label="Main language for speech" value={settings.mainLanguage} onPress={() => router.push('/languages')} />
-            <Row icon="mic-outline" label="Voice selection" value={settings.voiceSelection} onPress={() => router.push('/voice-settings')} />
-            <SwitchRow icon="chatbubbles-outline" label="Background conversations"
-              value={settings.backgroundConversations} onChange={v => updateSetting('backgroundConversations', v)} />
-            <SwitchRow icon="create-outline" label="Autocomplete"
-              value={settings.autocomplete} onChange={v => updateSetting('autocomplete', v)} />
-            <SwitchRow icon="trending-up-outline" label="Trending searches"
-              value={settings.trendingSearches} onChange={v => updateSetting('trendingSearches', v)} />
-            <SwitchRow icon="list-outline" label="Follow-up suggestions"
-              value={settings.followupSuggestions} onChange={v => updateSetting('followupSuggestions', v)} isLast />
-          </View>
-        </View>
-
-        {/* Security */}
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>Security</Text>
-          <View style={styles.card}>
-            <Row icon="lock-closed-outline" label="Security" onPress={() => router.push('/security')} isLast />
-          </View>
-        </View>
-
-        {/* Admin */}
-        {isAdmin && (
-          <View style={styles.section}>
-            <Text style={styles.sectionLabel}>Admin</Text>
-            <View style={styles.card}>
-              <Row icon="shield-outline" label="Admin Dashboard" onPress={() => router.push('/admin')} />
-              <Row icon="mail-outline" label="Send Email to Users" onPress={() => router.push('/admin-email')} isLast />
-            </View>
-          </View>
-        )}
-
-        {/* About */}
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>About</Text>
-          <View style={styles.card}>
-            <Row icon="bug-outline" label="Report bug" onPress={() => router.push('/bugreport')} />
-            <Row icon="document-text-outline" label="Terms of Use" onPress={() => router.push('/terms-of-use')} />
-            <Row icon="shield-checkmark-outline" label="Privacy Policy" onPress={() => router.push('/privacy-policy')} isLast />
-          </View>
-        </View>
-
-        {/* Logout */}
-        <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
-          <Text style={styles.logoutText}>Log Out</Text>
-        </TouchableOpacity>
-
-        <Text style={styles.versionText}>Dawinix v{currentVersion}</Text>
-      </ScrollView>
-
-      {/* Edit Profile Modal */}
-      <Modal visible={editModalVisible} transparent animationType="slide" onRequestClose={() => setEditModalVisible(false)}>
-        <Pressable style={styles.modalOverlay} onPress={() => setEditModalVisible(false)}>
-          <Pressable style={styles.editModal} onPress={e => e.stopPropagation()}>
-            {/* Avatar */}
-            <TouchableOpacity style={styles.editAvatarWrap} onPress={pickEditPhoto}>
-              {editPhoto ? (
-                <Image source={{ uri: editPhoto }} style={styles.editAvatarImg} contentFit="cover" />
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          style={styles.scrollContent}
+        >
+          {/* Profile Section */}
+          <View style={styles.profileSection}>
+            <View style={styles.avatarContainer}>
+              {profilePhoto ? (
+                <Image source={{ uri: profilePhoto }} style={styles.avatarImage} />
               ) : (
-                <View style={[styles.editAvatarWrap, { alignItems: 'center', justifyContent: 'center' }]}>
-                  <Text style={{ fontSize: 36, color: primaryText }}>{initials}</Text>
+                <View style={[styles.avatarContainer, { alignItems: 'center', justifyContent: 'center' }]}>
+                  <Text style={styles.avatarText}>
+                    {(username?.[0] || user?.email?.[0] || 'U').toUpperCase()}
+                  </Text>
                 </View>
               )}
-              <View style={styles.cameraIcon}>
-                {uploadingPhoto
-                  ? <ActivityIndicator size="small" color="#FFF" />
-                  : <Ionicons name="camera" size={14} color="#FFF" />}
+            </View>
+
+            <Text style={styles.profileName}>{username || 'User'}</Text>
+            <Text style={styles.profileUsername}>{user?.email}</Text>
+
+            <TouchableOpacity
+              style={styles.editProfileButton}
+              onPress={() => router.push('/profile')}
+            >
+              <Text style={styles.editProfileText}>Edit profile</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Account Section */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Account</Text>
+            <View style={styles.card}>
+              <SettingRow icon="mail-outline" title="Email" value={user?.email} />
+              <SettingRow
+                icon="add-circle-outline"
+                title="Subscription"
+                value={tierNames[tier]}
+              />
+              <SettingRow
+                icon="arrow-up-circle-outline"
+                title="Upgrade to ChatGPT Plus"
+                onPress={() => router.push('/subscription')}
+              />
+              <SettingRow
+                icon="refresh-outline"
+                title="Restore purchases"
+                onPress={() => router.push('/subscription')}
+              />
+              <SettingRow
+                icon="receipt-outline"
+                title="Orders"
+                onPress={() => router.push('/orders')}
+              />
+              <SettingRow
+                icon="person-circle-outline"
+                title="Personalization"
+                onPress={() => router.push('/personalization')}
+              />
+              <SettingRow
+                icon="notifications-outline"
+                title="Notifications"
+                onPress={() => router.push('/notifications')}
+              />
+              <SettingRow
+                icon="apps-outline"
+                title="Apps"
+                onPress={() => {}}
+              />
+              <SettingRow
+                icon="people-outline"
+                title="Parental controls"
+                onPress={() => router.push('/parental-controls')}
+              />
+              <SettingRow
+                icon="document-lock-outline"
+                title="Data controls"
+                onPress={() => router.push('/data-controls')}
+              />
+              <SettingRow
+                icon="archive-outline"
+                title="Archived chats"
+                onPress={() => router.push('/archived-chats')}
+              />
+              <SettingRow
+                icon="lock-closed-outline"
+                title="Security"
+                onPress={() => router.push('/security')}
+              />
+              <SettingRow
+                icon="card-outline"
+                title="RevenueCat Setup Guide"
+                subtitle="Configure in-app purchases"
+                onPress={() => router.push('/revenuecat-setup')}
+                isLast={true}
+              />
+            </View>
+          </View>
+
+          {/* App Settings */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>App Settings</Text>
+            <View style={styles.card}>
+              <SettingRow
+                icon="arrow-up-circle-outline"
+                title="Check for updates"
+                value={latestVersion && latestVersion !== currentVersion ? `${currentVersion} → ${latestVersion}` : currentVersion}
+                onPress={checkForUpdates}
+                isLoading={isCheckingVersion}
+              />
+
+              {/* Appearance with inline options */}
+              <InlineSettingRow icon="contrast-outline" title="Appearance">
+                <View style={styles.appearanceOptions}>
+                  {appearanceOptions.map(option => {
+                    const isSelected = settings.appearance === option;
+                    return (
+                      <TouchableOpacity
+                        key={option}
+                        onPress={() => updateSetting('appearance', option)}
+                        style={[
+                          styles.appearanceOption,
+                          isSelected && styles.appearanceOptionSelected,
+                        ]}
+                      >
+                        <Text style={isSelected ? styles.appearanceTextSelected : styles.appearanceText}>
+                          {option}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </InlineSettingRow>
+
+              {/* Accent Color */}
+              <InlineSettingRow icon="color-palette-outline" title="Accent color">
+                <View style={styles.colorOptions}>
+                  {accentColors.map(color => (
+                    <TouchableOpacity
+                      key={color}
+                      onPress={() => updateSetting('accentColor', color)}
+                      style={[
+                        styles.colorOption,
+                        { backgroundColor: color },
+                        settings.accentColor === color && styles.colorOptionSelected,
+                      ]}
+                    />
+                  ))}
+                </View>
+              </InlineSettingRow>
+
+              <SwitchRow
+                icon="phone-portrait-outline"
+                title="Haptic feedback"
+                value={settings.hapticFeedback}
+                onValueChange={(v) => updateSetting('hapticFeedback', v)}
+              />
+
+              <SwitchRow
+                icon="text-outline"
+                title="Auto spelling correction"
+                value={settings.autoSpelling}
+                onValueChange={(v) => updateSetting('autoSpelling', v)}
+              />
+
+              <SettingRow
+                icon="globe-outline"
+                title="App language"
+                value={settings.appLanguage}
+                onPress={() => router.push('/languages')}
+              />
+
+              <SettingRow
+                icon="language-outline"
+                title="Main language for speech"
+                value={settings.mainLanguage}
+                onPress={() => router.push('/languages')}
+              />
+
+              <SettingRow
+                icon="mic-outline"
+                title="Voice selection"
+                value={settings.voiceSelection}
+              />
+
+              <SwitchRow
+                icon="chatbubbles-outline"
+                title="Background conversations"
+                value={settings.backgroundConversations}
+                onValueChange={(v) => updateSetting('backgroundConversations', v)}
+              />
+
+              <SwitchRow
+                icon="create-outline"
+                title="Autocomplete"
+                value={settings.autocomplete}
+                onValueChange={(v) => updateSetting('autocomplete', v)}
+              />
+
+              <SwitchRow
+                icon="trending-up-outline"
+                title="Trending searches"
+                value={settings.trendingSearches}
+                onValueChange={(v) => updateSetting('trendingSearches', v)}
+              />
+
+              <SwitchRow
+                icon="list-outline"
+                title="Follow-up suggestions"
+                value={settings.followupSuggestions}
+                onValueChange={(v) => updateSetting('followupSuggestions', v)}
+                isLast={true}
+              />
+            </View>
+          </View>
+
+          {/* Admin Section */}
+          {isAdmin && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Admin</Text>
+              <View style={styles.card}>
+                <SettingRow
+                  icon="shield-outline"
+                  title="Admin Dashboard"
+                  subtitle="Full system control"
+                  onPress={() => router.push('/admin')}
+                />
+                <SettingRow
+                  icon="mail-outline"
+                  title="Send Email to Users"
+                  subtitle="Broadcast messages"
+                  onPress={() => router.push('/admin-email')}
+                  isLast={true}
+                />
               </View>
-            </TouchableOpacity>
+            </View>
+          )}
 
-            <Text style={styles.editLabel}>Name</Text>
-            <TextInput
-              style={styles.editInput}
-              value={editName}
-              onChangeText={setEditName}
-              placeholder="Your name"
-              placeholderTextColor="#555"
-            />
+          {/* About Section */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>About</Text>
+            <View style={styles.card}>
+              <SettingRow
+                icon="bug-outline"
+                title="Report bug"
+                onPress={() => router.push('/bugreport')}
+              />
+              <SettingRow
+                icon="help-circle-outline"
+                title="Help Center"
+                onPress={() => router.push('/help')}
+              />
+              <SettingRow
+                icon="document-text-outline"
+                title="Terms of Use"
+                onPress={() => router.push('/terms-of-use')}
+              />
+              <SettingRow
+                icon="shield-checkmark-outline"
+                title="Privacy Policy"
+                onPress={() => router.push('/privacy-policy')}
+                isLast={true}
+              />
+            </View>
+          </View>
 
-            <Text style={styles.editLabel}>Username</Text>
-            <TextInput
-              style={[styles.editInput, !canChangeUsername() && { opacity: 0.5 }]}
-              value={editUsername}
-              onChangeText={setEditUsername}
-              placeholder="username"
-              placeholderTextColor="#555"
-              editable={canChangeUsername()}
-              autoCapitalize="none"
-            />
+          {/* Logout */}
+          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+            <Text style={styles.logoutText}>Log Out</Text>
+          </TouchableOpacity>
 
-            <Text style={styles.editHint}>
-              {!canChangeUsername()
-                ? `Username can be changed in ${daysUntilUsernameChange()} days.`
-                : "Your profile helps people recognize you. Your name and username are also used in the Dawinix app."}
-            </Text>
-
-            <TouchableOpacity style={styles.saveBtn} onPress={saveProfile} disabled={savingProfile}>
-              {savingProfile
-                ? <ActivityIndicator color="#000" />
-                : <Text style={styles.saveBtnText}>Save profile</Text>}
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.cancelBtn} onPress={() => setEditModalVisible(false)}>
-              <Text style={styles.cancelBtnText}>Cancel</Text>
-            </TouchableOpacity>
-          </Pressable>
-        </Pressable>
-      </Modal>
+          <Text style={styles.versionText}>HaitianChatGpt for iOS – v{currentVersion}</Text>
+        </ScrollView>
+      </View>
     </View>
   );
 }

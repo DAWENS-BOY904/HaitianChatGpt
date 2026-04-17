@@ -105,14 +105,6 @@ export default function RootLayout() {
                     <Stack.Screen name="coding" />
                     <Stack.Screen name="voice-settings" />
                     <Stack.Screen name="revenuecat-setup" />
-                    <Stack.Screen name="authenticator-app" />
-                    <Stack.Screen name="mfa-totp-setup" />
-                    <Stack.Screen name="text-messages-mfa" />
-                    <Stack.Screen name="passkeys" />
-                    <Stack.Screen name="ads-controls" />
-                    <Stack.Screen name="ad-history" />
-                    <Stack.Screen name="ad-interests" />
-                    <Stack.Screen name="ads-off" />
                     </Stack>
                   </ConversationProvider>
                 </SocialProvider>
