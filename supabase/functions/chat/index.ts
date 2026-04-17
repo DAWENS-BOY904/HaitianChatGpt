@@ -930,16 +930,15 @@ IMPORTANT:
     }
 
     // Handle image generation vs text response
-    // STRICT: Only generate image when clear explicit user intent detected
     if (detectionResult.isImageTask) {
-      console.log('[chat] Image task detected, generating image for prompt:', lastContent.slice(0, 80));
       const imageResult = await generateImageSmart(lastContent, aiModel);
       
-      if (imageResult.error || !imageResult.imageUrl) {
-        // Fallback to text description when image generation fails
-        console.log('[chat] Image generation failed, falling back to text:', imageResult.error);
+      if (imageResult.error) {
+        // Fallback to text description
         aiResponse = await callAI(aiModel, aiMessages, false);
-        imageUrl = undefined;
+        if (!aiResponse.error) {
+          imageUrl = undefined;
+        }
       } else {
         imageUrl = imageResult.imageUrl;
         aiResponse = {
@@ -949,7 +948,7 @@ IMPORTANT:
         };
       }
     } else {
-      // Regular text response — never generate images here
+      // Regular text response
       aiResponse = await callAI(aiModel, aiMessages, false);
     }
 

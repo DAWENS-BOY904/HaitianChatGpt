@@ -58,8 +58,6 @@ interface ConversationContextType {
   loading: boolean;
   streamingMessageId: string | null; // NEW: Track streaming message
   accountStatus: AccountStatus;
-  temporaryMode?: boolean;
-  setTemporaryMode?: (val: boolean) => void;
   checkAccountStatus: () => Promise<void>;
   createConversation: () => Promise<string | null>;
   selectConversation: (id: string) => Promise<void>;
@@ -114,8 +112,6 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
     audioBase64: null,
     waveformData: [],
   });
-  // Temporary mode: messages shown in UI but never persisted to DB or conversations list
-  const [temporaryMode, setTemporaryMode] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -504,43 +500,6 @@ const sendMessage = async (
   if (contentCheck.isViolation) {
     await handleContentViolation('TEXT_CONTENT_VIOLATION', contentCheck.severity || 'medium', contentCheck.reason);
     throw new Error('Message blocked: Content violates usage policies.');
-  }
-
-  // TEMPORARY MODE: use in-memory only, no DB persistence
-  if (temporaryMode) {
-    const tempUserId = `temp-user-${Date.now()}`;
-    const tempAiId = `temp-ai-${Date.now() + 1}`;
-    const tempUserMsg: Message = { id: tempUserId, role: 'user', content, image_url: imageUrl, created_at: new Date().toISOString() };
-    setMessages(prev => [...prev, tempUserMsg]);
-    setStreamingMessageId(tempAiId);
-    try {
-      // Need a temp conversationId for the backend
-      let tempConvId = currentConversation?.id;
-      if (!tempConvId) {
-        // Create a real conversation in DB just to call the edge function, but don't expose it in list
-        const { data, error } = await supabase.from('conversations').insert([{ user_id: user.id, title: 'Temporary Chat', is_temporary: true }]).select().single();
-        if (!error && data) {
-          tempConvId = data.id;
-          setCurrentConversation({ id: data.id, title: 'Temporary Chat', createdAt: data.created_at, updatedAt: data.updated_at });
-        } else {
-          tempConvId = 'temp-' + Date.now();
-        }
-      }
-      const requestBody: any = { messages: [{ role: 'user', content }], conversationId: tempConvId, aiModel: aiModel || 'onspace-ai' };
-      if (base64Image) requestBody.base64Image = base64Image;
-      const { data: aiResponse, error: aiError } = await supabase.functions.invoke('chat', { body: requestBody });
-      if (aiError) throw aiError;
-      let cleanMessage = aiResponse.message || 'Response generated';
-      cleanMessage = cleanMessage.replace(/\[Using [^\]]+\]\s*/gi, '').replace(/\[Model:[^\]]+\]\s*/gi, '').trim();
-      const tempAiMsg: Message = { id: tempAiId, role: 'assistant', content: cleanMessage, image_url: aiResponse.imageUrl || undefined, created_at: new Date().toISOString() };
-      setMessages(prev => [...prev, tempAiMsg]);
-    } catch (e: any) {
-      setMessages(prev => prev.filter(m => m.id !== tempUserId));
-      throw e;
-    } finally {
-      setTimeout(() => setStreamingMessageId(null), 2000);
-    }
-    return;
   }
 
   let conversationId = currentConversation?.id;
@@ -976,8 +935,6 @@ const sendMessage = async (
       loading,
       streamingMessageId, // NEW: Exposed to consumers
       accountStatus,
-      temporaryMode,
-      setTemporaryMode,
       checkAccountStatus,
       createConversation,
       selectConversation,

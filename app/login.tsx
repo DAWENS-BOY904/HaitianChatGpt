@@ -181,14 +181,15 @@ export default function LoginScreen() {
     try {
       const available = await AppleAuthentication.isAvailableAsync();
       if (!available) {
-        showAlert('Not Available', 'Apple Sign In is not available on this device. Please update iOS.');
+        showAlert('Not Available', 'Apple Sign In is not available on this device.');
         return;
       }
 
-      // Generate a cryptographically secure nonce
-      const generateNonce = (length: number): string => {
+      // Generate a random nonce
+      const generateNonce = (length: number) => {
         const charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
         let nonce = '';
+        const randomValues = new Uint8Array(length);
         for (let i = 0; i < length; i++) {
           nonce += charset[Math.floor(Math.random() * charset.length)];
         }
@@ -197,23 +198,16 @@ export default function LoginScreen() {
 
       const rawNonce = generateNonce(32);
 
-      // SHA-256 hash the nonce (required by Apple)
-      const sha256 = async (str: string): Promise<string> => {
-        try {
-          const msgBuf = new TextEncoder().encode(str);
-          const hashBuf = await crypto.subtle.digest('SHA-256', msgBuf);
-          return Array.from(new Uint8Array(hashBuf))
-            .map(b => b.toString(16).padStart(2, '0'))
-            .join('');
-        } catch (e) {
-          // Fallback: use raw nonce if crypto not available
-          return rawNonce;
-        }
+      // SHA256 hash the nonce for Apple
+      const digestNonce = async (nonce: string): Promise<string> => {
+        const msgBuffer = new TextEncoder().encode(nonce);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
       };
 
-      const hashedNonce = await sha256(rawNonce);
+      const hashedNonce = await digestNonce(rawNonce);
 
-      // Request Apple credentials
       const credential = await AppleAuthentication.signInAsync({
         requestedScopes: [
           AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
@@ -223,47 +217,34 @@ export default function LoginScreen() {
       });
 
       if (!credential.identityToken) {
-        showAlert('Sign In Error', 'Apple did not return an identity token. Please try again.');
+        showAlert('Error', 'Apple Sign In failed: no identity token returned.');
         return;
       }
 
+      const { getSupabaseClient } = await import('@/template');
       const supabase = getSupabaseClient();
 
-      // Sign in to Supabase with Apple ID token
-      const { data, error } = await supabase.auth.signInWithIdToken({
+      const { error, data } = await supabase.auth.signInWithIdToken({
         provider: 'apple',
         token: credential.identityToken,
         nonce: rawNonce,
       });
 
       if (error) {
-        console.error('Supabase Apple sign-in error:', error);
-        showAlert('Sign In Failed', error.message || 'Failed to authenticate with Apple.');
+        showAlert('Sign In Failed', error.message);
         return;
       }
-
+      // Send login confirmation email
       if (data?.user) {
-        // Update profile with Apple name if provided
-        if (credential.fullName?.givenName || credential.fullName?.familyName) {
-          const fullName = [
-            credential.fullName.givenName,
-            credential.fullName.familyName,
-          ].filter(Boolean).join(' ');
-          await supabase.from('user_profiles').update({ full_name: fullName }).eq('id', data.user.id).catch(() => {});
-        }
-
-        const appleEmail = data.user.email || credential.email || `${credential.user}@privaterelay.appleid.com`;
+        const appleEmail = data.user.email ||
+          credential.email ||
+          `${credential.user}@privaterelay.appleid.com`;
         sendLoginConfirmationEmail(data.user.id, appleEmail);
       }
-      // AuthProvider handles navigation automatically
+      // AuthRouter will handle navigation on success
     } catch (e: any) {
-      if (e?.code === 'ERR_REQUEST_CANCELED') return; // user cancelled — no error shown
-      if (e?.code === 'ERR_APPLE_AUTHENTICATION_CREDENTIAL') {
-        showAlert('Sign In Failed', 'Apple credential error. Please try again.');
-        return;
-      }
-      console.error('Apple Sign In error:', e);
-      showAlert('Sign In Error', e?.message || 'Apple Sign In failed. Please try again.');
+      if (e?.code === 'ERR_REQUEST_CANCELED') return; // user cancelled
+      showAlert('Error', e?.message || 'Apple Sign In failed');
     }
   };
 
