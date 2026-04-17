@@ -9,7 +9,7 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
       "bundleIdentifier": "app.onspace.dawinix",
       "buildNumber": "1.0.0",
       "usesAppleSignIn": true
@@ -18,9 +18,9 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/logo.png",
         "backgroundColor": "#ffffff"
-        "package": "app.onspace.dawinix",
-        "versionCode": 1
-    },
+      },
+      "package": "app.onspace.dawinix",
+      "versionCode": 1,
       "edgeToEdgeEnabled": true
     },
     "web": {
@@ -30,7 +30,7 @@
     },
     "plugins": [
       "expo-router",
-      "expo-apple-authentication"
+      "expo-apple-authentication",
       [
         "expo-splash-screen",
         {
