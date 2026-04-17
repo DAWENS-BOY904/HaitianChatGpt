@@ -1,62 +1,139 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
   ScrollView,
-  Platform,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAuth } from '@/template';
+import { getSupabaseClient } from '@/template';
 
 interface AdEntry {
   id: string;
-  name: string;
-  iconBg: string;
-  iconLetter: string;
-  time: string;
-  action: string;
+  query: string;
+  source_icon: string | null;
+  source_name: string | null;
+  created_at: string;
 }
 
-const MOCK_AD_HISTORY: Array<{ group: string; items: AdEntry[] }> = [
-  {
-    group: 'Today',
-    items: [
-      { id: '1', name: 'Dev Mode', iconBg: '#6C6CF8', iconLetter: 'D', time: '3:42 AM', action: 'Viewed' },
-    ],
-  },
-  {
-    group: '3 days ago',
-    items: [
-      { id: '2', name: 'Time to Hire an App Developer', iconBg: '#1DBF73', iconLetter: 'fi', time: '8:30 AM', action: 'Viewed' },
-    ],
-  },
-  {
-    group: '4 days ago',
-    items: [
-      { id: '3', name: 'Try Zapier Free', iconBg: '#FF4F00', iconLetter: 'Z', time: '5:52 PM', action: 'Viewed' },
-    ],
-  },
-  {
-    group: 'Last week',
-    items: [
-      { id: '4', name: 'X-keys Gaming @ B&H', iconBg: '#CC0000', iconLetter: 'B', time: 'Apr 7, 2026 at 9:32 PM', action: 'Viewed' },
-      { id: '5', name: 'Instrument OpenAI in 5 min', iconBg: '#FF6B35', iconLetter: 'I', time: 'Apr 4, 2026 at 7:03 PM', action: 'Viewed' },
-    ],
-  },
-];
+interface GroupedEntries {
+  group: string;
+  items: AdEntry[];
+}
+
+function groupByDate(entries: AdEntry[]): GroupedEntries[] {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yesterday = new Date(today.getTime() - 86400000);
+  const threeDaysAgo = new Date(today.getTime() - 3 * 86400000);
+  const lastWeek = new Date(today.getTime() - 7 * 86400000);
+
+  const groups: Record<string, AdEntry[]> = {};
+
+  for (const entry of entries) {
+    const d = new Date(entry.created_at);
+    const day = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    let label: string;
+
+    if (day >= today) {
+      label = 'Today';
+    } else if (day >= yesterday) {
+      label = 'Yesterday';
+    } else if (day >= threeDaysAgo) {
+      label = '3 days ago';
+    } else if (day >= lastWeek) {
+      label = 'Last week';
+    } else {
+      const diff = Math.floor((today.getTime() - day.getTime()) / 86400000);
+      label = `${diff} days ago`;
+    }
+
+    if (!groups[label]) groups[label] = [];
+    groups[label].push(entry);
+  }
+
+  const order = ['Today', 'Yesterday', '3 days ago', 'Last week'];
+  const result: GroupedEntries[] = [];
+
+  for (const key of order) {
+    if (groups[key]) result.push({ group: key, items: groups[key] });
+  }
+
+  for (const key of Object.keys(groups)) {
+    if (!order.includes(key)) result.push({ group: key, items: groups[key] });
+  }
+
+  return result;
+}
+
+function formatTime(iso: string): string {
+  const d = new Date(iso);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const entryDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+
+  if (entryDay >= today) {
+    return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }) + ' Viewed';
+  }
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) +
+    ' at ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }) + ' Viewed';
+}
+
+const ICON_COLORS = ['#6C6CF8', '#1DBF73', '#FF4F00', '#CC0000', '#FF6B35', '#0A84FF', '#AF52DE'];
 
 export default function AdHistoryScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
+  const supabase = getSupabaseClient();
+
+  const [groups, setGroups] = useState<GroupedEntries[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   const bg = '#000000';
   const cardBg = '#1C1C1E';
   const primaryText = '#FFFFFF';
   const secondaryText = '#8E8E93';
   const divider = 'rgba(255,255,255,0.08)';
+
+  const loadHistory = useCallback(async () => {
+    if (!user) { setLoading(false); return; }
+    try {
+      const { data, error } = await supabase
+        .from('ad_history')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(100);
+
+      if (!error && data) {
+        setGroups(groupByDate(data as AdEntry[]));
+      }
+    } catch (e) {
+      // ignore
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [user]);
+
+  useEffect(() => { loadHistory(); }, [loadHistory]);
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    loadHistory();
+  }, [loadHistory]);
+
+  const getIconColor = (idx: number) => ICON_COLORS[idx % ICON_COLORS.length];
+
+  const getInitial = (query: string) => (query?.[0] || 'Q').toUpperCase();
 
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: bg },
@@ -97,6 +174,16 @@ export default function AdHistoryScreen() {
     adInfo: { flex: 1 },
     adName: { fontSize: 16, color: primaryText, fontWeight: '500', marginBottom: 3 },
     adMeta: { fontSize: 13, color: secondaryText },
+    emptyCenter: {
+      flex: 1, alignItems: 'center', justifyContent: 'center',
+      paddingHorizontal: 40, paddingBottom: 60,
+    },
+    iconCircle: {
+      width: 60, height: 60, borderRadius: 30, backgroundColor: '#2C2C2E',
+      alignItems: 'center', justifyContent: 'center', marginBottom: 16,
+    },
+    emptyTitle: { fontSize: 20, fontWeight: '700', color: primaryText, marginBottom: 10 },
+    emptyDesc: { fontSize: 15, color: secondaryText, textAlign: 'center', lineHeight: 22 },
   });
 
   return (
@@ -107,7 +194,10 @@ export default function AdHistoryScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={primaryText} />}
+      >
         <View style={styles.headerCard}>
           <View style={styles.iconBox}>
             <Ionicons name="time-outline" size={28} color={primaryText} />
@@ -118,27 +208,44 @@ export default function AdHistoryScreen() {
           </Text>
         </View>
 
-        {MOCK_AD_HISTORY.map(group => (
-          <View key={group.group}>
-            <Text style={styles.groupLabel}>{group.group}</Text>
-            <View style={styles.adCard}>
-              {group.items.map((item, idx) => (
-                <View
-                  key={item.id}
-                  style={[styles.adRow, idx === group.items.length - 1 && styles.adRowLast]}
-                >
-                  <View style={[styles.adIconCircle, { backgroundColor: item.iconBg }]}>
-                    <Text style={styles.adIconText}>{item.iconLetter}</Text>
-                  </View>
-                  <View style={styles.adInfo}>
-                    <Text style={styles.adName}>{item.name}</Text>
-                    <Text style={styles.adMeta}>{item.time} {item.action}</Text>
-                  </View>
-                </View>
-              ))}
-            </View>
+        {loading ? (
+          <View style={[styles.emptyCenter, { flex: 0, paddingVertical: 40 }]}>
+            <ActivityIndicator color={primaryText} />
           </View>
-        ))}
+        ) : groups.length === 0 ? (
+          <View style={styles.emptyCenter}>
+            <View style={styles.iconCircle}>
+              <Ionicons name="time-outline" size={28} color={secondaryText} />
+            </View>
+            <Text style={styles.emptyTitle}>No Ad History</Text>
+            <Text style={styles.emptyDesc}>
+              As you interact with AI web searches, your activity will appear here.
+            </Text>
+          </View>
+        ) : (
+          groups.map(group => (
+            <View key={group.group}>
+              <Text style={styles.groupLabel}>{group.group}</Text>
+              <View style={styles.adCard}>
+                {group.items.map((item, idx) => (
+                  <View
+                    key={item.id}
+                    style={[styles.adRow, idx === group.items.length - 1 && styles.adRowLast]}
+                  >
+                    <View style={[styles.adIconCircle, { backgroundColor: getIconColor(idx) }]}>
+                      <Text style={styles.adIconText}>{getInitial(item.query)}</Text>
+                    </View>
+                    <View style={styles.adInfo}>
+                      <Text style={styles.adName} numberOfLines={1}>{item.query}</Text>
+                      <Text style={styles.adMeta}>{formatTime(item.created_at)}</Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            </View>
+          ))
+        )}
+
         <View style={{ height: insets.bottom + 20 }} />
       </ScrollView>
     </View>
