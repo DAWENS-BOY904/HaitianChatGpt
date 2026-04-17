@@ -1634,9 +1634,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-  "eventMessage": "send-login-email error: TypeError: supabaseAdmin.from(...).insert(...).catch is not a function\n    at Object.handler (file:///models/njpuoozygqtpvlzhnjpu/send-login-email/index.ts:183:15)\n    at eventLoopTick (ext:core/01_core.js:168:7)\n    at async respond (ext:sb_core_main_js/js/http.js:197:14)\n",
-  "functionId": "send-login-email",
-  "id": "3e2171bc-20f6-4e69-8029-ffd6c06bb121",
-  "logLevel": "ERROR",
-  "timestamp": 1776400908
-} Implement real passkey creation in app/passkeys using expo-local-authentication for biometric prompt, save the passkey record to user_api_keys table with key_name 'passkey' and platform info, show existing passkeys list with delete option, and on login check for passkeys automatically.Redesign the settings page header in app/settings to match ChatGPT style — remove the black background, add borderRadius to the modal sheet, and make it look clean like the reference photo with a light/dark themed header.
+In login on mount check if the current user has any saved passkeys in user_api_keys table with key_name='passkey', and if found, prompt Face ID/Touch ID via expo-local-authentication to authenticate, then auto-sign-in without showing the email form.Find and fix the 'Cannot access cleanedBeforeCard before initialization' error — search all files for the variable cleanedBeforeCard, move its declaration before any early return or conditional that uses it, so it is always initialized before access. Implement real passkey creation in app/passkeys using expo-local-authentication for biometric prompt, save the passkey record to user_api_keys table with key_name 'passkey' and platform info, show existing passkeys list with delete option, and on login check for passkeys automatically.Redesign the settings page header in app/settings to match ChatGPT style — remove the black background, add borderRadius to the modal sheet, and make it look clean like the reference photo with a light/dark themed header.
