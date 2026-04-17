@@ -36,7 +36,7 @@ import { useAlert, useAuth } from '@/template';
 import { Spacing, Typography, BorderRadius } from '../constants/theme';
 import { MenuModal } from '../components/MenuModal';
 import { ToolsModal } from '../components/ToolsModal';
-import { QuizModal, QuizQuestion } from '../components/QuizModal';
+import { QuizModal, QuizView, QuizQuestion } from '../components/QuizModal';
 import { PresetsModal } from '../components/PresetsModal';
 import { StreamingText } from '../components/StreamingText';
 import { ConversationMenuModal } from '../components/ConversationMenuModal';
@@ -1118,20 +1118,32 @@ export default function HomeScreen() {
   const handleCancelGeneration = useCallback(() => { setGenerating(false); }, []);
 
   const generateQuizQuestions = (_topic: string): QuizQuestion[] => [
-    { question: 'What is the capital of France?', options: ['Berlin', 'Madrid', 'Rome', 'Paris'], answer: 3 },
-    { question: 'Chemical symbol for Gold?', options: ['Go', 'Gd', 'Au', 'Ag'], answer: 2 },
-    { question: 'How many continents are there?', options: ['5', '6', '7', '8'], answer: 2 },
-    { question: 'Closest planet to the Sun?', options: ['Venus', 'Mercury', 'Earth', 'Mars'], answer: 1 },
-    { question: 'What is 5 x 6?', options: ['25', '30', '35', '36'], answer: 1 },
-    { question: 'Who wrote Romeo and Juliet?', options: ['Dickens', 'Hemingway', 'Tolkien', 'Shakespeare'], answer: 3 },
-    { question: 'What gas do plants absorb?', options: ['Oxygen', 'Nitrogen', 'Carbon dioxide', 'Hydrogen'], answer: 2 },
-    { question: 'Largest ocean?', options: ['Atlantic', 'Indian', 'Arctic', 'Pacific'], answer: 3 },
-    { question: 'Boiling point of water (C)?', options: ['90', '95', '100', '110'], answer: 2 },
-    { question: 'Fastest land animal?', options: ['Lion', 'Cheetah', 'Horse', 'Leopard'], answer: 1 },
+    { question: 'What is the capital of France?', options: ['Berlin', 'Madrid', 'Rome', 'Paris'], answer: 3, explanation: 'Paris is the capital and largest city of France.' },
+    { question: 'Chemical symbol for Gold?', options: ['Go', 'Gd', 'Au', 'Ag'], answer: 2, explanation: 'Au comes from the Latin word Aurum.' },
+    { question: 'How many continents are there?', options: ['5', '6', '7', '8'], answer: 2, explanation: 'There are 7 continents on Earth.' },
+    { question: 'Closest planet to the Sun?', options: ['Venus', 'Mercury', 'Earth', 'Mars'], answer: 1, explanation: 'Mercury is the closest planet to the Sun.' },
+    { question: 'What is 5 x 6?', options: ['25', '30', '35', '36'], answer: 1, explanation: 'Basic multiplication: 5 times 6 equals 30.' },
+    { question: 'Who wrote Romeo and Juliet?', options: ['Dickens', 'Hemingway', 'Tolkien', 'Shakespeare'], answer: 3, explanation: 'William Shakespeare wrote this famous play.' },
+    { question: 'What gas do plants absorb?', options: ['Oxygen', 'Nitrogen', 'Carbon dioxide', 'Hydrogen'], answer: 2, explanation: 'Plants absorb CO2 during photosynthesis.' },
+    { question: 'Largest ocean?', options: ['Atlantic', 'Indian', 'Arctic', 'Pacific'], answer: 3, explanation: 'The Pacific Ocean is the largest and deepest.' },
+    { question: 'Boiling point of water (°C)?', options: ['90°C', '95°C', '100°C', '110°C'], answer: 2, explanation: 'Water boils at 100°C at sea level.' },
+    { question: 'Fastest land animal?', options: ['Lion', 'Cheetah', 'Horse', 'Leopard'], answer: 1, explanation: 'The cheetah can run up to 120 km/h.' },
   ];
+
+  // ── Show quiz inline in chat when AI generates one ──
+  const [inlineQuizVisible, setInlineQuizVisible] = useState(false);
+  const [inlineQuizQuestions, setInlineQuizQuestions] = useState<QuizQuestion[]>([]);
+
+  const showInlineQuiz = useCallback((questions: QuizQuestion[]) => {
+    setInlineQuizQuestions(questions);
+    setInlineQuizVisible(true);
+    // Scroll to bottom so quiz is visible
+    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 200);
+  }, []);
 
   const handleQuizViewResults = (answers: any[], questions: QuizQuestion[]) => {
     setQuizModalVisible(false);
+    setInlineQuizVisible(false);
     const correct = answers.filter(a => a.correct).length;
     const resultLines = questions.map((q, i) => {
       const ans = answers.find(a => a.questionIndex === i);
@@ -1143,7 +1155,12 @@ export default function HomeScreen() {
     sendMessage(finalMsg, undefined, undefined, false, currentAIModel);
   };
 
-  const handleHarderQuiz = () => { setQuizModalVisible(false); setInputText('Make me a harder quiz'); };
+  const handleHarderQuiz = () => {
+    setQuizModalVisible(false);
+    setInlineQuizVisible(false);
+    setInputText('Make me a harder quiz');
+    setTimeout(() => inputRef.current?.focus(), 100);
+  };
   const handleEditMessage = useCallback((messageId: string, content: string) => { setEditingMessageId(messageId); setInputText(content); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }, []);
   const handleCancelEdit = useCallback(() => { setEditingMessageId(null); setInputText(''); }, []);
   const handleMediaPicked = useCallback((media: MediaFile[]) => { if (media.length > 5) { showAlert('Limit', 'You can select a maximum of 5 files'); return; } setSelectedMedia(media); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }, [showAlert]);
@@ -1495,9 +1512,22 @@ export default function HomeScreen() {
                           </View>
                         </View>
                       ) : null}
-                      ListFooterComponent={generating ? (
-                        <ThinkingIndicator userMessage={(messages || []).length > 0 ? (messages || [])[(messages || []).length - 1].content : inputText} completed={showCompletionStatus} mode={thinkingMode} />
-                      ) : null}
+                      ListFooterComponent={
+                        <>
+                          {inlineQuizVisible && inlineQuizQuestions.length > 0 ? (
+                            <QuizView
+                              questions={inlineQuizQuestions}
+                              onClose={() => setInlineQuizVisible(false)}
+                              onViewResults={handleQuizViewResults}
+                              onTryAnother={() => { const qs = generateQuizQuestions(''); setInlineQuizQuestions(qs); }}
+                              onHarderQuiz={handleHarderQuiz}
+                            />
+                          ) : null}
+                          {streamingMessageId ? null : generating ? (
+                            <ThinkingIndicator userMessage={(messages || []).length > 0 ? (messages || [])[(messages || []).length - 1].content : inputText} completed={showCompletionStatus} mode={thinkingMode} />
+                          ) : null}
+                        </>
+                      }
                       onContentSizeChange={() => { if (isAtBottom) flatListRef.current?.scrollToEnd({ animated: true }); }}
                       maxToRenderPerBatch={10}
                       windowSize={10}
@@ -1729,21 +1759,14 @@ export default function HomeScreen() {
                     </View>
                   </View>
                   <TouchableOpacity style={{ backgroundColor: '#FFF', borderRadius: 50, paddingVertical: 16, alignItems: 'center' }}
-                    onPress={() => { setQuizConnectDetailVisible(false); const qs = generateQuizQuestions(''); setQuizQuestions(qs); setQuizModalVisible(true); }}>
+                    onPress={() => { setQuizConnectDetailVisible(false); const qs = generateQuizQuestions(''); setInlineQuizQuestions(qs); setInlineQuizVisible(true); setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 300); }}>
                     <Text style={{ color: '#000', fontSize: 17, fontWeight: '700' }}>Connect Quizzes</Text>
                   </TouchableOpacity>
                 </View>
               </View>
             </Modal>
 
-            <QuizModal
-              visible={quizModalVisible}
-              questions={quizQuestions}
-              onClose={() => setQuizModalVisible(false)}
-              onViewResults={handleQuizViewResults}
-              onTryAnother={() => { const qs = generateQuizQuestions(''); setQuizQuestions(qs); }}
-              onHarderQuiz={handleHarderQuiz}
-            />
+            {/* Legacy modal — kept for Connect flow; inline view handles actual quiz display */}
 
             <PresetsModal
               visible={presetsModalVisible}
