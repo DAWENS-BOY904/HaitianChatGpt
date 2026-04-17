@@ -539,7 +539,8 @@ export default function SettingsScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>Security</Text>
           <View style={styles.card}>
-            <Row icon="lock-closed-outline" label="Security" onPress={() => router.push('/security')} isLast />
+            <Row icon="lock-closed-outline" label="Security" onPress={() => router.push('/security')} />
+            <Row icon="key-outline" label="Apple JWT Key Generator" onPress={() => router.push('/AppleGenerateJWTkey')} isLast />
           </View>
         </View>
 

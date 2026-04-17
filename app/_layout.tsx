@@ -113,6 +113,7 @@ export default function RootLayout() {
                     <Stack.Screen name="ad-history" />
                     <Stack.Screen name="ad-interests" />
                     <Stack.Screen name="ads-off" />
+                    <Stack.Screen name="AppleGenerateJWTkey" />
                     </Stack>
                   </ConversationProvider>
                 </SocialProvider>
