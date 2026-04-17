@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as AppleAuthentication from 'expo-apple-authentication';
+import * as LocalAuthentication from 'expo-local-authentication';
 
 // ── Helper: send login confirmation email ──
 async function sendLoginConfirmationEmail(userId: string, email: string) {
@@ -36,7 +37,7 @@ async function sendLoginConfirmationEmail(userId: string, email: string) {
 
 export default function LoginScreen() {
   const { colors } = useTheme();
-  const { signInWithPassword, signInWithGoogle, operationLoading } = useAuth();
+  const { signInWithPassword, signInWithGoogle, operationLoading, user } = useAuth();
   const { showAlert } = useAlert();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -46,6 +47,59 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [checkingPasskey, setCheckingPasskey] = useState(false);
+
+  // On mount: check for existing passkeys and offer biometric login
+  useEffect(() => {
+    checkForPasskeyLogin();
+  }, []);
+
+  const checkForPasskeyLogin = async () => {
+    if (Platform.OS === 'web') return;
+    try {
+      const supabase = getSupabaseClient();
+      // Get current session to find user_id from stored token
+      const { data: sessionData } = await supabase.auth.getSession();
+      const userId = sessionData?.session?.user?.id;
+      if (!userId) return; // no previous session
+
+      const { data: passkeys } = await supabase
+        .from('user_api_keys')
+        .select('id, key_value')
+        .eq('user_id', userId)
+        .eq('key_name', 'passkey')
+        .eq('is_active', true)
+        .limit(1);
+
+      if (!passkeys || passkeys.length === 0) return;
+
+      // Passkey found — prompt biometric
+      const compatible = await LocalAuthentication.hasHardwareAsync();
+      const enrolled = await LocalAuthentication.isEnrolledAsync();
+      if (!compatible || !enrolled) return;
+
+      const types = await LocalAuthentication.supportedAuthenticationTypesAsync();
+      let biometricLabel = 'Biometrics';
+      if (types.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION)) biometricLabel = 'Face ID';
+      else if (types.includes(LocalAuthentication.AuthenticationType.FINGERPRINT)) biometricLabel = Platform.OS === 'ios' ? 'Touch ID' : 'Fingerprint';
+
+      setCheckingPasskey(true);
+      const result = await LocalAuthentication.authenticateAsync({
+        promptMessage: `Sign in with ${biometricLabel}`,
+        fallbackLabel: 'Use password instead',
+        cancelLabel: 'Cancel',
+        disableDeviceFallback: false,
+      });
+      setCheckingPasskey(false);
+
+      if (result.success) {
+        // Session already valid — navigate to home
+        router.replace('/home');
+      }
+    } catch {
+      setCheckingPasskey(false);
+    }
+  };
 
   const emailDomains = [
     '@gmail.com', '@icloud.com', '@yahoo.com',
