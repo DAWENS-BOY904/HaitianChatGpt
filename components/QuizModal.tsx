@@ -102,7 +102,7 @@ export function QuizModal({ visible, questions, onClose, onViewResults, onTryAno
   };
 
   const handleOptionSelect = (optionIdx: number) => {
-    if (selectedOption !== null && showFeedback === 'correct') return; // already answered correctly
+    if (selectedOption !== null && showFeedback === 'correct') return; // already answered correctlyy
     if (!q) return;
 
     setSelectedOption(optionIdx);
