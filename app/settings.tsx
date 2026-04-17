@@ -26,6 +26,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getSupabaseClient } from '@/template';
 import * as ImagePicker from 'expo-image-picker';
 import Constants from 'expo-constants';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function SettingsScreen() {
   const { colors, isDark } = useTheme();
@@ -186,6 +187,11 @@ export default function SettingsScreen() {
         text: 'Log Out',
         style: 'destructive',
         onPress: async () => {
+          // Clear passkey session flag so biometric prompt does not fire on next fresh login
+          try {
+            await AsyncStorage.removeItem('passkey_session_active');
+            await AsyncStorage.removeItem('passkey_user_id');
+          } catch (_) {}
           await logout();
           router.replace('/login');
         },
