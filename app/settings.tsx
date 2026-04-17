@@ -484,7 +484,7 @@ export default function SettingsScreen() {
             <Row icon="receipt-outline" label="Orders" onPress={() => router.push('/orders')} />
             <Row icon="person-circle-outline" label="Personalization" onPress={() => router.push('/personalization')} />
             <Row icon="notifications-outline" label="Notifications" onPress={() => router.push('/notifications')} />
-            <Row icon="apps-outline" label="Apps" onPress={() => {}} />
+            <Row icon="lock-closed-outline" label="Security" onPress={() => router.push('/security')} />
             <Row icon="people-outline" label="Parental controls" onPress={() => router.push('/parental-controls')} />
             <Row icon="document-lock-outline" label="Data controls" onPress={() => router.push('/data-controls')} />
             <Row icon="megaphone-outline" label="Ads controls" onPress={() => router.push('/ads-controls')} />
@@ -535,21 +535,13 @@ export default function SettingsScreen() {
           </View>
         </View>
 
-        {/* Security */}
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>Security</Text>
-          <View style={styles.card}>
-            <Row icon="lock-closed-outline" label="Security" onPress={() => router.push('/security')} />
-            <Row icon="key-outline" label="Apple JWT Key Generator" onPress={() => router.push('/AppleGenerateJWTkey')} isLast />
-          </View>
-        </View>
-
         {/* Admin */}
         {isAdmin && (
           <View style={styles.section}>
             <Text style={styles.sectionLabel}>Admin</Text>
             <View style={styles.card}>
               <Row icon="shield-outline" label="Admin Dashboard" onPress={() => router.push('/admin')} />
+              <Row icon="key-outline" label="Apple JWT Key Generator" onPress={() => router.push('/AppleGenerateJWTkey')} isLast />
               <Row icon="mail-outline" label="Send Email to Users" onPress={() => router.push('/admin-email')} isLast />
             </View>
           </View>
