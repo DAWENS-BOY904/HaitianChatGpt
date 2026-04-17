@@ -8,7 +8,7 @@ import {
   StatusBar,
   Platform,
   ActivityIndicator,
-  Animated,
+  Alert,
 } from 'react-native';
 import { useAuth, useAlert, getSupabaseClient } from '@/template';
 import { useTheme } from '../hooks/useTheme';
@@ -19,7 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as LocalAuthentication from 'expo-local-authentication';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { createClient } from '@supabase/supabase-js';
+import * as Crypto from 'expo-crypto';
 
 // ── Helper: send login confirmation email ──
 async function sendLoginConfirmationEmail(userId: string, email: string) {
@@ -39,24 +39,24 @@ async function sendLoginConfirmationEmail(userId: string, email: string) {
   }
 }
 
-// ── Helper: get Apple-specific Supabase client (uses MY_SUPABASE_URL) ──
-function getAppleSupabaseClient() {
-  const supabaseUrl = process.env.MY_SUPABASE_URL || process.env.EXPO_PUBLIC_MY_SUPABASE_URL;
-  const supabaseKey = process.env.MY_SUPABASE_ANON_KEY || process.env.EXPO_PUBLIC_MY_SUPABASE_ANON_KEY;
-  
-  if (!supabaseUrl || !supabaseKey) {
-    console.error('MY_SUPABASE_URL or MY_SUPABASE_ANON_KEY not configured');
-    // Fallback to regular client if env vars not set
-    return getSupabaseClient();
+// ── Helper: Generate nonce for Apple Sign In ──
+async function generateNonce(length: number = 32): Promise<string> {
+  const charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  const randomBytes = await Crypto.getRandomBytesAsync(length);
+  let nonce = '';
+  for (let i = 0; i < length; i++) {
+    nonce += charset[randomBytes[i] % charset.length];
   }
-  
-  return createClient(supabaseUrl, supabaseKey, {
-    auth: {
-      autoRefreshToken: true,
-      persistSession: true,
-      detectSessionInUrl: false,
-    },
-  });
+  return nonce;
+}
+
+// ── Helper: SHA256 hash for Apple nonce ──
+async function sha256Hash(str: string): Promise<string> {
+  const digest = await Crypto.digestStringAsync(
+    Crypto.CryptoDigestAlgorithm.SHA256,
+    str
+  );
+  return digest;
 }
 
 export default function LoginScreen() {
@@ -76,11 +76,19 @@ export default function LoginScreen() {
   const [passkeyBiometricLabel, setPasskeyBiometricLabel] = useState('Biometrics');
   const [passkeyLoading, setPasskeyLoading] = useState(false);
   const [passkeyUserId, setPasskeyUserId] = useState<string | null>(null);
+  const [appleLoading, setAppleLoading] = useState(false);
 
   // On mount: check for existing passkeys and show biometric prompt card
   useEffect(() => {
     checkForPasskeyLogin();
   }, []);
+
+  // Watch for user changes and navigate when authenticated
+  useEffect(() => {
+    if (user) {
+      router.replace('/home');
+    }
+  }, [user]);
 
   const checkForPasskeyLogin = async () => {
     if (Platform.OS === 'web') return;
@@ -119,7 +127,8 @@ export default function LoginScreen() {
       setPasskeyBiometricLabel(label);
       setPasskeyUserId(userId);
       setShowPasskeyPrompt(true);
-    } catch {
+    } catch (err) {
+      console.log('Passkey check error:', err);
       // silently ignore
     }
   };
@@ -180,13 +189,19 @@ export default function LoginScreen() {
   };
 
   const handleGoogleSignIn = async () => {
-    const { error, user } = await signInWithGoogle() as any;
-    if (error) {
-      showAlert('Error', error);
-      return;
-    }
-    if (user) {
-      sendLoginConfirmationEmail(user.id, user.email || email);
+    try {
+      const { error, user: googleUser } = await signInWithGoogle() as any;
+      if (error) {
+        showAlert('Error', error);
+        return;
+      }
+      if (googleUser) {
+        await sendLoginConfirmationEmail(googleUser.id, googleUser.email || email);
+        // Navigation handled by useEffect watching 'user'
+      }
+    } catch (err: any) {
+      console.error('Google sign-in error:', err);
+      showAlert('Error', err?.message || 'Google sign-in failed. Please try again.');
     }
   };
 
@@ -199,40 +214,20 @@ export default function LoginScreen() {
       showAlert('Not Available', 'Apple Sign In is only available on iOS devices.');
       return;
     }
+
+    setAppleLoading(true);
+    
     try {
       const available = await AppleAuthentication.isAvailableAsync();
       if (!available) {
         showAlert('Not Available', 'Apple Sign In is not available on this device. Please update iOS.');
+        setAppleLoading(false);
         return;
       }
 
-      // Generate a cryptographically secure nonce
-      const generateNonce = (length: number): string => {
-        const charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-        let nonce = '';
-        for (let i = 0; i < length; i++) {
-          nonce += charset[Math.floor(Math.random() * charset.length)];
-        }
-        return nonce;
-      };
-
-      const rawNonce = generateNonce(32);
-
-      // SHA-256 hash the nonce (required by Apple)
-      const sha256 = async (str: string): Promise<string> => {
-        try {
-          const msgBuf = new TextEncoder().encode(str);
-          const hashBuf = await crypto.subtle.digest('SHA-256', msgBuf);
-          return Array.from(new Uint8Array(hashBuf))
-            .map(b => b.toString(16).padStart(2, '0'))
-            .join('');
-        } catch (e) {
-          // Fallback: use raw nonce if crypto not available
-          return rawNonce;
-        }
-      };
-
-      const hashedNonce = await sha256(rawNonce);
+      // Generate nonce using expo-crypto
+      const rawNonce = await generateNonce(32);
+      const hashedNonce = await sha256Hash(rawNonce);
 
       // Request Apple credentials
       const credential = await AppleAuthentication.signInAsync({
@@ -245,22 +240,24 @@ export default function LoginScreen() {
 
       if (!credential.identityToken) {
         showAlert('Sign In Error', 'Apple did not return an identity token. Please try again.');
+        setAppleLoading(false);
         return;
       }
 
-      // Use Apple-specific Supabase client with MY_SUPABASE_URL
-      const supabase = getAppleSupabaseClient();
+      // Use the main Supabase client (not a separate one)
+      const supabase = getSupabaseClient();
 
       // Sign in to Supabase with Apple ID token
       const { data, error } = await supabase.auth.signInWithIdToken({
         provider: 'apple',
         token: credential.identityToken,
-        nonce: rawNonce,
+        nonce: rawNonce, // Use raw nonce here
       });
 
       if (error) {
         console.error('Supabase Apple sign-in error:', error);
         showAlert('Sign In Failed', error.message || 'Failed to authenticate with Apple.');
+        setAppleLoading(false);
         return;
       }
 
@@ -271,21 +268,34 @@ export default function LoginScreen() {
             credential.fullName.givenName,
             credential.fullName.familyName,
           ].filter(Boolean).join(' ');
-          await supabase.from('user_profiles').update({ full_name: fullName }).eq('id', data.user.id).catch(() => {});
+          
+          try {
+            await supabase
+              .from('user_profiles')
+              .update({ full_name: fullName })
+              .eq('id', data.user.id);
+          } catch (profileErr) {
+            console.log('Profile update error (non-critical):', profileErr);
+          }
         }
 
         const appleEmail = data.user.email || credential.email || `${credential.user}@privaterelay.appleid.com`;
-        sendLoginConfirmationEmail(data.user.id, appleEmail);
+        await sendLoginConfirmationEmail(data.user.id, appleEmail);
+        
+        // Navigation will be handled by useEffect watching 'user' state
       }
-      // AuthProvider handles navigation automatically
     } catch (e: any) {
-      if (e?.code === 'ERR_REQUEST_CANCELED') return; // user cancelled — no error shown
-      if (e?.code === 'ERR_APPLE_AUTHENTICATION_CREDENTIAL') {
+      if (e?.code === 'ERR_REQUEST_CANCELED') {
+        // User cancelled — no error shown
+        console.log('Apple Sign In cancelled by user');
+      } else if (e?.code === 'ERR_APPLE_AUTHENTICATION_CREDENTIAL') {
         showAlert('Sign In Failed', 'Apple credential error. Please try again.');
-        return;
+      } else {
+        console.error('Apple Sign In error:', e);
+        showAlert('Sign In Error', e?.message || 'Apple Sign In failed. Please try again.');
       }
-      console.error('Apple Sign In error:', e);
-      showAlert('Sign In Error', e?.message || 'Apple Sign In failed. Please try again.');
+    } finally {
+      setAppleLoading(false);
     }
   };
 
@@ -389,6 +399,7 @@ export default function LoginScreen() {
       borderWidth: 1,
       borderColor: '#000000',
       gap: Spacing.sm,
+      opacity: appleLoading ? 0.7 : 1,
     },
     appleButtonText: {
       ...Typography.body,
@@ -408,6 +419,7 @@ export default function LoginScreen() {
       borderWidth: 1.5,
       borderColor: colors.border,
       gap: Spacing.sm,
+      opacity: operationLoading ? 0.7 : 1,
     },
     oauthButtonText: {
       ...Typography.body,
@@ -592,11 +604,18 @@ export default function LoginScreen() {
         <TouchableOpacity
           style={styles.oauthButton}
           onPress={handleGoogleSignIn}
+          disabled={operationLoading}
           accessibilityLabel="Continue with Google"
           accessibilityRole="button"
         >
-          <Ionicons name="logo-google" size={20} color={colors.text} />
-          <Text style={styles.oauthButtonText}>Continue with Google</Text>
+          {operationLoading ? (
+            <ActivityIndicator size="small" color={colors.text} />
+          ) : (
+            <>
+              <Ionicons name="logo-google" size={20} color={colors.text} />
+              <Text style={styles.oauthButtonText}>Continue with Google</Text>
+            </>
+          )}
         </TouchableOpacity>
 
         {/* Apple Sign In — iOS only per Apple HIG */}
@@ -604,17 +623,25 @@ export default function LoginScreen() {
           <TouchableOpacity
             style={styles.appleButton}
             onPress={handleAppleSignIn}
+            disabled={appleLoading}
             accessibilityLabel="Sign in with Apple"
             accessibilityRole="button"
           >
-            <Ionicons name="logo-apple" size={20} color="#FFFFFF" />
-            <Text style={styles.appleButtonText}>Sign in with Apple</Text>
+            {appleLoading ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <>
+                <Ionicons name="logo-apple" size={20} color="#FFFFFF" />
+                <Text style={styles.appleButtonText}>Sign in with Apple</Text>
+              </>
+            )}
           </TouchableOpacity>
         )}
 
         <TouchableOpacity
           style={styles.oauthButton}
           onPress={handlePhoneLogin}
+          disabled={operationLoading}
           accessibilityLabel="Continue with phone"
           accessibilityRole="button"
         >
@@ -625,3 +652,4 @@ export default function LoginScreen() {
     </View>
   );
 }
+
