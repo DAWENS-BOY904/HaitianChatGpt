@@ -1634,4 +1634,3 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-hello ai dont skip make change: when you tex with ai chak message u send page chat la dwe auto monte sou new and siw vle scroll pou we lot anle yo li pa dwe  rete anba li dwe alsways anle and fix upload remove background color la puti t simple in the cat page and fix upload model redesign better.
