@@ -1823,3 +1823,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
+when i tex its says property editingId dosen't exist fix all of this and when i tex the ai response only :response generated the ai not work correctly.
