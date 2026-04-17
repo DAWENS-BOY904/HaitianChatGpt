@@ -548,7 +548,7 @@ export default function HomeScreen() {
   const { settings, updateSetting } = useSettings();
   const { user } = useAuth();
   const { canSendMessage, coins, isUnlimited, incrementMessageCount, isAdmin } = useGuestLimits();
-  const { conversations, messages, currentConversation, sendMessage, updateMessageAndRegenerate, createConversation, deleteConversation, loading, streamingMessageId, updateConversationTitle, archiveConversation, selectConversation } = useConversation();
+  const { conversations, messages, currentConversation, sendMessage, updateMessageAndRegenerate, createConversation, deleteConversation, loading, streamingMessageId, updateConversationTitle, archiveConversation, selectConversation, temporaryMode: ctxTempMode, setTemporaryMode: ctxSetTempMode } = useConversation();
   const { showAlert } = useAlert();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -595,7 +595,15 @@ export default function HomeScreen() {
   const [groupStartModalVisible, setGroupStartModalVisible] = useState(false);
   const [notifPermModalVisible, setNotifPermModalVisible] = useState(false);
   const [groupChatMode, setGroupChatMode] = useState(false);
-  const [temporaryChatMode, setTemporaryChatMode] = useState(false);
+  const [temporaryChatMode, setTemporaryChatModeLocal] = useState(false);
+  const setTemporaryChatMode = (val: boolean) => {
+    setTemporaryChatModeLocal(val);
+    if (ctxSetTempMode) ctxSetTempMode(val);
+  };
+  // Keep local state in sync with context
+  useEffect(() => {
+    if (ctxSetTempMode) ctxSetTempMode(temporaryChatMode);
+  }, [temporaryChatMode]);
   const [customizeAIVisible, setCustomizeAIVisible] = useState(false);
   const [inviteLinkVisible, setInviteLinkVisible] = useState(false);
   const [groupCustomInstructions, setGroupCustomInstructions] = useState('');
