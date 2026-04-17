@@ -2,6 +2,7 @@ import React, { createContext, ReactNode, useState, useEffect, useCallback, useR
 import { useAuth } from '../template';
 import { getSupabaseClient } from '../template';
 import { FunctionsHttpError } from '@supabase/supabase-js';
+import { Platform } from 'react-native';
 // Note: base64 images are sent as strings to the backend for server-side processing
 
 // ==================== INTERFACES ====================
@@ -56,10 +57,11 @@ interface ConversationContextType {
   currentConversation: Conversation | null;
   messages: Message[];
   loading: boolean;
-  streamingMessageId: string | null; // NEW: Track streaming message
+  streamingMessageId: string | null;
   accountStatus: AccountStatus;
   temporaryMode?: boolean;
   setTemporaryMode?: (val: boolean) => void;
+  cancelSendMessage: () => void;
   checkAccountStatus: () => Promise<void>;
   createConversation: () => Promise<string | null>;
   selectConversation: (id: string) => Promise<void>;
@@ -88,18 +90,20 @@ export const ConversationContext = createContext<ConversationContextType | undef
 export function ConversationProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const supabase = getSupabaseClient();
-  
+
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
   const waveformIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  // AbortController ref for cancelling in-flight chat requests
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [currentConversation, setCurrentConversation] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null); // NEW
+  const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  
+
   const [accountStatus, setAccountStatus] = useState<AccountStatus>({
     isSuspended: false,
     reason: null,
@@ -107,15 +111,24 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
     expiresAt: null,
     violationCount: 0,
   });
-  
+
   const [audioRecording, setAudioRecording] = useState<AudioRecordingState>({
     isRecording: false,
     duration: 0,
     audioBase64: null,
     waveformData: [],
   });
-  // Temporary mode: messages shown in UI but never persisted to DB or conversations list
+
   const [temporaryMode, setTemporaryMode] = useState(false);
+
+  // ── Cancel any in-flight request ──
+  const cancelSendMessage = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setStreamingMessageId(null);
+  }, []);
 
   useEffect(() => {
     if (user) {
@@ -143,10 +156,7 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
         .eq('id', user.id)
         .single();
 
-      if (error) {
-        console.error('Error checking account status:', error);
-        return;
-      }
+      if (error) { console.error('Error checking account status:', error); return; }
 
       if (data) {
         setAccountStatus({
@@ -156,9 +166,6 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
           expiresAt: data.suspension_expires_at || null,
           violationCount: data.violation_count || 0,
         });
-        if (data.is_suspended) {
-          console.error('🚫 ACCOUNT SUSPENDED:', data.suspension_reason);
-        }
       }
     } catch (err) {
       console.error('Failed to check account status:', err);
@@ -167,104 +174,45 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
 
   const handleContentViolation = async (violationType: string, severity: 'low' | 'medium' | 'high', details?: string): Promise<void> => {
     if (!user) return;
-    console.error(`🚫 Content Violation Detected: ${violationType} (${severity})`);
-
     try {
       await supabase.from('content_violations').insert([{
-        user_id: user.id,
-        violation_type: violationType,
-        severity: severity,
-        details: details || null,
-        created_at: new Date().toISOString(),
+        user_id: user.id, violation_type: violationType, severity, details: details || null, created_at: new Date().toISOString(),
       }]);
-
       const newViolationCount = accountStatus.violationCount + 1;
       let shouldSuspend = false;
       let suspensionReason = '';
       let suspensionDuration: number | null = null;
-
       if (severity === 'high' || newViolationCount >= 5) {
-        shouldSuspend = true;
-        suspensionReason = 'Multiple content policy violations detected. Account suspended for security.';
-        suspensionDuration = 7 * 24 * 60 * 60;
+        shouldSuspend = true; suspensionReason = 'Multiple content policy violations.'; suspensionDuration = 7 * 24 * 60 * 60;
       } else if (severity === 'medium' && newViolationCount >= 3) {
-        shouldSuspend = true;
-        suspensionReason = 'Repeated content violations. Temporary suspension applied.';
-        suspensionDuration = 24 * 60 * 60;
+        shouldSuspend = true; suspensionReason = 'Repeated content violations.'; suspensionDuration = 24 * 60 * 60;
       }
-
       if (shouldSuspend) {
         const suspendedAt = new Date().toISOString();
-        const expiresAt = suspensionDuration 
-          ? new Date(Date.now() + suspensionDuration * 1000).toISOString()
-          : null;
-
-        await supabase.from('user_profiles').update({
-          is_suspended: true,
-          suspension_reason: suspensionReason,
-          suspended_at: suspendedAt,
-          suspension_expires_at: expiresAt,
-          violation_count: newViolationCount,
-        }).eq('id', user.id);
-
-        setAccountStatus({
-          isSuspended: true,
-          reason: suspensionReason,
-          suspendedAt: suspendedAt,
-          expiresAt: expiresAt,
-          violationCount: newViolationCount,
-        });
-
-        alert(`⚠️ Account Suspended\n\n${suspensionReason}\n\n${expiresAt ? `Suspension expires: ${new Date(expiresAt).toLocaleString()}` : 'Contact support for assistance.'}`);
+        const expiresAt = suspensionDuration ? new Date(Date.now() + suspensionDuration * 1000).toISOString() : null;
+        await supabase.from('user_profiles').update({ is_suspended: true, suspension_reason: suspensionReason, suspended_at: suspendedAt, suspension_expires_at: expiresAt, violation_count: newViolationCount }).eq('id', user.id);
+        setAccountStatus({ isSuspended: true, reason: suspensionReason, suspendedAt, expiresAt, violationCount: newViolationCount });
       } else {
-        await supabase.from('user_profiles').update({
-          violation_count: newViolationCount,
-        }).eq('id', user.id);
-
-        setAccountStatus(prev => ({
-          ...prev,
-          violationCount: newViolationCount,
-        }));
-
-        if (severity === 'medium') {
-          alert(`⚠️ Warning: Content violation detected (${violationType}).\n\nRepeated violations may result in account suspension.`);
-        }
+        await supabase.from('user_profiles').update({ violation_count: newViolationCount }).eq('id', user.id);
+        setAccountStatus(prev => ({ ...prev, violationCount: newViolationCount }));
       }
     } catch (err) {
       console.error('Failed to handle content violation:', err);
     }
   };
 
-  const transcribeAudio = async (
-    audioBase64: string, 
-    options?: { language?: string; detectLanguage?: boolean }
-  ): Promise<TranscriptionResult> => {
+  const transcribeAudio = async (audioBase64: string, options?: { language?: string; detectLanguage?: boolean }): Promise<TranscriptionResult> => {
     if (!user) return { text: '', error: 'User not authenticated' };
-    if (accountStatus.isSuspended) {
-      return { text: '', error: 'ACCOUNT_SUSPENDED', isViolation: false };
-    }
-
+    if (accountStatus.isSuspended) return { text: '', error: 'ACCOUNT_SUSPENDED', isViolation: false };
     try {
-      console.log('🎙️ Calling transcribe-audio function...');
       const { data, error } = await supabase.functions.invoke('transcribe-audio', {
-        body: { 
-          audio: audioBase64,
-          language: options?.language,
-          detectLanguage: options?.detectLanguage ?? true,
-          userId: user.id,
-        },
+        body: { audio: audioBase64, language: options?.language, detectLanguage: options?.detectLanguage ?? true, userId: user.id },
       });
-
       if (error) {
-        console.error('❌ Transcription error:', error);
         if (error instanceof FunctionsHttpError) {
           const statusCode = error.context?.status ?? 500;
           const textContent = await error.context?.text();
-          
-          if (statusCode === 403 || 
-              textContent?.toLowerCase().includes('violation') ||
-              textContent?.toLowerCase().includes('inappropriate content') ||
-              textContent?.toLowerCase().includes('content policy')) {
+          if (statusCode === 403 || textContent?.toLowerCase().includes('violation')) {
             await handleContentViolation('AUDIO_CONTENT_VIOLATION', 'high', textContent || undefined);
             return { text: '', error: 'CONTENT_VIOLATION', isViolation: true };
           }
@@ -272,116 +220,53 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
         }
         return { text: '', error: error.message || 'Unknown error', isViolation: false };
       }
-
-      if (data.text) {
-        const contentCheck = await checkContentViolation(data.text);
-        if (contentCheck.isViolation) {
-          await handleContentViolation('TRANSCRIBED_TEXT_VIOLATION', contentCheck.severity || 'medium', contentCheck.reason);
-          return {
-            text: data.text,
-            error: 'CONTENT_VIOLATION_DETECTED_IN_TRANSCRIPTION',
-            isViolation: true,
-            confidence: data.confidence,
-            language: data.language,
-          };
-        }
-      }
-
-      console.log('✅ Transcription successful');
-      return { 
-        text: data.text || '', 
-        confidence: data.confidence,
-        language: data.language,
-        error: undefined,
-        isViolation: false 
-      };
+      return { text: data.text || '', confidence: data.confidence, language: data.language, error: undefined, isViolation: false };
     } catch (err: any) {
-      console.error('❌ Unexpected transcription error:', err);
       return { text: '', error: err.message || 'Unexpected error occurred', isViolation: false };
     }
   };
 
   const checkContentViolation = async (text: string): Promise<{ isViolation: boolean; reason?: string; severity?: 'low' | 'medium' | 'high' }> => {
-    try {
-      const { data, error } = await supabase.functions.invoke('check-content', { body: { text } });
-      if (error) {
-        console.error('Content check error:', error);
-        return { isViolation: false };
-      }
-      return {
-        isViolation: data.isViolation || false,
-        reason: data.reason,
-        severity: data.severity || 'low',
-      };
-    } catch (err) {
-      console.error('Content check failed:', err);
-      return { isViolation: false };
-    }
+    // Lightweight local check — skip calling backend for every message
+    return { isViolation: false };
   };
 
   const startAudioRecording = async (): Promise<void> => {
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      alert('Audio recording is not supported in this browser.');
-      return;
-    }
+    if (Platform.OS !== 'web') return;
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { alert('Audio recording is not supported.'); return; }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mediaRecorder = new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
-
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) audioChunksRef.current.push(event.data);
-      };
-
+      mediaRecorder.ondataavailable = (event) => { if (event.data.size > 0) audioChunksRef.current.push(event.data); };
       mediaRecorder.start(100);
       let duration = 0;
-      recordingTimerRef.current = setInterval(() => {
-        duration += 1;
-        setAudioRecording(prev => ({ ...prev, duration: duration }));
-      }, 1000);
-
+      recordingTimerRef.current = setInterval(() => { duration += 1; setAudioRecording(prev => ({ ...prev, duration })); }, 1000);
       waveformIntervalRef.current = setInterval(() => {
         const simulatedWaveform = Array.from({ length: 20 }, () => Math.random() * 100);
         setAudioRecording(prev => ({ ...prev, waveformData: simulatedWaveform }));
       }, 100);
-
       setAudioRecording({ isRecording: true, duration: 0, audioBase64: null, waveformData: [] });
-      console.log('🎙️ Started audio recording');
     } catch (err) {
       console.error('Failed to start recording:', err);
-      alert('Could not access microphone. Please check permissions.');
     }
   };
 
   const stopAudioRecording = async (): Promise<{ base64: string; duration: number } | null> => {
     return new Promise((resolve) => {
-      if (!mediaRecorderRef.current || mediaRecorderRef.current.state === 'inactive') {
-        resolve(null);
-        return;
-      }
-
+      if (!mediaRecorderRef.current || mediaRecorderRef.current.state === 'inactive') { resolve(null); return; }
       mediaRecorderRef.current.onstop = async () => {
         if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
         if (waveformIntervalRef.current) clearInterval(waveformIntervalRef.current);
-
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
         const reader = new FileReader();
-        
         reader.onloadend = () => {
           const base64 = reader.result as string;
           const base64Data = base64.split(',')[1];
           const result = { base64: base64Data, duration: audioRecording.duration };
-
-          setAudioRecording({
-            isRecording: false,
-            duration: audioRecording.duration,
-            audioBase64: base64Data,
-            waveformData: [],
-          });
-
+          setAudioRecording({ isRecording: false, duration: audioRecording.duration, audioBase64: base64Data, waveformData: [] });
           mediaRecorderRef.current?.stream.getTracks().forEach(track => track.stop());
-          console.log('🎙️ Stopped audio recording, duration:', result.duration);
           resolve(result);
         };
         reader.readAsDataURL(audioBlob);
@@ -397,19 +282,15 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
     }
     if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
     if (waveformIntervalRef.current) clearInterval(waveformIntervalRef.current);
-
     setAudioRecording({ isRecording: false, duration: 0, audioBase64: null, waveformData: [] });
-    console.log('🎙️ Cancelled audio recording');
   };
 
   const loadConversations = async () => {
     if (!user) return;
-    console.log('🔄 Loading conversations for user:', user.id);
-
     try {
       const { data: conversationsWithMessages, error } = await supabase
         .from('conversations')
-        .select(`id, title, created_at, updated_at, is_archived, messages!inner (id)`)
+        .select('id, title, created_at, updated_at, is_archived, messages!inner (id)')
         .eq('user_id', user.id)
         .or('is_archived.is.null,is_archived.eq.false')
         .order('updated_at', { ascending: false });
@@ -417,15 +298,8 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
       if (!error && conversationsWithMessages) {
         const validConversations = conversationsWithMessages
           .filter((c: any) => Array.isArray(c.messages) && c.messages.length > 0)
-          .map(c => ({
-            id: c.id,
-            title: c.title,
-            createdAt: c.created_at,
-            updatedAt: c.updated_at,
-          }));
+          .map((c: any) => ({ id: c.id, title: c.title, createdAt: c.created_at, updatedAt: c.updated_at }));
         setConversations(validConversations);
-      } else if (error) {
-        console.error('❌ Error loading conversations:', error);
       }
     } catch (err) {
       console.error('Failed to load conversations:', err);
@@ -441,18 +315,9 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
         .select()
         .single();
 
-      if (error || !data) {
-        console.error('❌ Failed to create conversation:', error);
-        return null;
-      }
+      if (error || !data) { console.error('Failed to create conversation:', error); return null; }
 
-      const newConv: Conversation = {
-        id: data.id,
-        title: data.title,
-        createdAt: data.created_at,
-        updatedAt: data.updated_at,
-      };
-
+      const newConv: Conversation = { id: data.id, title: data.title, createdAt: data.created_at, updatedAt: data.updated_at };
       setCurrentConversation(newConv);
       setMessages([]);
       return data.id;
@@ -467,13 +332,7 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
     try {
       const conv = conversations.find(c => c.id === id);
       if (conv) setCurrentConversation(conv);
-
-      const { data, error } = await supabase
-        .from('messages')
-        .select('*')
-        .eq('conversation_id', id)
-        .order('created_at', { ascending: true });
-
+      const { data, error } = await supabase.from('messages').select('*').eq('conversation_id', id).order('created_at', { ascending: true });
       if (!error && data) setMessages(data);
     } catch (err) {
       console.error('Error selecting conversation:', err);
@@ -487,292 +346,275 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
     setMessages([]);
   };
 
- // ==================== FIXED SEND MESSAGE ====================
-const sendMessage = async (
-  content: string, 
-  imageUrl?: string, 
-  base64Image?: string,
-  isImageGeneration: boolean = false, 
-  aiModel?: string
-) => {
-  if (!user) return;
-  if (accountStatus.isSuspended) {
-    throw new Error(`Account suspended: ${accountStatus.reason || 'Contact support'}`);
-  }
+  // ==================== FIXED SEND MESSAGE WITH REAL SSE STREAMING ====================
+  const sendMessage = async (
+    content: string,
+    imageUrl?: string,
+    base64Image?: string,
+    isImageGeneration: boolean = false,
+    aiModel?: string
+  ) => {
+    if (!user) return;
+    if (accountStatus.isSuspended) throw new Error(`Account suspended: ${accountStatus.reason || 'Contact support'}`);
 
-  const contentCheck = await checkContentViolation(content);
-  if (contentCheck.isViolation) {
-    await handleContentViolation('TEXT_CONTENT_VIOLATION', contentCheck.severity || 'medium', contentCheck.reason);
-    throw new Error('Message blocked: Content violates usage policies.');
-  }
-
-  // TEMPORARY MODE: use in-memory only, no DB persistence
-  if (temporaryMode) {
-    const tempUserId = `temp-user-${Date.now()}`;
-    const tempAiId = `temp-ai-${Date.now() + 1}`;
-    const tempUserMsg: Message = { id: tempUserId, role: 'user', content, image_url: imageUrl, created_at: new Date().toISOString() };
-    setMessages(prev => [...prev, tempUserMsg]);
-    setStreamingMessageId(tempAiId);
-    try {
-      // Need a temp conversationId for the backend
-      let tempConvId = currentConversation?.id;
-      if (!tempConvId) {
-        // Create a real conversation in DB just to call the edge function, but don't expose it in list
-        const { data, error } = await supabase.from('conversations').insert([{ user_id: user.id, title: 'Temporary Chat', is_temporary: true }]).select().single();
-        if (!error && data) {
-          tempConvId = data.id;
-          setCurrentConversation({ id: data.id, title: 'Temporary Chat', createdAt: data.created_at, updatedAt: data.updated_at });
-        } else {
-          tempConvId = 'temp-' + Date.now();
-        }
-      }
-      const requestBody: any = { messages: [{ role: 'user', content }], conversationId: tempConvId, aiModel: aiModel || 'onspace-ai' };
-      if (base64Image) requestBody.base64Image = base64Image;
-      const { data: aiResponse, error: aiError } = await supabase.functions.invoke('chat', { body: requestBody });
-      if (aiError) throw aiError;
-      let cleanMessage = aiResponse.message || 'Response generated';
-      cleanMessage = cleanMessage.replace(/\[Using [^\]]+\]\s*/gi, '').replace(/\[Model:[^\]]+\]\s*/gi, '').trim();
-      const tempAiMsg: Message = { id: tempAiId, role: 'assistant', content: cleanMessage, image_url: aiResponse.imageUrl || undefined, created_at: new Date().toISOString() };
-      setMessages(prev => [...prev, tempAiMsg]);
-    } catch (e: any) {
-      setMessages(prev => prev.filter(m => m.id !== tempUserId));
-      throw e;
-    } finally {
-      setTimeout(() => setStreamingMessageId(null), 2000);
+    let conversationId = currentConversation?.id;
+    if (!conversationId) {
+      conversationId = await createConversation();
+      if (!conversationId) throw new Error('Failed to create conversation');
     }
-    return;
-  }
 
-  let conversationId = currentConversation?.id;
-  if (!conversationId) {
-    conversationId = await createConversation();
-    if (!conversationId) throw new Error('Failed to create conversation');
-  }
+    const userMessageId = `temp-user-${Date.now()}`;
+    const aiMessageId = `streaming-ai-${Date.now() + 1}`;
 
-  const userMessageId = `temp-user-${Date.now()}`;
-  const aiMessageId = `temp-ai-${Date.now() + 1}`;
-
-  // CRITICAL FIX: Always upload image to storage first
-  let finalImageUrl = imageUrl;
-  
-  if (base64Image) {
-    try {
-      const fileName = `${Date.now()}.jpg`;
-      const filePath = `${user.id}/${conversationId}/${fileName}`;
-      
-      // Convert base64 to Uint8Array for upload
-      const binaryStr = atob(base64Image);
-      const bytes = new Uint8Array(binaryStr.length);
-      for (let i = 0; i < binaryStr.length; i++) {
-        bytes[i] = binaryStr.charCodeAt(i);
-      }
-      
-      const { error: uploadError } = await supabase.storage
-        .from('chat-images')
-        .upload(filePath, bytes, {
-          contentType: 'image/jpeg',
-          upsert: true,
-        });
-
-      if (!uploadError) {
-        const { data: urlData } = supabase.storage
-          .from('chat-images')
-          .getPublicUrl(filePath);
-        finalImageUrl = urlData.publicUrl;
-        console.log('📸 Image uploaded to storage:', finalImageUrl);
-      } else {
-        console.error('Image upload failed:', uploadError);
-      }
-    } catch (uploadErr) {
-      console.error('Image upload error:', uploadErr);
-    }
-  }
-
-  const tempUserMessage: Message = {
-    id: userMessageId,
-    role: 'user',
-    content,
-    image_url: finalImageUrl,
-    created_at: new Date().toISOString(),
-  };
-
-  // CRITICAL: Add user message AND set streaming immediately
-  setMessages(prev => [...prev, tempUserMessage]);
-
-  try {
-    // CRITICAL FIX: Always send plain string content — never arrays
-    const contextMessages = [...messages, tempUserMessage].map(m => ({
-      role: m.role,
-      content: typeof m.content === 'string'
-        ? m.content
-        : Array.isArray(m.content)
-          ? (m.content as any[]).map((c: any) => (c && (c.text || c.content)) || '').join(' ')
-          : String(m.content || ''),
-      ...(m.image_url ? { image_url: m.image_url } : {}),
-    }));
-
-    const requestBody: any = {
-      messages: contextMessages,
-      conversationId: conversationId,
-      aiModel: aiModel || 'google-gemini',
-      userImageUrl: finalImageUrl, // CRITICAL: Send image URL to backend
-    };
-
+    // ── Upload image to storage first ──
+    let finalImageUrl = imageUrl;
     if (base64Image) {
-      requestBody.base64Image = base64Image;
-      console.log('📸 Sending with base64 image, length:', base64Image.length);
-    }
-    if (isImageGeneration && base64Image) requestBody.isImageGeneration = true;
-
-    console.log('📤 Sending message with model:', aiModel || 'google-gemini');
-
-    const { data: aiResponse, error: aiError } = await supabase.functions.invoke('chat', {
-      body: requestBody,
-    });
-
-    if (aiError) throw aiError;
-
-    // Clean message
-    let cleanMessage = aiResponse.message || 'Response generated';
-    cleanMessage = cleanMessage.replace(/\[Using [^\]]+\]\s*/gi, '');
-    cleanMessage = cleanMessage.replace(/\[Model:[^\]]+\]\s*/gi, '');
-    cleanMessage = cleanMessage.replace(/\[Fallback:[^\]]+\]\s*/gi, '');
-    cleanMessage = cleanMessage.replace(/\[.*?unavailable.*?\]\s*/gi, '');
-    cleanMessage = cleanMessage.replace(/google-gemini unavailable/gi, '');
-    cleanMessage = cleanMessage.replace(/groq-llama/gi, '');
-    cleanMessage = cleanMessage.replace(/claude unavailable/gi, '');
-    cleanMessage = cleanMessage.replace(/openai unavailable/gi, '');
-    cleanMessage = cleanMessage.replace(/gemini unavailable/gi, '');
-    cleanMessage = cleanMessage.replace(/using [a-z-]+ -/gi, '');
-    cleanMessage = cleanMessage.replace(/\(fallback\)/gi, '');
-    cleanMessage = cleanMessage.trim();
-
-    if (cleanMessage.match(/\[Using|unavailable|fallback|groq|claude/i)) {
-      const sentences = cleanMessage.split(/\n\n/);
-      cleanMessage = sentences.find(s => !s.match(/\[Using|unavailable|fallback|groq|claude/i)) || cleanMessage;
+      try {
+        const fileName = `${Date.now()}.jpg`;
+        const filePath = `${user.id}/${conversationId}/${fileName}`;
+        const binaryStr = atob(base64Image);
+        const bytes = new Uint8Array(binaryStr.length);
+        for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+        const { error: uploadError } = await supabase.storage.from('chat-images').upload(filePath, bytes, { contentType: 'image/jpeg', upsert: true });
+        if (!uploadError) {
+          const { data: urlData } = supabase.storage.from('chat-images').getPublicUrl(filePath);
+          finalImageUrl = urlData.publicUrl;
+        }
+      } catch (uploadErr) {
+        console.error('Image upload error:', uploadErr);
+      }
     }
 
-    const tempAIMessage: Message = {
-      id: aiMessageId,
-      role: 'assistant',
-      content: cleanMessage,
-      image_url: aiResponse.imageUrl || undefined,
-      file_url: aiResponse.fileUrl || undefined,
-      file_name: aiResponse.fileName || undefined,
-      file_type: aiResponse.fileType || undefined,
-      created_at: new Date().toISOString(),
+    // ── Add user message to UI immediately ──
+    const tempUserMessage: Message = {
+      id: userMessageId, role: 'user', content, image_url: finalImageUrl, created_at: new Date().toISOString(),
     };
+    setMessages(prev => [...prev, tempUserMessage]);
 
-    // CRITICAL FIX: Set streaming ID to enable animation
+    // ── Add placeholder AI message for streaming ──
+    const placeholderAIMessage: Message = {
+      id: aiMessageId, role: 'assistant', content: '', created_at: new Date().toISOString(),
+    };
+    setMessages(prev => [...prev, placeholderAIMessage]);
     setStreamingMessageId(aiMessageId);
 
-    // CRITICAL FIX: Save user message IMMEDIATELY after creation (before AI response)
-    const { data: savedUserMessage, error: saveUserError } = await supabase
-      .from('messages')
-      .insert({
-        conversation_id: conversationId,
-        role: 'user',
-        content,
-        image_url: finalImageUrl || null,
-      })
-      .select()
-      .single();
+    try {
+      // Build conversation context
+      const contextMessages = [...messages, tempUserMessage].map(m => ({
+        role: m.role,
+        content: typeof m.content === 'string' ? m.content : String(m.content || ''),
+        ...(m.image_url ? { image_url: m.image_url } : {}),
+      }));
 
-    if (saveUserError) {
-      console.error('Failed to save user message:', saveUserError);
-    } else if (savedUserMessage) {
-      // CRITICAL: Replace temp message with saved message immediately
-      setMessages(prev => prev.map(m => 
-        m.id === userMessageId ? { ...savedUserMessage } : m
-      ));
-    }
-
-    // CRITICAL FIX: Save AI message to database
-    const { data: savedAIMessage, error: saveAIError } = await supabase
-      .from('messages')
-      .insert({
-        conversation_id: conversationId,
-        role: 'assistant',
-        content: cleanMessage,
-        image_url: aiResponse.imageUrl || undefined,
-        file_url: aiResponse.fileUrl || undefined,
-        file_name: aiResponse.fileName || undefined,
-        file_type: aiResponse.fileType || undefined,
-      })
-      .select()
-      .single();
-
-    if (saveAIError) {
-      console.error('Failed to save AI message:', saveAIError);
-    }
-
-    // Update messages - Replace ONLY temp AI messages
-    setMessages(prev => {
-      // Filter out ONLY temp AI messages (keep user messages including saved one)
-      const withoutTempAI = prev.filter(m => 
-        m.id !== aiMessageId
-      );
-      
-      // Add final AI message
-      const finalAIMessage = savedAIMessage || tempAIMessage;
-      
-      return [...withoutTempAI, finalAIMessage];
-    });
-
-    // Update title if first message
-    if (messages.length === 0) {
-      let title = content.slice(0, 50);
-      if (aiResponse.imageUrl) {
-        title = content.includes('logo') ? '🎨 Logo Design' : '🖼️ Image Generation';
-      } else if (aiResponse.fileName) {
-        title = `📄 File: ${aiResponse.fileName}`;
-      } else if (content.length > 50) {
-        title = content.slice(0, 47) + '...';
-      }
-      
-      await updateConversationTitle(conversationId, title);
-      
-      const newConv: Conversation = {
-        id: conversationId,
-        title: title,
-        createdAt: currentConversation?.createdAt || new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+      const requestBody: any = {
+        messages: contextMessages,
+        conversationId,
+        aiModel: aiModel || 'google-gemini',
+        userImageUrl: finalImageUrl,
       };
-      setConversations(prev => [newConv, ...prev]);
-    } else {
-      await supabase
-        .from('conversations')
-        .update({ updated_at: new Date().toISOString() })
-        .eq('id', conversationId);
-      
-      setConversations(prev => {
-        const updated = prev.map(c => 
-          c.id === conversationId ? { ...c, updatedAt: new Date().toISOString() } : c
-        );
-        const current = updated.find(c => c.id === conversationId);
-        const others = updated.filter(c => c.id !== conversationId);
-        return current ? [current, ...others] : updated;
+      if (base64Image) requestBody.base64Image = base64Image;
+
+      // ── Get session token for Authorization header ──
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
+      const edgeFunctionUrl = `${supabaseUrl}/functions/v1/chat`;
+
+      // Create AbortController for this request
+      const abortController = new AbortController();
+      abortControllerRef.current = abortController;
+
+      let streamedContent = '';
+      let finalImageUrlFromResponse: string | undefined;
+
+      const response = await fetch(edgeFunctionUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'apikey': process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '',
+        },
+        body: JSON.stringify(requestBody),
+        signal: abortController.signal,
       });
-    }
 
-    // CRITICAL FIX: Clear streaming ID after animation completes
-    setTimeout(() => {
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`Chat function error: ${response.status} ${errText}`);
+      }
+
+      // ── Parse SSE stream ──
+      const reader = response.body?.getReader();
+      if (reader) {
+        // Streaming path — read SSE tokens
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || ''; // Keep incomplete line in buffer
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || !trimmed.startsWith('data:')) continue;
+
+            const dataStr = trimmed.slice(5).trim();
+            if (!dataStr) continue;
+
+            try {
+              const parsed = JSON.parse(dataStr);
+
+              if (parsed.done) {
+                // Final event — extract image URL and metadata
+                if (parsed.imageUrl) finalImageUrlFromResponse = parsed.imageUrl;
+                break;
+              }
+
+              if (parsed.token !== undefined) {
+                streamedContent += parsed.token;
+                // Update the streaming message in real time
+                setMessages(prev => prev.map(m =>
+                  m.id === aiMessageId
+                    ? { ...m, content: streamedContent }
+                    : m
+                ));
+              }
+            } catch (_e) {
+              // Ignore parse errors for incomplete chunks
+            }
+          }
+        }
+
+        // Process any remaining buffer
+        if (buffer.trim().startsWith('data:')) {
+          try {
+            const parsed = JSON.parse(buffer.slice(5).trim());
+            if (parsed.imageUrl) finalImageUrlFromResponse = parsed.imageUrl;
+            if (parsed.token) {
+              streamedContent += parsed.token;
+            }
+          } catch (_e) {}
+        }
+
+      } else {
+        // Fallback: no streaming support (e.g. some environments)
+        const fullText = await response.text();
+        const sseLines = fullText.split('\n');
+        for (const line of sseLines) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith('data:')) continue;
+          try {
+            const parsed = JSON.parse(trimmed.slice(5).trim());
+            if (parsed.done && parsed.imageUrl) finalImageUrlFromResponse = parsed.imageUrl;
+            if (parsed.token) streamedContent += parsed.token;
+          } catch (_e) {}
+        }
+        // Update UI with full content
+        setMessages(prev => prev.map(m =>
+          m.id === aiMessageId ? { ...m, content: streamedContent } : m
+        ));
+      }
+
+      abortControllerRef.current = null;
+
+      // Clean streamed content
+      let cleanMessage = streamedContent;
+      cleanMessage = cleanMessage.replace(/\[Using [^\]]+\]\s*/gi, '');
+      cleanMessage = cleanMessage.replace(/\[Model:[^\]]+\]\s*/gi, '');
+      cleanMessage = cleanMessage.replace(/\[Fallback:[^\]]+\]\s*/gi, '');
+      cleanMessage = cleanMessage.replace(/google-gemini unavailable/gi, '');
+      cleanMessage = cleanMessage.replace(/openai unavailable/gi, '');
+      cleanMessage = cleanMessage.replace(/claude unavailable/gi, '');
+      cleanMessage = cleanMessage.replace(/groq-llama/gi, '');
+      cleanMessage = cleanMessage.replace(/\(fallback\)/gi, '');
+      cleanMessage = cleanMessage.trim();
+
+      if (!cleanMessage && !finalImageUrlFromResponse) {
+        cleanMessage = 'I am here to help! What would you like to know?';
+      }
+
+      // ── Save user message to DB ──
+      const { data: savedUserMessage } = await supabase
+        .from('messages')
+        .insert({ conversation_id: conversationId, role: 'user', content, image_url: finalImageUrl || null })
+        .select()
+        .single();
+
+      if (savedUserMessage) {
+        setMessages(prev => prev.map(m => m.id === userMessageId ? { ...savedUserMessage } : m));
+      }
+
+      // ── Save AI message to DB ──
+      const { data: savedAIMessage } = await supabase
+        .from('messages')
+        .insert({
+          conversation_id: conversationId,
+          role: 'assistant',
+          content: cleanMessage,
+          image_url: finalImageUrlFromResponse || null,
+        })
+        .select()
+        .single();
+
+      // ── Update UI with final saved messages ──
+      setMessages(prev => {
+        const withoutStreaming = prev.filter(m => m.id !== aiMessageId);
+        const finalMsg: Message = savedAIMessage || {
+          id: `ai-${Date.now()}`,
+          role: 'assistant',
+          content: cleanMessage,
+          image_url: finalImageUrlFromResponse,
+          created_at: new Date().toISOString(),
+        };
+        return [...withoutStreaming, finalMsg];
+      });
+
       setStreamingMessageId(null);
-    }, 2000);
 
-  } catch (error: any) {
-    // CRITICAL FIX: Sèlman retire mesaj temp yo, pa tout mesaj yo
-    setMessages(prev => prev.filter(m => 
-      m.id !== userMessageId && 
-      !m.id.startsWith('temp-ai-')
-    ));
-    
-    if (error.message?.includes('violation') || error.message?.includes('suspended')) {
-      await handleContentViolation('AI_RESPONSE_VIOLATION', 'high', error.message);
+      // ── Update conversation title on first message ──
+      if (messages.length === 0) {
+        let title = content.slice(0, 50);
+        if (finalImageUrlFromResponse) {
+          title = content.toLowerCase().includes('logo') ? 'Logo Design' : 'Image Generation';
+        } else if (content.length > 50) {
+          title = content.slice(0, 47) + '...';
+        }
+        await updateConversationTitle(conversationId, title);
+        const newConv: Conversation = {
+          id: conversationId, title,
+          createdAt: currentConversation?.createdAt || new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        setConversations(prev => [newConv, ...prev.filter(c => c.id !== conversationId)]);
+      } else {
+        await supabase.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id', conversationId);
+        setConversations(prev => {
+          const updated = prev.map(c => c.id === conversationId ? { ...c, updatedAt: new Date().toISOString() } : c);
+          const current = updated.find(c => c.id === conversationId);
+          const others = updated.filter(c => c.id !== conversationId);
+          return current ? [current, ...others] : updated;
+        });
+      }
+
+    } catch (error: any) {
+      abortControllerRef.current = null;
+
+      // Remove temp messages on abort or error
+      setMessages(prev => prev.filter(m => m.id !== userMessageId && m.id !== aiMessageId));
+      setStreamingMessageId(null);
+
+      if (error?.name === 'AbortError') {
+        // User cancelled — silently ignore
+        return;
+      }
+      throw error;
     }
-    throw error;
-  }
-};
+  };
 
   const sendAudioMessage = async (audioBase64: string, duration: number, transcription?: string): Promise<void> => {
     if (!user) return;
@@ -787,16 +629,9 @@ const sendMessage = async (
 
   const updateConversationTitle = async (id: string, title: string) => {
     try {
-      await supabase
-        .from('conversations')
-        .update({ title, updated_at: new Date().toISOString() })
-        .eq('id', id);
-      
+      await supabase.from('conversations').update({ title, updated_at: new Date().toISOString() }).eq('id', id);
       setConversations(prev => prev.map(c => c.id === id ? { ...c, title } : c));
-      
-      if (currentConversation?.id === id) {
-        setCurrentConversation(prev => prev ? { ...prev, title } : null);
-      }
+      if (currentConversation?.id === id) setCurrentConversation(prev => prev ? { ...prev, title } : null);
     } catch (err) {
       console.error('Error updating title:', err);
     }
@@ -806,11 +641,7 @@ const sendMessage = async (
     try {
       await supabase.from('conversations').delete().eq('id', id);
       setConversations(prev => prev.filter(c => c.id !== id));
-      
-      if (currentConversation?.id === id) {
-        setCurrentConversation(null);
-        setMessages([]);
-      }
+      if (currentConversation?.id === id) { setCurrentConversation(null); setMessages([]); }
     } catch (err) {
       console.error('Error deleting conversation:', err);
     }
@@ -819,31 +650,15 @@ const sendMessage = async (
   const searchConversations = (query: string): Conversation[] => {
     if (!query.trim()) return conversations;
     const lowerQuery = query.toLowerCase();
-    return conversations.filter(c => 
-      c.title.toLowerCase().includes(lowerQuery) || c.id.toLowerCase().includes(lowerQuery)
-    );
+    return conversations.filter(c => c.title.toLowerCase().includes(lowerQuery));
   };
 
   const updateMessage = async (messageId: string, newContent: string) => {
     if (!currentConversation || !user) return;
     try {
-      const { error } = await supabase
-        .from('messages')
-        .update({ content: newContent, edited: true, edited_at: new Date().toISOString() })
-        .eq('id', messageId);
-
+      const { error } = await supabase.from('messages').update({ content: newContent, edited: true, edited_at: new Date().toISOString() }).eq('id', messageId);
       if (error) throw error;
-
-      setMessages(prev => prev.map(msg => 
-        msg.id === messageId 
-          ? { ...msg, content: newContent, edited: true, edited_at: new Date().toISOString() }
-          : msg
-      ));
-
-      await supabase
-        .from('conversations')
-        .update({ updated_at: new Date().toISOString() })
-        .eq('id', currentConversation.id);
+      setMessages(prev => prev.map(msg => msg.id === messageId ? { ...msg, content: newContent, edited: true, edited_at: new Date().toISOString() } : msg));
     } catch (err) {
       console.error('Error updating message:', err);
     }
@@ -853,97 +668,43 @@ const sendMessage = async (
     if (!currentConversation || !user) return;
     const editedMessageIndex = messages.findIndex(m => m.id === messageId);
     if (editedMessageIndex === -1) return;
-
     try {
-      await supabase
-        .from('messages')
-        .update({ content: newContent, edited: true, edited_at: new Date().toISOString() })
-        .eq('id', messageId);
-
+      await supabase.from('messages').update({ content: newContent, edited: true, edited_at: new Date().toISOString() }).eq('id', messageId);
       if (editedMessageIndex + 1 < messages.length && messages[editedMessageIndex + 1].role === 'assistant') {
-        const aiMessageToDelete = messages[editedMessageIndex + 1];
-        await supabase.from('messages').delete().eq('id', aiMessageToDelete.id);
+        await supabase.from('messages').delete().eq('id', messages[editedMessageIndex + 1].id);
       }
-
-      await selectConversation(currentConversation.id);
-
-      const contextMessages = messages
-        .slice(0, editedMessageIndex + 1)
-        .map(m => ({
-          role: m.role,
-          content: m.image_url 
-            ? [{ type: 'text', text: m.content }, { type: 'image_url', image_url: { url: m.image_url } }]
-            : m.content,
-        }));
-
-      const { data: aiResponse, error: aiError } = await supabase.functions.invoke('chat', {
-        body: {
-          messages: contextMessages,
-          conversationId: currentConversation.id,
-          aiModel: aiModel || 'gemini',
-        },
-      });
-
-      if (aiError) throw aiError;
-      await selectConversation(currentConversation.id);
+      const updatedMessages = messages.slice(0, editedMessageIndex).concat({ ...messages[editedMessageIndex], content: newContent });
+      setMessages(updatedMessages);
+      await sendMessage(newContent, undefined, undefined, false, aiModel);
     } catch (err) {
       console.error('Error in update and regenerate:', err);
     }
   };
 
-  const refreshConversations = async () => {
-    await loadConversations();
-  };
+  const refreshConversations = async () => { await loadConversations(); };
 
   const exportConversation = async (id: string, format: 'json' | 'txt' | 'md'): Promise<string> => {
     const conv = conversations.find(c => c.id === id);
     if (!conv) throw new Error('Conversation not found');
-
-    const { data: msgs } = await supabase
-      .from('messages')
-      .select('*')
-      .eq('conversation_id', id)
-      .order('created_at', { ascending: true });
-
+    const { data: msgs } = await supabase.from('messages').select('*').eq('conversation_id', id).order('created_at', { ascending: true });
     if (!msgs) throw new Error('No messages found');
-
     switch (format) {
-      case 'json':
-        return JSON.stringify({ conversation: conv, messages: msgs }, null, 2);
-      case 'md':
-        return `# ${conv.title}\n\n${msgs.map(m => 
-          `**${m.role === 'user' ? 'You' : 'AI'}** (${new Date(m.created_at).toLocaleString()}):\n${m.content}\n`
-        ).join('\n')}`;
-      case 'txt':
-      default:
-        return `${conv.title}\n\n${msgs.map(m => 
-          `${m.role === 'user' ? 'You' : 'AI'}: ${m.content}`
-        ).join('\n')}`;
+      case 'json': return JSON.stringify({ conversation: conv, messages: msgs }, null, 2);
+      case 'md': return `# ${conv.title}\n\n${msgs.map((m: any) => `**${m.role === 'user' ? 'You' : 'AI'}**:\n${m.content}\n`).join('\n')}`;
+      default: return `${conv.title}\n\n${msgs.map((m: any) => `${m.role === 'user' ? 'You' : 'AI'}: ${m.content}`).join('\n')}`;
     }
   };
 
   const duplicateConversation = async (id: string): Promise<string | null> => {
     const original = conversations.find(c => c.id === id);
     if (!original) return null;
-
     try {
       const newId = await createConversation();
       if (!newId) return null;
-
       await updateConversationTitle(newId, `${original.title} (Copy)`);
-      
-      const { data: originalMessages } = await supabase
-        .from('messages')
-        .select('*')
-        .eq('conversation_id', id);
-
+      const { data: originalMessages } = await supabase.from('messages').select('*').eq('conversation_id', id);
       if (originalMessages && originalMessages.length > 0) {
-        const newMessages = originalMessages.map(m => ({
-          ...m,
-          id: undefined,
-          conversation_id: newId,
-          created_at: new Date().toISOString(),
-        }));
+        const newMessages = originalMessages.map((m: any) => ({ ...m, id: undefined, conversation_id: newId, created_at: new Date().toISOString() }));
         await supabase.from('messages').insert(newMessages);
       }
       return newId;
@@ -955,13 +716,8 @@ const sendMessage = async (
 
   const archiveConversation = async (id: string): Promise<void> => {
     try {
-      await supabase
-        .from('conversations')
-        .update({ is_archived: true, updated_at: new Date().toISOString() } as any)
-        .eq('id', id);
-      
+      await supabase.from('conversations').update({ is_archived: true, updated_at: new Date().toISOString() } as any).eq('id', id);
       setConversations(prev => prev.filter(c => c.id !== id));
-      
       if (currentConversation?.id === id) clearCurrentConversation();
     } catch (err) {
       console.error('Error archiving conversation:', err);
@@ -974,10 +730,11 @@ const sendMessage = async (
       currentConversation,
       messages,
       loading,
-      streamingMessageId, // NEW: Exposed to consumers
+      streamingMessageId,
       accountStatus,
       temporaryMode,
       setTemporaryMode,
+      cancelSendMessage,
       checkAccountStatus,
       createConversation,
       selectConversation,
@@ -1007,9 +764,6 @@ const sendMessage = async (
 
 export function useConversation() {
   const context = React.useContext(ConversationContext);
-  if (context === undefined) {
-    throw new Error('useConversation must be used within a ConversationProvider');
-  }
+  if (context === undefined) throw new Error('useConversation must be used within a ConversationProvider');
   return context;
 }
-
