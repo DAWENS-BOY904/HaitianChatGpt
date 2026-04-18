@@ -167,3 +167,4 @@ const styles = StyleSheet.create({
     fontWeight: '400',
   },
 });
+fix rhinking in home page better and sreaming must be safe and clear in home page fix all.
