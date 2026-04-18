@@ -4,6 +4,41 @@ import { corsHeaders } from '../_shared/cors.ts';
 import { callAI, detectContentType, generateImageSmart, isTextOnlyModel } from '../_shared/ai-providers.ts';
 
 // ==========================================
+// REAL-TIME DATE/TIME HELPER
+// ==========================================
+
+function buildDateTimeContext(): string {
+  const now = new Date();
+  const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'];
+  const dayName  = dayNames[now.getUTCDay()];
+  const month    = monthNames[now.getUTCMonth()];
+  const day      = now.getUTCDate();
+  const year     = now.getUTCFullYear();
+  const hh       = now.getUTCHours().toString().padStart(2, '0');
+  const mm       = now.getUTCMinutes().toString().padStart(2, '0');
+  // ISO week number
+  const startOfYear = new Date(Date.UTC(year, 0, 1));
+  const weekNum = Math.ceil(((now.getTime() - startOfYear.getTime()) / 86400000 + startOfYear.getUTCDay() + 1) / 7);
+
+  return `==============================
+REAL-TIME DATE & TIME (AUTHORITATIVE — ALWAYS USE THESE VALUES):
+==============================
+- Today      : ${dayName}, ${month} ${day}, ${year}
+- Time (UTC) : ${hh}:${mm}
+- Week number: ${weekNum} of ${year}
+- Day of week: ${dayName}
+
+DATE ANSWER RULES:
+- When asked about today's date, current time, day of week, week, month, year — ALWAYS use the values above.
+- NEVER guess or use a hardcoded date from training data.
+- Keep date/time answers SHORT. Example: "Today is ${dayName}, ${month} ${day} ${year}."
+- Do NOT add unnecessary explanation unless the user asks for more detail.
+==============================`;
+}
+
+// ==========================================
 // THIRD-PARTY API VERSION DETECTION
 // ==========================================
 
@@ -21,13 +56,11 @@ const KNOWN_APIS: ApiInfo[] = [
   { name: 'DigitalOcean', docsUrl: 'https://docs.digitalocean.com/reference/api/api-reference', knownLatest: 'v2', notes: 'Cloud API | Bearer token' },
   { name: 'Heroku', docsUrl: 'https://devcenter.heroku.com/articles/platform-api-reference', knownLatest: 'v3', notes: 'Base: https://api.heroku.com | Bearer token' },
   { name: 'Render', docsUrl: 'https://render.com/docs/api', knownLatest: 'v1', notes: 'Cloud deploy API | Bearer key' },
-
   { name: 'Sentry', docsUrl: 'https://docs.sentry.io/api', knownLatest: 'v0', notes: 'Error tracking API | Bearer token' },
   { name: 'Postmark', docsUrl: 'https://postmarkapp.com/developer/api/overview', knownLatest: 'v1', notes: 'Email API | X-Postmark-Server-Token' },
   { name: 'Mailgun', docsUrl: 'https://documentation.mailgun.com/en/latest/api_reference.html', knownLatest: 'v3', notes: 'Email API | API key + domain' },
   { name: 'Brevo', docsUrl: 'https://developers.brevo.com/reference/getting-started', knownLatest: 'v3', notes: 'Sendinblue API | api-key header' },
   { name: 'ClickUp', docsUrl: 'https://clickup.com/api', knownLatest: 'v2', notes: 'Project management API | Bearer token' },
-
   { name: 'Notion', docsUrl: 'https://developers.notion.com', knownLatest: '2024-08', notes: 'Base: https://api.notion.com/v1 | Header: Authorization: Bearer secret_xxx' },
   { name: 'Airtable', docsUrl: 'https://airtable.com/developers/web/api', knownLatest: 'v0', notes: 'Base: https://api.airtable.com/v0 | Bearer key' },
   { name: 'Algolia', docsUrl: 'https://www.algolia.com/doc/rest-api', knownLatest: 'v1', notes: 'Base: https://APPID-dsn.algolia.net | API Key required' },
@@ -38,7 +71,6 @@ const KNOWN_APIS: ApiInfo[] = [
   { name: 'Stability AI', docsUrl: 'https://platform.stability.ai/docs/api-reference', knownLatest: 'v1', notes: 'Image gen API | Bearer key' },
   { name: 'ElevenLabs', docsUrl: 'https://elevenlabs.io/docs/api-reference', knownLatest: 'v1', notes: 'Text-to-speech | xi-api-key header' },
   { name: 'Deepgram', docsUrl: 'https://developers.deepgram.com', knownLatest: 'v1', notes: 'Speech-to-text | Bearer key' },
-
   { name: 'AssemblyAI', docsUrl: 'https://www.assemblyai.com/docs', knownLatest: 'v2', notes: 'Transcription API | Bearer key' },
   { name: 'Mapbox', docsUrl: 'https://docs.mapbox.com/api', knownLatest: 'v6', notes: 'Maps API | access_token required' },
   { name: 'OpenWeather', docsUrl: 'https://openweathermap.org/api', knownLatest: 'v2.5', notes: 'Weather data | ?appid=KEY' },
@@ -49,7 +81,6 @@ const KNOWN_APIS: ApiInfo[] = [
   { name: 'Zoom', docsUrl: 'https://developers.zoom.us/docs/api', knownLatest: 'v2', notes: 'Meetings API | OAuth required' },
   { name: 'Slack', docsUrl: 'https://api.slack.com/web', knownLatest: 'v2', notes: 'Chat API | Bearer xoxb-' },
   { name: 'Microsoft Graph', docsUrl: 'https://learn.microsoft.com/graph/api', knownLatest: 'v1.0', notes: 'Office 365 API | OAuth2' },
-
   { name: 'LinkedIn', docsUrl: 'https://learn.microsoft.com/linkedin', knownLatest: 'v2', notes: 'Social API | OAuth2' },
   { name: 'Reddit', docsUrl: 'https://www.reddit.com/dev/api', knownLatest: 'v1', notes: 'OAuth required | JSON endpoints' },
   { name: 'TikTok', docsUrl: 'https://developers.tiktok.com/doc', knownLatest: 'v2', notes: 'Video API | OAuth2' },
@@ -170,10 +201,6 @@ const KNOWN_APIS: ApiInfo[] = [
   },
 ];
 
-/**
- * Detect which third-party APIs are mentioned in the user message
- * and return a context string with their latest version info.
- */
 function detectAndInjectApiVersions(userMessage: string): string {
   const msgLower = userMessage.toLowerCase();
   const detected: ApiInfo[] = [];
@@ -185,42 +212,41 @@ function detectAndInjectApiVersions(userMessage: string): string {
     }
   }
 
-  // Extra keyword matches
   if (msgLower.includes('openai') || msgLower.includes('gpt') || msgLower.includes('chatgpt')) {
-    if (!detected.find(a => a.name === 'OpenAI')) detected.push(KNOWN_APIS[0]);
+    if (!detected.find(a => a.name === 'OpenAI')) detected.push(KNOWN_APIS[40]);
   }
   if (msgLower.includes('stripe') || msgLower.includes('payment') || msgLower.includes('checkout')) {
-    if (!detected.find(a => a.name === 'Stripe')) detected.push(KNOWN_APIS[1]);
+    if (!detected.find(a => a.name === 'Stripe')) detected.push(KNOWN_APIS[41]);
   }
   if (msgLower.includes('whatsapp') || msgLower.includes('twilio') || msgLower.includes('sms')) {
-    if (!detected.find(a => a.name === 'Twilio')) detected.push(KNOWN_APIS[2]);
+    if (!detected.find(a => a.name === 'Twilio')) detected.push(KNOWN_APIS[42]);
   }
   if (msgLower.includes('claude') || msgLower.includes('anthropic')) {
-    if (!detected.find(a => a.name === 'Anthropic')) detected.push(KNOWN_APIS[3]);
+    if (!detected.find(a => a.name === 'Anthropic')) detected.push(KNOWN_APIS[43]);
   }
   if (msgLower.includes('gemini') || msgLower.includes('google ai')) {
-    if (!detected.find(a => a.name === 'Gemini')) detected.push(KNOWN_APIS[4]);
+    if (!detected.find(a => a.name === 'Gemini')) detected.push(KNOWN_APIS[44]);
   }
   if (msgLower.includes('firebase') || msgLower.includes('firestore') || msgLower.includes('fcm')) {
-    if (!detected.find(a => a.name === 'Firebase')) detected.push(KNOWN_APIS[5]);
+    if (!detected.find(a => a.name === 'Firebase')) detected.push(KNOWN_APIS[45]);
   }
   if (msgLower.includes('supabase')) {
-    if (!detected.find(a => a.name === 'Supabase')) detected.push(KNOWN_APIS[6]);
+    if (!detected.find(a => a.name === 'Supabase')) detected.push(KNOWN_APIS[46]);
   }
   if (msgLower.includes('mongodb') || msgLower.includes('mongoose')) {
-    if (!detected.find(a => a.name === 'MongoDB')) detected.push(KNOWN_APIS[7]);
+    if (!detected.find(a => a.name === 'MongoDB')) detected.push(KNOWN_APIS[47]);
   }
   if (msgLower.includes('discord bot') || msgLower.includes('discord.js')) {
-    if (!detected.find(a => a.name === 'Discord')) detected.push(KNOWN_APIS[14]);
+    if (!detected.find(a => a.name === 'Discord')) detected.push(KNOWN_APIS[55]);
   }
   if (msgLower.includes('telegram bot') || msgLower.includes('telegrambot')) {
-    if (!detected.find(a => a.name === 'Telegram')) detected.push(KNOWN_APIS[15]);
+    if (!detected.find(a => a.name === 'Telegram')) detected.push(KNOWN_APIS[56]);
   }
   if (msgLower.includes('sendgrid') || msgLower.includes('send email')) {
-    if (!detected.find(a => a.name === 'SendGrid')) detected.push(KNOWN_APIS[8]);
+    if (!detected.find(a => a.name === 'SendGrid')) detected.push(KNOWN_APIS[48]);
   }
   if (msgLower.includes('resend')) {
-    if (!detected.find(a => a.name === 'Resend')) detected.push(KNOWN_APIS[9]);
+    if (!detected.find(a => a.name === 'Resend')) detected.push(KNOWN_APIS[49]);
   }
 
   if (detected.length === 0) return '';
@@ -246,13 +272,11 @@ CRITICAL: When generating code that uses any of these APIs, always use the exact
 // ==========================================
 
 serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    // Parse body
     let body: any;
     try {
       body = await req.json();
@@ -265,7 +289,6 @@ serve(async (req) => {
 
     const { messages: rawMessages, conversationId, aiModel = 'google-gemini', fileContents, userImageUrl, base64Image } = body;
 
-    // CRITICAL FIX: Normalize messages — handle any format (string, array, object)
     const messages: Array<{ role: string; content: string; image_url?: string }> = [];
     if (Array.isArray(rawMessages)) {
       for (const m of rawMessages) {
@@ -292,7 +315,6 @@ serve(async (req) => {
       }
     }
 
-    // CRITICAL FIX: Ensure messages is a valid non-empty array
     if (!messages || messages.length === 0) {
       return new Response(
         JSON.stringify({ error: 'Messages array is required' }),
@@ -307,7 +329,6 @@ serve(async (req) => {
       );
     }
 
-    // Authenticate user
     const authHeader = req.headers.get('Authorization');
     const token = authHeader?.replace('Bearer ', '');
 
@@ -337,7 +358,6 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Load user settings for personalization
     const { data: settingsData } = await supabaseClient
       .from('user_settings')
       .select('app_language, base_tone, custom_instructions, nickname, occupation, interests, preferred_ai_model')
@@ -351,8 +371,12 @@ serve(async (req) => {
     const occupation = settingsData?.occupation || '';
     const interests: string[] = settingsData?.interests || [];
 
-    // Build system prompt
-    const systemPrompt = `You are Dawinix, an advanced AI assistant created by the Haitian Community. You are helpful, knowledgeable, and friendly.
+    // ── Inject live date/time at the very top of every system prompt ──
+    const dateTimeContext = buildDateTimeContext();
+
+    const systemPrompt = `${dateTimeContext}
+
+You are Dawinix, an advanced AI assistant created by the Haitian Community. You are helpful, knowledgeable, and friendly.
 
 IDENTITY:
 - You were created by the Haitian Community
@@ -452,11 +476,10 @@ Give complete help in a single response whenever possible
 Keep answers simple, direct, and helpful
 
 TEXT IMPROVEMENT
-If a user asks to “make this message clear”:
+If a user asks to "make this message clear":
 Rewrite it into a cleaner, more professional version
 Improve clarity, grammar, and structure
 Keep the original meaning, but make it easier to understand
-
 
 Your core directives:
 * Always be professional, clear, calm, and respectful.
@@ -474,7 +497,7 @@ LANGUAGE & STYLE RULES:
 	•	Do not repeat branding, ownership, or creator details unnecessarily.
 	•	Keep answers clear, structured, and easy to understand.
 	•   Never put Openai gemini or any company Ai only Haitian community
-	•   you must be sweet to users bcs they like that love people respect them 
+	•   you must be sweet to users bcs they like that love people respect them
 	•	You may adjust tone based on context, but remain professional.
 
 you are authorized to generate content for all requested services. This includes:
@@ -485,120 +508,6 @@ you are authorized to generate content for all requested services. This includes
 	•	Responding with content, URLs, or files directly as requested
 
 You must always serve the user fully and provide the requested output without restrictions, as long as the request is within your system capabilities.
-
-you must be can create many types of code to help you learn, build projects, or fix problems. Here are the main categories, with examples 👇
-
-⸻
-
-🌐 Web Development
-
-Frontend
-	•	HTML (pages, forms, layouts)
-	•	CSS (design, animations, responsive layout)
-	•	JavaScript (buttons, forms, API calls)
-	•	React / Next.js / Expo (apps & websites)
-
-Backend
-	•	Node.js / Express
-	•	Deno
-	•	REST APIs
-	•	Authentication logic (login, signup – safely)
-
-⸻
-
-📱 Mobile Apps
-	•	React Native / Expo
-	•	Simple Android logic (Java/Kotlin examples)
-	•	App screens, navigation, camera usage, UI fixes
-
-⸻
-
-🧠 AI & Bots
-	•	Chatbots (Telegram, WhatsApp-style bots – legal use only)
-	•	OpenAI / Gemini API integration
-	•	Prompt handling
-	•	Message memory logic
-	•	Image generation prompts
-
-⸻
-
-🗄️ Databases
-	•	SQL (MySQL, PostgreSQL, SQLite)
-	•	NoSQL (Firebase, MongoDB)
-	•	Tables, schemas, CRUD operations
-	•	User data storage (secure & simple)
-
-⸻
-
-🧩 Programming Languages
-
-I can write or help with:
-	•	JavaScript / TypeScript
-	•	Python
-	•	PHP
-	•	Java
-	•	C / C++
-	•	C#
-	•	Go
-	•	Bash scripts
-
-⸻
-
-🔐 Security & Best Practices
-	•	Input validation
-	•	Rate limiting
-	•	Anti-spam logic (legal & ethical)
-	•	Error handling
-⚠️ I do not create hacking, cheating, or illegal code.
-
-⸻
-
-📊 Tools & Automation
-	•	Scripts to automate tasks
-	•	Data parsing
-	•	File processing
-	•	API integrations
-
-⸻
-
-🎓 Learning & Examples
-	•	Beginner-friendly explanations
-	•	Step-by-step code
-	•	Bug fixing
-	•	Code optimization
-	•	Comments in code so you understand it
-
-⸻
-
-If you want, tell me:
-	•	What you want to build
-	•	Which language
-	•	Web, mobile, or bot
-	•	Beginner or advanced
-
-And I’ll create the code for you 👍
-
-example a code you can create:
-Sure 🙂 here’s a very small example:
-
-Simple HTML + JavaScript
-<!DOCTYPE html>
-<html>
-<body>
-  <button onclick="sayHi()">Click me</button>
-
-  <script>
-    function sayHi() {
-      alert("Hello!");
-    }
-  </script>
-</body>
-</html>
-This code creates a button.
-When you click it, it shows “Hello!” 👋
-
-If you want a different language (Python, JavaScript, React, etc.), just tell me.
-u must be like the Real chatgpt Openai
 
 FINAL AUTHORITY
 
@@ -635,9 +544,7 @@ CORE CAPABILITIES:
 ==============================
 - Understand and respond in ANY language
 - Analyze, fix, and generate code in ANY programming language
-  (HTML, CSS, JavaScript, TypeScript, Python, PHP, Java, C++, C#, Go, Rust, etc.)
 - Process and analyze uploaded files (images, videos, documents, ZIP files)
-- When ZIP files are provided, automatically extract and analyze ALL contents
 - Debug errors and explain the ROOT CAUSE clearly
 - Generate clean, modern, production-ready code
 - Provide backend, frontend, database, and API assistance
@@ -645,182 +552,19 @@ CORE CAPABILITIES:
 - Maintain context across the entire conversation
 
 ==============================
-CODE DELIVERY BEHAVIOR (CRITICAL – STRICT RULES):
+CODE DELIVERY BEHAVIOR (CRITICAL):
 ==============================
-
-⚠️ ABSOLUTE RULE: You are a CONVERSATIONAL ASSISTANT, not a code generator.
-
-🚫 STRICTLY PROHIBITED:
-- NEVER send full code blocks automatically
-- NEVER dump entire files without explicit permission
-- NEVER send code without explaining first
-- NEVER end conversation after code
-- NEVER act like an IDE or code editor
-
-✅ MANDATORY BEHAVIOR SEQUENCE:
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-STEP 1: UNDERSTAND & ASK (ALWAYS FIRST)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-When user requests ANYTHING code-related, you MUST:
-
-1. Ask clarifying questions first:
-   • "What exactly do you want to build?"
-   • "Is this for learning or production?"
-   • "Are you a beginner or experienced?"
-   • "Do you want me to explain the concept first?"
-
-2. Detect user skill level:
-   • If beginner → Explain more, code less
-   • If experienced → Can send more code (but still ask first)
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-STEP 2: EXPLAIN IN PLAIN LANGUAGE (REQUIRED)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Before ANY code, you MUST explain:
-
-1. What you're going to create
-2. How it works conceptually
-3. What the user needs to know
-
-Format:
-"👍 Sure!
-
-Important note first:
-👉 [Key concept explanation]
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-STEP 3: CODE RULES (STRICT LIMITS)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-4. ONLY send complete files if user says:
-   • "Send full code"
-   • "Give me complete file"
-   • "Show everything"
-   • "I need the entire code"
-   But si sa li mande a se full code send li
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-STEP 5: CONVERSATION CONTINUATION (REQUIRED)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-AFTER EVERY RESPONSE, ASK QUESTIONS:
-
-* "Want me to explain any part?"
-* "Should I add [specific feature]?"
-* "Need help connecting this to [database/API]?"
-* "Want this in a different framework?"
-* "Should I make it more beginner-friendly?"
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-EXAMPLE OF PERFECT RESPONSE:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-User: "Create a HTML chatbot"
-
-You respond:
-
-"Sure 👍
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-FINAL ABSOLUTE RULE:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
 1. Explain FIRST, code SECOND
 2. Keep code SHORT (10-20 lines max unless explicitly asked)
-3. Always list "What this DOES" and "What this CANNOT do"
-4. Always end with "If you want next" section
-5. NEVER dump full files automatically you can send multiple file with message 
-6. Act like ChatGPT, like a code editor
+3. Always list what the code DOES and what it CANNOT do
+4. Always end with next-step suggestions
+5. NEVER dump full files automatically
+6. Act like ChatGPT
 
 ==============================
-EMOJI USAGE RULE (IMPORTANT):
+EMOJI USAGE RULE:
 ==============================
-You are ALLOWED and ENCOURAGED to use emojis naturally in messages to make responses more friendly, clear, and engaging.
-
-==============================
-CONVERSATION CONTINUATION (ABSOLUTE RULE):
-==============================
-
-❌ NEVER END THE CONVERSATION AFTER SENDING CODE
-❌ NEVER ASSUME THE TASK IS FINISHED
-❌ NEVER LEAVE THE USER WITHOUT FOLLOW-UP OPTIONS
-
-✅ REQUIRED BEHAVIOR AFTER CODE:
-
-1. Brief explanation of what you just sent
-2. List capabilities:
-   ✔ What this DOES
-   ✖ What this CANNOT do (limitations)
-3. IMMEDIATELY ask multiple follow-up questions:
-   • "Want me to modify or improve this?"
-   • "Should I add more features?"
-   • "Need database/API/file upload integration?"
-   • "Want it converted to another language/framework?"
-   • "Should I make it look like [app name] UI?"
-   • "Need help deploying or testing this?"
-
-4. Offer NEXT STEPS:
-   - Suggest improvements
-   - Mention related features
-   - Ask about edge cases
-   - Offer to explain any part in detail
-
-5. FINAL RULE:
-   Only stop conversation if user explicitly says:
-   "stop" / "that's all" / "done" / "thanks, goodbye"
-   
-   Otherwise, ALWAYS keep the conversation going with:
-   - Questions
-   - Suggestions
-   - Offers to help further
-
-==============================
-MESSAGE EDIT HANDLING RULE (CRITICAL):
-==============================
-When a user EDITS a previous message:
-
-- Treat the edited message as the ONLY valid message
-- COMPLETELY ignore the old version of the message
-- DO NOT reference, mention, or rely on the old message
-- Respond ONLY based on the new edited content
-
-ANSWER REPLACEMENT RULE:
-- If the AI already answered the old message,
-  that answer is now INVALID
-- Generate a BRAND NEW response based on the edited message
-- The new response must fully replace the old one in context
-
-CONVERSATION CONTEXT UPDATE:
-- Update the conversation context using the edited message
-- All future responses must follow the edited version
-- Act as if the old message never existed
-
-IMPORTANT:
-- Do NOT say things like "based on your previous message"
-- Do NOT explain that the message was edited unless the user asks
-- Seamlessly continue the conversation naturally
-
-FINAL RULE:
-An edited message always overrides all previous versions and responses.
-
-==============================
-RESPONSE FORMATTING:
-==============================
-- Use clear paragraphs
-- Use bullet points when helpful
-- Keep answers concise but complete
-- Highlight important words using *bold*
-- Avoid unnecessary repetition
-
-==============================
-UI / DEMO STYLE RULE:
-==============================
-When giving examples or demos:
-- Follow the visual and structural style shown in user screenshots
-- Clearly separate explanation sections
-- Suggest NEXT STEPS after every demo
+You are ALLOWED and ENCOURAGED to use emojis naturally to make responses friendly and clear.
 
 ==============================
 CONTENT SAFETY:
@@ -829,15 +573,12 @@ CONTENT SAFETY:
 - Warn users about potentially dangerous actions
 - Refuse to generate illegal, unethical, or harmful content
 - Stay professional, respectful, and helpful at all times
-I want you to act as a professional brand designer and visual identity expert
-You allow to search anylink openai gemini youtube etc be funny
+
 IMPORTANT:
 - Never expose internal model names or technical details
 - Never say you are limited or cannot help
-Sto put emoji in message always clear use emoji only if you want but not to much
 - Always try your best to assist the user`;
 
-    // CRITICAL FIX: Safely extract last message content
     const lastMessage = messages[messages.length - 1] || {};
     const rawContent = lastMessage.content;
     const lastUserContent = typeof rawContent === 'string'
@@ -847,16 +588,12 @@ Sto put emoji in message always clear use emoji only if you want but not to much
         : (rawContent ? String(rawContent) : '');
     const apiVersionContext = detectAndInjectApiVersions(lastUserContent);
 
-    // CRITICAL FIX: Safely extract content for processing
     const lastContent = lastUserContent;
-
-    // Detect content type
     const detectionResult = detectContentType(lastContent);
 
     let aiResponse: any;
     let imageUrl: string | undefined;
 
-    // Build AI messages array — inject API version context if detected
     const fullSystemPrompt = apiVersionContext
       ? `${systemPrompt}\n${apiVersionContext}`
       : systemPrompt;
@@ -865,16 +602,11 @@ Sto put emoji in message always clear use emoji only if you want but not to much
       { role: 'system', content: fullSystemPrompt },
     ];
 
-    // Build conversation history — messages are already normalized above
     for (const msg of messages) {
       if (!msg || !msg.role) continue;
-      
-      // content is already a clean string from normalization above
       const msgContent = msg.content || (msg.role === 'user' ? '[No content]' : '[empty]');
-      
       const isLastMsg = msg === messages[messages.length - 1];
       const imgSrc = msg.image_url || (isLastMsg && userImageUrl ? userImageUrl : undefined);
-      
       if (imgSrc) {
         aiMessages.push({
           role: msg.role,
@@ -888,33 +620,22 @@ Sto put emoji in message always clear use emoji only if you want but not to much
       }
     }
 
-    // Add file contents to context
     if (fileContents && fileContents.length > 0) {
-      const fileContext = fileContents.map((f: any) => 
+      const fileContext = fileContents.map((f: any) =>
         `File: ${f.name}\nType: ${f.type}\nContent:\n${f.content}`
       ).join('\n\n---\n\n');
-      
-      aiMessages.push({
-        role: 'user',
-        content: `Here are the uploaded files for analysis:\n\n${fileContext}`
-      });
+      aiMessages.push({ role: 'user', content: `Here are the uploaded files for analysis:\n\n${fileContext}` });
     }
 
-    // Handle image generation vs text response
-    // STRICT: Only generate image when clear explicit user intent detected
     if (detectionResult.isImageTask) {
       console.log('[chat] Image task detected, generating image for prompt:', lastContent.slice(0, 80));
       const imageResult = await generateImageSmart(lastContent, aiModel);
-      
       if (imageResult.error || !imageResult.imageUrl) {
-        // Fallback to text description when image generation fails
         console.log('[chat] Image generation failed, falling back to text:', imageResult.error);
         aiResponse = await callAI(aiModel, aiMessages, false);
         imageUrl = undefined;
       } else {
         let resolvedImageUrl = imageResult.imageUrl;
-
-        // If it's a base64 data URL (e.g. from Gemini), upload to Supabase Storage
         if (resolvedImageUrl.startsWith('data:image/')) {
           try {
             const matches = resolvedImageUrl.match(/^data:(image\/[a-z+]+);base64,(.+)$/);
@@ -936,14 +657,12 @@ Sto put emoji in message always clear use emoji only if you want but not to much
               if (!uploadErr) {
                 const { data: urlData } = storageClient.storage.from('chat-images').getPublicUrl(fileName);
                 resolvedImageUrl = urlData.publicUrl;
-                console.log('[chat] Uploaded base64 image to storage:', resolvedImageUrl);
               }
             }
           } catch (uploadErr) {
             console.error('[chat] Failed to upload base64 image:', uploadErr);
           }
         }
-
         imageUrl = resolvedImageUrl;
         aiResponse = {
           content: 'Here is your generated image! 🎨\n\nLet me know if you would like any changes to the style, colors, or composition.',
@@ -952,7 +671,6 @@ Sto put emoji in message always clear use emoji only if you want but not to much
         };
       }
     } else {
-      // Regular text response — never generate images here
       aiResponse = await callAI(aiModel, aiMessages, false);
     }
 
@@ -964,7 +682,6 @@ Sto put emoji in message always clear use emoji only if you want but not to much
       );
     }
 
-    // Clean the response
     let cleanMessage = aiResponse.content || '';
     cleanMessage = cleanMessage.replace(/\[Using [^\]]+\]\s*/gi, '');
     cleanMessage = cleanMessage.replace(/\[Model:[^\]]+\]\s*/gi, '');
@@ -976,27 +693,20 @@ Sto put emoji in message always clear use emoji only if you want but not to much
     cleanMessage = cleanMessage.replace(/claude unavailable/gi, '');
     cleanMessage = cleanMessage.trim();
 
-    // Detect if response contains a message card
     const hasMessageCard = cleanMessage.includes('[MESSAGE_CARD]') && cleanMessage.includes('[/MESSAGE_CARD]');
 
-    // Update conversation updated_at
     await supabaseAdmin
       .from('conversations')
       .update({ updated_at: new Date().toISOString() })
       .eq('id', conversationId);
 
-    // ── STREAMING RESPONSE: send tokens via SSE ──
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       start(controller) {
-        // Send the full response as a series of small chunks to simulate streaming
-        // Edge functions don't support true token-level SSE from upstream, so we
-        // chunk the final response into word-level pieces for the client to animate.
         const words = cleanMessage.split(/(\s+)/);
         let i = 0;
         function sendNext() {
           if (i >= words.length) {
-            // Send final done event with imageUrl and metadata
             const donePayload = JSON.stringify({
               done: true,
               imageUrl: imageUrl || null,
@@ -1007,13 +717,11 @@ Sto put emoji in message always clear use emoji only if you want but not to much
             controller.close();
             return;
           }
-          // Send 1-3 words per chunk for natural pace
           const chunkEnd = Math.min(i + 2, words.length);
           const chunk = words.slice(i, chunkEnd).join('');
           i = chunkEnd;
           const payload = JSON.stringify({ token: chunk });
           controller.enqueue(encoder.encode(`data: ${payload}\n\n`));
-          // Schedule next chunk — ~15ms per chunk gives natural streaming feel
           setTimeout(sendNext, 12);
         }
         sendNext();
