@@ -2064,4 +2064,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-
+you fucking see message and skip  fucking make change that i write in the mess age inm fix good Implement long-press on message bubbles to select text and copy it. When user long-presses a message, show a native text selection handle that lets them highlight and copy any portion of the message content.
