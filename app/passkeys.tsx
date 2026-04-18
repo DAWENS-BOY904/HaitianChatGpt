@@ -331,3 +331,4 @@ export default function PasskeysScreen() {
     </View>
   );
 }
+allow faceid or anpwent for the passkey add real paskey no demo real function expo 
