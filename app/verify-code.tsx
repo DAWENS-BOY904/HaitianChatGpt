@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -26,6 +26,28 @@ export default function VerifyCodeScreen() {
 
   const [code, setCode] = useState(['', '', '', '', '', '']);
   const inputRefs = useRef<(TextInput | null)[]>([]);
+
+  // Rate-limit state: track how many times resend has been tapped + cooldown
+  const [resendCount, setResendCount] = useState(0);
+  const [cooldown, setCooldown] = useState(0); // seconds remaining
+  const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [resendLoading, setResendLoading] = useState(false);
+
+  const startCooldown = useCallback((seconds: number) => {
+    setCooldown(seconds);
+    cooldownRef.current && clearInterval(cooldownRef.current);
+    cooldownRef.current = setInterval(() => {
+      setCooldown(prev => {
+        if (prev <= 1) {
+          cooldownRef.current && clearInterval(cooldownRef.current!);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  }, []);
+
+  useEffect(() => () => { cooldownRef.current && clearInterval(cooldownRef.current); }, []);
 
   useEffect(() => {
     // Auto-focus first input
@@ -135,24 +157,32 @@ export default function VerifyCodeScreen() {
   };
 
   const handleResendEmail = async () => {
-    if (isAdminLogin) {
-      try {
+    if (cooldown > 0 || resendLoading) return;
+
+    setResendLoading(true);
+    try {
+      if (isAdminLogin) {
         const { getSupabaseClient } = await import('@/template');
         const supabase = getSupabaseClient();
-        await supabase.functions.invoke('send-verification-code', {
+        const { error: fnError } = await supabase.functions.invoke('send-verification-code', {
           body: { email, type: 'admin_login' },
         });
-        showAlert('Success', 'A new verification code has been sent to your email.');
-      } catch (e) {
-        showAlert('Error', 'Failed to resend code. Please try again.');
+        if (fnError) throw new Error(fnError.message);
+        showAlert('Code Sent', 'A new verification code has been sent to your email.');
+      } else {
+        const { error } = await sendOTP(email);
+        if (error) throw new Error(error);
+        showAlert('Code Sent', 'Verification code sent to your email.');
       }
-      return;
-    }
-    const { error } = await sendOTP(email);
-    if (error) {
-      showAlert('Error', error);
-    } else {
-      showAlert('Success', 'Verification code sent to your email');
+
+      const newCount = resendCount + 1;
+      setResendCount(newCount);
+      // After 2nd send → 30s cooldown; every subsequent send → 30s cooldown
+      if (newCount >= 2) startCooldown(30);
+    } catch (e: any) {
+      showAlert('Error', e?.message || 'Failed to resend code. Please try again.');
+    } finally {
+      setResendLoading(false);
     }
   };
 
@@ -328,11 +358,13 @@ export default function VerifyCodeScreen() {
         </TouchableOpacity>
 
         <TouchableOpacity 
-          style={styles.resendButton} 
+          style={[styles.resendButton, (cooldown > 0 || resendLoading) && { opacity: 0.4 }]} 
           onPress={handleResendEmail}
-          disabled={operationLoading}
+          disabled={operationLoading || cooldown > 0 || resendLoading}
         >
-          <Text style={styles.resendButtonText}>Resend email</Text>
+          <Text style={styles.resendButtonText}>
+            {resendLoading ? 'Sending...' : cooldown > 0 ? `Resend in ${cooldown}s` : 'Resend email'}
+          </Text>
         </TouchableOpacity>
       </View>
 
@@ -344,4 +376,3 @@ export default function VerifyCodeScreen() {
     </View>
   );
 }
-i dont see any code in my email fix that and when you send a code allow sending 2time after wait 30s for 3time and continue wait 30s and fix the edg mak real more better safe.
