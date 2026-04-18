@@ -211,17 +211,12 @@ export default function LoginScreen() {
       // Auto-send a verification code to the admin email, then go to code entry
       setAdminCodeSending(true);
       try {
-        // Admin login uses Supabase OTP (OnSpace cloud) directly — no Resend
         const supabase = getSupabaseClient();
-        const { error: otpError } = await supabase.auth.signInWithOtp({
-          email: email.toLowerCase(),
-          options: { shouldCreateUser: false },
+        await supabase.functions.invoke('send-verification-code', {
+          body: { email: email.toLowerCase(), type: 'admin_login' },
         });
-        if (otpError) throw new Error(otpError.message);
-      } catch (e: any) {
-        showAlert('Error', e?.message || 'Failed to send admin code. Please try again.');
-        setAdminCodeSending(false);
-        return;
+      } catch (e) {
+        console.warn('Admin code send error (non-blocking):', e);
       } finally {
         setAdminCodeSending(false);
       }
