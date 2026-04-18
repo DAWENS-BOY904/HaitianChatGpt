@@ -15,7 +15,51 @@ interface ApiInfo {
   notes: string;
 }
 
-const KNOWN_APIS: ApiInfo[] = [
+const EXTRA_APIS: ApiInfo[] = [
+  { name: 'Vercel', docsUrl: 'https://vercel.com/docs/rest-api', knownLatest: 'v9', notes: 'Deployments API | Bearer token' },
+  { name: 'Netlify', docsUrl: 'https://docs.netlify.com/api/get-started', knownLatest: 'v1', notes: 'Base: https://api.netlify.com/api/v1 | Bearer token' },
+  { name: 'DigitalOcean', docsUrl: 'https://docs.digitalocean.com/reference/api/api-reference', knownLatest: 'v2', notes: 'Cloud API | Bearer token' },
+  { name: 'Heroku', docsUrl: 'https://devcenter.heroku.com/articles/platform-api-reference', knownLatest: 'v3', notes: 'Base: https://api.heroku.com | Bearer token' },
+  { name: 'Render', docsUrl: 'https://render.com/docs/api', knownLatest: 'v1', notes: 'Cloud deploy API | Bearer key' },
+
+  { name: 'Sentry', docsUrl: 'https://docs.sentry.io/api', knownLatest: 'v0', notes: 'Error tracking API | Bearer token' },
+  { name: 'Postmark', docsUrl: 'https://postmarkapp.com/developer/api/overview', knownLatest: 'v1', notes: 'Email API | X-Postmark-Server-Token' },
+  { name: 'Mailgun', docsUrl: 'https://documentation.mailgun.com/en/latest/api_reference.html', knownLatest: 'v3', notes: 'Email API | API key + domain' },
+  { name: 'Brevo', docsUrl: 'https://developers.brevo.com/reference/getting-started', knownLatest: 'v3', notes: 'Sendinblue API | api-key header' },
+  { name: 'ClickUp', docsUrl: 'https://clickup.com/api', knownLatest: 'v2', notes: 'Project management API | Bearer token' },
+
+  { name: 'Notion', docsUrl: 'https://developers.notion.com', knownLatest: '2024-08', notes: 'Base: https://api.notion.com/v1 | Header: Authorization: Bearer secret_xxx' },
+  { name: 'Airtable', docsUrl: 'https://airtable.com/developers/web/api', knownLatest: 'v0', notes: 'Base: https://api.airtable.com/v0 | Bearer key' },
+  { name: 'Algolia', docsUrl: 'https://www.algolia.com/doc/rest-api', knownLatest: 'v1', notes: 'Base: https://APPID-dsn.algolia.net | API Key required' },
+  { name: 'Meilisearch', docsUrl: 'https://www.meilisearch.com/docs', knownLatest: 'v1.x', notes: 'Base: http://localhost:7700 | Header: X-Meili-API-Key' },
+  { name: 'Pinecone', docsUrl: 'https://docs.pinecone.io', knownLatest: 'v1', notes: 'Vector DB | Header: Api-Key' },
+  { name: 'Replicate', docsUrl: 'https://replicate.com/docs/reference/http', knownLatest: 'v1', notes: 'Run AI models | Bearer token' },
+  { name: 'HuggingFace', docsUrl: 'https://huggingface.co/docs/api-inference', knownLatest: 'v1', notes: 'Base: https://api-inference.huggingface.co' },
+  { name: 'Stability AI', docsUrl: 'https://platform.stability.ai/docs/api-reference', knownLatest: 'v1', notes: 'Image gen API | Bearer key' },
+  { name: 'ElevenLabs', docsUrl: 'https://elevenlabs.io/docs/api-reference', knownLatest: 'v1', notes: 'Text-to-speech | xi-api-key header' },
+  { name: 'Deepgram', docsUrl: 'https://developers.deepgram.com', knownLatest: 'v1', notes: 'Speech-to-text | Bearer key' },
+
+  { name: 'AssemblyAI', docsUrl: 'https://www.assemblyai.com/docs', knownLatest: 'v2', notes: 'Transcription API | Bearer key' },
+  { name: 'Mapbox', docsUrl: 'https://docs.mapbox.com/api', knownLatest: 'v6', notes: 'Maps API | access_token required' },
+  { name: 'OpenWeather', docsUrl: 'https://openweathermap.org/api', knownLatest: 'v2.5', notes: 'Weather data | ?appid=KEY' },
+  { name: 'CoinGecko', docsUrl: 'https://www.coingecko.com/en/api/documentation', knownLatest: 'v3', notes: 'Crypto prices | Free tier available' },
+  { name: 'Coinbase', docsUrl: 'https://docs.cloud.coinbase.com', knownLatest: 'v2', notes: 'Crypto API | API key + secret' },
+  { name: 'Binance', docsUrl: 'https://binance-docs.github.io/apidocs', knownLatest: 'v3', notes: 'Trading API | HMAC auth' },
+  { name: 'Kraken', docsUrl: 'https://docs.kraken.com/api', knownLatest: 'v0', notes: 'Crypto trading | API key + secret' },
+  { name: 'Zoom', docsUrl: 'https://developers.zoom.us/docs/api', knownLatest: 'v2', notes: 'Meetings API | OAuth required' },
+  { name: 'Slack', docsUrl: 'https://api.slack.com/web', knownLatest: 'v2', notes: 'Chat API | Bearer xoxb-' },
+  { name: 'Microsoft Graph', docsUrl: 'https://learn.microsoft.com/graph/api', knownLatest: 'v1.0', notes: 'Office 365 API | OAuth2' },
+
+  { name: 'LinkedIn', docsUrl: 'https://learn.microsoft.com/linkedin', knownLatest: 'v2', notes: 'Social API | OAuth2' },
+  { name: 'Reddit', docsUrl: 'https://www.reddit.com/dev/api', knownLatest: 'v1', notes: 'OAuth required | JSON endpoints' },
+  { name: 'TikTok', docsUrl: 'https://developers.tiktok.com/doc', knownLatest: 'v2', notes: 'Video API | OAuth2' },
+  { name: 'Spotify', docsUrl: 'https://developer.spotify.com/documentation/web-api', knownLatest: 'v1', notes: 'Music API | OAuth2' },
+  { name: 'Apple Music', docsUrl: 'https://developer.apple.com/documentation/applemusicapi', knownLatest: 'v1', notes: 'JWT auth required' },
+  { name: 'IMDb', docsUrl: 'https://imdb-api.com/api', knownLatest: 'v2', notes: 'Movie data | API key' },
+  { name: 'TMDB', docsUrl: 'https://developer.themoviedb.org', knownLatest: 'v3/v4', notes: 'Movies API | Bearer token' },
+  { name: 'Unsplash', docsUrl: 'https://unsplash.com/documentation', knownLatest: 'v1', notes: 'Images API | Client-ID' },
+  { name: 'Giphy', docsUrl: 'https://developers.giphy.com/docs/api', knownLatest: 'v1', notes: 'GIF API | API key' },
+  { name: 'Tenor', docsUrl: 'https://tenor.com/gifapi/documentation', knownLatest: 'v2', notes: 'GIF search | key param' },
   {
     name: 'OpenAI',
     docsUrl: 'https://platform.openai.com/docs/api-reference',
