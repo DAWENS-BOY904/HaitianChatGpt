@@ -331,4 +331,3 @@ export default function PasskeysScreen() {
     </View>
   );
 }
-YOU FUCKING SEE THE MESSAGE DONT SKIP  MAKE CHANGE:Implement real Face ID / fingerprint login on the login screen using expo-local-authentication. When the user has a saved passkey, automatically prompt biometric auth on app open and log them in without entering a password.
