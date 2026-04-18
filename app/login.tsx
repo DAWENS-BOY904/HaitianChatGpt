@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,8 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
+  Animated,
+  Image,
 } from 'react-native';
 import { useAuth, useAlert, getSupabaseClient } from '@/template';
 import { useTheme } from '../hooks/useTheme';
@@ -20,6 +22,62 @@ import * as AppleAuthentication from 'expo-apple-authentication';
 import * as LocalAuthentication from 'expo-local-authentication';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Crypto from 'expo-crypto';
+
+// ── AI Logo ──
+const AI_LOGO_URL = 'https://uzxmmddivzqjhcnnrkns.supabase.co/storage/v1/object/public/logo/WhatsApp%20Image%202026-04-18%20at%202.58.46%20AM.jpeg';
+
+const logoStyles = StyleSheet.create({
+  logoContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  glowRing: {
+    position: 'absolute',
+    backgroundColor: 'rgba(0, 150, 255, 0.3)',
+  },
+  logoWrapper: {
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: 'rgba(0, 150, 255, 0.5)',
+    ...Platform.select({
+      ios: { shadowColor: '#0096FF', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.5, shadowRadius: 8 },
+      android: { elevation: 6 },
+    }),
+  },
+});
+
+function AILogo({ size = 64 }: { size?: number }) {
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const glowAnim = useRef(new Animated.Value(0.5)).current;
+
+  useEffect(() => {
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1.08, duration: 1500, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 1500, useNativeDriver: true }),
+      ])
+    );
+    const glow = Animated.loop(
+      Animated.sequence([
+        Animated.timing(glowAnim, { toValue: 1, duration: 1000, useNativeDriver: true }),
+        Animated.timing(glowAnim, { toValue: 0.5, duration: 1000, useNativeDriver: true }),
+      ])
+    );
+    pulse.start();
+    glow.start();
+    return () => { pulse.stop(); glow.stop(); };
+  }, []);
+
+  return (
+    <View style={[logoStyles.logoContainer, { width: size + 16, height: size + 16 }]}>
+      <Animated.View style={[logoStyles.glowRing, { width: size + 16, height: size + 16, borderRadius: (size + 16) / 2, opacity: glowAnim, transform: [{ scale: pulseAnim }] }]} />
+      <Animated.View style={[logoStyles.logoWrapper, { width: size, height: size, borderRadius: size / 2, transform: [{ scale: pulseAnim }] }]}>
+        <Image source={{ uri: AI_LOGO_URL }} style={{ width: size, height: size, borderRadius: size / 2 }} resizeMode="cover" />
+      </Animated.View>
+    </View>
+  );
+}
 
 // ── Helper: send login confirmation email ──
 async function sendLoginConfirmationEmail(userId: string, email: string) {
@@ -538,6 +596,9 @@ export default function LoginScreen() {
       </TouchableOpacity>
 
       <View style={styles.content}>
+        <View style={{ alignItems: 'center', marginBottom: 16 }}>
+          <AILogo size={72} />
+        </View>
         <Text style={styles.title}>Log in or sign up</Text>
         <Text style={styles.description}>
           You will get smarter responses and can upload files, images and more.
@@ -652,5 +713,5 @@ export default function LoginScreen() {
     </View>
   );
 }
-Redesign the login page header in app/login to include the AI logo (same one from the welcome screen) above the 'Log in or sign up' title,, making it visually match the app's branding style.
+
 
