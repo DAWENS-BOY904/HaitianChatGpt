@@ -502,3 +502,5 @@ export default function RootScreen() {
 
   return <WelcomeScreen />;
 }
+fix error ⚠️ Uncaught Error
+styles is not defined.
