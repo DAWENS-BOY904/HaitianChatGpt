@@ -344,3 +344,4 @@ export default function VerifyCodeScreen() {
     </View>
   );
 }
+i dont receiv code for admin email in my email make sure you fix that  and edg function to make more better safe real.
