@@ -344,3 +344,4 @@ export default function VerifyCodeScreen() {
     </View>
   );
 }
+i dont see any code in my email fix that and when you send a code allow sending 2time after wait 30s for 3time and continue wait 30s and fix the edg mak real more better safe.
