@@ -174,3 +174,4 @@ export function useStreamingText(options: {
     ),
   };
 }
+dont fucking skip my message if read this make change all change better and real Add a subtle slide-up + fade-in entrance animation to each new message bubble in MessageItem so messages appear with a smooth spring animation instead of instantly popping in. Fix streaming text rendering in MessageItem to be smoother — reduce layout jitter during token-by-token updates, ensure the blinking cursor stays flush with the last character, and prevent the message bubble from resizing abruptly mid-stream.
