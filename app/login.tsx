@@ -679,4 +679,4 @@ export default function LoginScreen() {
     </View>
   );
 }
-
+fixlogin admin when admin enter email auto send to code page to enter the code and succes login after login auto direct home and all log success.
