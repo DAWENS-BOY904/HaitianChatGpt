@@ -652,5 +652,5 @@ export default function LoginScreen() {
     </View>
   );
 }
-
+Redesign the login page header in app/login to include the AI logo (same one from the welcome screen) above the 'Log in or sign up' title,, making it visually match the app's branding style.
 
