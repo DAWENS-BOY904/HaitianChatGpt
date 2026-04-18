@@ -1,5 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, StatusBar, Platform, Animated, ActivityIndicator } from 'react-native';
+import { 
+  View, 
+  Text, 
+  TouchableOpacity, 
+  StyleSheet, 
+  StatusBar, 
+  Platform, 
+  Animated, 
+  ActivityIndicator,
+  Image 
+} from 'react-native';
 import { useRouter, Redirect } from 'expo-router';
 import { useAuth, useAlert, getSupabaseClient } from '@/template';
 import { useTheme } from '../hooks/useTheme';
@@ -15,6 +25,9 @@ const WELCOME_PHRASES = [
   "Ready to assist you",
   "What's on your mind?",
 ];
+
+// AI Logo URL - won gradient logo
+const AI_LOGO_URL = 'https://kimi-web-img.moonshot.cn/img/www.shutterstock.com/297f3e4a58d8db42209b9a619baa4d1c548f54c5.jpg';
 
 // ── Helper: send login confirmation email (non-blocking) ──
 async function sendLoginConfirmationEmail(userId: string, email: string) {
@@ -40,7 +53,6 @@ function getAppleSupabaseClient() {
   
   if (!supabaseUrl || !supabaseKey) {
     console.error('MY_SUPABASE_URL or MY_SUPABASE_ANON_KEY not configured');
-    // Fallback to regular client if env vars not set
     return getSupabaseClient();
   }
   
@@ -62,7 +74,6 @@ async function performAppleSignIn(
   }
 
   try {
-    // Dynamic import to avoid web build errors
     const AppleAuthentication = await import('expo-apple-authentication');
     const available = await AppleAuthentication.isAvailableAsync();
     if (!available) {
@@ -94,7 +105,6 @@ async function performAppleSignIn(
       return { user: null, error: 'Apple Sign In failed: no identity token returned.' };
     }
 
-    // Use Apple-specific Supabase client with MY_SUPABASE_URL
     const supabase = getAppleSupabaseClient();
     const { data, error } = await supabase.auth.signInWithIdToken({
       provider: 'apple',
@@ -105,9 +115,97 @@ async function performAppleSignIn(
     if (error) return { user: null, error: error.message };
     return { user: data?.user ?? null };
   } catch (e: any) {
-    if (e?.code === 'ERR_REQUEST_CANCELED') return { user: null }; // user cancelled — no error
+    if (e?.code === 'ERR_REQUEST_CANCELED') return { user: null };
     return { user: null, error: e?.message || 'Apple Sign In failed' };
   }
+}
+
+// ── Animated AI Logo Component ──
+function AILogo({ size = 80 }: { size?: number }) {
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const glowAnim = useRef(new Animated.Value(0.5)).current;
+
+  useEffect(() => {
+    // Pulse animation
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1.1,
+          duration: 1500,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 1500,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    // Glow animation
+    const glow = Animated.loop(
+      Animated.sequence([
+        Animated.timing(glowAnim, {
+          toValue: 1,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(glowAnim, {
+          toValue: 0.5,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    pulse.start();
+    glow.start();
+
+    return () => {
+      pulse.stop();
+      glow.stop();
+    };
+  }, []);
+
+  return (
+    <View style={[styles.logoContainer, { width: size + 20, height: size + 20 }]}>
+      {/* Glow effect */}
+      <Animated.View 
+        style={[
+          styles.glowRing,
+          {
+            width: size + 20,
+            height: size + 20,
+            borderRadius: (size + 20) / 2,
+            opacity: glowAnim,
+            transform: [{ scale: pulseAnim }],
+          }
+        ]} 
+      />
+      {/* Main Logo */}
+      <Animated.View 
+        style={[
+          styles.logoWrapper,
+          {
+            width: size,
+            height: size,
+            borderRadius: size / 2,
+            transform: [{ scale: pulseAnim }],
+          }
+        ]}
+      >
+        <Image
+          source={{ uri: AI_LOGO_URL }}
+          style={{
+            width: size,
+            height: size,
+            borderRadius: size / 2,
+          }}
+          resizeMode="cover"
+        />
+      </Animated.View>
+    </View>
+  );
 }
 
 function WelcomeScreen() {
@@ -119,8 +217,25 @@ function WelcomeScreen() {
   const [phraseIndex, setPhraseIndex] = useState(0);
   const [loading, setLoading] = useState<'apple' | 'google' | null>(null);
   const fadeTitle = useRef(new Animated.Value(1)).current;
+  const slideUp = useRef(new Animated.Value(50)).current;
+  const fadeIn = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    // Entry animation
+    Animated.parallel([
+      Animated.timing(slideUp, {
+        toValue: 0,
+        duration: 800,
+        useNativeDriver: true,
+      }),
+      Animated.timing(fadeIn, {
+        toValue: 1,
+        duration: 800,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    // Phrase rotation
     const interval = setInterval(() => {
       Animated.timing(fadeTitle, { toValue: 0, duration: 300, useNativeDriver: true }).start(() => {
         setPhraseIndex(prev => (prev + 1) % WELCOME_PHRASES.length);
@@ -130,7 +245,6 @@ function WelcomeScreen() {
     return () => clearInterval(interval);
   }, []);
 
-  // ── Real Apple Sign-In ──
   const handleApple = async () => {
     if (Platform.OS !== 'ios') {
       showAlert('Not Available', 'Apple Sign In is only available on iOS.');
@@ -143,14 +257,12 @@ function WelcomeScreen() {
       if (user) {
         const email = user.email || `${user.id}@privaterelay.appleid.com`;
         sendLoginConfirmationEmail(user.id, email);
-        // AuthRouter / Redirect will handle nav automatically via useAuth
       }
     } finally {
       setLoading(null);
     }
   };
 
-  // ── Real Google Sign-In ──
   const handleGoogle = async () => {
     setLoading('google');
     try {
@@ -173,9 +285,26 @@ function WelcomeScreen() {
       justifyContent: 'center',
       alignItems: 'center',
       paddingHorizontal: Spacing.xl,
-      paddingTop: Platform.select({ ios: insets.top + 60, android: insets.top + 60, default: 60 }),
+      paddingTop: Platform.select({ ios: insets.top + 40, android: insets.top + 40, default: 40 }),
     },
-    title: { fontSize: 42, fontWeight: '700', color: colors.text, marginBottom: Spacing.lg, textAlign: 'center' },
+    logoSection: {
+      alignItems: 'center',
+      marginBottom: Spacing.xl,
+    },
+    title: { 
+      fontSize: 42, 
+      fontWeight: '700', 
+      color: colors.text, 
+      marginTop: Spacing.lg,
+      marginBottom: Spacing.md, 
+      textAlign: 'center' 
+    },
+    subtitle: {
+      fontSize: 16,
+      color: colors.textSecondary || '#666',
+      textAlign: 'center',
+      marginBottom: Spacing.lg,
+    },
     buttonContainer: {
       width: '100%',
       gap: Spacing.md,
@@ -190,6 +319,17 @@ function WelcomeScreen() {
       borderRadius: BorderRadius.full,
       padding: Spacing.md,
       gap: Spacing.sm,
+      ...Platform.select({
+        ios: {
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.1,
+          shadowRadius: 4,
+        },
+        android: {
+          elevation: 3,
+        },
+      }),
     },
     appleButtonText: { color: '#000000', fontWeight: '600', fontSize: 16 },
     googleButton: {
@@ -200,15 +340,37 @@ function WelcomeScreen() {
       borderRadius: BorderRadius.full,
       padding: Spacing.md,
       gap: Spacing.sm,
+      ...Platform.select({
+        ios: {
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.1,
+          shadowRadius: 4,
+        },
+        android: {
+          elevation: 3,
+        },
+      }),
     },
     googleButtonText: { color: '#FFFFFF', fontWeight: '600', fontSize: 16 },
     signupButton: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: '#4A4A4A',
+      backgroundColor: colors.primary || '#007AFF',
       borderRadius: BorderRadius.full,
       padding: Spacing.md,
+      ...Platform.select({
+        ios: {
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.15,
+          shadowRadius: 4,
+        },
+        android: {
+          elevation: 4,
+        },
+      }),
     },
     signupButtonText: { color: '#FFFFFF', fontWeight: '600', fontSize: 16 },
     loginButton: {
@@ -222,18 +384,68 @@ function WelcomeScreen() {
       borderColor: colors.border,
     },
     loginButtonText: { color: colors.text, fontWeight: '600', fontSize: 16 },
+    // AI Logo styles
+    logoContainer: {
+      justifyContent: 'center',
+      alignItems: 'center',
+      position: 'relative',
+    },
+    glowRing: {
+      position: 'absolute',
+      backgroundColor: 'rgba(0, 150, 255, 0.3)',
+    },
+    logoWrapper: {
+      overflow: 'hidden',
+      borderWidth: 3,
+      borderColor: 'rgba(0, 150, 255, 0.5)',
+      ...Platform.select({
+        ios: {
+          shadowColor: '#0096FF',
+          shadowOffset: { width: 0, height: 0 },
+          shadowOpacity: 0.5,
+          shadowRadius: 10,
+        },
+        android: {
+          elevation: 8,
+        },
+      }),
+    },
   });
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle={colors.text === '#FFFFFF' ? 'light-content' : 'dark-content'} />
       <View style={styles.content}>
-        <Animated.Text style={[styles.title, { opacity: fadeTitle }]}>
-          {WELCOME_PHRASES[phraseIndex]}
-        </Animated.Text>
+        {/* AI Logo Header / Avatar */}
+        <Animated.View 
+          style={[
+            styles.logoSection,
+            {
+              opacity: fadeIn,
+              transform: [{ translateY: slideUp }],
+            }
+          ]}
+        >
+          <AILogo size={100} />
+          <Animated.Text style={[styles.title, { opacity: fadeTitle }]}>
+            {WELCOME_PHRASES[phraseIndex]}
+          </Animated.Text>
+          <Text style={styles.subtitle}>
+            Your AI Assistant
+          </Text>
+        </Animated.View>
       </View>
-      <View style={styles.buttonContainer}>
-        {/* Apple Sign-In — direct, no login page redirect */}
+      
+      <Animated.View 
+        style={[
+          styles.buttonContainer,
+          {
+            opacity: fadeIn,
+            transform: [{ translateY: slideUp }],
+          }
+        ]}
+      >
+        {/* Apple Sign-In */}
         {Platform.OS === 'ios' ? (
           <TouchableOpacity
             style={styles.appleButton}
@@ -251,7 +463,7 @@ function WelcomeScreen() {
           </TouchableOpacity>
         ) : null}
 
-        {/* Google Sign-In — direct OAuth, no login page redirect */}
+        {/* Google Sign-In */}
         <TouchableOpacity
           style={styles.googleButton}
           onPress={handleGoogle}
@@ -267,15 +479,16 @@ function WelcomeScreen() {
           </Text>
         </TouchableOpacity>
 
-        {/* Email sign-up / sign-in */}
+        {/* Email sign-up */}
         <TouchableOpacity style={styles.signupButton} onPress={() => router.push('/login')}>
           <Text style={styles.signupButtonText}>Continue with Email</Text>
         </TouchableOpacity>
 
+        {/* Log in */}
         <TouchableOpacity style={styles.loginButton} onPress={() => router.push('/login')}>
           <Text style={styles.loginButtonText}>Log in</Text>
         </TouchableOpacity>
-      </View>
+      </Animated.View>
     </View>
   );
 }
