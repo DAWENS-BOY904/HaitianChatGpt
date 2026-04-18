@@ -15,7 +15,7 @@ interface ApiInfo {
   notes: string;
 }
 
-const EXTRA_APIS: ApiInfo[] = [
+const KNOWN_APIS: ApiInfo[] = [
   { name: 'Vercel', docsUrl: 'https://vercel.com/docs/rest-api', knownLatest: 'v9', notes: 'Deployments API | Bearer token' },
   { name: 'Netlify', docsUrl: 'https://docs.netlify.com/api/get-started', knownLatest: 'v1', notes: 'Base: https://api.netlify.com/api/v1 | Bearer token' },
   { name: 'DigitalOcean', docsUrl: 'https://docs.digitalocean.com/reference/api/api-reference', knownLatest: 'v2', notes: 'Cloud API | Bearer token' },

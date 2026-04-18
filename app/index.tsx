@@ -505,4 +505,3 @@ export default function RootScreen() {
 
   return <WelcomeScreen />;
 }
-if see this dont skip make change please read message In supabase/functions/chat/index.ts the detectAndInjectApiVersions function references KNOWN_APIS but the variable is defined as EXTRA_APIS. Fix this by renaming EXTRA_APIS to KNOWN_APIS so the API version detection actually works without throwing a ReferenceError at runtime.
