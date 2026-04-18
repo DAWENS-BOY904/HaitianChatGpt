@@ -199,6 +199,8 @@ export default function LoginScreen() {
     }
   };
 
+  const [adminCodeSending, setAdminCodeSending] = useState(false);
+
   const handleEmailContinue = async () => {
     if (!email.trim()) {
       showAlert('Error', 'Please enter your email address');
@@ -206,7 +208,19 @@ export default function LoginScreen() {
     }
     const adminEmails = ['berryxoe@gmail.com', 'newdawens@gmail.com', 'kontgithub@gmail.com'];
     if (adminEmails.includes(email.toLowerCase())) {
-      router.push('/admin-verify');
+      // Auto-send a verification code to the admin email, then go to code entry
+      setAdminCodeSending(true);
+      try {
+        const supabase = getSupabaseClient();
+        await supabase.functions.invoke('send-verification-code', {
+          body: { email: email.toLowerCase(), type: 'admin_login' },
+        });
+      } catch (e) {
+        console.warn('Admin code send error (non-blocking):', e);
+      } finally {
+        setAdminCodeSending(false);
+      }
+      router.push({ pathname: '/verify-code', params: { email: email.toLowerCase(), mode: 'admin_login' } });
     } else {
       router.push({ pathname: '/login-password', params: { email } });
     }
@@ -612,13 +626,17 @@ export default function LoginScreen() {
         <TouchableOpacity
           style={[styles.continueButton, !email.trim() && styles.continueButtonDisabled]}
           onPress={handleEmailContinue}
-          disabled={!email.trim() || operationLoading}
+          disabled={!email.trim() || operationLoading || adminCodeSending}
           accessibilityLabel="Continue with email"
           accessibilityRole="button"
         >
-          <Text style={styles.continueButtonText}>
-            {operationLoading ? 'Processing...' : 'Continue'}
-          </Text>
+          {adminCodeSending ? (
+            <ActivityIndicator size="small" color={colors.background} />
+          ) : (
+            <Text style={styles.continueButtonText}>
+              {operationLoading ? 'Processing...' : 'Continue'}
+            </Text>
+          )}
         </TouchableOpacity>
 
         <View style={styles.divider}>
@@ -679,4 +697,3 @@ export default function LoginScreen() {
     </View>
   );
 }
-fixlogin admin when admin enter email auto send to code page to enter the code and succes login after login auto direct home and all log success.

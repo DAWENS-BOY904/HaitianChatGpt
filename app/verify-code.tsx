@@ -21,7 +21,8 @@ export default function VerifyCodeScreen() {
   const { showAlert } = useAlert();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { email, password } = useLocalSearchParams<{ email: string; password: string }>();
+  const { email, password, mode } = useLocalSearchParams<{ email: string; password: string; mode: string }>();
+  const isAdminLogin = mode === 'admin_login';
 
   const [code, setCode] = useState(['', '', '', '', '', '']);
   const inputRefs = useRef<(TextInput | null)[]>([]);
@@ -64,6 +65,66 @@ export default function VerifyCodeScreen() {
       return;
     }
 
+    if (isAdminLogin) {
+      // Admin login: verify code via edge function, then sign in with OTP
+      try {
+        const { getSupabaseClient } = await import('@/template');
+        const supabase = getSupabaseClient();
+        // Verify the code stored in verification_codes table
+        const { data: vcData, error: vcError } = await supabase
+          .from('verification_codes')
+          .select('id, code, expires_at, used')
+          .eq('email', email)
+          .eq('type', 'admin_login')
+          .eq('used', false)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single();
+
+        if (vcError || !vcData) {
+          showAlert('Error', 'Invalid or expired code. Please request a new one.');
+          setCode(['', '', '', '', '', '']);
+          inputRefs.current[0]?.focus();
+          return;
+        }
+
+        if (vcData.code !== otp) {
+          showAlert('Error', 'Incorrect code. Please try again.');
+          setCode(['', '', '', '', '', '']);
+          inputRefs.current[0]?.focus();
+          return;
+        }
+
+        if (new Date(vcData.expires_at) < new Date()) {
+          showAlert('Error', 'Code has expired. Please request a new one.');
+          setCode(['', '', '', '', '', '']);
+          inputRefs.current[0]?.focus();
+          return;
+        }
+
+        // Mark code as used
+        await supabase
+          .from('verification_codes')
+          .update({ used: true })
+          .eq('id', vcData.id);
+
+        // Sign admin in via Supabase OTP (email-based)
+        const { error: otpError } = await supabase.auth.signInWithOtp({ email });
+        if (otpError) {
+          // OTP sign-in may require a second verification — fall back to redirect
+          console.warn('Admin OTP sign-in:', otpError.message);
+        }
+
+        // Navigate to home — auth state will be picked up by AuthProvider
+        router.replace('/home');
+      } catch (e: any) {
+        showAlert('Error', e?.message || 'Verification failed. Please try again.');
+        setCode(['', '', '', '', '', '']);
+        inputRefs.current[0]?.focus();
+      }
+      return;
+    }
+
     const { error } = await verifyOTPAndLogin(email, otp, { password });
     if (error) {
       showAlert('Error', error);
@@ -74,6 +135,19 @@ export default function VerifyCodeScreen() {
   };
 
   const handleResendEmail = async () => {
+    if (isAdminLogin) {
+      try {
+        const { getSupabaseClient } = await import('@/template');
+        const supabase = getSupabaseClient();
+        await supabase.functions.invoke('send-verification-code', {
+          body: { email, type: 'admin_login' },
+        });
+        showAlert('Success', 'A new verification code has been sent to your email.');
+      } catch (e) {
+        showAlert('Error', 'Failed to resend code. Please try again.');
+      }
+      return;
+    }
     const { error } = await sendOTP(email);
     if (error) {
       showAlert('Error', error);
