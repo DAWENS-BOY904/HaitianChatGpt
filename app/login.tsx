@@ -9,7 +9,6 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
-  Animated,
   Image,
 } from 'react-native';
 import { useAuth, useAlert, getSupabaseClient } from '@/template';
@@ -27,15 +26,6 @@ import * as Crypto from 'expo-crypto';
 const AI_LOGO_URL = 'https://uzxmmddivzqjhcnnrkns.supabase.co/storage/v1/object/public/logo/logo.png';
 
 const logoStyles = StyleSheet.create({
-  logoContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    position: 'relative',
-  },
-  glowRing: {
-    position: 'absolute',
-    backgroundColor: 'rgba(0, 150, 255, 0.3)',
-  },
   logoWrapper: {
     overflow: 'hidden',
     borderWidth: 2,
@@ -48,33 +38,9 @@ const logoStyles = StyleSheet.create({
 });
 
 function AILogo({ size = 64 }: { size?: number }) {
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-  const glowAnim = useRef(new Animated.Value(0.5)).current;
-
-  useEffect(() => {
-    const pulse = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 1.08, duration: 1500, useNativeDriver: true }),
-        Animated.timing(pulseAnim, { toValue: 1, duration: 1500, useNativeDriver: true }),
-      ])
-    );
-    const glow = Animated.loop(
-      Animated.sequence([
-        Animated.timing(glowAnim, { toValue: 1, duration: 1000, useNativeDriver: true }),
-        Animated.timing(glowAnim, { toValue: 0.5, duration: 1000, useNativeDriver: true }),
-      ])
-    );
-    pulse.start();
-    glow.start();
-    return () => { pulse.stop(); glow.stop(); };
-  }, []);
-
   return (
-    <View style={[logoStyles.logoContainer, { width: size + 16, height: size + 16 }]}>
-      <Animated.View style={[logoStyles.glowRing, { width: size + 16, height: size + 16, borderRadius: (size + 16) / 2, opacity: glowAnim, transform: [{ scale: pulseAnim }] }]} />
-      <Animated.View style={[logoStyles.logoWrapper, { width: size, height: size, borderRadius: size / 2, transform: [{ scale: pulseAnim }] }]}>
-        <Image source={{ uri: AI_LOGO_URL }} style={{ width: size, height: size, borderRadius: size / 2 }} resizeMode="cover" />
-      </Animated.View>
+    <View style={[logoStyles.logoWrapper, { width: size, height: size, borderRadius: size / 2 }]}>
+      <Image source={{ uri: AI_LOGO_URL }} style={{ width: size, height: size, borderRadius: size / 2 }} resizeMode="cover" />
     </View>
   );
 }
@@ -713,5 +679,4 @@ export default function LoginScreen() {
     </View>
   );
 }
-remove animation effet make it simple clear.
 
