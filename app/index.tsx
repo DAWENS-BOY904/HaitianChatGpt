@@ -120,6 +120,35 @@ async function performAppleSignIn(
   }
 }
 
+// ── Module-level styles for AILogo (must be outside component) ──
+const logoStyles = StyleSheet.create({
+  logoContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  glowRing: {
+    position: 'absolute',
+    backgroundColor: 'rgba(0, 150, 255, 0.3)',
+  },
+  logoWrapper: {
+    overflow: 'hidden',
+    borderWidth: 3,
+    borderColor: 'rgba(0, 150, 255, 0.5)',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#0096FF',
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.5,
+        shadowRadius: 10,
+      },
+      android: {
+        elevation: 8,
+      },
+    }),
+  },
+});
+
 // ── Animated AI Logo Component ──
 function AILogo({ size = 80 }: { size?: number }) {
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -168,11 +197,11 @@ function AILogo({ size = 80 }: { size?: number }) {
   }, []);
 
   return (
-    <View style={[styles.logoContainer, { width: size + 20, height: size + 20 }]}>
+    <View style={[logoStyles.logoContainer, { width: size + 20, height: size + 20 }]}>
       {/* Glow effect */}
       <Animated.View 
         style={[
-          styles.glowRing,
+          logoStyles.glowRing,
           {
             width: size + 20,
             height: size + 20,
@@ -185,7 +214,7 @@ function AILogo({ size = 80 }: { size?: number }) {
       {/* Main Logo */}
       <Animated.View 
         style={[
-          styles.logoWrapper,
+          logoStyles.logoWrapper,
           {
             width: size,
             height: size,
@@ -384,32 +413,6 @@ function WelcomeScreen() {
       borderColor: colors.border,
     },
     loginButtonText: { color: colors.text, fontWeight: '600', fontSize: 16 },
-    // AI Logo styles
-    logoContainer: {
-      justifyContent: 'center',
-      alignItems: 'center',
-      position: 'relative',
-    },
-    glowRing: {
-      position: 'absolute',
-      backgroundColor: 'rgba(0, 150, 255, 0.3)',
-    },
-    logoWrapper: {
-      overflow: 'hidden',
-      borderWidth: 3,
-      borderColor: 'rgba(0, 150, 255, 0.5)',
-      ...Platform.select({
-        ios: {
-          shadowColor: '#0096FF',
-          shadowOffset: { width: 0, height: 0 },
-          shadowOpacity: 0.5,
-          shadowRadius: 10,
-        },
-        android: {
-          elevation: 8,
-        },
-      }),
-    },
   });
 
   return (
@@ -502,5 +505,3 @@ export default function RootScreen() {
 
   return <WelcomeScreen />;
 }
-fix error ⚠️ Uncaught Error
-styles is not defined.
