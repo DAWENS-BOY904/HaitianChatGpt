@@ -376,4 +376,3 @@ export default function VerifyCodeScreen() {
     </View>
   );
 }
-for admin email login use onspace cloud function supabase code but for other user use resend fix all this clear.
