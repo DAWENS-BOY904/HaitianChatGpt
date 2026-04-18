@@ -400,6 +400,7 @@ export const MessageItem = memo(function MessageItem({
 
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [showActionsModal, setShowActionsModal] = useState(false);
+  const [showSelectTextModal, setShowSelectTextModal] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
   const [liked, setLiked] = useState<'like' | 'dislike' | null>(null);
   const [analysisVisible, setAnalysisVisible] = useState(false);
@@ -439,10 +440,9 @@ export const MessageItem = memo(function MessageItem({
 
   const handleLongPress = useCallback((event: any) => {
     const { pageX, pageY } = event.nativeEvent;
-    setMenuPosition({ x: Math.min(pageX, SCREEN_WIDTH - 140), y: pageY - 100 });
-    if (message.role === 'assistant') setShowActionsModal(true);
-    else setShowContextMenu(true);
-  }, [message.role]);
+    setMenuPosition({ x: Math.min(pageX, SCREEN_WIDTH - 200), y: Math.max(pageY - 120, 60) });
+    setShowContextMenu(true);
+  }, []);
 
   const handleCopy = useCallback(async () => {
     await Clipboard.setStringAsync(message.content);
@@ -960,7 +960,14 @@ export const MessageItem = memo(function MessageItem({
           <View style={[styles.contextMenu, { top: menuPosition.y, left: menuPosition.x }]}>
             <TouchableOpacity style={styles.contextMenuItem} onPress={handleCopy}>
               <Ionicons name="copy-outline" size={20} color={colors.text} />
-              <Text style={styles.contextMenuText}>Copy</Text>
+              <Text style={styles.contextMenuText}>Copy All</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.contextMenuItem}
+              onPress={() => { setShowContextMenu(false); setShowSelectTextModal(true); }}
+            >
+              <Ionicons name="text" size={20} color={colors.text} />
+              <Text style={styles.contextMenuText}>Select Text</Text>
             </TouchableOpacity>
             {message.role === 'user' && onEdit && (
               <TouchableOpacity style={styles.contextMenuItem} onPress={handleEdit}>
@@ -977,6 +984,74 @@ export const MessageItem = memo(function MessageItem({
             </TouchableOpacity>
           </View>
         </Pressable>
+      </Modal>
+
+      {/* Select Text Modal */}
+      <Modal
+        visible={showSelectTextModal}
+        transparent={false}
+        animationType="slide"
+        onRequestClose={() => setShowSelectTextModal(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: colors.background }}>
+          <View style={{
+            flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+            paddingHorizontal: 16,
+            paddingTop: Platform.OS === 'ios' ? 56 : 28,
+            paddingBottom: 14,
+            borderBottomWidth: StyleSheet.hairlineWidth,
+            borderBottomColor: colors.border,
+          }}>
+            <TouchableOpacity onPress={() => setShowSelectTextModal(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <Ionicons name="close" size={24} color={colors.text} />
+            </TouchableOpacity>
+            <Text style={{ color: colors.text, fontSize: 17, fontWeight: '600' }}>Select Text</Text>
+            <TouchableOpacity
+              onPress={async () => { await Clipboard.setStringAsync(message.content); showAlert('Copied!', 'Message copied to clipboard'); setShowSelectTextModal(false); }}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Text style={{ color: colors.primary, fontSize: 15, fontWeight: '600' }}>Copy All</Text>
+            </TouchableOpacity>
+          </View>
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={{ padding: 20, paddingBottom: 60 }}
+            keyboardShouldPersistTaps="always"
+          >
+            <Text
+              selectable
+              selectionColor={`${colors.primary}55`}
+              style={{
+                color: colors.text,
+                fontSize: 16,
+                lineHeight: 26,
+                fontWeight: '400',
+              }}
+            >
+              {message.content}
+            </Text>
+          </ScrollView>
+          <View style={{
+            flexDirection: 'row', gap: 12, paddingHorizontal: 16,
+            paddingBottom: Platform.OS === 'ios' ? 34 : 20, paddingTop: 12,
+            borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border,
+          }}>
+            <TouchableOpacity
+              style={{ flex: 1, backgroundColor: colors.surface, borderRadius: 12, paddingVertical: 13, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderWidth: 1, borderColor: colors.border }}
+              onPress={async () => { await Share.share({ message: message.content }); }}
+            >
+              <Ionicons name="share-outline" size={18} color={colors.text} />
+              <Text style={{ color: colors.text, fontSize: 15, fontWeight: '600' }}>Share</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={{ flex: 1, backgroundColor: colors.primary, borderRadius: 12, paddingVertical: 13, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6 }}
+              onPress={async () => { await Clipboard.setStringAsync(message.content); showAlert('Copied!', 'Message copied to clipboard'); setShowSelectTextModal(false); }}
+            >
+              <Ionicons name="copy-outline" size={18} color="#FFF" />
+              <Text style={{ color: '#FFF', fontSize: 15, fontWeight: '600' }}>Copy All</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </Modal>
 
       {/* Sub-modals */}
