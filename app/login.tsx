@@ -24,7 +24,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Crypto from 'expo-crypto';
 
 // ── AI Logo ──
-const AI_LOGO_URL = 'https://uzxmmddivzqjhcnnrkns.supabase.co/storage/v1/object/public/logo/WhatsApp%20Image%202026-04-18%20at%202.58.46%20AM.jpeg';
+const AI_LOGO_URL = 'https://uzxmmddivzqjhcnnrkns.supabase.co/storage/v1/object/public/logo/logo.png';
 
 const logoStyles = StyleSheet.create({
   logoContainer: {
@@ -713,5 +713,5 @@ export default function LoginScreen() {
     </View>
   );
 }
-
+remove animation effet make it simple clear.
 
