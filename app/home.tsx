@@ -2064,4 +2064,5 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
+if see this dont skip make change Enhance the ThinkingIndicator with a pulsing brain icon and rotating progress ring, showing different animations for message, image, web search, and file intents and fix streaming tex better.
 
