@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, memo } from 'react';
-import { View, Text, StyleSheet, Animated, ViewStyle } from 'react-native';
+import { View, Text, StyleSheet, Animated, Easing, ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
 
@@ -13,9 +13,9 @@ interface ThinkingIndicatorProps {
 }
 
 const INTENT_KEYWORDS: Record<IntentType, string[]> = {
-  image: ['logo', 'image', 'img', 'design', 'picture', 'photo', 'draw', 'generate', 'create image'],
-  file: ['file', 'pdf', 'document', 'spreadsheet', 'excel', 'csv', 'download', 'chatbot', 'html', 'code', 'create', 'build', 'write'],
-  web_search: ['search', 'find', 'look up', 'google', 'browse', 'web', 'search for'],
+  image: ['logo', 'image', 'img', 'design', 'picture', 'photo', 'draw', 'generate', 'create image', 'dalle', 'stable diffusion'],
+  file: ['file', 'pdf', 'document', 'spreadsheet', 'excel', 'csv', 'download', 'chatbot', 'html', 'code', 'create', 'build', 'write', 'script'],
+  web_search: ['search', 'find', 'look up', 'google', 'browse', 'web', 'search for', 'latest', 'current', 'news'],
   message: [],
 };
 
@@ -28,56 +28,92 @@ function detectIntent(message?: string): IntentType {
   return 'message';
 }
 
-function getStatusText(intent: IntentType, message?: string, completed?: boolean): string {
-  if (completed) {
-    const done: Record<IntentType, string> = {
-      image: 'Image created ✨', file: 'File ready 📄', web_search: 'Search completed 🔍', message: 'Done',
-    };
-    return done[intent];
-  }
-  const present: Record<IntentType, string | ((msg?: string) => string)> = {
-    image: 'Creating image...',
-    file: 'Analyzing...',
-    web_search: (msg) => {
-      const q = msg?.replace(/search|find|look up|google|browse|web/gi, '').trim();
-      return q ? `Searching for ${q}...` : 'Searching web...';
-    },
-    message: 'Analyzing...',
-  };
-  const t = present[intent];
-  return typeof t === 'function' ? t(message) : t;
-}
+// ── Rotating ring ──
+const RotatingRing = memo(function RotatingRing({ color, size = 32 }: { color: string; size?: number }) {
+  const rotation = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const anim = Animated.loop(
+      Animated.timing(rotation, { toValue: 1, duration: 1200, easing: Easing.linear, useNativeDriver: true })
+    );
+    anim.start();
+    return () => anim.stop();
+  }, []);
+  const rotate = rotation.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
+  return (
+    <Animated.View style={{ width: size, height: size, transform: [{ rotate }] }}>
+      <View style={{
+        width: size, height: size, borderRadius: size / 2,
+        borderWidth: 2.5, borderColor: 'transparent',
+        borderTopColor: color, borderRightColor: color + '55',
+      }} />
+    </Animated.View>
+  );
+});
 
-// Simple 3-dot typing animation — no background, no container
+// ── Pulsing icon in center of ring ──
+const PulsingIcon = memo(function PulsingIcon({
+  name, color, size = 14, bgColor,
+}: { name: keyof typeof Ionicons.glyphMap; color: string; size?: number; bgColor: string }) {
+  const scale = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(scale, { toValue: 1.18, duration: 700, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.timing(scale, { toValue: 1, duration: 700, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+      ])
+    );
+    anim.start();
+    return () => anim.stop();
+  }, []);
+  return (
+    <Animated.View style={{
+      width: 32, height: 32, borderRadius: 16,
+      backgroundColor: bgColor,
+      alignItems: 'center', justifyContent: 'center',
+      transform: [{ scale }],
+    }}>
+      <Ionicons name={name} size={size} color={color} />
+    </Animated.View>
+  );
+});
+
+// ── Animated ring + icon combo ──
+const SpinningBadge = memo(function SpinningBadge({
+  icon, iconColor, ringColor, bgColor,
+}: { icon: keyof typeof Ionicons.glyphMap; iconColor: string; ringColor: string; bgColor: string }) {
+  return (
+    <View style={{ width: 38, height: 38, alignItems: 'center', justifyContent: 'center' }}>
+      <View style={{ position: 'absolute' }}>
+        <RotatingRing color={ringColor} size={38} />
+      </View>
+      <PulsingIcon name={icon} color={iconColor} size={15} bgColor={bgColor} />
+    </View>
+  );
+});
+
+// ── Simple 3-dot typing animation ──
 const ThinkingDots = memo(function ThinkingDots({ color }: { color: string }) {
-  const dot1 = useRef(new Animated.Value(0)).current;
-  const dot2 = useRef(new Animated.Value(0)).current;
-  const dot3 = useRef(new Animated.Value(0)).current;
+  const dots = [useRef(new Animated.Value(0)).current, useRef(new Animated.Value(0)).current, useRef(new Animated.Value(0)).current];
 
   useEffect(() => {
-    const animate = (dot: Animated.Value, delay: number) =>
+    const anims = dots.map((dot, i) =>
       Animated.loop(
         Animated.sequence([
-          Animated.delay(delay),
-          Animated.timing(dot, { toValue: 1, duration: 350, useNativeDriver: true }),
-          Animated.timing(dot, { toValue: 0, duration: 350, useNativeDriver: true }),
-          Animated.delay(700 - delay),
+          Animated.delay(i * 160),
+          Animated.timing(dot, { toValue: 1, duration: 300, useNativeDriver: true }),
+          Animated.timing(dot, { toValue: 0.25, duration: 300, useNativeDriver: true }),
+          Animated.delay(500 - i * 160),
         ])
-      );
-    const a1 = animate(dot1, 0);
-    const a2 = animate(dot2, 200);
-    const a3 = animate(dot3, 400);
-    a1.start(); a2.start(); a3.start();
-    return () => { a1.stop(); a2.stop(); a3.stop(); };
+      )
+    );
+    anims.forEach(a => a.start());
+    return () => anims.forEach(a => a.stop());
   }, []);
 
   return (
     <View style={dotStyles.row}>
-      {[dot1, dot2, dot3].map((dot, i) => (
-        <Animated.View
-          key={i}
-          style={[dotStyles.dot, { backgroundColor: color, opacity: dot }]}
-        />
+      {dots.map((dot, i) => (
+        <Animated.View key={i} style={[dotStyles.dot, { backgroundColor: color, opacity: dot }]} />
       ))}
     </View>
   );
@@ -85,14 +121,34 @@ const ThinkingDots = memo(function ThinkingDots({ color }: { color: string }) {
 
 const dotStyles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  dot: { width: 6, height: 6, borderRadius: 3 },
+  dot: { width: 7, height: 7, borderRadius: 3.5 },
+});
+
+// ── Shimmer label ──
+const ShimmerLabel = memo(function ShimmerLabel({ text, color }: { text: string; color: string }) {
+  const opacity = useRef(new Animated.Value(0.5)).current;
+  useEffect(() => {
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, { toValue: 1, duration: 900, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 0.5, duration: 900, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+      ])
+    );
+    anim.start();
+    return () => anim.stop();
+  }, []);
+  return (
+    <Animated.Text style={{ color, fontSize: 13, fontWeight: '500', opacity }}>
+      {text}
+    </Animated.Text>
+  );
 });
 
 export function ThinkingIndicator({ userMessage = '', completed = false, style }: ThinkingIndicatorProps) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const intent = detectIntent(userMessage);
-  const dotColor = colors.textSecondary || '#888';
 
+  // ── Completed state ──
   if (completed) {
     const doneMap: Record<IntentType, string> = {
       image: '✨ Image created',
@@ -102,40 +158,68 @@ export function ThinkingIndicator({ userMessage = '', completed = false, style }
     };
     return (
       <View style={[styles.wrapper, style]}>
-        <Text style={[styles.text, { color: colors.textSecondary }]}>{doneMap[intent]}</Text>
+        <Text style={{ color: colors.textSecondary, fontSize: 13, fontWeight: '500' }}>{doneMap[intent]}</Text>
       </View>
     );
   }
 
+  // ── Image creation ──
   if (intent === 'image') {
     return (
-      <View style={[styles.imageWrapper, style]}>
-        <View style={[styles.iconCircle, { backgroundColor: `${colors.primary}15` }]}>
-          <Ionicons name="color-palette-outline" size={18} color={colors.primary} />
-        </View>
-        <Text style={[styles.text, { color: colors.textSecondary }]}>Creating image...</Text>
-        <ThinkingDots color={dotColor} />
+      <View style={[styles.wrapper, style]}>
+        <SpinningBadge
+          icon="color-palette-outline"
+          iconColor={colors.primary}
+          ringColor={colors.primary}
+          bgColor={`${colors.primary}20`}
+        />
+        <ShimmerLabel text="Creating image..." color={colors.textSecondary} />
       </View>
     );
   }
 
+  // ── Web search ──
   if (intent === 'web_search') {
-    const q = userMessage?.replace(/search|find|look up|google|browse|web/gi, '').trim();
+    const q = userMessage?.replace(/search|find|look up|google|browse|web|latest|news|current/gi, '').trim();
+    const label = q && q.length > 3 ? `Searching "${q.slice(0, 28)}${q.length > 28 ? '…' : ''}"` : 'Searching the web...';
     return (
       <View style={[styles.wrapper, style]}>
-        <Ionicons name="globe-outline" size={15} color={colors.textSecondary} />
-        <Text style={[styles.text, { color: colors.textSecondary }]} numberOfLines={1}>
-          {q ? `Searching for ${q}...` : 'Searching web...'}
-        </Text>
-        <ThinkingDots color={dotColor} />
+        <SpinningBadge
+          icon="globe-outline"
+          iconColor="#5AC8FA"
+          ringColor="#5AC8FA"
+          bgColor="rgba(90,200,250,0.15)"
+        />
+        <ShimmerLabel text={label} color={colors.textSecondary} />
       </View>
     );
   }
 
-  // Default thinking state — clean 3-dot animation
+  // ── File / code generation ──
+  if (intent === 'file') {
+    return (
+      <View style={[styles.wrapper, style]}>
+        <SpinningBadge
+          icon="code-slash-outline"
+          iconColor="#FF9F0A"
+          ringColor="#FF9F0A"
+          bgColor="rgba(255,159,10,0.15)"
+        />
+        <ShimmerLabel text="Generating..." color={colors.textSecondary} />
+      </View>
+    );
+  }
+
+  // ── Default: brain icon + dots ──
   return (
     <View style={[styles.wrapper, style]}>
-      <ThinkingDots color={dotColor} />
+      <SpinningBadge
+        icon="bulb-outline"
+        iconColor={isDark ? '#A8A8B3' : '#666'}
+        ringColor={isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.15)'}
+        bgColor={isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.05)'}
+      />
+      <ThinkingDots color={colors.textSecondary} />
     </View>
   );
 }
@@ -144,26 +228,8 @@ const styles = StyleSheet.create({
   wrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 12,
     paddingHorizontal: 16,
     paddingVertical: 10,
-  },
-  imageWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
-  iconCircle: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  text: {
-    fontSize: 14,
-    fontWeight: '400',
   },
 });

@@ -2064,5 +2064,5 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-langyet mmw when you see my message read and make change fuck if see this dont skip make change Enhance the ThinkingIndicator with a pulsing brain icon and rotating progress ring, showing different animations for message, image, web search, and file intents and fix streaming tex better.
+
 
