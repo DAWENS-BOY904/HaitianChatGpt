@@ -2064,4 +2064,3 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-if yo pressm long in a message allow you can copy code with press long example have : hello  ai . and you want to vopy hello long press and you can swap left or right.
