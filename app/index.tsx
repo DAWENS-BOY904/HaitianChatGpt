@@ -27,7 +27,7 @@ const WELCOME_PHRASES = [
 ];
 
 // AI Logo URL - won gradient logo
-const AI_LOGO_URL = 'https://kimi-web-img.moonshot.cn/img/www.shutterstock.com/297f3e4a58d8db42209b9a619baa4d1c548f54c5.jpg';
+const AI_LOGO_URL = 'https://uzxmmddivzqjhcnnrkns.supabase.co/storage/v1/object/public/logo/WhatsApp%20Image%202026-04-18%20at%202.58.46%20AM.jpeg';
 
 // ── Helper: send login confirmation email (non-blocking) ──
 async function sendLoginConfirmationEmail(userId: string, email: string) {
