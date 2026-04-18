@@ -53,7 +53,7 @@ const RC_API_KEY = Platform.select({
   default: '',
 });
 
-const GO_PALM_IMAGE = 'https://files.catbox.moe/d3i5u4.png';
+const GO_PALM_IMAGE = 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=400&h=300&fit=crop';
 const PLUS_PALM_IMAGE = 'https://images.unsplash.com/photo-1546484396-fb3fc6f95f98?w=400&h=300&fit=crop';
 const MAP_BACKGROUND = 'https://images.unsplash.com/photo-1524661135-423995f22d0b?w=600&h=800&fit=crop';
 
