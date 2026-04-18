@@ -344,7 +344,6 @@ function parseDownloadCard(content: string): { text: string; downloadLabel?: str
 
 // ── Inline markdown renderer (bold, italic, code) ──
 function renderInlineMarkdown(text: string, baseStyle: any, colors: any): React.ReactNode {
-  // Split by bold (**text**), italic (*text*), inline code (`code`)
   const parts: React.ReactNode[] = [];
   const regex = /(\*\*([^*]+)\*\*|\*([^*]+)\*|`([^`]+)`)/g;
   let lastIndex = 0;
@@ -356,13 +355,10 @@ function renderInlineMarkdown(text: string, baseStyle: any, colors: any): React.
       parts.push(<Text key={`t${keyIdx++}`}>{text.slice(lastIndex, match.index)}</Text>);
     }
     if (match[2]) {
-      // Bold
       parts.push(<Text key={`b${keyIdx++}`} style={{ fontWeight: '700' }}>{match[2]}</Text>);
     } else if (match[3]) {
-      // Italic
       parts.push(<Text key={`i${keyIdx++}`} style={{ fontStyle: 'italic' }}>{match[3]}</Text>);
     } else if (match[4]) {
-      // Inline code
       parts.push(
         <Text key={`c${keyIdx++}`} style={{
           fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
@@ -411,6 +407,16 @@ export const MessageItem = memo(function MessageItem({
     link: false, webView: false, imageViewer: false, imageEdit: false, file: false,
   });
   const [downloadingImage, setDownloadingImage] = useState(false);
+
+  // ── Entrance animation: slide-up + fade-in ──
+  const entranceOpacity = useRef(new Animated.Value(0)).current;
+  const entranceTranslateY = useRef(new Animated.Value(16)).current;
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(entranceOpacity, { toValue: 1, duration: 260, useNativeDriver: true }),
+      Animated.spring(entranceTranslateY, { toValue: 0, tension: 240, friction: 24, useNativeDriver: true }),
+    ]).start();
+  }, []);
 
   const toggleModal = useCallback((modalName: keyof typeof modals, value?: boolean) => {
     setModals(prev => ({ ...prev, [modalName]: value ?? !prev[modalName] }));
@@ -524,7 +530,6 @@ export const MessageItem = memo(function MessageItem({
     return { inlineImages: images, cleanedBeforeCard: text };
   }, [message.role, beforeCard]);
 
-  // Parse content into text/code parts — uses cleanedBeforeCard
   const contentParts = useMemo(() => {
     const textToProcess = cleanedBeforeCard;
     const parts: Array<{ type: 'text' | 'code'; content: string; language?: string }> = [];
@@ -668,20 +673,6 @@ export const MessageItem = memo(function MessageItem({
       backgroundColor: message.role === 'user' ? 'rgba(255,255,255,0.15)' : colors.background,
     },
     actionButtonActive: { backgroundColor: colors.primary },
-    generatingIndicator: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: Spacing.sm,
-      marginTop: Spacing.sm,
-    },
-    generatingText: { ...Typography.caption, color: colors.textSecondary, fontSize: 12 },
-    cancelButton: {
-      paddingHorizontal: Spacing.md,
-      paddingVertical: 6,
-      borderRadius: BorderRadius.sm,
-      backgroundColor: '#FF3B30',
-    },
-    cancelButtonText: { ...Typography.caption, color: '#FFFFFF', fontSize: 12, fontWeight: '600' },
     contextMenuOverlay: { flex: 1, backgroundColor: 'transparent' },
     contextMenu: {
       position: 'absolute',
@@ -717,227 +708,225 @@ export const MessageItem = memo(function MessageItem({
     },
   }), [colors, message.role]);
 
-  // Determine if we're currently streaming THIS message
   const isStreaming = streaming && isGenerating && message.role === 'assistant';
 
   return (
     <>
-      <Pressable
-        onLongPress={handleLongPress}
-        style={[
-          styles.container,
-          message.role === 'user' ? styles.userMessage : styles.assistantMessage,
-        ]}
-      >
-        {/* User uploaded image */}
-        {message.role === 'user' && message.image_url && (
-          <TouchableOpacity
-            onPress={() => handleImagePress(message.image_url!)}
-            style={{ borderRadius: BorderRadius.md, overflow: 'hidden', marginBottom: Spacing.sm }}
-            activeOpacity={0.9}
-          >
-            <Image
-              source={{ uri: message.image_url }}
-              style={styles.userImagePreview}
-              contentFit="cover"
-              transition={200}
-            />
-          </TouchableOpacity>
-        )}
+      {/* ── Slide-up + fade-in entrance wrapper ── */}
+      <Animated.View style={{ opacity: entranceOpacity, transform: [{ translateY: entranceTranslateY }] }}>
+        <Pressable
+          onLongPress={handleLongPress}
+          style={[
+            styles.container,
+            message.role === 'user' ? styles.userMessage : styles.assistantMessage,
+          ]}
+        >
+          {/* User uploaded image */}
+          {message.role === 'user' && message.image_url && (
+            <TouchableOpacity
+              onPress={() => handleImagePress(message.image_url!)}
+              style={{ borderRadius: BorderRadius.md, overflow: 'hidden', marginBottom: Spacing.sm }}
+              activeOpacity={0.9}
+            >
+              <Image
+                source={{ uri: message.image_url }}
+                style={styles.userImagePreview}
+                contentFit="cover"
+                transition={200}
+              />
+            </TouchableOpacity>
+          )}
 
-        {/* AI Generated Image */}
-        {hasGeneratedImage && message.role === 'assistant' && (
-          <TouchableOpacity
-            onPress={() => handleImagePress(message.image_url!)}
-            activeOpacity={0.9}
-            disabled={downloadingImage}
-          >
-            <Image
-              source={{ uri: message.image_url }}
-              style={styles.messageImage}
-              contentFit="cover"
-              transition={200}
-            />
-            {downloadingImage ? (
-              <View style={styles.downloadOverlay}>
-                <ActivityIndicator color="#fff" size="large" />
-                <Text style={{ color: '#fff', marginTop: 8, fontSize: 13 }}>Saving...</Text>
+          {/* AI Generated Image */}
+          {hasGeneratedImage && message.role === 'assistant' && (
+            <TouchableOpacity
+              onPress={() => handleImagePress(message.image_url!)}
+              activeOpacity={0.9}
+              disabled={downloadingImage}
+            >
+              <Image
+                source={{ uri: message.image_url }}
+                style={styles.messageImage}
+                contentFit="cover"
+                transition={200}
+              />
+              {downloadingImage ? (
+                <View style={styles.downloadOverlay}>
+                  <ActivityIndicator color="#fff" size="large" />
+                  <Text style={{ color: '#fff', marginTop: 8, fontSize: 13 }}>Saving...</Text>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  style={styles.downloadButton}
+                  onPress={(e) => { e.stopPropagation(); handleDownloadImage(message.image_url!); }}
+                >
+                  <Ionicons name="download" size={22} color="#fff" />
+                </TouchableOpacity>
+              )}
+            </TouchableOpacity>
+          )}
+
+          {/* File Attachment */}
+          {message.file_url && message.file_name && (
+            <TouchableOpacity
+              style={styles.fileAttachment}
+              onPress={() => handleFileDownload(message.file_name!, '', message.file_type || 'txt')}
+            >
+              <View style={styles.fileIcon}>
+                <Ionicons name={getFileIcon(message.file_type)} size={26} color={colors.primary} />
               </View>
-            ) : (
+              <View style={styles.fileInfo}>
+                <Text style={styles.fileName} numberOfLines={1}>{message.file_name}</Text>
+                <Text style={styles.fileMeta}>{message.file_type?.toUpperCase() || 'FILE'}</Text>
+              </View>
+              <Ionicons name="download-outline" size={22} color={colors.text} />
+            </TouchableOpacity>
+          )}
+
+          {/* Message Content */}
+          {contentParts.map((part, index) => {
+            const isLastPart = index === contentParts.length - 1 && !hasCard;
+            const shouldStream = shouldStreamPart(isLastPart);
+
+            if (part.type === 'code') {
+              return (
+                <View key={`code-${index}`}>
+                  <CodeBlock
+                    code={part.content}
+                    language={part.language || 'code'}
+                    streaming={shouldStream}
+                    speed={streamingSpeed}
+                  />
+                </View>
+              );
+            }
+
+            const textSegments = splitTablesFromText(part.content);
+            return (
+              <View key={`text-${index}`}>
+                {textSegments.map((seg, si) => {
+                  if (seg.type === 'table') {
+                    return <MarkdownTable key={`table-${si}`} tableText={seg.content} colors={colors} />;
+                  }
+                  const textParts = parseTextWithLinks(seg.content);
+                  return (
+                    <Text
+                      key={`seg-${si}`}
+                      selectable
+                      style={[
+                        styles.messageText,
+                        message.role === 'user' ? styles.userMessageText : styles.assistantMessageText,
+                      ]}
+                    >
+                      {textParts.map((textPart, textIndex) => {
+                        if (textPart.type === 'link') {
+                          return (
+                            <Text
+                              key={`link-${textIndex}`}
+                              style={styles.linkText}
+                              onPress={() => handleLinkPress(textPart.url)}
+                            >
+                              {textPart.content}
+                            </Text>
+                          );
+                        }
+                        return <Text key={`txt-${textIndex}`}>{textPart.content}</Text>;
+                      })}
+                      {/* Blinking cursor on last segment while streaming */}
+                      {isStreaming && isLastPart && si === textSegments.length - 1 ? (
+                        <BlinkingCursor color={colors.textSecondary} />
+                      ) : null}
+                    </Text>
+                  );
+                })}
+              </View>
+            );
+          })}
+
+          {/* Inline AI-generated images from text */}
+          {inlineImages.length > 0 && inlineImages.map((imgUrl, i) => (
+            <TouchableOpacity
+              key={`inline-img-${i}`}
+              onPress={() => handleImagePress(imgUrl)}
+              activeOpacity={0.9}
+              style={{ borderRadius: BorderRadius.md, overflow: 'hidden', marginVertical: Spacing.sm }}
+            >
+              <Image
+                source={{ uri: imgUrl }}
+                style={styles.messageImage}
+                contentFit="cover"
+                transition={200}
+              />
               <TouchableOpacity
                 style={styles.downloadButton}
-                onPress={(e) => { e.stopPropagation(); handleDownloadImage(message.image_url!); }}
+                onPress={(e) => { e.stopPropagation(); handleDownloadImage(imgUrl); }}
               >
                 <Ionicons name="download" size={22} color="#fff" />
               </TouchableOpacity>
-            )}
-          </TouchableOpacity>
-        )}
+            </TouchableOpacity>
+          ))}
 
-        {/* File Attachment */}
-        {message.file_url && message.file_name && (
-          <TouchableOpacity
-            style={styles.fileAttachment}
-            onPress={() => handleFileDownload(message.file_name!, '', message.file_type || 'txt')}
-          >
-            <View style={styles.fileIcon}>
-              <Ionicons name={getFileIcon(message.file_type)} size={26} color={colors.primary} />
-            </View>
-            <View style={styles.fileInfo}>
-              <Text style={styles.fileName} numberOfLines={1}>{message.file_name}</Text>
-              <Text style={styles.fileMeta}>{message.file_type?.toUpperCase() || 'FILE'}</Text>
-            </View>
-            <Ionicons name="download-outline" size={22} color={colors.text} />
-          </TouchableOpacity>
-        )}
+          {/* Download card */}
+          {downloadLabel && message.role === 'assistant' && (
+            <DownloadLinkCard label={downloadLabel} colors={colors} />
+          )}
 
-        {/* Message Content — render directly from message.content (real-time SSE updates) */}
-        {contentParts.map((part, index) => {
-          const isLastPart = index === contentParts.length - 1 && !hasCard;
-          const shouldStream = shouldStreamPart(isLastPart);
+          {/* Styled Message Card */}
+          {hasCard && message.role === 'assistant' && (
+            <MessageCard content={cardContent} colors={colors} />
+          )}
 
-          if (part.type === 'code') {
-            return (
-              <View key={`code-${index}`}>
-                <CodeBlock
-                  code={part.content}
-                  language={part.language || 'code'}
-                  streaming={shouldStream}
-                  speed={streamingSpeed}
+          {/* Sources pill */}
+          {message.role === 'assistant' && sources.length > 0 && (
+            <SourcesButton sources={sources} />
+          )}
+
+          {/* Edited Indicator */}
+          {message.edited && (
+            <Text style={styles.editedLabel}>
+              (edited {message.edited_at ? new Date(message.edited_at).toLocaleTimeString() : ''})
+            </Text>
+          )}
+
+          {/* Action Buttons — assistant only, hide while streaming */}
+          {message.role === 'assistant' && !isGenerating && (
+            <View style={styles.actionsContainer}>
+              <TouchableOpacity style={styles.actionButton} onPress={handleCopy}>
+                <Ionicons name="copy-outline" size={14} color={colors.text} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.actionButton, liked === 'like' && styles.actionButtonActive]}
+                onPress={() => handleLike('like')}
+              >
+                <Ionicons
+                  name={liked === 'like' ? 'thumbs-up' : 'thumbs-up-outline'}
+                  size={14}
+                  color={liked === 'like' ? '#FFFFFF' : colors.text}
                 />
-              </View>
-            );
-          }
-
-          const textSegments = splitTablesFromText(part.content);
-          return (
-            <View key={`text-${index}`}>
-              {textSegments.map((seg, si) => {
-                if (seg.type === 'table') {
-                  return <MarkdownTable key={`table-${si}`} tableText={seg.content} colors={colors} />;
-                }
-                const textParts = parseTextWithLinks(seg.content);
-                return (
-                  <Text
-                    key={`seg-${si}`}
-                    selectable
-                    style={[
-                      styles.messageText,
-                      message.role === 'user' ? styles.userMessageText : styles.assistantMessageText,
-                    ]}
-                  >
-                    {textParts.map((textPart, textIndex) => {
-                      if (textPart.type === 'link') {
-                        return (
-                          <Text
-                            key={`link-${textIndex}`}
-                            style={styles.linkText}
-                            onPress={() => handleLinkPress(textPart.url)}
-                          >
-                            {textPart.content}
-                          </Text>
-                        );
-                      }
-                      return <Text key={`txt-${textIndex}`}>{textPart.content}</Text>;
-                    })}
-                    {/* Blinking cursor on last part while streaming */}
-                    {isStreaming && isLastPart && si === textSegments.length - 1 ? (
-                      <BlinkingCursor color={colors.textSecondary} />
-                    ) : null}
-                  </Text>
-                );
-              })}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.actionButton, liked === 'dislike' && styles.actionButtonActive]}
+                onPress={() => handleLike('dislike')}
+              >
+                <Ionicons
+                  name={liked === 'dislike' ? 'thumbs-down' : 'thumbs-down-outline'}
+                  size={14}
+                  color={liked === 'dislike' ? '#FFFFFF' : colors.text}
+                />
+              </TouchableOpacity>
+              {analysisEntries.length > 0 && (
+                <TerminalButton onPress={() => setAnalysisVisible(true)} />
+              )}
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={() => setShowActionsModal(true)}
+              >
+                <Ionicons name="ellipsis-horizontal" size={14} color={colors.text} />
+              </TouchableOpacity>
             </View>
-          );
-        })}
-
-        {/* Inline AI-generated images from text */}
-        {inlineImages.length > 0 && inlineImages.map((imgUrl, i) => (
-          <TouchableOpacity
-            key={`inline-img-${i}`}
-            onPress={() => handleImagePress(imgUrl)}
-            activeOpacity={0.9}
-            style={{ borderRadius: BorderRadius.md, overflow: 'hidden', marginVertical: Spacing.sm }}
-          >
-            <Image
-              source={{ uri: imgUrl }}
-              style={styles.messageImage}
-              contentFit="cover"
-              transition={200}
-            />
-            <TouchableOpacity
-              style={styles.downloadButton}
-              onPress={(e) => { e.stopPropagation(); handleDownloadImage(imgUrl); }}
-            >
-              <Ionicons name="download" size={22} color="#fff" />
-            </TouchableOpacity>
-          </TouchableOpacity>
-        ))}
-
-        {/* Download card */}
-        {downloadLabel && message.role === 'assistant' && (
-          <DownloadLinkCard label={downloadLabel} colors={colors} />
-        )}
-
-        {/* Styled Message Card */}
-        {hasCard && message.role === 'assistant' && (
-          <MessageCard content={cardContent} colors={colors} />
-        )}
-
-        {/* Sources pill */}
-        {message.role === 'assistant' && sources.length > 0 && (
-          <SourcesButton sources={sources} />
-        )}
-
-        {/* Edited Indicator */}
-        {message.edited && (
-          <Text style={styles.editedLabel}>
-            (edited {message.edited_at ? new Date(message.edited_at).toLocaleTimeString() : ''})
-          </Text>
-        )}
-
-        {/* Action Buttons — assistant only, hide while streaming */}
-        {message.role === 'assistant' && !isGenerating && (
-          <View style={styles.actionsContainer}>
-            <TouchableOpacity style={styles.actionButton} onPress={handleCopy}>
-              <Ionicons name="copy-outline" size={14} color={colors.text} />
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.actionButton, liked === 'like' && styles.actionButtonActive]}
-              onPress={() => handleLike('like')}
-            >
-              <Ionicons
-                name={liked === 'like' ? 'thumbs-up' : 'thumbs-up-outline'}
-                size={14}
-                color={liked === 'like' ? '#FFFFFF' : colors.text}
-              />
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.actionButton, liked === 'dislike' && styles.actionButtonActive]}
-              onPress={() => handleLike('dislike')}
-            >
-              <Ionicons
-                name={liked === 'dislike' ? 'thumbs-down' : 'thumbs-down-outline'}
-                size={14}
-                color={liked === 'dislike' ? '#FFFFFF' : colors.text}
-              />
-            </TouchableOpacity>
-
-            {analysisEntries.length > 0 && (
-              <TerminalButton onPress={() => setAnalysisVisible(true)} />
-            )}
-
-            <TouchableOpacity
-              style={styles.actionButton}
-              onPress={() => setShowActionsModal(true)}
-            >
-              <Ionicons name="ellipsis-horizontal" size={14} color={colors.text} />
-            </TouchableOpacity>
-          </View>
-        )}
-      </Pressable>
+          )}
+        </Pressable>
+      </Animated.View>
 
       {/* Analysis Modal */}
       {analysisEntries.length > 0 && (
@@ -1021,12 +1010,7 @@ export const MessageItem = memo(function MessageItem({
             <Text
               selectable
               selectionColor={`${colors.primary}55`}
-              style={{
-                color: colors.text,
-                fontSize: 16,
-                lineHeight: 26,
-                fontWeight: '400',
-              }}
+              style={{ color: colors.text, fontSize: 16, lineHeight: 26, fontWeight: '400' }}
             >
               {message.content}
             </Text>
