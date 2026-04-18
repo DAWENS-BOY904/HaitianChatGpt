@@ -167,3 +167,4 @@ const styles = StyleSheet.create({
     fontWeight: '400',
   },
 });
+Enhance the ThinkingIndicator with a smoother pulsing brain icon animation and a rotating progress ring that shows estimated response time based on message complexity and fix streaming.
