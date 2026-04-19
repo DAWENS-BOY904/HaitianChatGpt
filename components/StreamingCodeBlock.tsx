@@ -396,31 +396,28 @@ export const CodeBlock = memo(function CodeBlock({
   useEffect(() => {
     codeRef.current = code;
     if (!streaming) {
-      // Cancel any in-progress animation and show full code
+      // Cancel any in-progress animation and show full code immediately
       if (streamRef.current) clearTimeout(streamRef.current);
       setDisplayedCode(code);
       charIndexRef.current = code.length;
       return;
     }
-    // Reset and start character-by-character stream
-    charIndexRef.current = displayedCode.length; // continue from where we left off
+    // Continue streaming from current position
+    if (charIndexRef.current >= code.length) return;
     const tick = () => {
-      const current = charIndexRef.current;
       const full = codeRef.current;
+      const current = charIndexRef.current;
       if (current < full.length) {
-        // Render 1-2 chars per tick for natural pace
-        const end = Math.min(current + 2, full.length);
+        // Batch 8 chars per tick = less re-renders, less lag
+        const end = Math.min(current + 8, full.length);
         setDisplayedCode(full.slice(0, end));
         charIndexRef.current = end;
-        // 18-22ms per tick gives ~50-55 chars/sec — natural reading pace
-        streamRef.current = setTimeout(tick, speed);
+        streamRef.current = setTimeout(tick, 20);
       }
     };
-    if (charIndexRef.current < code.length) {
-      streamRef.current = setTimeout(tick, 0);
-    }
+    streamRef.current = setTimeout(tick, 0);
     return () => { if (streamRef.current) clearTimeout(streamRef.current); };
-  }, [code, streaming, speed]);
+  }, [code, streaming]);
 
   const onCopy = useCallback(async () => {
     await Clipboard.setStringAsync(code);
