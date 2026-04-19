@@ -1170,7 +1170,7 @@ export default function HomeScreen() {
         body: {
           messages: [{ role: 'user', content: prompt }],
           model: currentAIModel,
-          conversationId: 'quiz-gen',
+          conversationId: currentConversation?.id || 'quiz-gen',
           userId: user?.id,
         },
       });
@@ -1196,8 +1196,6 @@ export default function HomeScreen() {
     setQuizTopicVisible(false);
     setQuizConnectDetailVisible(false);
     setQuizGenerating(true);
-    // Close keyboard & scroll to bottom so quiz is fully visible
-    Keyboard.dismiss();
     try {
       const questions = await generateAIQuizQuestions(topic, selectedDifficulty);
       showInlineQuiz(questions);
@@ -1223,14 +1221,13 @@ export default function HomeScreen() {
     setQuizModalVisible(false);
     setInlineQuizVisible(false);
     const correct = answers.filter(a => a.correct).length;
-    const topic = customTopicInput.trim() || selectedQuizTopic || 'General Knowledge';
 
     // Save score to database
     if (user?.id) {
       try {
         await supabase.from('quiz_scores').insert({
           user_id: user.id,
-          topic,
+          topic: customTopicInput.trim() || selectedQuizTopic || 'General Knowledge',
           difficulty: selectedDifficulty,
           score: correct,
           total: questions.length,
@@ -1239,25 +1236,14 @@ export default function HomeScreen() {
       } catch (_e) {}
     }
 
-    // AI sends the score summary (not the user)
     const resultLines = questions.map((q, i) => {
-      const ans = answers.find((a: any) => a.questionIndex === i);
+      const ans = answers.find(a => a.questionIndex === i);
       const chosen = ans ? q.options[ans.chosenIndex] : 'Skipped';
       const isCorrect = ans?.correct;
-      return `${i + 1}. **${q.question}**\n${isCorrect ? '\u2705' : '\u274c'} ${chosen}${!isCorrect ? ` (Correct: ${q.options[q.answer]})` : ''}`;
-    }).join('\n');
-
-    const pct = Math.round((correct / questions.length) * 100);
-    const emoji = pct === 100 ? '\uD83C\uDF89' : pct >= 80 ? '\uD83D�' : pct >= 60 ? '\uD83D\uDC4D' : pct >= 40 ? '\uD83D\uDCDA' : '\uD83D\uDCAA';
-    const summaryPrompt = `The user just completed a quiz on ${topic} (${selectedDifficulty} difficulty) and scored ${correct}/${questions.length} (${pct}%). Please present their quiz results clearly and encouragingly. Here are the answers:\n\n${resultLines}\n\nEnd your message by asking if they want to try a harder quiz or a different topic.`;
-    // Send as user message so AI responds with the formatted results
-    try {
-      let convId = currentConversation?.id;
-      if (!convId) { convId = await createConversation() || undefined; }
-      setSending(true); setGenerating(true);
-      await sendMessage(summaryPrompt, undefined, undefined, false, currentAIModel);
-    } catch (_e) {}
-    finally { setSending(false); setGenerating(false); }
+      return `${i + 1}. **${q.question}**\n${isCorrect ? '\u2705' : '\u274c'} Your answer: ${chosen} \u2014 ${isCorrect ? 'Correct' : 'Incorrect'}${!isCorrect ? `\n\u2713 Correct: ${q.options[q.answer]}` : ''}`;
+    }).join('\n\n');
+    const finalMsg = `Here is how you did on the quiz:\n\n${resultLines}\n\n**Score: ${correct} / ${questions.length}**\n\nWant me to \u2192 make a harder quiz or one focused on a topic you like?`;
+    sendMessage(finalMsg, undefined, undefined, false, currentAIModel);
   };
 
   const handleHarderQuiz = () => {

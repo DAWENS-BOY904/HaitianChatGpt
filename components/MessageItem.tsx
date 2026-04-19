@@ -579,15 +579,14 @@ export const MessageItem = memo(function MessageItem({
 
   const styles = useMemo(() => StyleSheet.create({
     container: {
-      paddingHorizontal: Spacing.md,
-      paddingVertical: 10,
-      marginVertical: 2,
-      maxWidth: '78%',
+      padding: Spacing.md,
+      marginVertical: Spacing.xs,
+      maxWidth: '88%',
     },
     userMessage: {
       alignSelf: 'flex-end',
       backgroundColor: colors.primary,
-      borderRadius: 18,
+      borderRadius: BorderRadius.lg,
       borderBottomRightRadius: 4,
       marginRight: Spacing.sm,
     },
@@ -596,7 +595,7 @@ export const MessageItem = memo(function MessageItem({
       backgroundColor: 'transparent',
       borderRadius: 0,
       marginLeft: Spacing.sm,
-      maxWidth: '92%',
+      maxWidth: '95%',
     },
     messageImage: {
       width: '100%',
@@ -646,7 +645,7 @@ export const MessageItem = memo(function MessageItem({
     fileInfo: { flex: 1 },
     fileName: { ...Typography.body, color: colors.text, fontWeight: '600', fontSize: 14 },
     fileMeta: { ...Typography.caption, color: colors.textSecondary, fontSize: 12, marginTop: 2 },
-    messageText: { fontSize: 15, lineHeight: 23, flexShrink: 1, flexWrap: 'wrap' },
+    messageText: { ...Typography.body, fontSize: 15, lineHeight: 22 },
     userMessageText: { color: '#FFFFFF' },
     assistantMessageText: { color: colors.text },
     editedLabel: {
