@@ -56,4 +56,3 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
 });
-hello ai allow ipad can enter to the app and allow login for ipad better to.
