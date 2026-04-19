@@ -475,3 +475,4 @@ export default function AppleGenerateJWTKeyScreen() {
     </View>
   );
 }
+fix error web crypto api is not invaliable on this device please use expo sdk 50+ or react native 0.71+ wich include a builldt-in crypto polyfill. make sure you test its and fix its good better for mobile with no error.
