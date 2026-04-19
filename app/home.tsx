@@ -1063,16 +1063,7 @@ export default function HomeScreen() {
     setInputText('');
     setSelectedMedia([]);
     setEditingMessageId(null);
-    // Detect intent for thinking indicator
-    const lowerText = (currentText || '').toLowerCase();
-    const isImageIntent = [
-      'logo', 'create image', 'generate image', 'make image', 'create photo', 'generate photo',
-      'make a logo', 'create a logo', 'design a logo', 'draw a', 'paint a', 'illustrate',
-      'create art', 'generate art', 'create an image', 'make an image', 'create a picture',
-      'generate a picture', 'create icon', 'create banner', 'kreye', 'fe foto', 'fe imaj', 'fe logo',
-      'créer', 'generer', 'crear', 'generar',
-    ].some(kw => lowerText.includes(kw));
-    setThinkingMode(isImageIntent ? 'creating_image' : 'thinking');
+    setThinkingMode('thinking');
     setSending(true);
     setGenerating(true);
 
@@ -1416,16 +1407,15 @@ export default function HomeScreen() {
     blurContent: { alignItems: 'center', justifyContent: 'center' },
     blurText: { fontSize: 24, fontWeight: 'bold', color: 'white', marginTop: 16 },
     messagesContainer: { flex: 1 },
-    inputContainer: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 10, paddingBottom: Platform.select({ ios: insets.bottom + 8, android: insets.bottom + 8, default: 8 }), paddingTop: 8, gap: 8, backgroundColor: Platform.OS === 'ios' ? 'transparent' : colors.background },
-    inputWrapper: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? '#1C1C1E' : '#F0F0F5', borderRadius: 28, paddingHorizontal: 14, paddingVertical: 4, minHeight: 48, maxHeight: 120, gap: 6 },
+    inputContainer: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingBottom: Platform.select({ ios: insets.bottom + 8, android: insets.bottom + 8, default: 8 }), paddingTop: 8, gap: 8, backgroundColor: Platform.OS === 'ios' ? 'transparent' : colors.background },
+    inputWrapper: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? '#1C1C1E' : '#F2F2F7', borderRadius: 26, paddingHorizontal: 16, minHeight: 48, maxHeight: 120, gap: 8 },
     input: { flex: 1, fontSize: 16, color: colors.text, paddingVertical: 12, maxHeight: 100 },
     recordingContainer: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8 },
     recordingDuration: { color: '#FF3B30', fontSize: 13, fontWeight: '600', minWidth: 36 },
-    addBtn: { width: 42, height: 42, borderRadius: 21, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', marginBottom: 2 },
+    addBtn: { width: 42, height: 42, borderRadius: 21, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
     micBtn: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
-    sendButton: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', marginRight: 2 },
+    sendButton: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
     stopButton: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#FF3B30', alignItems: 'center', justifyContent: 'center' },
-    voiceOrbBtn: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center', marginBottom: 2, shadowColor: accentColor, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.4, shadowRadius: 6, elevation: 4 },
     emptyState: { flex: 1 },
     loadingContainer: { padding: Spacing.md, alignItems: 'center' },
     documentPreview: { width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', padding: 4 },
@@ -1648,11 +1638,7 @@ export default function HomeScreen() {
                             />
                           ) : null}
                           {streamingMessageId ? null : generating ? (
-                            <ThinkingIndicator
-                              userMessage={(messages || []).length > 0 ? (messages || [])[(messages || []).length - 1].content : inputText}
-                              completed={showCompletionStatus}
-                              mode={thinkingMode}
-                            />
+                            <ThinkingIndicator userMessage={(messages || []).length > 0 ? (messages || [])[(messages || []).length - 1].content : inputText} completed={showCompletionStatus} mode={thinkingMode} />
                           ) : null}
                         </>
                       }
@@ -1702,28 +1688,20 @@ export default function HomeScreen() {
                 </View>
               ) : null}
 
-              {/* Input Area — reference design: [+] [input...mic] [voice-orb] */}
+              {/* Input Area */}
               <View style={[styles.inputContainer, Platform.OS === 'ios' && { backgroundColor: 'transparent' }]}>
+                <TouchableOpacity style={styles.addBtn} onPress={() => setToolsVisible(true)} disabled={editingMessageId !== null || isRecording || isProcessing}>
+                  {Platform.OS === 'ios' ? (
+                    <BlurView intensity={60} tint={isDark ? 'dark' : 'light'} style={{ width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' }}>
+                      <Ionicons name="add" size={24} color={editingMessageId || isRecording || isProcessing ? colors.textSecondary : colors.text} />
+                    </BlurView>
+                  ) : (
+                    <View style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: isDark ? '#1C1C1E' : '#F2F2F7', alignItems: 'center', justifyContent: 'center' }}>
+                      <Ionicons name="add" size={24} color={editingMessageId || isRecording || isProcessing ? colors.textSecondary : colors.text} />
+                    </View>
+                  )}
+                </TouchableOpacity>
 
-                {/* + button: always outside, left of input */}
-                {!editingMessageId && !isRecording && !isProcessing ? (
-                  <TouchableOpacity
-                    style={styles.addBtn}
-                    onPress={() => setToolsVisible(true)}
-                  >
-                    {Platform.OS === 'ios' ? (
-                      <BlurView intensity={60} tint={isDark ? 'dark' : 'light'} style={{ width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' }}>
-                        <Ionicons name="add" size={24} color={colors.text} />
-                      </BlurView>
-                    ) : (
-                      <View style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA', alignItems: 'center', justifyContent: 'center' }}>
-                        <Ionicons name="add" size={24} color={colors.text} />
-                      </View>
-                    )}
-                  </TouchableOpacity>
-                ) : null}
-
-                {/* Main input pill */}
                 <View style={styles.inputWrapper}>
                   {isRecording ? (
                     <View style={styles.recordingContainer}>
@@ -1764,60 +1742,35 @@ export default function HomeScreen() {
                       ) : null}
                     </View>
                   )}
-
-                  {/* Mic inside pill (only when no text) */}
-                  {!showSendButton && !editingMessageId ? (
-                    <TouchableOpacity
-                      onPress={toggleRecording}
-                      style={{ paddingHorizontal: 8, paddingVertical: 4 }}
-                      hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
-                    >
-                      {isProcessing ? (
-                        <ActivityIndicator size="small" color={colors.primary} />
-                      ) : (
-                        <Ionicons
-                          name={isRecording ? 'stop-circle' : 'mic-outline'}
-                          size={22}
-                          color={isRecording ? '#FF3B30' : colors.textSecondary}
-                        />
-                      )}
-                    </TouchableOpacity>
-                  ) : null}
-
-                  {/* Send / Stop inside pill */}
-                  {sending ? (
-                    <TouchableOpacity
-                      style={[styles.sendButton, { backgroundColor: isDark ? '#3A3A3C' : '#E5E5EA' }]}
-                      onPress={handleStopGeneration}
-                    >
-                      <View style={{ width: 11, height: 11, backgroundColor: colors.text, borderRadius: 2 }} />
-                    </TouchableOpacity>
-                  ) : showSendButton ? (
-                    <TouchableOpacity
-                      style={[styles.sendButton, { backgroundColor: accentColor }]}
-                      onPress={handleSend}
-                      disabled={isRecording || isProcessing}
-                    >
-                      <Ionicons name="arrow-up" size={19} color="#FFFFFF" />
-                    </TouchableOpacity>
-                  ) : null}
                 </View>
 
-                {/* Cancel edit button */}
                 {editingMessageId ? (
                   <TouchableOpacity style={{ padding: 8 }} onPress={handleCancelEdit}>
                     <Ionicons name="close-circle-outline" size={24} color="#FF3B30" />
                   </TouchableOpacity>
                 ) : null}
 
-                {/* Voice orb button — right of pill, always visible */}
-                {!showSendButton && !sending && !editingMessageId ? (
+                {!showSendButton ? (
                   <TouchableOpacity
-                    style={[styles.voiceOrbBtn, { backgroundColor: isRecording ? '#FF3B30' : accentColor }]}
-                    onPress={() => router.push('/voice-control')}
-                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                    style={[styles.micBtn, { backgroundColor: isRecording ? '#FF3B30' : (isProcessing ? '#888' : '#E8460A') }]}
+                    onPress={toggleRecording}
+                    disabled={editingMessageId !== null}
                   >
-                    <Ionicons name="pulse" size={21} color="#FFFFFF" />
+                    {isProcessing ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <Ionicons name={isRecording ? 'stop' : 'mic'} size={21} color="#FFFFFF" />
+                    )}
+                  </TouchableOpacity>
+                ) : null}
+
+                {sending ? (
+                  <TouchableOpacity style={styles.stopButton} onPress={handleStopGeneration}>
+                    <View style={{ width: 11, height: 11, backgroundColor: '#FFFFFF', borderRadius: 2 }} />
+                  </TouchableOpacity>
+                ) : showSendButton ? (
+                  <TouchableOpacity style={[styles.sendButton, { backgroundColor: accentColor }]} onPress={handleSend} disabled={isRecording || isProcessing}>
+                    <Ionicons name="arrow-up" size={19} color="#FFFFFF" />
                   </TouchableOpacity>
                 ) : null}
               </View>

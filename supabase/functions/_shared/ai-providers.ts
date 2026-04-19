@@ -597,34 +597,15 @@ export function detectContentType(userMessage: string): {
   const lowerMsg = userMessage.toLowerCase();
   
   const imageKeywords = [
-    // English - logo
     'create a logo', 'create logo', 'generate logo', 'make a logo', 'design a logo', 'build a logo',
-    'generate a logo', 'make me a logo', 'design me a logo',
-    // English - image/photo/picture
-    'create an image', 'create image', 'generate image', 'make an image', 'design an image',
-    'generate a photo', 'create a photo', 'make a photo', 'take a photo',
-    'generate a picture', 'make a picture', 'generate picture', 'create picture', 'create a picture',
-    // English - art/illustration
-    'draw a', 'draw me', 'paint a', 'paint me', 'illustrate', 'sketch a', 'sketch me',
-    'create art', 'generate art', 'make art', 'create artwork', 'generate artwork',
-    // English - icon/banner/thumbnail
-    'create an icon', 'create icon', 'generate icon', 'make an icon', 'design an icon',
-    'create a banner', 'generate banner', 'make a banner', 'design a banner',
-    'create a thumbnail', 'generate thumbnail',
-    // English - visual
-    'generate a visual', 'create a visual', 'make a visual',
-    'create an illustration', 'generate an illustration',
-    // Haitian Creole
+    'create an image', 'create image', 'generate image', 'make an image', 'design an image', 'generate a photo',
+    'draw a', 'draw me', 'paint a', 'paint me', 'illustrate', 'sketch a',
+    'generate a picture', 'make a picture', 'generate picture', 'create picture',
+    'create an icon', 'create icon', 'generate icon',
+    'create a banner', 'generate banner', 'make a banner',
+    'create art', 'generate art', 'make art', 'create artwork',
     'kreye yon logo', 'kreye logo', 'fe yon logo', 'fe logo', 'desine logo',
     'kreye foto', 'kreye imaj', 'fe foto', 'fe imaj', 'kreye yon imaj',
-    'fè yon logo', 'fè logo', 'kreye yon foto', 'fè foto',
-    // French
-    'créer un logo', 'creer un logo', 'générer une image', 'generer une image',
-    'créer une image', 'faire un logo', 'dessiner',
-    // Spanish
-    'crear un logo', 'generar una imagen', 'crear una imagen', 'hacer un logo',
-    // Short patterns
-    'photo of', 'picture of', 'image of', 'logo for', 'logo of',
   ];
   
   const editKeywords = [

@@ -312,20 +312,11 @@ export default function VoiceControlScreen() {
         body: { text: text.slice(0, 500), voice: selectedVoice, speed: 1.0 },
       });
 
-      // generate-tts returns { success, audioUrl } at root level
-      const audioUrl = data?.audioUrl || data?.audio_url;
-      if (error || !audioUrl) {
-        // Try to read the real error message
-        let errMsg = 'TTS failed';
-        if (error && (error as any).context) {
-          try { const txt = await (error as any).context.text(); errMsg = txt || errMsg; } catch {}
-        }
-        throw new Error(errMsg);
-      }
+      if (error || !data?.audioUrl) throw new Error('TTS failed');
 
       await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true });
       const { sound } = await Audio.Sound.createAsync(
-        { uri: audioUrl },
+        { uri: data.audioUrl },
         { shouldPlay: true, volume: 1.0 }
       );
       soundRef.current = sound;

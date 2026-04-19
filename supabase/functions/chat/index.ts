@@ -627,28 +627,12 @@ IMPORTANT:
       aiMessages.push({ role: 'user', content: `Here are the uploaded files for analysis:\n\n${fileContext}` });
     }
 
-    // ── strip any JSON action blobs the model might generate ──
-    function cleanJsonActions(text: string): string {
-      // Remove {"action":...} blobs the LLM sometimes returns instead of content
-      return text
-        .replace(/\{\s*"action"\s*:\s*"[^"]+"[^}]*\}/g, '')
-        .replace(/```json[\s\S]*?```/g, '')
-        .trim();
-    }
-
     if (detectionResult.isImageTask) {
       console.log('[chat] Image task detected, generating image for prompt:', lastContent.slice(0, 80));
       const imageResult = await generateImageSmart(lastContent, aiModel);
       if (imageResult.error || !imageResult.imageUrl) {
-        console.log('[chat] Image generation failed, retrying with dalle:', imageResult.error);
-        // Final retry: try dalle directly
-        const { generateImageWithDalle } = await import('../_shared/ai-providers.ts').catch(() => ({ generateImageWithDalle: null }));
-        // We already tried all providers in generateImageSmart, give friendly message
-        aiResponse = {
-          content: 'I was unable to generate the image at this time. Please try again in a moment — image generation can sometimes be temporarily unavailable.',
-          model: 'fallback',
-          tokens: 0,
-        };
+        console.log('[chat] Image generation failed, falling back to text:', imageResult.error);
+        aiResponse = await callAI(aiModel, aiMessages, false);
         imageUrl = undefined;
       } else {
         let resolvedImageUrl = imageResult.imageUrl;
