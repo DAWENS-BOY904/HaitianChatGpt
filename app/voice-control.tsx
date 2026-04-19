@@ -920,3 +920,4 @@ const styles = StyleSheet.create({
 });
 
 export { CallEndedBanner };
+when you open keyboard and you tap the screen the keyboard disapear remove.
