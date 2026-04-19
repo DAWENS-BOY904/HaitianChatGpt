@@ -975,10 +975,3 @@ const styles = StyleSheet.create({
 });
 
 export { CallEndedBanner };
-hello ai please fix this error {
-  "eventMessage": "[TTS] All providers failed\n",
-  "functionId": "generate-tts",
-  "id": "dc00ebb3-3fdc-4171-ac65-7848247a6a07",
-  "logLevel": "ERROR",
-  "timestamp": 1776641014
-} and please when connecting to the AI, add a real phone call system using Expo, with actual call sounds (like ringing and in-call audio) so it feels like a real phone experience
