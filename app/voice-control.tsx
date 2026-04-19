@@ -920,3 +920,4 @@ const styles = StyleSheet.create({
 });
 
 export { CallEndedBanner };
+hello ai dont fucking skip my message make the change please dont skip when the keyboard is open and you tap anywhere on the screen, the keyboard should close.
