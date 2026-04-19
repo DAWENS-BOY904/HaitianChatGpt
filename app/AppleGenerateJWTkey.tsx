@@ -29,6 +29,21 @@ async function base64urlEncode(arrayBuffer: ArrayBuffer): Promise<string> {
   return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
+// Safe crypto accessor — works in React Native (Hermes/JSC) and web
+function getSubtleCrypto(): SubtleCrypto {
+  // React Native 0.71+ exposes globalThis.crypto.subtle via the Crypto polyfill
+  const c: Crypto | undefined =
+    (globalThis as any).crypto ||
+    (typeof window !== 'undefined' ? (window as any).crypto : undefined);
+  if (!c?.subtle) {
+    throw new Error(
+      'Web Crypto API is not available on this device. ' +
+      'Please use Expo SDK 50+ or React Native 0.71+ which include a built-in crypto polyfill.'
+    );
+  }
+  return c.subtle;
+}
+
 async function generateAppleClientSecret(params: {
   teamId: string;
   keyId: string;
@@ -36,6 +51,8 @@ async function generateAppleClientSecret(params: {
   privateKey: string;
 }): Promise<string> {
   const { teamId, keyId, clientId, privateKey } = params;
+
+  const subtle = getSubtleCrypto();
 
   const now = Math.floor(Date.now() / 1000);
   const exp = now + 15777000; // ~6 months
@@ -58,7 +75,7 @@ async function generateAppleClientSecret(params: {
   );
   const signingInput = `${encHeader}.${encPayload}`;
 
-  // Clean up PEM key
+  // Clean up PEM key — handle both PKCS#8 and raw EC private key formats
   const pemClean = privateKey
     .replace(/-----BEGIN PRIVATE KEY-----/g, '')
     .replace(/-----END PRIVATE KEY-----/g, '')
@@ -66,18 +83,35 @@ async function generateAppleClientSecret(params: {
     .replace(/-----END EC PRIVATE KEY-----/g, '')
     .replace(/\s+/g, '');
 
-  // Import the EC P-256 private key
-  const keyBuffer = Uint8Array.from(atob(pemClean), c => c.charCodeAt(0));
-  const cryptoKey = await crypto.subtle.importKey(
-    'pkcs8',
-    keyBuffer,
-    { name: 'ECDSA', namedCurve: 'P-256' },
-    false,
-    ['sign']
-  );
+  if (!pemClean) throw new Error('Private key is empty after stripping PEM headers.');
 
-  // Sign
-  const sigBuffer = await crypto.subtle.sign(
+  // Decode base64 to bytes
+  let keyBytes: Uint8Array;
+  try {
+    keyBytes = Uint8Array.from(atob(pemClean), c => c.charCodeAt(0));
+  } catch {
+    throw new Error('Failed to decode private key — make sure you paste the full .p8 content including BEGIN/END lines.');
+  }
+
+  // Import the EC P-256 private key (PKCS#8 DER)
+  let cryptoKey: CryptoKey;
+  try {
+    cryptoKey = await subtle.importKey(
+      'pkcs8',
+      keyBytes,
+      { name: 'ECDSA', namedCurve: 'P-256' },
+      false,
+      ['sign']
+    );
+  } catch (importErr: any) {
+    throw new Error(
+      `Key import failed: ${importErr?.message || 'Invalid key format'}. ` +
+      'Ensure the .p8 file is in PKCS#8 format (Apple keys are — paste the complete file content).'
+    );
+  }
+
+  // Sign the JWT input
+  const sigBuffer = await subtle.sign(
     { name: 'ECDSA', hash: 'SHA-256' },
     cryptoKey,
     new TextEncoder().encode(signingInput)
@@ -441,4 +475,3 @@ export default function AppleGenerateJWTKeyScreen() {
     </View>
   );
 }
-fix error generate because property crypto dosen't exist make all safe good and real function better.
