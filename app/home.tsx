@@ -2064,5 +2064,6 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
+hello please make this little chsnge fix home page bug when the mdssge is to ling and when a code block apear and fix when the ai stresming response auto stay anle sil send message li rete snle when send snother premier an monte u we 2em lan fow scroll pou see it.
 
 
