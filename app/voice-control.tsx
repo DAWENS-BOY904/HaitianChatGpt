@@ -934,3 +934,12 @@ const styles = StyleSheet.create({
 });
 
 export { CallEndedBanner };
+fix this error :{
+  "eventMessage": "POST | 502 | http://njpuoozygqtpvlzhnjpu.backend.onspace.ai/functions/v1/generate-tts | Bad Gateway",
+  "functionId": "generate-tts",
+  "id": "911389a4-3887-4fce-93e0-5fb20472898b",
+  "logLevel": "ERROR",
+  "method": "POST",
+  "statusCode": 502,
+  "timestamp": 1776639668
+}.
