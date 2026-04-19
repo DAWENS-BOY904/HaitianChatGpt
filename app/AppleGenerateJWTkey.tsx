@@ -16,7 +16,21 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../hooks/useTheme';
 
-// ── Generates a proper Apple Client Secret (JWT) for Supabase Sign In with Apple ──
+// ── POLYFILL SETUP ──
+// Install these dependencies:
+// npx expo install expo-crypto expo-standard-web-crypto
+// OR for bare React Native:
+// npm install react-native-get-random-values @peculiar/webcrypto
+
+// Option 1: Using expo-crypto (RECOMMENDED for Expo)
+import * as ExpoCrypto from 'expo-crypto';
+
+// Option 2: Alternative using @peculiar/webcrypto (if expo-crypto doesn't work)
+// import { Crypto } from '@peculiar/webcrypto';
+// const webCrypto = new Crypto();
+// global.crypto = webCrypto;
+
+// ── JWT Generation for Apple Sign In ──
 // Reference: https://developer.apple.com/documentation/accountorganizationaldatasharing/creating-a-client-secret
 
 async function base64urlEncode(arrayBuffer: ArrayBuffer): Promise<string> {
@@ -29,20 +43,36 @@ async function base64urlEncode(arrayBuffer: ArrayBuffer): Promise<string> {
   return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-// Safe crypto accessor — works in React Native (Hermes/JSC) and web
+// Safe crypto accessor with Expo fallback
 function getSubtleCrypto(): SubtleCrypto {
-  // React Native 0.71+ exposes globalThis.crypto.subtle via the Crypto polyfill
-  const c: Crypto | undefined =
-    (globalThis as any).crypto ||
-    (typeof window !== 'undefined' ? (window as any).crypto : undefined);
-  if (!c?.subtle) {
-    throw new Error(
-      'Web Crypto API is not available on this device. ' +
-      'Please use Expo SDK 50+ or React Native 0.71+ which include a built-in crypto polyfill.'
-    );
+  // Try global crypto first (web environment)
+  const globalCrypto = (globalThis as any).crypto;
+  if (globalCrypto?.subtle) {
+    return globalCrypto.subtle;
   }
-  return c.subtle;
+
+  // Try Expo's webcrypto polyfill
+  const expoCrypto = (globalThis as any).expo?.crypto?.subtle;
+  if (expoCrypto) {
+    return expoCrypto;
+  }
+
+  // Check if we have standard web crypto via polyfill
+  if (typeof window !== 'undefined' && (window as any).crypto?.subtle) {
+    return (window as any).crypto.subtle;
+  }
+
+  throw new Error(
+    'Web Crypto API is not available. ' +
+    'Please install: npx expo install expo-crypto expo-standard-web-crypto\n' +
+    'Then add to your app entry file: import "expo-standard-web-crypto"'
+  );
 }
+
+// Alternative: Pure JavaScript JWT signing using jsrsasign (most reliable for RN)
+// Install: npm install jsrsasign
+// This avoids Web Crypto API entirely
+import * as KJUR from 'jsrsasign'; // We'll use this as fallback
 
 async function generateAppleClientSecret(params: {
   teamId: string;
@@ -51,8 +81,6 @@ async function generateAppleClientSecret(params: {
   privateKey: string;
 }): Promise<string> {
   const { teamId, keyId, clientId, privateKey } = params;
-
-  const subtle = getSubtleCrypto();
 
   const now = Math.floor(Date.now() / 1000);
   const exp = now + 15777000; // ~6 months
@@ -67,58 +95,85 @@ async function generateAppleClientSecret(params: {
     sub: clientId,
   };
 
-  const encHeader = await base64urlEncode(
-    new TextEncoder().encode(JSON.stringify(header))
-  );
-  const encPayload = await base64urlEncode(
-    new TextEncoder().encode(JSON.stringify(payload))
-  );
-  const signingInput = `${encHeader}.${encPayload}`;
-
-  // Clean up PEM key — handle both PKCS#8 and raw EC private key formats
-  const pemClean = privateKey
-    .replace(/-----BEGIN PRIVATE KEY-----/g, '')
-    .replace(/-----END PRIVATE KEY-----/g, '')
-    .replace(/-----BEGIN EC PRIVATE KEY-----/g, '')
-    .replace(/-----END EC PRIVATE KEY-----/g, '')
-    .replace(/\s+/g, '');
-
-  if (!pemClean) throw new Error('Private key is empty after stripping PEM headers.');
-
-  // Decode base64 to bytes
-  let keyBytes: Uint8Array;
   try {
-    keyBytes = Uint8Array.from(atob(pemClean), c => c.charCodeAt(0));
-  } catch {
-    throw new Error('Failed to decode private key — make sure you paste the full .p8 content including BEGIN/END lines.');
-  }
+    // Try Web Crypto API first
+    const subtle = getSubtleCrypto();
 
-  // Import the EC P-256 private key (PKCS#8 DER)
-  let cryptoKey: CryptoKey;
-  try {
-    cryptoKey = await subtle.importKey(
-      'pkcs8',
-      keyBytes,
-      { name: 'ECDSA', namedCurve: 'P-256' },
-      false,
-      ['sign']
+    const encHeader = await base64urlEncode(
+      new TextEncoder().encode(JSON.stringify(header))
     );
-  } catch (importErr: any) {
-    throw new Error(
-      `Key import failed: ${importErr?.message || 'Invalid key format'}. ` +
-      'Ensure the .p8 file is in PKCS#8 format (Apple keys are — paste the complete file content).'
+    const encPayload = await base64urlEncode(
+      new TextEncoder().encode(JSON.stringify(payload))
     );
+    const signingInput = `${encHeader}.${encPayload}`;
+
+    // Clean up PEM key
+    const pemClean = privateKey
+      .replace(/-----BEGIN PRIVATE KEY-----/g, '')
+      .replace(/-----END PRIVATE KEY-----/g, '')
+      .replace(/-----BEGIN EC PRIVATE KEY-----/g, '')
+      .replace(/-----END EC PRIVATE KEY-----/g, '')
+      .replace(/\s+/g, '');
+
+    if (!pemClean) throw new Error('Private key is empty after stripping PEM headers.');
+
+    // Decode base64 to bytes
+    let keyBytes: Uint8Array;
+    try {
+      keyBytes = Uint8Array.from(atob(pemClean), c => c.charCodeAt(0));
+    } catch {
+      throw new Error('Failed to decode private key — make sure you paste the full .p8 content including BEGIN/END lines.');
+    }
+
+    // Import the EC P-256 private key
+    let cryptoKey: CryptoKey;
+    try {
+      cryptoKey = await subtle.importKey(
+        'pkcs8',
+        keyBytes,
+        { name: 'ECDSA', namedCurve: 'P-256' },
+        false,
+        ['sign']
+      );
+    } catch (importErr: any) {
+      throw new Error(
+        `Key import failed: ${importErr?.message || 'Invalid key format'}. ` +
+        'Ensure the .p8 file is in PKCS#8 format (Apple keys are — paste the complete file content).'
+      );
+    }
+
+    // Sign the JWT
+    const sigBuffer = await subtle.sign(
+      { name: 'ECDSA', hash: 'SHA-256' },
+      cryptoKey,
+      new TextEncoder().encode(signingInput)
+    );
+
+    const encSig = await base64urlEncode(sigBuffer);
+    return `${signingInput}.${encSig}`;
+
+  } catch (webCryptoError) {
+    // Fallback: Use jsrsasign library (pure JS, works everywhere)
+    console.warn('Web Crypto API failed, using jsrsasign fallback:', webCryptoError);
+    
+    // Install jsrsasign: npm install jsrsasign
+    // Then uncomment below:
+    /*
+    const sHeader = JSON.stringify(header);
+    const sPayload = JSON.stringify(payload);
+    
+    // Create JWS using ES256
+    const jws = KJUR.jws.JWS.sign(
+      'ES256',
+      sHeader,
+      sPayload,
+      privateKey // jsrsasign handles PEM directly
+    );
+    return jws;
+    */
+    
+    throw webCryptoError; // Remove this line when fallback is implemented
   }
-
-  // Sign the JWT input
-  const sigBuffer = await subtle.sign(
-    { name: 'ECDSA', hash: 'SHA-256' },
-    cryptoKey,
-    new TextEncoder().encode(signingInput)
-  );
-
-  const encSig = await base64urlEncode(sigBuffer);
-  return `${signingInput}.${encSig}`;
 }
 
 export default function AppleGenerateJWTKeyScreen() {
