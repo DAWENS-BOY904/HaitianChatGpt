@@ -577,6 +577,32 @@ export const MessageItem = memo(function MessageItem({
     [streaming, isGenerating, message.role]
   );
 
+  const imgCardStyles = useMemo(() => StyleSheet.create({
+    cardWrap: { marginTop: 4, marginBottom: 4 },
+    label: {
+      color: colors.textSecondary,
+      fontSize: 13,
+      fontWeight: '500',
+      marginBottom: 8,
+      paddingLeft: 2,
+    },
+    imageContainer: {
+      borderRadius: 18,
+      overflow: 'hidden',
+      backgroundColor: colors.surface,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.18,
+      shadowRadius: 12,
+      elevation: 8,
+    },
+    image: {
+      width: Math.min(SCREEN_WIDTH - 48, 340),
+      height: Math.min(SCREEN_WIDTH - 48, 340),
+      borderRadius: 18,
+    },
+  }), [colors]);
+
   const styles = useMemo(() => StyleSheet.create({
     container: {
       paddingHorizontal: Spacing.md,
@@ -738,33 +764,37 @@ export const MessageItem = memo(function MessageItem({
             </TouchableOpacity>
           )}
 
-          {/* AI Generated Image */}
+          {/* AI Generated Image — clean card with "Image created" label */}
           {hasGeneratedImage && message.role === 'assistant' && (
-            <TouchableOpacity
-              onPress={() => handleImagePress(message.image_url!)}
-              activeOpacity={0.9}
-              disabled={downloadingImage}
-            >
-              <Image
-                source={{ uri: message.image_url }}
-                style={styles.messageImage}
-                contentFit="cover"
-                transition={200}
-              />
-              {downloadingImage ? (
-                <View style={styles.downloadOverlay}>
-                  <ActivityIndicator color="#fff" size="large" />
-                  <Text style={{ color: '#fff', marginTop: 8, fontSize: 13 }}>Saving...</Text>
-                </View>
-              ) : (
-                <TouchableOpacity
-                  style={styles.downloadButton}
-                  onPress={(e) => { e.stopPropagation(); handleDownloadImage(message.image_url!); }}
-                >
-                  <Ionicons name="download" size={22} color="#fff" />
-                </TouchableOpacity>
-              )}
-            </TouchableOpacity>
+            <View style={imgCardStyles.cardWrap}>
+              <Text style={imgCardStyles.label}>Image created</Text>
+              <TouchableOpacity
+                onPress={() => handleImagePress(message.image_url!)}
+                activeOpacity={0.9}
+                disabled={downloadingImage}
+                style={imgCardStyles.imageContainer}
+              >
+                <Image
+                  source={{ uri: message.image_url }}
+                  style={imgCardStyles.image}
+                  contentFit="cover"
+                  transition={400}
+                />
+                {downloadingImage ? (
+                  <View style={styles.downloadOverlay}>
+                    <ActivityIndicator color="#fff" size="large" />
+                    <Text style={{ color: '#fff', marginTop: 8, fontSize: 13 }}>Saving...</Text>
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    style={styles.downloadButton}
+                    onPress={(e) => { e.stopPropagation(); handleDownloadImage(message.image_url!); }}
+                  >
+                    <Ionicons name="download" size={22} color="#fff" />
+                  </TouchableOpacity>
+                )}
+              </TouchableOpacity>
+            </View>
           )}
 
           {/* File Attachment */}
