@@ -441,3 +441,4 @@ export default function AppleGenerateJWTKeyScreen() {
     </View>
   );
 }
+fix error generate because property crypto dosen't exist make all safe good and real function better.
