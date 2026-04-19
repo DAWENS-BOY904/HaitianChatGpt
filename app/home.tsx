@@ -1593,7 +1593,8 @@ export default function HomeScreen() {
                       keyExtractor={item => item.id}
                       contentContainerStyle={{ paddingVertical: Spacing.md }}
                       onScroll={handleScrollEvent}
-                      scrollEventThrottle={16}
+                      scrollEventThrottle={8}
+                      maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
                       ListHeaderComponent={groupChatMode && (messages || []).length > 0 ? (
                         <View style={{ paddingHorizontal: 16, paddingBottom: 16, alignItems: 'center', gap: 10 }}>
                           <Text style={{ color: colors.textSecondary, fontSize: 13, textAlign: 'center' }}>
@@ -1627,7 +1628,7 @@ export default function HomeScreen() {
                           ) : null}
                         </>
                       }
-                      onContentSizeChange={() => { if (isAtBottom) flatListRef.current?.scrollToEnd({ animated: true }); }}
+                      onContentSizeChange={() => { if (isAtBottom || generating || sending) flatListRef.current?.scrollToEnd({ animated: false }); }}
                       maxToRenderPerBatch={10}
                       windowSize={10}
                       removeClippedSubviews={Platform.OS === 'android'}
@@ -2064,6 +2065,5 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-hello please make this little chsnge fix home page bug when the mdssge is to ling and when a code block apear and fix when the ai stresming response auto stay anle sil send message li rete snle when send snother premier an monte u we 2em lan fow scroll pou see it.
 
 
