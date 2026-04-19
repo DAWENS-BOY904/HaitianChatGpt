@@ -3,6 +3,8 @@ import {
   View,
   Text,
   TouchableOpacity,
+  TouchableWithoutFeedback,
+  Keyboard,
   StyleSheet,
   Platform,
   StatusBar,
@@ -564,6 +566,7 @@ export default function VoiceControlScreen() {
       : ['#050505', '#0a0a0a', '#0d0d0d', '#050505'];
 
   return (
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <StatusBar barStyle="light-content" />
       <LinearGradient colors={bgColors} style={StyleSheet.absoluteFill} />
@@ -720,6 +723,7 @@ export default function VoiceControlScreen() {
             onSubmitEditing={handleSendText}
             returnKeyType="send"
             autoFocus
+            onBlur={() => {}}
           />
           <TouchableOpacity
             style={[styles.sendBtn, { opacity: userInput.trim() ? 1 : 0.4 }]}
@@ -731,6 +735,7 @@ export default function VoiceControlScreen() {
         </BlurView>
       ) : null}
     </KeyboardAvoidingView>
+    </TouchableWithoutFeedback>
   );
 }
 
@@ -920,4 +925,3 @@ const styles = StyleSheet.create({
 });
 
 export { CallEndedBanner };
-hello ai dont fucking skip my message make the change please dont skip when the keyboard is open and you tap anywhere on the screen, the keyboard should close.
