@@ -618,15 +618,19 @@ Deno.serve(async (req) => {
     
     // Log to database (optional analytics)
     try {
-      await supabaseAdmin.from('tts_logs').insert({
-        request_id: requestId,
+      // Note: tts_logs table may not exist, safely skip
+      await supabaseAdmin.from('activity_logs').insert({
         user_id: userId || null,
-        voice: finalVoice,
-        speed: finalSpeed,
-        text_length: finalText.length,
-        audio_size_bytes: audioUint8.length,
-        processing_time_ms: processingTime,
-        created_at: new Date().toISOString()
+        action: 'tts_generated',
+        action_type: 'tts',
+        details: {
+          request_id: requestId,
+          voice: finalVoice,
+          speed: finalSpeed,
+          text_length: finalText.length,
+          audio_size_bytes: audioUint8.length,
+          processing_time_ms: processingTime,
+        },
       });
     } catch (e) {
       // Non-critical, just log

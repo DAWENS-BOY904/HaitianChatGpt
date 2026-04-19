@@ -114,7 +114,13 @@ export default function VoiceSettingsScreen() {
         body: { text: previewText, voice: voiceId, speed: parseFloat(speechRate) },
       });
 
-      if (error || !data?.audioUrl) throw new Error('Preview failed');
+      if (error || !data?.audioUrl) {
+        let errMsg = 'Preview failed';
+        if (error && (error as any).context) {
+          try { const txt = await (error as any).context.text(); errMsg = txt || errMsg; } catch {}
+        }
+        throw new Error(errMsg);
+      }
 
       await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true });
       const { sound } = await Audio.Sound.createAsync(

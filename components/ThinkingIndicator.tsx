@@ -1,7 +1,9 @@
 import React, { useEffect, useRef, memo } from 'react';
-import { View, Text, StyleSheet, Animated, Easing, ViewStyle } from 'react-native';
+import { View, Text, StyleSheet, Animated, Easing, ViewStyle, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 type IntentType = 'message' | 'image' | 'file' | 'web_search';
 
@@ -13,13 +15,20 @@ interface ThinkingIndicatorProps {
 }
 
 const INTENT_KEYWORDS: Record<IntentType, string[]> = {
-  image: ['logo', 'image', 'img', 'design', 'picture', 'photo', 'draw', 'generate', 'create image', 'dalle', 'stable diffusion'],
+  image: [
+    'logo', 'image', 'img', 'design', 'picture', 'photo', 'draw', 'generate', 'create image',
+    'create a logo', 'make a logo', 'design a logo', 'create an image', 'make an image',
+    'create art', 'illustration', 'sketch', 'paint', 'banner', 'icon', 'thumbnail', 'visual',
+    'kreye', 'desine', 'fe foto', 'fe imaj', 'fe logo',
+    'créer', 'générer', 'dessiner', 'crear', 'generar',
+  ],
   file: ['file', 'pdf', 'document', 'spreadsheet', 'excel', 'csv', 'download', 'chatbot', 'html', 'code', 'create', 'build', 'write', 'script'],
   web_search: ['search', 'find', 'look up', 'google', 'browse', 'web', 'search for', 'latest', 'current', 'news'],
   message: [],
 };
 
-function detectIntent(message?: string): IntentType {
+function detectIntent(message?: string, mode?: string): IntentType {
+  if (mode === 'creating_image' || mode === 'editing_image') return 'image';
   if (!message) return 'message';
   const msg = message.toLowerCase();
   for (const [intent, keywords] of Object.entries(INTENT_KEYWORDS)) {
@@ -50,7 +59,7 @@ const RotatingRing = memo(function RotatingRing({ color, size = 32 }: { color: s
   );
 });
 
-// ── Pulsing icon in center of ring ──
+// ── Pulsing icon ──
 const PulsingIcon = memo(function PulsingIcon({
   name, color, size = 14, bgColor,
 }: { name: keyof typeof Ionicons.glyphMap; color: string; size?: number; bgColor: string }) {
@@ -77,7 +86,7 @@ const PulsingIcon = memo(function PulsingIcon({
   );
 });
 
-// ── Animated ring + icon combo ──
+// ── Ring + icon combo ──
 const SpinningBadge = memo(function SpinningBadge({
   icon, iconColor, ringColor, bgColor,
 }: { icon: keyof typeof Ionicons.glyphMap; iconColor: string; ringColor: string; bgColor: string }) {
@@ -91,10 +100,9 @@ const SpinningBadge = memo(function SpinningBadge({
   );
 });
 
-// ── Simple 3-dot typing animation ──
+// ── 3-dot typing animation ──
 const ThinkingDots = memo(function ThinkingDots({ color }: { color: string }) {
   const dots = [useRef(new Animated.Value(0)).current, useRef(new Animated.Value(0)).current, useRef(new Animated.Value(0)).current];
-
   useEffect(() => {
     const anims = dots.map((dot, i) =>
       Animated.loop(
@@ -109,7 +117,6 @@ const ThinkingDots = memo(function ThinkingDots({ color }: { color: string }) {
     anims.forEach(a => a.start());
     return () => anims.forEach(a => a.stop());
   }, []);
-
   return (
     <View style={dotStyles.row}>
       {dots.map((dot, i) => (
@@ -118,7 +125,6 @@ const ThinkingDots = memo(function ThinkingDots({ color }: { color: string }) {
     </View>
   );
 });
-
 const dotStyles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   dot: { width: 7, height: 7, borderRadius: 3.5 },
@@ -144,9 +150,64 @@ const ShimmerLabel = memo(function ShimmerLabel({ text, color }: { text: string;
   );
 });
 
-export function ThinkingIndicator({ userMessage = '', completed = false, style }: ThinkingIndicatorProps) {
+// ── Full shimmer image card (like the reference) ──
+const ImageShimmerCard = memo(function ImageShimmerCard({ isDark }: { isDark: boolean }) {
+  const shimmer = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(shimmer, { toValue: 1, duration: 1200, easing: Easing.inOut(Easing.ease), useNativeDriver: false }),
+        Animated.timing(shimmer, { toValue: 0, duration: 1200, easing: Easing.inOut(Easing.ease), useNativeDriver: false }),
+      ])
+    );
+    anim.start();
+    return () => anim.stop();
+  }, []);
+
+  const bg1 = isDark ? '#1a1a2e' : '#e8e8f0';
+  const bg2 = isDark ? '#16213e' : '#d0d0e0';
+  const bg3 = isDark ? '#0f0f23' : '#c0c0d0';
+
+  const backgroundColor = shimmer.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: [bg1, bg2, bg3],
+  });
+
+  const cardW = Math.min(SCREEN_WIDTH - 32, 360);
+  const cardH = Math.round(cardW * 1.1); // slightly taller than wide — similar to reference
+
+  return (
+    <View style={{ paddingHorizontal: 16, paddingTop: 6 }}>
+      <Text style={{ color: isDark ? 'rgba(255,255,255,0.85)' : '#111', fontSize: 20, fontWeight: '400', marginBottom: 14 }}>
+        Creating image
+      </Text>
+      <Animated.View
+        style={{
+          width: cardW,
+          height: cardH,
+          borderRadius: 20,
+          backgroundColor,
+          overflow: 'hidden',
+        }}
+      >
+        {/* inner glow overlay */}
+        <View
+          style={{
+            ...StyleSheet.absoluteFillObject,
+            borderRadius: 20,
+            borderWidth: 1,
+            borderColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.06)',
+          }}
+        />
+      </Animated.View>
+    </View>
+  );
+});
+
+export function ThinkingIndicator({ userMessage = '', completed = false, style, mode }: ThinkingIndicatorProps) {
   const { colors, isDark } = useTheme();
-  const intent = detectIntent(userMessage);
+  const intent = detectIntent(userMessage, mode);
 
   // ── Completed state ──
   if (completed) {
@@ -163,17 +224,11 @@ export function ThinkingIndicator({ userMessage = '', completed = false, style }
     );
   }
 
-  // ── Image creation ──
+  // ── Image creation — show shimmer card ──
   if (intent === 'image') {
     return (
-      <View style={[styles.wrapper, style]}>
-        <SpinningBadge
-          icon="color-palette-outline"
-          iconColor={colors.primary}
-          ringColor={colors.primary}
-          bgColor={`${colors.primary}20`}
-        />
-        <ShimmerLabel text="Creating image..." color={colors.textSecondary} />
+      <View style={[styles.imageWrapper, style]}>
+        <ImageShimmerCard isDark={isDark} />
       </View>
     );
   }
@@ -184,12 +239,7 @@ export function ThinkingIndicator({ userMessage = '', completed = false, style }
     const label = q && q.length > 3 ? `Searching "${q.slice(0, 28)}${q.length > 28 ? '…' : ''}"` : 'Searching the web...';
     return (
       <View style={[styles.wrapper, style]}>
-        <SpinningBadge
-          icon="globe-outline"
-          iconColor="#5AC8FA"
-          ringColor="#5AC8FA"
-          bgColor="rgba(90,200,250,0.15)"
-        />
+        <SpinningBadge icon="globe-outline" iconColor="#5AC8FA" ringColor="#5AC8FA" bgColor="rgba(90,200,250,0.15)" />
         <ShimmerLabel text={label} color={colors.textSecondary} />
       </View>
     );
@@ -199,12 +249,7 @@ export function ThinkingIndicator({ userMessage = '', completed = false, style }
   if (intent === 'file') {
     return (
       <View style={[styles.wrapper, style]}>
-        <SpinningBadge
-          icon="code-slash-outline"
-          iconColor="#FF9F0A"
-          ringColor="#FF9F0A"
-          bgColor="rgba(255,159,10,0.15)"
-        />
+        <SpinningBadge icon="code-slash-outline" iconColor="#FF9F0A" ringColor="#FF9F0A" bgColor="rgba(255,159,10,0.15)" />
         <ShimmerLabel text="Generating..." color={colors.textSecondary} />
       </View>
     );
@@ -230,6 +275,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  imageWrapper: {
     paddingVertical: 10,
   },
 });
