@@ -308,22 +308,27 @@ export default function VoiceControlScreen() {
       setIsAISpeaking(true);
       setCurrentAIText(text);
 
+      // Switch audio mode for playback before TTS call
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+      });
+
       const { data, error } = await supabase.functions.invoke('generate-tts', {
         body: { text: text.slice(0, 500), voice: selectedVoice, speed: 1.0 },
       });
 
-      // generate-tts returns { success, audioUrl } at root level
       const audioUrl = data?.audioUrl || data?.audio_url;
       if (error || !audioUrl) {
-        // Try to read the real error message
         let errMsg = 'TTS failed';
         if (error && (error as any).context) {
           try { const txt = await (error as any).context.text(); errMsg = txt || errMsg; } catch {}
         }
+        console.log('[Voice] TTS error:', errMsg);
         throw new Error(errMsg);
       }
 
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true });
       const { sound } = await Audio.Sound.createAsync(
         { uri: audioUrl },
         { shouldPlay: true, volume: 1.0 }
@@ -335,52 +340,88 @@ export default function VoiceControlScreen() {
           setCurrentAIText('');
           sound.unloadAsync().catch(() => {});
           soundRef.current = null;
-          // Auto-start listening after AI finishes (if not paused)
           if (!isPausedRef.current) {
-            setTimeout(() => startListening(), 300);
+            setTimeout(() => startListening(), 400);
           }
         }
       });
-    } catch (e) {
+    } catch (e: any) {
+      console.log('[Voice] speakText error:', e?.message);
       setIsAISpeaking(false);
       setCurrentAIText('');
-      if (!isPausedRef.current) setTimeout(() => startListening(), 300);
+      // Still try to listen even if TTS failed
+      if (!isPausedRef.current) setTimeout(() => startListening(), 600);
     }
-  }, [selectedVoice, supabase]);
+  }, [selectedVoice, supabase, startListening]);
 
   // ─── START LISTENING ───
   const startListening = useCallback(async () => {
     if (isPausedRef.current || phase === 'ended' || phase === 'connecting') return;
     if (isRecordingRef.current) return;
     try {
+      // Clean up any existing recording first
+      if (recordingRef.current) {
+        try { await recordingRef.current.stopAndUnloadAsync(); } catch {}
+        recordingRef.current = null;
+      }
+
       const { status } = await Audio.requestPermissionsAsync();
-      if (status !== 'granted') return;
+      if (status !== 'granted') {
+        console.log('[Voice] Microphone permission denied');
+        return;
+      }
+
+      // Small delay to let any previous audio session release
+      await new Promise(r => setTimeout(r, 150));
+
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
         playsInSilentModeIOS: true,
         shouldDuckAndroid: true,
+        staysActiveInBackground: false,
+        interruptionModeIOS: 1,
+        interruptionModeAndroid: 1,
       });
+
+      if (Platform.OS === 'android') await new Promise(r => setTimeout(r, 100));
+
       const { recording } = await Audio.Recording.createAsync({
         android: {
-          extension: '.m4a', outputFormat: Audio.AndroidOutputFormat.MPEG_4,
-          audioEncoder: Audio.AndroidAudioEncoder.AAC, sampleRate: 16000, numberOfChannels: 1, bitRate: 64000,
+          extension: '.m4a',
+          outputFormat: Audio.AndroidOutputFormat.MPEG_4,
+          audioEncoder: Audio.AndroidAudioEncoder.AAC,
+          sampleRate: 16000,
+          numberOfChannels: 1,
+          bitRate: 64000,
         },
         ios: {
-          extension: '.m4a', audioQuality: Audio.IOSAudioQuality.MEDIUM,
-          sampleRate: 16000, numberOfChannels: 1, bitRate: 64000,
-          linearPCMBitDepth: 16, linearPCMIsBigEndian: false, linearPCMIsFloat: false,
+          extension: '.m4a',
+          audioQuality: Audio.IOSAudioQuality.MEDIUM,
+          sampleRate: 16000,
+          numberOfChannels: 1,
+          bitRate: 64000,
+          linearPCMBitDepth: 16,
+          linearPCMIsBigEndian: false,
+          linearPCMIsFloat: false,
         },
         web: { mimeType: 'audio/webm', bitsPerSecond: 64000 },
       });
+
       recordingRef.current = recording;
       isRecordingRef.current = true;
       setIsUserSpeaking(true);
       setStatusLabel('Listening...');
       // Auto-stop after 8 seconds of user speech
       setTimeout(() => { if (isRecordingRef.current) stopAndProcess(); }, 8000);
-    } catch (e) {
+    } catch (e: any) {
+      console.log('[Voice] startListening error:', e?.message);
       isRecordingRef.current = false;
       setIsUserSpeaking(false);
+      recordingRef.current = null;
+      // Retry once after brief delay if not paused
+      if (!isPausedRef.current) {
+        setTimeout(() => startListening(), 1000);
+      }
     }
   }, [phase]);
 
