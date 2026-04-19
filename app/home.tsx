@@ -914,12 +914,10 @@ export default function HomeScreen() {
   }, [stopRecordingTimer]);
 
   const startVoiceRecording = async () => {
-    // Request fresh permission
     try {
       const { status } = await Audio.requestPermissionsAsync();
       audioPermissionRef.current = status === 'granted';
     } catch (e) { audioPermissionRef.current = false; }
-
     if (!audioPermissionRef.current) {
       Alert.alert('Microphone Required', 'Please enable microphone access in Settings.', [
         { text: 'Cancel', style: 'cancel' },
@@ -927,85 +925,25 @@ export default function HomeScreen() {
       ]);
       return;
     }
-
     try {
-      // Clean up first
       await cleanupRecording();
-      await new Promise(r => setTimeout(r, 250));
-
-      // Set audio mode for recording
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-        shouldDuckAndroid: true,
-        playThroughEarpieceAndroid: false,
-        staysActiveInBackground: false,
-        interruptionModeIOS: 1,
-        interruptionModeAndroid: 1,
-      });
-
-      // Extra Android stabilization
-      if (Platform.OS === 'android') await new Promise(r => setTimeout(r, 200));
-
+      await new Promise(r => setTimeout(r, 200));
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true, shouldDuckAndroid: true, playThroughEarpieceAndroid: false, staysActiveInBackground: false, interruptionModeIOS: 1, interruptionModeAndroid: 1 });
+      if (Platform.OS === 'android') await new Promise(r => setTimeout(r, 100));
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       setRecordingState('recording');
       isRecordingRef.current = true;
       startRecordingTimer();
-
       const { recording } = await Audio.Recording.createAsync({
-        android: {
-          extension: '.m4a',
-          outputFormat: Audio.AndroidOutputFormat.MPEG_4,
-          audioEncoder: Audio.AndroidAudioEncoder.AAC,
-          sampleRate: 16000,
-          numberOfChannels: 1,
-          bitRate: 128000,
-        },
-        ios: {
-          extension: '.m4a',
-          audioQuality: Audio.IOSAudioQuality.HIGH,
-          sampleRate: 16000,
-          numberOfChannels: 1,
-          bitRate: 128000,
-          linearPCMBitDepth: 16,
-          linearPCMIsBigEndian: false,
-          linearPCMIsFloat: false,
-        },
+        android: { extension: '.m4a', outputFormat: Audio.AndroidOutputFormat.MPEG_4, audioEncoder: Audio.AndroidAudioEncoder.AAC, sampleRate: 16000, numberOfChannels: 1, bitRate: 128000 },
+        ios: { extension: '.m4a', audioQuality: Audio.IOSAudioQuality.HIGH, sampleRate: 16000, numberOfChannels: 1, bitRate: 128000, linearPCMBitDepth: 16, linearPCMIsBigEndian: false, linearPCMIsFloat: false },
         web: { mimeType: 'audio/webm;codecs=opus', bitsPerSecond: 64000 },
       });
-
       recordingRef.current = recording;
-      stopTimeoutRef.current = setTimeout(() => {
-        if (isRecordingRef.current) stopVoiceRecording();
-      }, MAX_RECORDING_DURATION * 1000);
-
+      stopTimeoutRef.current = setTimeout(() => { if (isRecordingRef.current) stopVoiceRecording(); }, MAX_RECORDING_DURATION * 1000);
     } catch (error: any) {
-      console.log('[Recording] Failed to start:', error?.message);
       await cleanupRecording();
-
-      // On Android, sometimes the audio session is locked — try resetting
-      if (Platform.OS === 'android') {
-        try {
-          await Audio.setAudioModeAsync({
-            allowsRecordingIOS: false,
-            shouldDuckAndroid: false,
-            playThroughEarpieceAndroid: false,
-            staysActiveInBackground: false,
-          });
-          await new Promise(r => setTimeout(r, 500));
-        } catch {}
-      }
-
-      Alert.alert(
-        'Recording Failed',
-        Platform.OS === 'android'
-          ? 'Could not start microphone. Please close other apps using the mic and try again.'
-          : 'Could not start recording. Make sure no other app is using the microphone.',
-        [
-          { text: 'Try Again', onPress: () => setTimeout(startVoiceRecording, 600) },
-          { text: 'OK', style: 'cancel' },
-        ]
-      );
+      Alert.alert('Recording Failed', Platform.OS === 'android' ? 'Could not start recording on Android. Please restart the app.' : 'Could not start recording. Please try again.');
     }
   };
 

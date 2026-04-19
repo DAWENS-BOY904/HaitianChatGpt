@@ -9,27 +9,17 @@ import {
   ActivityIndicator,
   Switch,
 } from 'react-native';
-import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Audio } from 'expo-av';
+import { useTheme } from '../hooks/useTheme';
 import { useSettings } from '../hooks/useSettings';
 import { useAlert } from '@/template';
 import { getSupabaseClient } from '@/template';
-
-// Real AI voice persona images
-const VOICE_IMAGES: Record<string, any> = {
-  alloy: require('../assets/images/voice-alloy.jpg'),
-  echo: require('../assets/images/voice-echo.jpg'),
-  fable: require('../assets/images/voice-fable.jpg'),
-  onyx: require('../assets/images/voice-onyx.jpg'),
-  nova: require('../assets/images/voice-nova.jpg'),
-  shimmer: require('../assets/images/voice-shimmer.jpg'),
-  coral: require('../assets/images/voice-coral.jpg'),
-};
+import * as FileSystem from 'expo-file-system';
 
 const AI_VOICES = [
   {
@@ -37,63 +27,56 @@ const AI_VOICES = [
     name: 'Alloy',
     description: 'Warm, friendly male voice',
     gender: 'male' as const,
+    icon: 'person-circle-outline',
     previewText: 'Hello! I am Alloy. How can I assist you today?',
-    accent: 'American',
-    color: '#007AFF',
   },
   {
     id: 'echo',
     name: 'Echo',
     description: 'Calm, clear male voice',
     gender: 'male' as const,
+    icon: 'man-outline',
     previewText: 'Hello! I am Echo, ready to help you.',
-    accent: 'British',
-    color: '#5856D6',
   },
   {
     id: 'fable',
     name: 'Fable',
     description: 'Expressive, energetic male voice',
     gender: 'male' as const,
+    icon: 'happy-outline',
     previewText: 'Hello! Fable here, excited to work with you!',
-    accent: 'British',
-    color: '#FF9F0A',
   },
   {
     id: 'onyx',
     name: 'Onyx',
     description: 'Deep, authoritative male voice',
     gender: 'male' as const,
+    icon: 'mic-outline',
     previewText: 'Hello. I am Onyx. How may I help you?',
-    accent: 'American',
-    color: '#1C1C1E',
   },
   {
     id: 'nova',
     name: 'Nova',
     description: 'Warm, friendly female voice',
     gender: 'female' as const,
+    icon: 'woman-outline',
     previewText: 'Hello! I am Nova, here to assist you.',
-    accent: 'American',
-    color: '#FF2D55',
   },
   {
     id: 'shimmer',
     name: 'Shimmer',
     description: 'Bright, upbeat female voice',
     gender: 'female' as const,
+    icon: 'sparkles-outline',
     previewText: 'Hello! Shimmer here. What can I do for you?',
-    accent: 'American',
-    color: '#FFD60A',
   },
   {
     id: 'coral',
     name: 'Coral',
     description: 'Soft, gentle female voice',
     gender: 'female' as const,
+    icon: 'heart-outline',
     previewText: 'Hello, I am Coral. I am here for you.',
-    accent: 'American',
-    color: '#FF6B6B',
   },
 ];
 
@@ -107,6 +90,7 @@ const SPEECH_RATES = [
 export default function VoiceSettingsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { colors, isDark } = useTheme();
   const { showAlert } = useAlert();
   const { settings, updateSetting } = useSettings();
   const supabase = getSupabaseClient();
@@ -115,18 +99,8 @@ export default function VoiceSettingsScreen() {
   const [speechRate, setSpeechRate] = useState<string>((settings as any).speech_rate?.toString() || '1.0');
   const [voiceInterrupt, setVoiceInterrupt] = useState<boolean>((settings as any).voice_interruption ?? false);
   const [autoGreeting, setAutoGreeting] = useState<boolean>((settings as any).auto_greeting ?? true);
-  const [darkMode, setDarkMode] = useState<boolean>(true); // default dark for voice screen
   const [playingVoice, setPlayingVoice] = useState<string | null>(null);
   const soundRef = useRef<Audio.Sound | null>(null);
-
-  // Derived theme
-  const bg = darkMode ? '#000000' : '#F2F2F7';
-  const card = darkMode ? '#1C1C1E' : '#FFFFFF';
-  const border = darkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)';
-  const primaryText = darkMode ? '#FFFFFF' : '#000000';
-  const secondary = darkMode ? 'rgba(255,255,255,0.45)' : '#8E8E93';
-  const surface = darkMode ? '#2C2C2E' : '#F2F2F7';
-  const accent = '#10A37F';
 
   const playVoicePreview = useCallback(async (voiceId: string, previewText: string) => {
     try {
@@ -140,8 +114,7 @@ export default function VoiceSettingsScreen() {
         body: { text: previewText, voice: voiceId, speed: parseFloat(speechRate) },
       });
 
-      const audioUrl = data?.audioUrl || data?.audio_url;
-      if (error || !audioUrl) {
+      if (error || !data?.audioUrl) {
         let errMsg = 'Preview failed';
         if (error && (error as any).context) {
           try { const txt = await (error as any).context.text(); errMsg = txt || errMsg; } catch {}
@@ -149,14 +122,10 @@ export default function VoiceSettingsScreen() {
         throw new Error(errMsg);
       }
 
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: false,
-      });
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true });
       const { sound } = await Audio.Sound.createAsync(
-        { uri: audioUrl },
-        { shouldPlay: true, volume: 1.0 }
+        { uri: data.audioUrl },
+        { shouldPlay: true }
       );
       soundRef.current = sound;
       sound.setOnPlaybackStatusUpdate((status) => {
@@ -168,7 +137,7 @@ export default function VoiceSettingsScreen() {
       });
     } catch (e) {
       setPlayingVoice(null);
-      showAlert('Preview Failed', 'Could not play voice preview. Please check your connection.');
+      showAlert('Preview Failed', 'Could not play voice preview. Check your connection.');
     }
   }, [supabase, speechRate, showAlert]);
 
@@ -187,63 +156,45 @@ export default function VoiceSettingsScreen() {
     };
   }, []);
 
+  const bg = isDark ? '#000000' : '#F2F2F7';
+  const card = isDark ? '#1C1C1E' : '#FFFFFF';
+  const border = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
+  const primaryText = isDark ? '#FFFFFF' : '#000000';
+  const secondary = isDark ? 'rgba(255,255,255,0.45)' : '#8E8E93';
+  const accent = '#10A37F';
+
   return (
     <View style={{ flex: 1, backgroundColor: bg }}>
       {/* HEADER */}
-      <View style={[styles.header, { paddingTop: insets.top + 12, borderBottomColor: border, backgroundColor: bg }]}>
+      <View style={[styles.header, { paddingTop: insets.top + 12, borderBottomColor: border }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={20} color={primaryText} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: primaryText }]}>Voice Settings</Text>
-        <TouchableOpacity onPress={handleSave} style={[styles.saveBtn, { backgroundColor: accent }]}>
+        <TouchableOpacity
+          onPress={handleSave}
+          style={[styles.saveBtn, { backgroundColor: accent }]}
+        >
           <Text style={styles.saveBtnText}>Save</Text>
         </TouchableOpacity>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}>
-
-        {/* APPEARANCE TOGGLE */}
-        <View style={[styles.section, { marginTop: 20 }]}>
-          <Text style={[styles.sectionTitle, { color: primaryText }]}>Appearance</Text>
-          <View style={[styles.settingRow, { backgroundColor: card, borderColor: border }]}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
-              <View style={[styles.modeIcon, { backgroundColor: darkMode ? '#1C1C1E' : '#F2F2F7', borderColor: darkMode ? '#555' : '#DDD' }]}>
-                <Ionicons name={darkMode ? 'moon' : 'sunny'} size={18} color={darkMode ? '#FFD60A' : '#FF9F0A'} />
-              </View>
-              <View>
-                <Text style={[styles.settingTitle, { color: primaryText }]}>
-                  {darkMode ? 'Dark Mode' : 'Light Mode'}
-                </Text>
-                <Text style={[styles.settingDesc, { color: secondary }]}>
-                  Toggle voice screen appearance
-                </Text>
-              </View>
-            </View>
-            <Switch
-              value={darkMode}
-              onValueChange={setDarkMode}
-              trackColor={{ false: '#D1D1D6', true: accent + '99' }}
-              thumbColor={darkMode ? accent : '#FFFFFF'}
-            />
-          </View>
-        </View>
-
-        {/* VOICE INTERACTION */}
-        <View style={styles.section}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}>
+        {/* VOICE INTERRUPT */}
+        <View style={[styles.section, { marginTop: 24 }]}>
           <Text style={[styles.sectionTitle, { color: primaryText }]}>Voice Interaction</Text>
-
           <View style={[styles.settingRow, { backgroundColor: card, borderColor: border }]}>
             <View style={{ flex: 1, paddingRight: 12 }}>
               <Text style={[styles.settingTitle, { color: primaryText }]}>Voice Interrupt</Text>
               <Text style={[styles.settingDesc, { color: secondary }]}>
-                Interrupt the AI while it speaks. When off, AI finishes before listening.
+                When enabled, you can interrupt the AI while it speaks. When disabled, the AI finishes its response before listening.
               </Text>
             </View>
             <Switch
               value={voiceInterrupt}
               onValueChange={setVoiceInterrupt}
-              trackColor={{ false: darkMode ? '#3A3A3C' : '#D1D1D6', true: accent + '99' }}
-              thumbColor={voiceInterrupt ? accent : (darkMode ? '#AEAEB2' : '#FFFFFF')}
+              trackColor={{ false: isDark ? '#3A3A3C' : '#D1D1D6', true: accent + '99' }}
+              thumbColor={voiceInterrupt ? accent : (isDark ? '#AEAEB2' : '#FFFFFF')}
             />
           </View>
 
@@ -257,16 +208,16 @@ export default function VoiceSettingsScreen() {
             <Switch
               value={autoGreeting}
               onValueChange={setAutoGreeting}
-              trackColor={{ false: darkMode ? '#3A3A3C' : '#D1D1D6', true: accent + '99' }}
-              thumbColor={autoGreeting ? accent : (darkMode ? '#AEAEB2' : '#FFFFFF')}
+              trackColor={{ false: isDark ? '#3A3A3C' : '#D1D1D6', true: accent + '99' }}
+              thumbColor={autoGreeting ? accent : (isDark ? '#AEAEB2' : '#FFFFFF')}
             />
           </View>
         </View>
 
-        {/* SPEECH SPEED */}
+        {/* SPEECH RATE */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: primaryText }]}>Speech Speed</Text>
-          <View style={styles.rateRow}>
+          <View style={[styles.rateRow]}>
             {SPEECH_RATES.map((rate) => {
               const isSelected = speechRate === rate.id;
               return (
@@ -274,10 +225,8 @@ export default function VoiceSettingsScreen() {
                   key={rate.id}
                   style={[
                     styles.rateBtn,
-                    {
-                      backgroundColor: isSelected ? accent + '18' : card,
-                      borderColor: isSelected ? accent : border,
-                    },
+                    { backgroundColor: card, borderColor: isSelected ? accent : border },
+                    isSelected && { backgroundColor: accent + '18' },
                   ]}
                   onPress={() => setSpeechRate(rate.id)}
                   activeOpacity={0.75}
@@ -290,97 +239,75 @@ export default function VoiceSettingsScreen() {
           </View>
         </View>
 
-        {/* AI VOICE SELECTION */}
+        {/* VOICE SELECTION */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: primaryText }]}>AI Voice</Text>
           <Text style={[styles.sectionDesc, { color: secondary }]}>
-            Tap the play button to preview. Selected voice is used during conversation.
+            Tap the play button to preview. The selected voice is used during your conversation.
           </Text>
 
           {AI_VOICES.map((voice) => {
             const isSelected = selectedVoice === voice.id;
             const isPlaying = playingVoice === voice.id;
-
             return (
               <TouchableOpacity
                 key={voice.id}
                 style={[
                   styles.voiceCard,
                   {
-                    backgroundColor: isSelected ? (darkMode ? accent + '15' : accent + '08') : card,
+                    backgroundColor: card,
                     borderColor: isSelected ? accent : border,
                   },
+                  isSelected && { backgroundColor: accent + '10' },
                 ]}
                 onPress={() => setSelectedVoice(voice.id)}
                 activeOpacity={0.8}
               >
-                {/* Avatar image */}
-                <View style={[styles.avatarWrap, { borderColor: isSelected ? accent : 'transparent' }]}>
-                  <Image
-                    source={VOICE_IMAGES[voice.id]}
-                    style={styles.avatarImg}
-                    contentFit="cover"
-                    transition={200}
+                {/* Left: icon */}
+                <View style={[styles.voiceIcon, { backgroundColor: isSelected ? accent + '22' : (isDark ? '#2C2C2E' : '#F2F2F7') }]}>
+                  <Ionicons
+                    name={voice.icon as any}
+                    size={24}
+                    color={isSelected ? accent : secondary}
                   />
-                  {/* Gender badge */}
-                  <View style={[
-                    styles.genderBadge,
-                    { backgroundColor: voice.gender === 'male' ? '#007AFF' : '#FF2D55' },
-                  ]}>
-                    <Ionicons
-                      name={voice.gender === 'male' ? 'male' : 'female'}
-                      size={8}
-                      color="#FFF"
-                    />
-                  </View>
                 </View>
 
-                {/* Info */}
-                <View style={{ flex: 1, marginLeft: 12 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                {/* Middle: info */}
+                <View style={{ flex: 1 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                     <Text style={[styles.voiceName, { color: primaryText }]}>{voice.name}</Text>
-                    <View style={[styles.accentTag, { backgroundColor: voice.color + '22' }]}>
-                      <Text style={[styles.accentText, { color: voice.color }]}>{voice.accent}</Text>
+                    <View style={[styles.genderTag, { backgroundColor: voice.gender === 'male' ? '#007AFF22' : '#FF2D5522' }]}>
+                      <Text style={[styles.genderText, { color: voice.gender === 'male' ? '#007AFF' : '#FF2D55' }]}>
+                        {voice.gender}
+                      </Text>
                     </View>
                   </View>
                   <Text style={[styles.voiceDesc, { color: secondary }]}>{voice.description}</Text>
                 </View>
 
-                {/* Controls */}
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                {/* Right: play + selected */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                   {isSelected ? (
                     <View style={[styles.checkCircle, { backgroundColor: accent }]}>
-                      <Ionicons name="checkmark" size={12} color="#FFF" />
+                      <Ionicons name="checkmark" size={14} color="#FFF" />
                     </View>
                   ) : null}
                   <TouchableOpacity
-                    style={[styles.playBtn, { backgroundColor: isSelected ? accent + '22' : surface }]}
+                    style={styles.playBtn}
                     onPress={() => playVoicePreview(voice.id, voice.previewText)}
-                    disabled={playingVoice !== null && playingVoice !== voice.id}
+                    disabled={playingVoice !== null}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   >
                     {isPlaying ? (
                       <ActivityIndicator size="small" color={accent} />
                     ) : (
-                      <Ionicons
-                        name="play"
-                        size={16}
-                        color={isSelected ? accent : secondary}
-                      />
+                      <Ionicons name="play-circle" size={34} color={isSelected ? accent : secondary} />
                     )}
                   </TouchableOpacity>
                 </View>
               </TouchableOpacity>
             );
           })}
-        </View>
-
-        {/* BOTTOM INFO */}
-        <View style={[styles.infoCard, { backgroundColor: card, borderColor: border, marginHorizontal: 16, marginTop: 8 }]}>
-          <Ionicons name="information-circle-outline" size={18} color={accent} />
-          <Text style={[styles.infoText, { color: secondary }]}>
-            Voice is powered by real AI TTS. Preview plays a short sample in that voice. Your selected voice is used in every voice call.
-          </Text>
         </View>
       </ScrollView>
     </View>
@@ -443,19 +370,11 @@ const styles = StyleSheet.create({
   settingTitle: {
     fontSize: 16,
     fontWeight: '600',
-    marginBottom: 3,
+    marginBottom: 4,
   },
   settingDesc: {
     fontSize: 13,
     lineHeight: 18,
-  },
-  modeIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   rateRow: {
     flexDirection: 'row',
@@ -480,78 +399,46 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     padding: 14,
-    borderRadius: 18,
+    borderRadius: 16,
     borderWidth: 1.5,
     marginBottom: 10,
+    gap: 12,
   },
-  avatarWrap: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    borderWidth: 2,
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  avatarImg: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-  },
-  genderBadge: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: 16,
-    height: 16,
-    borderRadius: 8,
+  voiceIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: '#FFF',
   },
   voiceName: {
     fontSize: 15,
     fontWeight: '700',
   },
   voiceDesc: {
-    fontSize: 12,
-    lineHeight: 17,
+    fontSize: 13,
+    marginTop: 2,
   },
-  accentTag: {
-    paddingHorizontal: 7,
+  genderTag: {
+    paddingHorizontal: 8,
     paddingVertical: 2,
-    borderRadius: 8,
+    borderRadius: 10,
   },
-  accentText: {
-    fontSize: 10,
-    fontWeight: '700',
+  genderText: {
+    fontSize: 11,
+    fontWeight: '600',
   },
   checkCircle: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
   },
   playBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  infoCard: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-    padding: 14,
-    borderRadius: 14,
-    borderWidth: StyleSheet.hairlineWidth,
-    marginBottom: 8,
-  },
-  infoText: {
-    flex: 1,
-    fontSize: 13,
-    lineHeight: 19,
+    width: 40,
+    height: 40,
   },
 });
