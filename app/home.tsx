@@ -1393,12 +1393,12 @@ export default function HomeScreen() {
     blurContent: { alignItems: 'center', justifyContent: 'center' },
     blurText: { fontSize: 24, fontWeight: 'bold', color: 'white', marginTop: 16 },
     messagesContainer: { flex: 1 },
-    inputContainer: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingBottom: Platform.select({ ios: insets.bottom + 8, android: insets.bottom + 8, default: 8 }), paddingTop: 8, gap: 8, backgroundColor: colors.background },
+    inputContainer: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingBottom: Platform.select({ ios: insets.bottom + 8, android: insets.bottom + 8, default: 8 }), paddingTop: 8, gap: 8, backgroundColor: Platform.OS === 'ios' ? 'transparent' : colors.background },
     inputWrapper: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? '#1C1C1E' : '#F2F2F7', borderRadius: 26, paddingHorizontal: 16, minHeight: 48, maxHeight: 120, gap: 8 },
     input: { flex: 1, fontSize: 16, color: colors.text, paddingVertical: 12, maxHeight: 100 },
     recordingContainer: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8 },
     recordingDuration: { color: '#FF3B30', fontSize: 13, fontWeight: '600', minWidth: 36 },
-    addBtn: { width: 42, height: 42, borderRadius: 21, backgroundColor: isDark ? '#1C1C1E' : '#F2F2F7', alignItems: 'center', justifyContent: 'center' },
+    addBtn: { width: 42, height: 42, borderRadius: 21, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
     micBtn: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
     sendButton: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
     stopButton: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#FF3B30', alignItems: 'center', justifyContent: 'center' },
@@ -1675,9 +1675,17 @@ export default function HomeScreen() {
               ) : null}
 
               {/* Input Area */}
-              <View style={styles.inputContainer}>
+              <View style={[styles.inputContainer, Platform.OS === 'ios' && { backgroundColor: 'transparent' }]}>
                 <TouchableOpacity style={styles.addBtn} onPress={() => setToolsVisible(true)} disabled={editingMessageId !== null || isRecording || isProcessing}>
-                  <Ionicons name="add" size={24} color={editingMessageId || isRecording || isProcessing ? colors.textSecondary : colors.text} />
+                  {Platform.OS === 'ios' ? (
+                    <BlurView intensity={60} tint={isDark ? 'dark' : 'light'} style={{ width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' }}>
+                      <Ionicons name="add" size={24} color={editingMessageId || isRecording || isProcessing ? colors.textSecondary : colors.text} />
+                    </BlurView>
+                  ) : (
+                    <View style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: isDark ? '#1C1C1E' : '#F2F2F7', alignItems: 'center', justifyContent: 'center' }}>
+                      <Ionicons name="add" size={24} color={editingMessageId || isRecording || isProcessing ? colors.textSecondary : colors.text} />
+                    </View>
+                  )}
                 </TouchableOpacity>
 
                 <View style={styles.inputWrapper}>
@@ -2065,5 +2073,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-fix inout tex message in home page in blur mode like this photo https://files.catbox.moe/1dthyz.jpeg and the + button must be blur in ios device better smooth fix bug fix lag in home page.
-	
+
