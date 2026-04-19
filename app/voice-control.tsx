@@ -920,3 +920,4 @@ const styles = StyleSheet.create({
 });
 
 export { CallEndedBanner };
+When the keyboard is open and you tap anywhere on the screen, the keyboard should close.
