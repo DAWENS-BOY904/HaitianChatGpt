@@ -2065,5 +2065,10 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-
+Hello, please make a small change and fix some issues on the home page:
+	•	Fix the bug where messages that are too long don’t display properly.
+	•	Fix the layout when a code block appears so it renders correctly.
+	•	Improve the AI streaming behavior: the latest response should stay visible at the bottom while it’s generating.
+	•	When a new message is sent, the previous message should move up automatically, without needing to scroll manually.
+	•	The new message should take the correct position smoothly, replacing the previous one’s spot in the flow fix side menu switch left its to sensible.
 
