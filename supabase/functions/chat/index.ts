@@ -629,29 +629,24 @@ IMPORTANT:
 
     // ── strip any JSON action blobs the model might generate ──
     function cleanJsonActions(text: string): string {
-      // Remove {"action":...} blobs the LLM sometimes returns instead of content
       return text
         .replace(/\{\s*"action"\s*:\s*"[^"]+"[^}]*\}/g, '')
         .replace(/```json[\s\S]*?```/g, '')
         .trim();
     }
 
+    // ── STRICT IMAGE TASK HANDLER ──────────────────────────────────────────────
+    // Always generate a real image — NEVER return raw JSON action blobs
     if (detectionResult.isImageTask) {
-      console.log('[chat] Image task detected, generating image for prompt:', lastContent.slice(0, 80));
+      console.log('[chat] Image task detected, generating image for prompt:', lastContent.slice(0, 120));
+
+      // Try all image providers in order
       const imageResult = await generateImageSmart(lastContent, aiModel);
-      if (imageResult.error || !imageResult.imageUrl) {
-        console.log('[chat] Image generation failed, retrying with dalle:', imageResult.error);
-        // Final retry: try dalle directly
-        const { generateImageWithDalle } = await import('../_shared/ai-providers.ts').catch(() => ({ generateImageWithDalle: null }));
-        // We already tried all providers in generateImageSmart, give friendly message
-        aiResponse = {
-          content: 'I was unable to generate the image at this time. Please try again in a moment — image generation can sometimes be temporarily unavailable.',
-          model: 'fallback',
-          tokens: 0,
-        };
-        imageUrl = undefined;
-      } else {
+
+      if (imageResult.imageUrl) {
         let resolvedImageUrl = imageResult.imageUrl;
+
+        // Upload base64 data URLs to storage so client gets a real HTTPS URL
         if (resolvedImageUrl.startsWith('data:image/')) {
           try {
             const matches = resolvedImageUrl.match(/^data:(image\/[a-z+]+);base64,(.+)$/);
@@ -679,15 +674,41 @@ IMPORTANT:
             console.error('[chat] Failed to upload base64 image:', uploadErr);
           }
         }
+
         imageUrl = resolvedImageUrl;
         aiResponse = {
-          content: 'Here is your generated image! 🎨\n\nLet me know if you would like any changes to the style, colors, or composition.',
+          content: 'Here is your generated image! ✨\n\nLet me know if you would like any adjustments to the style, colors, or composition.',
           model: imageResult.model,
           tokens: 0,
         };
+      } else {
+        // All image providers failed — generate a descriptive text response instead of raw JSON
+        console.log('[chat] All image providers failed:', imageResult.error);
+        aiResponse = await callAI(aiModel, [
+          ...aiMessages,
+          {
+            role: 'system',
+            content: 'The image generation service is temporarily unavailable. Apologize briefly and describe in detail what the requested image would look like. Do NOT return JSON. Do NOT use action tags. Just write a helpful text response.',
+          }
+        ], false);
+        // Ensure we never leak JSON to the client
+        if (aiResponse?.content) {
+          aiResponse.content = cleanJsonActions(aiResponse.content);
+          if (!aiResponse.content || aiResponse.content.length < 10) {
+            aiResponse.content = 'I could not generate the image right now. Please try again in a moment — the image service is temporarily unavailable.';
+          }
+        }
       }
     } else {
       aiResponse = await callAI(aiModel, aiMessages, false);
+      // Safety: strip any JSON action blobs that leaked through from text model
+      if (aiResponse?.content) {
+        const cleaned = cleanJsonActions(aiResponse.content);
+        if (cleaned !== aiResponse.content) {
+          console.log('[chat] Stripped JSON action blob from AI response');
+          aiResponse.content = cleaned || aiResponse.content;
+        }
+      }
     }
 
     if (!aiResponse || aiResponse.error) {
