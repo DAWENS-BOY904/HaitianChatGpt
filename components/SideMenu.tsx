@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { getSupabaseClient } from '@/template';
 import {
@@ -54,6 +53,7 @@ interface SideMenuProps {
   userCoins?: number;
   isUnlimited?: boolean;
   isAdmin?: boolean;
+  isGuest?: boolean;
 }
 
 interface ConvActionMenuProps {
@@ -63,7 +63,7 @@ interface ConvActionMenuProps {
   onAction: (action: 'share' | 'pin' | 'rename' | 'archive' | 'delete') => void;
 }
 
-// ── Conversation Action Mini-Menu (Photo 1 style) ──
+// ── Conversation Action Mini-Menu ──
 function ConvActionMenu({ visible, conv, onClose, onAction }: ConvActionMenuProps) {
   const { isDark } = useTheme();
   const fadeAnim = useSharedValue(0);
@@ -99,7 +99,6 @@ function ConvActionMenu({ visible, conv, onClose, onAction }: ConvActionMenuProp
       <TouchableOpacity style={cmStyles.backdrop} activeOpacity={1} onPress={onClose}>
         <Animated.View style={[cmStyles.menuWrap, animStyle]}>
           <BlurView intensity={85} tint="dark" style={cmStyles.blurBox}>
-            {/* Chat title preview */}
             <View style={cmStyles.titleRow}>
               <Text style={cmStyles.titleText} numberOfLines={1}>{conv.title || 'New chat'}</Text>
             </View>
@@ -263,6 +262,7 @@ export function SideMenu({
   userCoins = 0,
   isUnlimited = false,
   isAdmin = false,
+  isGuest = false,
 }: SideMenuProps) {
   const { colors, isDark } = useTheme();
   const { settings } = useSettings();
@@ -279,7 +279,7 @@ export function SideMenu({
   const insets = useSafeAreaInsets();
   const supabase = getSupabaseClient();
 
-  const handleQuickAction = (action: { id: string; route?: string; }) => { // Added type for action
+  const handleQuickAction = (action: { id: string; route?: string; }) => {
     if (action.id === 'upgrade') { onClose(); router.push('/subscription'); return; }
     if (action.route) { onClose(); router.push(action.route); }
   };
@@ -288,7 +288,6 @@ export function SideMenu({
   const [searchActive, setSearchActive] = useState(false);
   const [profilePhotoUrl, setProfilePhotoUrl] = useState<string | null>(null);
 
-  // Conv action menu state
   const [actionMenuConv, setActionMenuConv] = useState<{ id: string; title: string; isPinned?: boolean } | null>(null);
   const [actionMenuVisible, setActionMenuVisible] = useState(false);
   const [renameVisible, setRenameVisible] = useState(false);
@@ -300,7 +299,6 @@ export function SideMenu({
       .then(({ data }) => { if (data?.profile_photo_url) setProfilePhotoUrl(data.profile_photo_url); });
   }, [user?.id]);
 
-  // Load pinned state from db
   useEffect(() => {
     if (!user?.id) return;
     supabase.from('conversations').select('id, is_pinned').eq('user_id', user.id).eq('is_pinned', true)
@@ -347,20 +345,17 @@ export function SideMenu({
       }
     });
 
-  // Sort: pinned first, then rest
   const sortedConversations = [...conversations].sort((a, b) => {
     const aPinned = pinnedIds.has(a.id) ? 1 : 0;
     const bPinned = pinnedIds.has(b.id) ? 1 : 0;
     return bPinned - aPinned;
   });
 
-  // Use searchConversations from context when available
   const { searchConversations } = useConversation();
   const filteredConversations = searchQuery.trim()
     ? searchConversations(searchQuery)
     : sortedConversations;
 
-  // Highlight matching text in conversation title
   const renderConvTitle = (title: string) => {
     if (!searchQuery.trim()) return <Text style={[styles.convTitle, { color: colors.text }]} numberOfLines={1}>{title || 'New conversation'}</Text>;
     const lowerTitle = (title || '').toLowerCase();
@@ -399,9 +394,7 @@ export function SideMenu({
     const conv = actionMenuConv;
 
     if (action === 'share') {
-      try {
-        await Share.share({ message: `Check out this conversation: ${conv.title}` });
-      } catch (e) { }
+      try { await Share.share({ message: `Check out this conversation: ${conv.title}` }); } catch (e) {}
       return;
     }
     if (action === 'pin') {
@@ -414,22 +407,12 @@ export function SideMenu({
       });
       return;
     }
-    if (action === 'rename') {
-      setRenameVisible(true);
-      return;
-    }
-    if (action === 'archive') {
-      await archiveConversation(conv.id);
-      return;
-    }
+    if (action === 'rename') { setRenameVisible(true); return; }
+    if (action === 'archive') { await archiveConversation(conv.id); return; }
     if (action === 'delete') {
       Alert.alert('Delete Chat', 'This will permanently delete this chat.', [
         { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete', style: 'destructive', onPress: async () => {
-            await deleteConversation(conv.id);
-          }
-        },
+        { text: 'Delete', style: 'destructive', onPress: async () => { await deleteConversation(conv.id); } },
       ]);
     }
   };
@@ -440,6 +423,76 @@ export function SideMenu({
     await updateConversationTitle(actionMenuConv.id, title);
     setActionMenuConv(prev => prev ? { ...prev, title } : null);
   };
+
+  // ── GUEST MODE: simplified side menu (Photo 5 style) ──
+  if (isGuest) {
+    return (
+      <>
+        <Animated.View
+          style={[styles.overlay, overlayStyle]}
+          pointerEvents={visible ? 'auto' : 'none'}
+        >
+          <Pressable style={{ flex: 1 }} onPress={onClose} />
+        </Animated.View>
+
+        <GestureDetector gesture={panGesture}>
+          <Animated.View
+            style={[
+              styles.drawer,
+              {
+                backgroundColor: '#000000',
+                paddingTop: insets.top + (Platform.OS === 'android' ? StatusBar.currentHeight || 0 : 0),
+              },
+              containerStyle,
+            ]}
+          >
+            {/* Guest header */}
+            <View style={styles.topHeader}>
+              <TouchableOpacity
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}
+                onPress={() => { onClose(); onNewChat(); }}
+              >
+                <Ionicons name="create-outline" size={22} color="#FFFFFF" />
+                <Text style={{ color: '#FFFFFF', fontSize: 17, fontWeight: '600' }}>New chat</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={[styles.divider, { backgroundColor: 'rgba(255,255,255,0.1)' }]} />
+
+            {/* Guest menu items */}
+            <View style={{ flex: 1, paddingHorizontal: 20, paddingTop: 8 }}>
+              {[
+                { label: 'Terms of Use', route: '/terms-of-use' },
+                { label: 'Privacy Policy', route: '/privacy-policy' },
+                { label: 'Settings', route: '/settings' },
+              ].map((item) => (
+                <TouchableOpacity
+                  key={item.label}
+                  style={{ paddingVertical: 18 }}
+                  onPress={() => { onClose(); router.push(item.route as any); }}
+                >
+                  <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 17 }}>{item.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Bottom sign-up CTA */}
+            <View style={{ paddingHorizontal: 16, paddingBottom: insets.bottom + 24 }}>
+              <Text style={{ color: 'rgba(255,255,255,0.45)', fontSize: 14, textAlign: 'center', marginBottom: 14 }}>
+                Save your chat history, share chats, and personalize your experience.
+              </Text>
+              <TouchableOpacity
+                style={{ backgroundColor: '#FFFFFF', borderRadius: 50, paddingVertical: 16, alignItems: 'center' }}
+                onPress={() => { onClose(); router.push('/login'); }}
+              >
+                <Text style={{ color: '#000000', fontSize: 17, fontWeight: '700' }}>Sign up or log in</Text>
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
+        </GestureDetector>
+      </>
+    );
+  }
 
   return (
     <>
@@ -519,7 +572,7 @@ export function SideMenu({
                   style={[
                     styles.quickActionBtn,
                     { backgroundColor: isDark ? '#1C1C1E' : '#F2F2F7' },
-                    qa.isUpgrade && { borderColor: qa.color, borderWidth: 1 }, // Changed (qa as any).isUpgrade to qa.isUpgrade
+                    qa.isUpgrade && { borderColor: qa.color, borderWidth: 1 },
                   ]}
                   activeOpacity={0.7}
                   onPress={() => handleQuickAction(qa)}
@@ -527,9 +580,9 @@ export function SideMenu({
                   <Ionicons
                     name={qa.icon as any}
                     size={26}
-                    color={qa.isUpgrade ? qa.color : colors.text} // Changed (qa as any).isUpgrade to qa.isUpgrade
+                    color={qa.isUpgrade ? qa.color : colors.text}
                   />
-                  <Text style={[styles.quickActionLabel, { color: qa.isUpgrade ? qa.color : colors.text }]}> {/* Changed (qa as any).isUpgrade to qa.isUpgrade */}
+                  <Text style={[styles.quickActionLabel, { color: qa.isUpgrade ? qa.color : colors.text }]}>
                     {qa.label}
                   </Text>
                 </TouchableOpacity>
@@ -570,12 +623,9 @@ export function SideMenu({
                     delayLongPress={400}
                   >
                     <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                      {isPinned && (
-                        <Ionicons name="pin" size={12} color={accentColor} />
-                      )}
+                      {isPinned && <Ionicons name="pin" size={12} color={accentColor} />}
                       {renderConvTitle(conv.title || 'New conversation')}
                     </View>
-                    {/* No ... button — use long press only */}
                   </TouchableOpacity>
                 );
               })

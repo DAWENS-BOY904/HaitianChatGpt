@@ -13,6 +13,7 @@ import {
   Share,
   Platform,
   Animated,
+  TextInput,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,6 +21,7 @@ import * as Clipboard from 'expo-clipboard';
 import * as FileSystem from 'expo-file-system';
 import * as MediaLibrary from 'expo-media-library';
 import * as Sharing from 'expo-sharing';
+import { BlurView } from 'expo-blur';
 import { useTheme } from '../hooks/useTheme';
 import { useAuth, useAlert } from '@/template';
 import { router } from 'expo-router';
@@ -378,6 +380,128 @@ function renderInlineMarkdown(text: string, baseStyle: any, colors: any): React.
   return parts.length > 0 ? parts : text;
 }
 
+// ── Format timestamp ──
+function formatMessageTime(dateStr: string): string {
+  try {
+    const d = new Date(dateStr);
+    const now = new Date();
+    const isToday = d.toDateString() === now.toDateString();
+    const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    if (isToday) return `Today, ${timeStr}`;
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    if (d.toDateString() === yesterday.toDateString()) return `Yesterday, ${timeStr}`;
+    return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ', ' + timeStr;
+  } catch {
+    return '';
+  }
+}
+
+// ── Blur Context Menu (like Photo 1) ──
+const BlurContextMenu = memo(function BlurContextMenu({
+  visible,
+  timeLabel,
+  items,
+  onClose,
+}: {
+  visible: boolean;
+  timeLabel: string;
+  items: Array<{ icon: string; label: string; onPress: () => void; destructive?: boolean }>;
+  onClose: () => void;
+}) {
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.85)).current;
+
+  useEffect(() => {
+    if (visible) {
+      Animated.parallel([
+        Animated.timing(fadeAnim, { toValue: 1, duration: 180, useNativeDriver: true }),
+        Animated.spring(scaleAnim, { toValue: 1, tension: 280, friction: 22, useNativeDriver: true }),
+      ]).start();
+    } else {
+      Animated.parallel([
+        Animated.timing(fadeAnim, { toValue: 0, duration: 120, useNativeDriver: true }),
+        Animated.timing(scaleAnim, { toValue: 0.85, duration: 120, useNativeDriver: true }),
+      ]).start();
+    }
+  }, [visible]);
+
+  if (!visible) return null;
+
+  return (
+    <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
+      <Pressable style={ctxStyles.backdrop} onPress={onClose}>
+        <Animated.View style={[ctxStyles.menuWrap, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}>
+          <BlurView intensity={85} tint="dark" style={ctxStyles.blurBox}>
+            {timeLabel ? (
+              <View style={ctxStyles.timeRow}>
+                <Text style={ctxStyles.timeText}>{timeLabel}</Text>
+              </View>
+            ) : null}
+            {items.map((item, i) => (
+              <TouchableOpacity
+                key={item.label}
+                style={[ctxStyles.menuItem, i > 0 && ctxStyles.menuItemBorder]}
+                activeOpacity={0.65}
+                onPress={() => { onClose(); setTimeout(item.onPress, 60); }}
+              >
+                <Text style={[ctxStyles.menuLabel, item.destructive && ctxStyles.destructiveLabel]}>{item.label}</Text>
+                <Ionicons name={item.icon as any} size={22} color={item.destructive ? '#FF453A' : 'rgba(255,255,255,0.85)'} />
+              </TouchableOpacity>
+            ))}
+          </BlurView>
+        </Animated.View>
+      </Pressable>
+    </Modal>
+  );
+});
+
+const ctxStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  menuWrap: {
+    width: 260,
+    borderRadius: 18,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.45,
+    shadowRadius: 24,
+    elevation: 24,
+  },
+  blurBox: { borderRadius: 18, overflow: 'hidden' },
+  timeRow: {
+    paddingHorizontal: 18,
+    paddingTop: 14,
+    paddingBottom: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(255,255,255,0.1)',
+  },
+  timeText: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 13,
+    textAlign: 'center',
+    fontWeight: '500',
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 18,
+    paddingVertical: 15,
+  },
+  menuItemBorder: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(255,255,255,0.08)',
+  },
+  menuLabel: { fontSize: 17, color: 'rgba(255,255,255,0.92)', fontWeight: '400' },
+  destructiveLabel: { color: '#FF453A' },
+});
+
 export const MessageItem = memo(function MessageItem({
   message,
   onCancel,
@@ -389,7 +513,7 @@ export const MessageItem = memo(function MessageItem({
   streamingSpeed = 50,
   isOffline = false,
 }: MessageItemProps) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const { user } = useAuth();
   const { showAlert } = useAlert();
   const supabase = getSupabaseClient();
@@ -397,7 +521,6 @@ export const MessageItem = memo(function MessageItem({
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [showActionsModal, setShowActionsModal] = useState(false);
   const [showSelectTextModal, setShowSelectTextModal] = useState(false);
-  const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
   const [liked, setLiked] = useState<'like' | 'dislike' | null>(null);
   const [analysisVisible, setAnalysisVisible] = useState(false);
   const [selectedLink, setSelectedLink] = useState('');
@@ -408,7 +531,7 @@ export const MessageItem = memo(function MessageItem({
   });
   const [downloadingImage, setDownloadingImage] = useState(false);
 
-  // ── Entrance animation: slide-up + fade-in ──
+  // ── Entrance animation ──
   const entranceOpacity = useRef(new Animated.Value(0)).current;
   const entranceTranslateY = useRef(new Animated.Value(16)).current;
   useEffect(() => {
@@ -444,9 +567,7 @@ export const MessageItem = memo(function MessageItem({
     }
   }, [showAlert]);
 
-  const handleLongPress = useCallback((event: any) => {
-    const { pageX, pageY } = event.nativeEvent;
-    setMenuPosition({ x: Math.min(pageX, SCREEN_WIDTH - 200), y: Math.max(pageY - 120, 60) });
+  const handleLongPress = useCallback(() => {
     setShowContextMenu(true);
   }, []);
 
@@ -577,6 +698,24 @@ export const MessageItem = memo(function MessageItem({
     [streaming, isGenerating, message.role]
   );
 
+  // Build context menu items based on message role
+  const contextMenuItems = useMemo(() => {
+    const items: Array<{ icon: string; label: string; onPress: () => void; destructive?: boolean }> = [];
+    items.push({ icon: 'copy-outline', label: 'Copy', onPress: handleCopy });
+    if (message.role === 'user' && onEdit) {
+      items.push({ icon: 'pencil-outline', label: 'Edit', onPress: handleEdit });
+    }
+    if (message.role === 'assistant') {
+      items.push({
+        icon: 'text-outline', label: 'Select Text', onPress: () => {
+          setShowContextMenu(false);
+          setTimeout(() => setShowSelectTextModal(true), 100);
+        }
+      });
+    }
+    return items;
+  }, [message.role, onEdit, handleCopy, handleEdit]);
+
   const imgCardStyles = useMemo(() => StyleSheet.create({
     cardWrap: { marginTop: 4, marginBottom: 4 },
     label: {
@@ -700,28 +839,6 @@ export const MessageItem = memo(function MessageItem({
       backgroundColor: message.role === 'user' ? 'rgba(255,255,255,0.15)' : colors.background,
     },
     actionButtonActive: { backgroundColor: colors.primary },
-    contextMenuOverlay: { flex: 1, backgroundColor: 'transparent' },
-    contextMenu: {
-      position: 'absolute',
-      backgroundColor: colors.card,
-      borderRadius: BorderRadius.lg,
-      padding: Spacing.xs,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 8 },
-      shadowOpacity: 0.25,
-      shadowRadius: 12,
-      elevation: 10,
-      minWidth: 140,
-    },
-    contextMenuItem: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: Spacing.sm,
-      paddingVertical: Spacing.sm,
-      paddingHorizontal: Spacing.md,
-      borderRadius: BorderRadius.sm,
-    },
-    contextMenuText: { ...Typography.body, color: colors.text, fontSize: 15 },
     linkText: {
       color: message.role === 'user' ? '#FFFFFF' : colors.primary,
       textDecorationLine: 'underline',
@@ -736,13 +853,14 @@ export const MessageItem = memo(function MessageItem({
   }), [colors, message.role]);
 
   const isStreaming = streaming && isGenerating && message.role === 'assistant';
+  const timeLabel = formatMessageTime(message.created_at);
 
   return (
     <>
-      {/* ── Slide-up + fade-in entrance wrapper ── */}
       <Animated.View style={{ opacity: entranceOpacity, transform: [{ translateY: entranceTranslateY }] }}>
         <Pressable
           onLongPress={handleLongPress}
+          delayLongPress={350}
           style={[
             styles.container,
             message.role === 'user' ? styles.userMessage : styles.assistantMessage,
@@ -764,7 +882,7 @@ export const MessageItem = memo(function MessageItem({
             </TouchableOpacity>
           )}
 
-          {/* AI Generated Image — clean card with "Image created" label */}
+          {/* AI Generated Image */}
           {hasGeneratedImage && message.role === 'assistant' && (
             <View style={imgCardStyles.cardWrap}>
               <Text style={imgCardStyles.label}>Image created</Text>
@@ -843,7 +961,7 @@ export const MessageItem = memo(function MessageItem({
                   return (
                     <Text
                       key={`seg-${si}`}
-                      selectable
+                      selectable={message.role === 'assistant'}
                       style={[
                         styles.messageText,
                         message.role === 'user' ? styles.userMessageText : styles.assistantMessageText,
@@ -863,7 +981,6 @@ export const MessageItem = memo(function MessageItem({
                         }
                         return <Text key={`txt-${textIndex}`}>{textPart.content}</Text>;
                       })}
-                      {/* Blinking cursor on last segment while streaming */}
                       {isStreaming && isLastPart && si === textSegments.length - 1 ? (
                         <BlinkingCursor color={colors.textSecondary} />
                       ) : null}
@@ -969,44 +1086,15 @@ export const MessageItem = memo(function MessageItem({
         />
       )}
 
-      {/* Context Menu Modal */}
-      <Modal
+      {/* ── Blur Context Menu (Photo 1 style) ── */}
+      <BlurContextMenu
         visible={showContextMenu}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowContextMenu(false)}
-      >
-        <Pressable style={styles.contextMenuOverlay} onPress={() => setShowContextMenu(false)}>
-          <View style={[styles.contextMenu, { top: menuPosition.y, left: menuPosition.x }]}>
-            <TouchableOpacity style={styles.contextMenuItem} onPress={handleCopy}>
-              <Ionicons name="copy-outline" size={20} color={colors.text} />
-              <Text style={styles.contextMenuText}>Copy All</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.contextMenuItem}
-              onPress={() => { setShowContextMenu(false); setShowSelectTextModal(true); }}
-            >
-              <Ionicons name="text" size={20} color={colors.text} />
-              <Text style={styles.contextMenuText}>Select Text</Text>
-            </TouchableOpacity>
-            {message.role === 'user' && onEdit && (
-              <TouchableOpacity style={styles.contextMenuItem} onPress={handleEdit}>
-                <Ionicons name="pencil-outline" size={20} color={colors.text} />
-                <Text style={styles.contextMenuText}>Edit</Text>
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity
-              style={styles.contextMenuItem}
-              onPress={() => { setShowContextMenu(false); setShowActionsModal(true); }}
-            >
-              <Ionicons name="share-outline" size={20} color={colors.text} />
-              <Text style={styles.contextMenuText}>More</Text>
-            </TouchableOpacity>
-          </View>
-        </Pressable>
-      </Modal>
+        timeLabel={timeLabel}
+        items={contextMenuItems}
+        onClose={() => setShowContextMenu(false)}
+      />
 
-      {/* Select Text Modal */}
+      {/* Select Text Modal — AI messages (native selectable, Photo 3 style) */}
       <Modal
         visible={showSelectTextModal}
         transparent={false}
