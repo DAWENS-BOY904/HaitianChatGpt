@@ -386,7 +386,7 @@ export default function VoiceControlScreen() {
       });
       // Use a real phone ringing sound
       const { sound } = await Audio.Sound.createAsync(
-        { uri: 'https://cdn.pixabay.com/audio/2025/07/30/audio_a4cedca394.mp3?filename=dragon-studio-phone-ringing-382734.mp3' },
+        { uri: 'https://www.soundjay.com/phone/sounds/phone-ringing-1.mp3' },
         { shouldPlay: true, isLooping: true, volume: 0.85 }
       );
       ringSoundRef.current = sound;
