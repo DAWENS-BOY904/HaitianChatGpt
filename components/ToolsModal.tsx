@@ -30,6 +30,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { useRouter } from 'expo-router';
 import { useEffect } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -45,7 +46,7 @@ interface ToolsModalProps {
   onOpenPresets?: () => void;
 }
 
-// Light theme matching reference screenshots
+// Light theme matching reference screenshots — will be overridden by theme-aware styles at render
 const THEME = {
   bg: '#F2F2F7',
   surface: '#FFFFFF',
@@ -67,6 +68,8 @@ export function ToolsModal({
   onOpenPresets,
 }: ToolsModalProps) {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { isDark } = useTheme();
   const [showWebOptions, setShowWebOptions] = useState(false);
   const [webMode, setWebMode] = useState<'auto' | 'off'>('auto');
   const [loading, setLoading] = useState<string | null>(null);
@@ -237,12 +240,19 @@ export function ToolsModal({
     <Modal visible={visible} transparent animationType="none" statusBarTranslucent onRequestClose={onClose}>
       <View style={{ flex: 1, justifyContent: 'flex-end' }}>
         <Animated.View style={[StyleSheet.absoluteFill, backdropStyle]}>
-          <BlurView intensity={12} tint="dark" style={StyleSheet.absoluteFill} />
+          <BlurView intensity={12} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
           <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onClose} />
         </Animated.View>
 
         <GestureDetector gesture={pan}>
-          <Animated.View style={[styles.sheet, modalStyle]}>
+          <Animated.View style={[
+            styles.sheet,
+            {
+              backgroundColor: isDark ? '#1C1C1E' : THEME.bg,
+              shadowColor: '#000',
+            },
+            modalStyle,
+          ]}>
             <View style={styles.handleWrap}><View style={styles.handle} /></View>
 
             <ScrollView showsVerticalScrollIndicator={false} bounces={false} contentContainerStyle={styles.scrollContent}>
@@ -258,7 +268,10 @@ export function ToolsModal({
                       style={styles.cellWrap}
                     >
                       <TouchableOpacity
-                        style={styles.cell}
+                        style={[
+                          styles.cell,
+                          { backgroundColor: isDark ? '#2C2C2E' : THEME.surface },
+                        ]}
                         activeOpacity={0.7}
                         onPress={tool.action}
                         disabled={!!loading}
@@ -268,9 +281,9 @@ export function ToolsModal({
                         ) : (
                           <>
                             <View style={styles.iconWrap}>
-                              <Ionicons name={tool.icon as any} size={30} color={THEME.text} />
+                              <Ionicons name={tool.icon as any} size={30} color={isDark ? '#FFFFFF' : THEME.text} />
                             </View>
-                            <Text style={styles.cellLabel}>{tool.label}</Text>
+                            <Text style={[styles.cellLabel, { color: isDark ? '#FFFFFF' : THEME.text }]}>{tool.label}</Text>
                           </>
                         )}
                       </TouchableOpacity>
@@ -334,15 +347,18 @@ export function ToolsModal({
                 </Animated.View>
               )}
 
-              {/* Web Search + Professional Data rows (like WeChat reference) */}
-              <Animated.View entering={FadeInUp.delay(310).duration(300)} style={styles.rowsContainer}>
+              {/* Rows container (Web search + Professional data) */}
+              <Animated.View entering={FadeInUp.delay(310).duration(300)} style={[
+                styles.rowsContainer,
+                { backgroundColor: isDark ? '#2C2C2E' : THEME.surface },
+              ]}>
                 {/* Web search */}
                 <TouchableOpacity style={styles.rowItem} activeOpacity={0.7} onPress={() => setShowWebOptions(!showWebOptions)}>
                   <View style={styles.rowLeft}>
-                    <View style={styles.rowIconWrap}>
-                      <Ionicons name="globe-outline" size={20} color={THEME.text} />
+                    <View style={[styles.rowIconWrap, { backgroundColor: isDark ? '#3A3A3C' : '#F2F2F7' }]}>
+                      <Ionicons name="globe-outline" size={20} color={isDark ? '#FFFFFF' : THEME.text} />
                     </View>
-                    <Text style={styles.rowItemLabel}>Web search</Text>
+                    <Text style={[styles.rowItemLabel, { color: isDark ? '#FFFFFF' : THEME.text }]}>Web search</Text>
                   </View>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                     <Text style={styles.rowItemRight}>{webMode === 'auto' ? 'Auto' : 'Off'}</Text>
@@ -372,10 +388,10 @@ export function ToolsModal({
                 <TouchableOpacity style={styles.rowItem} activeOpacity={0.7}
                   onPress={() => { router.push('/data-controls'); onClose(); }}>
                   <View style={styles.rowLeft}>
-                    <View style={styles.rowIconWrap}>
-                      <Ionicons name="server-outline" size={20} color={THEME.text} />
+                    <View style={[styles.rowIconWrap, { backgroundColor: isDark ? '#3A3A3C' : '#F2F2F7' }]}>
+                      <Ionicons name="server-outline" size={20} color={isDark ? '#FFFFFF' : THEME.text} />
                     </View>
-                    <Text style={styles.rowItemLabel}>Professional Data</Text>
+                    <Text style={[styles.rowItemLabel, { color: isDark ? '#FFFFFF' : THEME.text }]}>Professional Data</Text>
                   </View>
                   <Ionicons name="chevron-forward" size={16} color="#C7C7CC" />
                 </TouchableOpacity>
@@ -395,8 +411,8 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     minHeight: SCREEN_HEIGHT * 0.44,
-    maxHeight: SCREEN_HEIGHT * 0.86,
-    paddingBottom: Platform.OS === 'ios' ? 36 : 20,
+    maxHeight: SCREEN_HEIGHT * 0.88,
+    paddingBottom: Platform.OS === 'ios' ? 44 : 24,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -4 },
     shadowOpacity: 0.1,
