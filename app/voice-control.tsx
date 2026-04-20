@@ -298,7 +298,6 @@ export default function VoiceControlScreen() {
   const [textModeOn, setTextModeOn] = useState(true);
   const [showTextModeToast, setShowTextModeToast] = useState(false);
   const [showKeyboard, setShowKeyboard] = useState(false);
-  const [voiceAndKeyboard, setVoiceAndKeyboard] = useState(false); // voice active while keyboard open
   const [userInput, setUserInput] = useState('');
   const [messages, setMessages] = useState<ConvMessage[]>([]);
   const [currentAIText, setCurrentAIText] = useState('');
@@ -717,7 +716,6 @@ export default function VoiceControlScreen() {
   }, [textModeOn]);
 
   // ─── SEND TEXT MESSAGE ────────────────────────────────────────────────────
-  // NOTE: Does NOT stop voice recording — voice and keyboard work simultaneously
   const handleSendText = useCallback(async () => {
     const text = userInput.trim();
     if (!text) return;
@@ -728,30 +726,26 @@ export default function VoiceControlScreen() {
     setUserInput('');
     const msg: ConvMessage = { role: 'user', content: text, timestamp: Date.now() };
     setMessages(prev => [...prev, msg]);
-    // Do NOT stop voice recording — let voice continue in parallel
+    if (isRecordingRef.current && recordingRef.current) {
+      try { await recordingRef.current.stopAndUnloadAsync(); } catch {}
+      recordingRef.current = null;
+      isRecordingRef.current = false;
+    }
+    setIsUserSpeaking(false);
     setIsAITyping(true);
     const contextMsgs = messages.slice(-6).map(m => ({ role: m.role, content: m.content }));
-    try {
-      const { data: aiData } = await supabase.functions.invoke('chat', {
-        body: {
-          messages: [...contextMsgs, { role: 'user', content: text }],
-          conversationId: callConversationId || `voice-${Date.now()}`,
-          model: 'gemini',
-        },
-      });
-      setIsAITyping(false);
-      const aiReply = aiData?.message || aiData?.content || "Sorry, I could not process that. Please try again.";
-      const aiMsg: ConvMessage = { role: 'assistant', content: aiReply, timestamp: Date.now() };
-      setMessages(prev => [...prev, aiMsg]);
-      // Only speak if voice is not already recording to avoid audio collision
-      if (!isRecordingRef.current) {
-        await speakText(aiReply.slice(0, 400));
-      }
-    } catch (_err) {
-      setIsAITyping(false);
-      const errMsg: ConvMessage = { role: 'assistant', content: "Sorry, I could not process that. Please try again.", timestamp: Date.now() };
-      setMessages(prev => [...prev, errMsg]);
-    }
+    const { data: aiData } = await supabase.functions.invoke('chat', {
+      body: {
+        messages: [...contextMsgs, { role: 'user', content: text }],
+        conversationId: callConversationId || `voice-${Date.now()}`,
+        model: 'gemini',
+      },
+    });
+    setIsAITyping(false);
+    const aiReply = aiData?.message || aiData?.content || "I heard you. How can I help?";
+    const aiMsg: ConvMessage = { role: 'assistant', content: aiReply, timestamp: Date.now() };
+    setMessages(prev => [...prev, aiMsg]);
+    await speakText(aiReply.slice(0, 400));
   }, [userInput, messages, callConversationId, supabase, speakText]);
 
   // Scroll to bottom on new messages
@@ -917,55 +911,24 @@ export default function VoiceControlScreen() {
         {/* Keyboard toggle */}
         <TouchableOpacity
           style={[styles.keyboardRow, { bottom: insets.bottom + 5 }]}
-          onPress={() => {
-            const next = !showKeyboard;
-            setShowKeyboard(next);
-            // When opening keyboard, keep voice active so both work simultaneously
-            if (next && !isPaused && phase === 'active') {
-              setVoiceAndKeyboard(true);
-            } else {
-              setVoiceAndKeyboard(false);
-            }
-          }}
+          onPress={() => setShowKeyboard(k => !k)}
         >
           <Ionicons name="keypad-outline" size={15} color="rgba(255,255,255,0.45)" />
-          <Text style={styles.keyboardText}>
-            {showKeyboard ? (isUserSpeaking ? '🎤 Voice + Keyboard active' : 'Tap to hide keyboard') : 'Tap to show keyboard'}
-          </Text>
+          <Text style={styles.keyboardText}>Tap to show keyboard</Text>
         </TouchableOpacity>
 
-        {/* Keyboard input — voice stays active when keyboard is open */}
+        {/* Keyboard input */}
         {showKeyboard ? (
           <BlurView intensity={80} tint="dark" style={[styles.inputBar, { paddingBottom: insets.bottom + 14 }]}>
-            <TouchableOpacity
-              style={[styles.voiceMicBtn, {
-                backgroundColor: isUserSpeaking ? '#10A37F' : 'rgba(255,255,255,0.12)',
-              }]}
-              onPress={() => {
-                if (isUserSpeaking) {
-                  stopAndProcess();
-                } else if (!isPaused && phase === 'active') {
-                  startListening();
-                }
-              }}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Ionicons
-                name={isUserSpeaking ? 'mic' : 'mic-outline'}
-                size={18}
-                color={isUserSpeaking ? '#FFF' : 'rgba(255,255,255,0.7)'}
-              />
-            </TouchableOpacity>
             <TextInput
               style={styles.textInput}
-              placeholder="Type or speak to Haitian AI"
+              placeholder="Type to continue chatting with Haitian AI"
               placeholderTextColor="rgba(255,255,255,0.35)"
               value={userInput}
               onChangeText={setUserInput}
               onSubmitEditing={handleSendText}
               returnKeyType="send"
               autoFocus
-              blurOnSubmit={false}
             />
             <TouchableOpacity
               style={[styles.sendBtn, { opacity: userInput.trim() ? 1 : 0.4 }]}
@@ -1002,7 +965,6 @@ const styles = StyleSheet.create({
   ctrlLabel: { color: 'rgba(255,255,255,0.75)', fontSize: 14, marginTop: 8, fontWeight: '400' },
   keyboardRow: { position: 'absolute', left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 6 },
   keyboardText: { fontSize: 13, color: 'rgba(255,255,255,0.4)' },
-  voiceMicBtn: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
   inputBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 12, gap: 10, overflow: 'hidden' },
   textInput: { flex: 1, backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 28, paddingHorizontal: 18, paddingVertical: 13, fontSize: 16, color: '#FFF', maxHeight: 100 },
   sendBtn: { width: 46, height: 46, borderRadius: 23, backgroundColor: '#007AFF', alignItems: 'center', justifyContent: 'center' },

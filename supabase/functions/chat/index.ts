@@ -711,35 +711,15 @@ IMPORTANT:
       }
     }
 
-    if (!aiResponse || (!aiResponse.content && aiResponse.error)) {
+    if (!aiResponse || aiResponse.error) {
       console.error('AI Error:', aiResponse?.error);
-      // Return a guaranteed fallback rather than a 500 error
-      const fallbackContent = "I'm sorry, I'm having trouble responding right now. Please try again in a moment.";
-      const encoder2 = new TextEncoder();
-      const fallbackStream = new ReadableStream({
-        start(controller) {
-          const words2 = fallbackContent.split(/( +)/);
-          let idx = 0;
-          function sendNext2() {
-            if (idx >= words2.length) {
-              controller.enqueue(encoder2.encode(`data: ${JSON.stringify({ done: true, imageUrl: null, thinkingMode: 'thinking', hasMessageCard: false })}\n\n`));
-              controller.close();
-              return;
-            }
-            const chunk2 = words2.slice(idx, idx + 2).join('');
-            idx += 2;
-            controller.enqueue(encoder2.encode(`data: ${JSON.stringify({ token: chunk2 })}\n\n`));
-            setTimeout(sendNext2, 12);
-          }
-          sendNext2();
-        },
-      });
-      return new Response(fallbackStream, {
-        headers: { ...corsHeaders, 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no' },
-      });
+      return new Response(
+        JSON.stringify({ error: aiResponse?.error || 'AI service temporarily unavailable. Please try again.' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
-    let cleanMessage = aiResponse?.content || "I'm sorry, I'm having trouble right now. Please try again.";
+    let cleanMessage = aiResponse.content || '';
     cleanMessage = cleanMessage.replace(/\[Using [^\]]+\]\s*/gi, '');
     cleanMessage = cleanMessage.replace(/\[Model:[^\]]+\]\s*/gi, '');
     cleanMessage = cleanMessage.replace(/\[Fallback:[^\]]+\]\s*/gi, '');
@@ -749,11 +729,6 @@ IMPORTANT:
     cleanMessage = cleanMessage.replace(/openai unavailable/gi, '');
     cleanMessage = cleanMessage.replace(/claude unavailable/gi, '');
     cleanMessage = cleanMessage.trim();
-
-    // Final safety net — never send empty content to client
-    if (!cleanMessage || cleanMessage.length < 3) {
-      cleanMessage = "I'm sorry, I couldn't generate a response right now. Please try again.";
-    }
 
     const hasMessageCard = cleanMessage.includes('[MESSAGE_CARD]') && cleanMessage.includes('[/MESSAGE_CARD]');
 
