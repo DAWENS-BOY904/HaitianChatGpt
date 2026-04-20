@@ -2232,4 +2232,3 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-Set up expo-notifications with a Supabase edge function to send real push notifications when AI response is ready for long requests (>5 seconds). Store push tokens in user_profiles, trigger notification from the chat edge function when a response completes, and handle notification taps to open the relevant conversation.
