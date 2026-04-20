@@ -745,7 +745,7 @@ export default function VoiceControlScreen() {
       const aiReply = aiData?.message || aiData?.content || "Sorry, I could not process that. Please try again.";
       const aiMsg: ConvMessage = { role: 'assistant', content: aiReply, timestamp: Date.now() };
       setMessages(prev => [...prev, aiMsg]);
-      // Only speak if voice is not already recording to avoid audio collision
+      // Only speak if voice is not already recording to avoid audio collisions
       if (!isRecordingRef.current) {
         await speakText(aiReply.slice(0, 400));
       }
