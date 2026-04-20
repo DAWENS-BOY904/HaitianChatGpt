@@ -58,29 +58,6 @@ import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-g
 import { runOnJS } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import * as Notifications from 'expo-notifications';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-
-// Input persistence helpers (8-minute TTL)
-const INPUT_PERSIST_KEY = 'home_input_draft';
-const INPUT_PERSIST_TTL = 8 * 60 * 1000; // 8 minutes
-async function saveDraft(text: string) {
-  try {
-    if (!text.trim()) { await AsyncStorage.removeItem(INPUT_PERSIST_KEY); return; }
-    await AsyncStorage.setItem(INPUT_PERSIST_KEY, JSON.stringify({ text, ts: Date.now() }));
-  } catch (_e) {}
-}
-async function loadDraft(): Promise<string> {
-  try {
-    const raw = await AsyncStorage.getItem(INPUT_PERSIST_KEY);
-    if (!raw) return '';
-    const { text, ts } = JSON.parse(raw);
-    if (Date.now() - ts > INPUT_PERSIST_TTL) { await AsyncStorage.removeItem(INPUT_PERSIST_KEY); return ''; }
-    return text || '';
-  } catch (_e) { return ''; }
-}
-async function clearDraft() {
-  try { await AsyncStorage.removeItem(INPUT_PERSIST_KEY); } catch (_e) {}
-}
 
 if (Platform.OS !== 'web') {
   Notifications.setNotificationHandler({
@@ -569,7 +546,6 @@ export default function HomeScreen() {
   const [isAppActive, setIsAppActive] = useState(true);
   const [showBlurOverlay, setShowBlurOverlay] = useState(false);
   const [inputText, setInputText] = useState('');
-  const draftSaveTimer = useRef<NodeJS.Timeout | null>(null);
   const [toolsVisible, setToolsVisible] = useState(false);
   const [conversationMenuVisible, setConversationMenuVisible] = useState(false);
   const [sideMenuVisible, setSideMenuVisible] = useState(false);
@@ -639,14 +615,6 @@ export default function HomeScreen() {
   const [userProfilePhoto, setUserProfilePhoto] = useState<string | null>(null);
   const pushTokenRef = useRef<string | null>(null);
 
-  // Load persisted draft on mount
-  useEffect(() => {
-    loadDraft().then(draft => { if (draft) setInputText(draft); });
-    // Clear stale draft after 8 min
-    const clearTimer = setTimeout(() => clearDraft(), INPUT_PERSIST_TTL);
-    return () => clearTimeout(clearTimer);
-  }, []);
-
   const handleInputChange = useCallback(async (txt: string) => {
     const safeTxt = txt ?? '';
     const byteLength = new TextEncoder().encode(safeTxt).length;
@@ -664,9 +632,6 @@ export default function HomeScreen() {
       return;
     }
     setInputText(safeTxt);
-    // Debounce draft save (300ms)
-    if (draftSaveTimer.current) clearTimeout(draftSaveTimer.current);
-    draftSaveTimer.current = setTimeout(() => saveDraft(safeTxt), 300);
     try { setCodeLangChips(/```\w*$/.test(safeTxt)); } catch (_e) { setCodeLangChips(false); }
     if (groupChatMode) {
       const atMatch = safeTxt.match(/@(\w*)$/);
@@ -1156,11 +1121,10 @@ export default function HomeScreen() {
       if (!conversationId) { showAlert('Error', 'Failed to create conversation'); return; }
     }
 
-    // Clear input immediately + clear draft
+    // Clear input immediately
     setInputText('');
     setSelectedMedia([]);
     setEditingMessageId(null);
-    clearDraft();
     // Detect intent for thinking indicator
     const lowerText = (currentText || '').toLowerCase();
     const isImageIntent = [

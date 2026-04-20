@@ -359,14 +359,12 @@ export default function VoiceControlScreen() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     try {
       if (user?.id) {
-        // Insert a new ban record (append, don't upsert — id is the PK)
-        const banUntilISO = banUntil.toISOString();
-        await supabase.from('voice_bans').insert({
+        await supabase.from('voice_bans').upsert({
           user_id: user.id,
           offense_count: count,
-          banned_until: banUntilISO,
+          banned_until: banUntil.toISOString(),
           reason: `Inappropriate language in voice control (offense #${count})`,
-        }).catch(() => {});
+        }, { onConflict: 'user_id' });
         await supabase.from('activity_logs').insert({
           user_id: user.id,
           action: `Voice control ban applied (offense #${count}, ${banHours}h)`,

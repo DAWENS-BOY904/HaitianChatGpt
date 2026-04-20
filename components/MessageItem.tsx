@@ -61,27 +61,91 @@ interface MessageItemProps {
   isOffline?: boolean;
 }
 
-// Blinking cursor for streaming
+// ── Blinking cursor (pipe style like ChatGPT) ──────────────────────────────
 const BlinkingCursor = memo(function BlinkingCursor({ color }: { color: string }) {
   const blink = useRef(new Animated.Value(1)).current;
   useEffect(() => {
     const anim = Animated.loop(
       Animated.sequence([
-        Animated.timing(blink, { toValue: 0, duration: 500, useNativeDriver: true }),
-        Animated.timing(blink, { toValue: 1, duration: 500, useNativeDriver: true }),
+        Animated.timing(blink, { toValue: 0, duration: 530, useNativeDriver: true }),
+        Animated.timing(blink, { toValue: 1, duration: 530, useNativeDriver: true }),
       ])
     );
     anim.start();
     return () => anim.stop();
   }, []);
   return (
-    <Animated.Text style={{ opacity: blink, color, fontSize: 16, fontWeight: '300', lineHeight: 22 }}>
-      {'▋'}
+    <Animated.Text style={{ opacity: blink, color, fontSize: 16, fontWeight: '400', lineHeight: 22 }}>
+      {'|'}
     </Animated.Text>
   );
 });
 
-// Detect if URL is an image
+// ── Word-by-word streaming text renderer ──────────────────────────────────
+// Each time `content` grows (new tokens arrive from SSE), the component
+// picks up from where it left off and animates the new words in smoothly.
+const StreamingWordText = memo(function StreamingWordText({
+  content,
+  style,
+  cursorColor,
+  isStreaming,
+}: {
+  content: string;
+  style: any;
+  cursorColor: string;
+  isStreaming: boolean;
+}) {
+  // Split on whitespace runs and newlines but keep delimiters so we can rejoin
+  const words = useMemo(() => content.split(/( +|\n)/), [content]);
+  const [visibleCount, setVisibleCount] = useState(0);
+  const targetCountRef = useRef(0);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    if (!isStreaming) {
+      // Streaming finished — reveal all at once
+      if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+      setVisibleCount(words.length);
+      targetCountRef.current = words.length;
+      return;
+    }
+
+    const newTarget = words.length;
+    if (newTarget <= targetCountRef.current) return; // no new content
+    targetCountRef.current = newTarget;
+
+    if (timerRef.current) return; // already ticking, let it catch up
+
+    // Start a fast interval that reveals one token per tick (~18ms = ~55 tokens/s)
+    timerRef.current = setInterval(() => {
+      setVisibleCount(prev => {
+        const next = prev + 1;
+        if (next >= targetCountRef.current) {
+          clearInterval(timerRef.current!);
+          timerRef.current = null;
+          return targetCountRef.current;
+        }
+        return next;
+      });
+    }, 18);
+  }, [words.length, isStreaming]);
+
+  useEffect(() => {
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, []);
+
+  const displayText = words.slice(0, visibleCount).join('');
+  const showCursor = isStreaming; // always show cursor while streaming
+
+  return (
+    <Text selectable style={style}>
+      {displayText}
+      {showCursor ? <BlinkingCursor color={cursorColor} /> : null}
+    </Text>
+  );
+});
+
+// ── URL image detection ───────────────────────────────────────────────────
 const isImageUrl = (url: string): boolean => {
   if (!url) return false;
   const lowerUrl = url.toLowerCase();
@@ -98,7 +162,7 @@ const isImageUrl = (url: string): boolean => {
   );
 };
 
-// ── Markdown Table Renderer ──
+// ── Markdown Table Renderer ──────────────────────────────────────────────
 const MarkdownTable = memo(function MarkdownTable({ tableText, colors }: { tableText: string; colors: any }) {
   const rows = tableText
     .split('\n')
@@ -342,7 +406,7 @@ function parseDownloadCard(content: string): { text: string; downloadLabel?: str
   return { text: [before, after].filter(Boolean).join('\n\n'), downloadLabel: label };
 }
 
-// ── Inline markdown renderer (bold, italic, code) ──
+// ── Inline markdown renderer (bold, italic, code) ──────────────────────
 function renderInlineMarkdown(text: string, baseStyle: any, colors: any): React.ReactNode {
   const parts: React.ReactNode[] = [];
   const regex = /(\*\*([^*]+)\*\*|\*([^*]+)\*|`([^`]+)`)/g;
@@ -735,6 +799,7 @@ export const MessageItem = memo(function MessageItem({
     },
   }), [colors, message.role]);
 
+  // True when this specific message is the one actively streaming
   const isStreaming = streaming && isGenerating && message.role === 'assistant';
 
   return (
@@ -814,7 +879,7 @@ export const MessageItem = memo(function MessageItem({
             </TouchableOpacity>
           )}
 
-          {/* Message Content */}
+          {/* ── Message Content ── */}
           {contentParts.map((part, index) => {
             const isLastPart = index === contentParts.length - 1 && !hasCard;
             const shouldStream = shouldStreamPart(isLastPart);
@@ -839,6 +904,22 @@ export const MessageItem = memo(function MessageItem({
                   if (seg.type === 'table') {
                     return <MarkdownTable key={`table-${si}`} tableText={seg.content} colors={colors} />;
                   }
+
+                  // ── Real-time word-by-word display for the active streaming segment ──
+                  const isLastSeg = si === textSegments.length - 1;
+                  if (isStreaming && isLastPart && isLastSeg) {
+                    return (
+                      <StreamingWordText
+                        key={`streaming-seg-${si}`}
+                        content={seg.content}
+                        style={[styles.messageText, styles.assistantMessageText]}
+                        cursorColor={colors.textSecondary}
+                        isStreaming={true}
+                      />
+                    );
+                  }
+
+                  // ── Static segments (already-streamed parts + user messages) ──
                   const textParts = parseTextWithLinks(seg.content);
                   return (
                     <Text
@@ -863,10 +944,6 @@ export const MessageItem = memo(function MessageItem({
                         }
                         return <Text key={`txt-${textIndex}`}>{textPart.content}</Text>;
                       })}
-                      {/* Blinking cursor on last segment while streaming */}
-                      {isStreaming && isLastPart && si === textSegments.length - 1 ? (
-                        <BlinkingCursor color={colors.textSecondary} />
-                      ) : null}
                     </Text>
                   );
                 })}
