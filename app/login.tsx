@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
@@ -10,7 +11,9 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Modal,
 } from 'react-native';
+import { BlurView } from 'expo-blur';
 import { useAuth, useAlert, getSupabaseClient } from '@/template';
 import { useTheme } from '../hooks/useTheme';
 import { Spacing, Typography, BorderRadius } from '../constants/theme';
@@ -101,6 +104,7 @@ export default function LoginScreen() {
   const [passkeyLoading, setPasskeyLoading] = useState(false);
   const [passkeyUserId, setPasskeyUserId] = useState<string | null>(null);
   const [appleLoading, setAppleLoading] = useState(false);
+  const [guestModalVisible, setGuestModalVisible] = useState(false);
 
   // On mount: check for existing passkeys and show biometric prompt card
   useEffect(() => {
@@ -250,6 +254,11 @@ export default function LoginScreen() {
 
   const handlePhoneLogin = () => {
     router.push('/phone-entry');
+  };
+
+  const handleGuestMode = () => {
+    // Navigate directly to home as guest (no auth)
+    router.replace('/home');
   };
 
   const handleAppleSignIn = async () => {
@@ -472,7 +481,7 @@ export default function LoginScreen() {
     },
   });
 
-  // ── Passkey prompt card styles (defined outside StyleSheet for readability) ──
+  // ── Passkey full-screen biometric prompt card styles (defined outside StyleSheet for readability) ──
   const pkStyles = StyleSheet.create({
     overlay: {
       ...StyleSheet.absoluteFillObject,
@@ -575,6 +584,16 @@ export default function LoginScreen() {
           </View>
         </View>
       )}
+
+      <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, pointerEvents: 'none' }} />
+
+      {/* guestStyles definition was placed outside the function component, moved it back inside or before return */}
+      {/* Assuming it was meant to be defined within the component's scope or globally */}
+      {/* If it was meant to be global, it should be at the top level or imported. */}
+      {/* If it was meant to be part of the LoginScreen component, it should be defined inside it. */}
+      {/* For now, placed it before the return statement to fix the parsing error. */}
+      {/* Alternatively, it could be moved below the 'styles' definition or outside the component entirely. */}
+      {/* The original placement outside `LoginScreen` but inside JSX `return` block was invalid. */}
 
       <TouchableOpacity style={styles.closeButton} onPress={() => router.back()}>
         <Ionicons name="close" size={24} color={colors.text} />
@@ -698,7 +717,70 @@ export default function LoginScreen() {
           <Ionicons name="call" size={20} color={colors.text} />
           <Text style={styles.oauthButtonText}>Continue with phone</Text>
         </TouchableOpacity>
+
+        {/* Guest mode button */}
+        <TouchableOpacity
+          style={[styles.oauthButton, { marginTop: 4 }]}
+          onPress={() => setGuestModalVisible(true)}
+          accessibilityLabel="Continue as guest"
+          accessibilityRole="button"
+        >
+          <Ionicons name="person-outline" size={20} color={colors.text} />
+          <Text style={styles.oauthButtonText}>Continue as guest</Text>
+        </TouchableOpacity>
       </View>
+
+      {/* Guest mode info modal */}
+      <Modal visible={guestModalVisible} transparent animationType="fade" onRequestClose={() => setGuestModalVisible(false)}>
+        <View style={{ flex: 1, justifyContent: 'flex-end' }}>
+          <BlurView intensity={60} tint="dark" style={StyleSheet.absoluteFill} />
+          <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setGuestModalVisible(false)} />
+          <View style={guestStyles.sheet}>
+            <View style={guestStyles.handle} />
+            <View style={guestStyles.iconWrap}>
+              <Ionicons name="person-outline" size={32} color="#FFF" />
+            </View>
+            <Text style={guestStyles.title}>Continue as Guest</Text>
+            <Text style={guestStyles.body}>
+              {'You can chat with AI without creating an account. Guest sessions are limited to 35 messages and do not save history.'}
+            </Text>
+            <View style={guestStyles.featureList}>
+              {[
+                { icon: 'checkmark-circle', text: '35 free messages', ok: true },
+                { icon: 'close-circle', text: 'No chat history saved', ok: false },
+                { icon: 'close-circle', text: 'No file uploads', ok: false },
+                { icon: 'checkmark-circle', text: 'Basic AI responses', ok: true },
+              ].map((f, i) => (
+                <View key={i} style={guestStyles.featureRow}>
+                  <Ionicons name={f.icon as any} size={18} color={f.ok ? '#34C759' : '#FF453A'} />
+                  <Text style={guestStyles.featureText}>{f.text}</Text>
+                </View>
+              ))}
+            </View>
+            <TouchableOpacity style={guestStyles.primaryBtn} onPress={() => { setGuestModalVisible(false); handleGuestMode(); }}>
+              <Text style={guestStyles.primaryBtnText}>Start as Guest</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={guestStyles.secondaryBtn} onPress={() => setGuestModalVisible(false)}>
+              <Text style={guestStyles.secondaryBtnText}>Create Account Instead</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
+
+const guestStyles = StyleSheet.create({
+  sheet: { backgroundColor: '#1C1C1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 28, paddingBottom: 40 },
+  handle: { width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.3)', alignSelf: 'center', marginBottom: 24 },
+  iconWrap: { width: 64, height: 64, borderRadius: 32, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center', alignSelf: 'center', marginBottom: 16 },
+  title: { color: '#FFF', fontSize: 22, fontWeight: '700', textAlign: 'center', marginBottom: 10 },
+  body: { color: 'rgba(255,255,255,0.55)', fontSize: 14, textAlign: 'center', lineHeight: 21, marginBottom: 20 },
+  featureList: { gap: 10, marginBottom: 24 },
+  featureRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  featureText: { color: 'rgba(255,255,255,0.8)', fontSize: 15 },
+  primaryBtn: { backgroundColor: '#FFFFFF', borderRadius: 50, paddingVertical: 16, alignItems: 'center', marginBottom: 12 },
+  primaryBtnText: { color: '#000000', fontSize: 17, fontWeight: '700' },
+  secondaryBtn: { alignItems: 'center', paddingVertical: 10 },
+  secondaryBtnText: { color: 'rgba(255,255,255,0.45)', fontSize: 15 },
+});
