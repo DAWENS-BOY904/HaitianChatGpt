@@ -444,12 +444,39 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
         throw new Error(`Chat function error: ${response.status} ${errText}`);
       }
 
-      // ── Parse SSE stream ──
+      // ── Parse SSE stream — word-by-word typewriter effect ──
       const reader = response.body?.getReader();
+
+      // Word-by-word typewriter: schedule each word with 12ms delay
+      const pendingWords: string[] = [];
+      let typewriterRunning = false;
+      let typewriterDoneResolve: (() => void) | null = null;
+      const typewriterDonePromise = new Promise<void>(resolve => {
+        typewriterDoneResolve = resolve;
+      });
+
+      function scheduleTypewriter() {
+        if (typewriterRunning) return;
+        typewriterRunning = true;
+        function tick() {
+          if (pendingWords.length === 0) {
+            typewriterRunning = false;
+            return;
+          }
+          const word = pendingWords.shift()!;
+          streamedContent += word;
+          setMessages(prev => prev.map(m =>
+            m.id === aiMessageId ? { ...m, content: streamedContent } : m
+          ));
+          setTimeout(tick, 12);
+        }
+        tick();
+      }
+
       if (reader) {
-        // Streaming path — read SSE tokens
         const decoder = new TextDecoder();
         let buffer = '';
+        let sseComplete = false;
 
         while (true) {
           const { done, value } = await reader.read();
@@ -457,7 +484,7 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
 
           buffer += decoder.decode(value, { stream: true });
           const lines = buffer.split('\n');
-          buffer = lines.pop() || ''; // Keep incomplete line in buffer
+          buffer = lines.pop() || '';
 
           for (const line of lines) {
             const trimmed = line.trim();
@@ -470,54 +497,64 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
               const parsed = JSON.parse(dataStr);
 
               if (parsed.done) {
-                // Final event — extract image URL and metadata
                 if (parsed.imageUrl) finalImageUrlFromResponse = parsed.imageUrl;
-                break;
+                sseComplete = true;
+                continue;
               }
 
               if (parsed.token !== undefined) {
-                streamedContent += parsed.token;
-                // Update the streaming message in real time
-                setMessages(prev => prev.map(m =>
-                  m.id === aiMessageId
-                    ? { ...m, content: streamedContent }
-                    : m
-                ));
+                // Split token into individual words and queue them
+                const words = parsed.token.match(/(\S+|\s+)/g) || [parsed.token];
+                pendingWords.push(...words);
+                scheduleTypewriter();
               }
-            } catch (_e) {
-              // Ignore parse errors for incomplete chunks
-            }
+            } catch (_e) {}
           }
         }
 
-        // Process any remaining buffer
+        // Process remaining buffer
         if (buffer.trim().startsWith('data:')) {
           try {
             const parsed = JSON.parse(buffer.slice(5).trim());
             if (parsed.imageUrl) finalImageUrlFromResponse = parsed.imageUrl;
             if (parsed.token) {
-              streamedContent += parsed.token;
+              const words = parsed.token.match(/(\S+|\s+)/g) || [parsed.token];
+              pendingWords.push(...words);
             }
           } catch (_e) {}
         }
 
+        // Wait for all pending words to be rendered (max 30s)
+        const maxWait = 30000;
+        const startWait = Date.now();
+        while (pendingWords.length > 0 || typewriterRunning) {
+          if (Date.now() - startWait > maxWait) break;
+          await new Promise(r => setTimeout(r, 50));
+        }
+
       } else {
-        // Fallback: no streaming support (e.g. some environments)
+        // Fallback: no streaming — apply full text at once then animate word-by-word
         const fullText = await response.text();
         const sseLines = fullText.split('\n');
+        let allTokens = '';
         for (const line of sseLines) {
           const trimmed = line.trim();
           if (!trimmed.startsWith('data:')) continue;
           try {
             const parsed = JSON.parse(trimmed.slice(5).trim());
             if (parsed.done && parsed.imageUrl) finalImageUrlFromResponse = parsed.imageUrl;
-            if (parsed.token) streamedContent += parsed.token;
+            if (parsed.token) allTokens += parsed.token;
           } catch (_e) {}
         }
-        // Update UI with full content
-        setMessages(prev => prev.map(m =>
-          m.id === aiMessageId ? { ...m, content: streamedContent } : m
-        ));
+        // Animate word by word for non-streaming path
+        const words = allTokens.match(/(\S+|\s+)/g) || [];
+        for (const word of words) {
+          streamedContent += word;
+          setMessages(prev => prev.map(m =>
+            m.id === aiMessageId ? { ...m, content: streamedContent } : m
+          ));
+          await new Promise(r => setTimeout(r, 12));
+        }
       }
 
       abortControllerRef.current = null;

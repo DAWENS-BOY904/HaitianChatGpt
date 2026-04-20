@@ -640,13 +640,13 @@ IMPORTANT:
     if (detectionResult.isImageTask) {
       console.log('[chat] Image task detected, generating image for prompt:', lastContent.slice(0, 120));
 
-      // Try all image providers in order
-      const imageResult = await generateImageSmart(lastContent, aiModel);
+      // Pass supabaseAdmin so generateImageSmart can upload base64 images automatically
+      const imageResult = await generateImageSmart(lastContent, aiModel, supabaseAdmin);
 
       if (imageResult.imageUrl) {
         let resolvedImageUrl = imageResult.imageUrl;
 
-        // Upload base64 data URLs to storage so client gets a real HTTPS URL
+        // Extra safety: if still base64 (upload failed inside generateImageSmart), try one more time
         if (resolvedImageUrl.startsWith('data:image/')) {
           try {
             const matches = resolvedImageUrl.match(/^data:(image\/[a-z+]+);base64,(.+)$/);
@@ -658,15 +658,11 @@ IMPORTANT:
               const bytes = new Uint8Array(binary.length);
               for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
               const fileName = `ai-gen/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-              const storageClient = createClient(
-                Deno.env.get('SUPABASE_URL') ?? '',
-                Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-              );
-              const { error: uploadErr } = await storageClient.storage
+              const { error: uploadErr } = await supabaseAdmin.storage
                 .from('chat-images')
                 .upload(fileName, bytes, { contentType: mimeType, upsert: true });
               if (!uploadErr) {
-                const { data: urlData } = storageClient.storage.from('chat-images').getPublicUrl(fileName);
+                const { data: urlData } = supabaseAdmin.storage.from('chat-images').getPublicUrl(fileName);
                 resolvedImageUrl = urlData.publicUrl;
               }
             }
