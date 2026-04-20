@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, memo } from 'react';
+import React, { useEffect, useRef, memo, useState } from 'react';
 import { View, Text, StyleSheet, Animated, Easing, ViewStyle, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
@@ -205,9 +205,23 @@ const ImageShimmerCard = memo(function ImageShimmerCard({ isDark }: { isDark: bo
   );
 });
 
+// ── Elapsed-time hook ──────────────────────────────────────────────────────
+function useElapsedSeconds(): number {
+  const [elapsed, setElapsed] = useState(0);
+  const startRef = useRef(Date.now());
+  useEffect(() => {
+    startRef.current = Date.now();
+    setElapsed(0);
+    const id = setInterval(() => setElapsed(Math.floor((Date.now() - startRef.current) / 1000)), 500);
+    return () => clearInterval(id);
+  }, []);
+  return elapsed;
+}
+
 export function ThinkingIndicator({ userMessage = '', completed = false, style, mode }: ThinkingIndicatorProps) {
   const { colors, isDark } = useTheme();
   const intent = detectIntent(userMessage, mode);
+  const elapsed = useElapsedSeconds();
 
   // ── Completed state ──
   if (completed) {
@@ -236,7 +250,8 @@ export function ThinkingIndicator({ userMessage = '', completed = false, style, 
   // ── Web search ──
   if (intent === 'web_search') {
     const q = userMessage?.replace(/search|find|look up|google|browse|web|latest|news|current/gi, '').trim();
-    const label = q && q.length > 3 ? `Searching "${q.slice(0, 28)}${q.length > 28 ? '…' : ''}"` : 'Searching the web...';
+    const baseLabel = q && q.length > 3 ? `Searching "${q.slice(0, 28)}${q.length > 28 ? '…' : ''}"` : 'Searching the web…';
+    const label = elapsed >= 5 ? `${baseLabel} (${elapsed}s)` : baseLabel;
     return (
       <View style={[styles.wrapper, style]}>
         <SpinningBadge icon="globe-outline" iconColor="#5AC8FA" ringColor="#5AC8FA" bgColor="rgba(90,200,250,0.15)" />
@@ -247,15 +262,17 @@ export function ThinkingIndicator({ userMessage = '', completed = false, style, 
 
   // ── File / code generation ──
   if (intent === 'file') {
+    const label = elapsed >= 5 ? `Generating… (${elapsed}s)` : 'Generating…';
     return (
       <View style={[styles.wrapper, style]}>
         <SpinningBadge icon="code-slash-outline" iconColor="#FF9F0A" ringColor="#FF9F0A" bgColor="rgba(255,159,10,0.15)" />
-        <ShimmerLabel text="Generating..." color={colors.textSecondary} />
+        <ShimmerLabel text={label} color={colors.textSecondary} />
       </View>
     );
   }
 
-  // ── Default: brain icon + dots ──
+  // ── Default: brain icon + dots + elapsed ──
+  const thinkLabel = elapsed >= 5 ? `Thinking… (${elapsed}s)` : '';
   return (
     <View style={[styles.wrapper, style]}>
       <SpinningBadge
@@ -265,6 +282,7 @@ export function ThinkingIndicator({ userMessage = '', completed = false, style, 
         bgColor={isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.05)'}
       />
       <ThinkingDots color={colors.textSecondary} />
+      {thinkLabel ? <Text style={{ color: colors.textSecondary, fontSize: 12, marginLeft: 2 }}>{thinkLabel}</Text> : null}
     </View>
   );
 }
