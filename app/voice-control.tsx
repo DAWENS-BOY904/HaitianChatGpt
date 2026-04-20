@@ -52,6 +52,7 @@ function containsBadWord(text: string): boolean {
   return BAD_WORDS.some(w => new RegExp(`\\b${w}\\b`, 'i').test(lower));
 }
 
+// ─── Format timestamp ───────────────────────────────────────────────────────
 function formatTime(ts: number): string {
   const d = new Date(ts);
   const h = d.getHours();
@@ -312,7 +313,6 @@ export default function VoiceControlScreen() {
 
   const recordingRef = useRef<Audio.Recording | null>(null);
   const soundRef = useRef<Audio.Sound | null>(null);
-  const ringSoundRef = useRef<Audio.Sound | null>(null);
   const callTimerRef = useRef<NodeJS.Timeout | null>(null);
   const scrollRef = useRef<ScrollView>(null);
   const isRecordingRef = useRef(false);
@@ -353,9 +353,13 @@ export default function VoiceControlScreen() {
   const applyVoiceBan = useCallback(async () => {
     voiceOffenseCountRef.current += 1;
     const count = voiceOffenseCountRef.current;
+
+    // Ban duration: 1st → 1h, 2nd → 3h, 3rd+ → 24h
     const banHours = count === 1 ? 1 : count === 2 ? 3 : 24;
     const banUntil = new Date(Date.now() + banHours * 60 * 60 * 1000);
+
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+
     try {
       if (user?.id) {
         await supabase.from('voice_bans').upsert({
@@ -364,6 +368,8 @@ export default function VoiceControlScreen() {
           banned_until: banUntil.toISOString(),
           reason: `Inappropriate language in voice control (offense #${count})`,
         }, { onConflict: 'user_id' });
+
+        // Notify admin
         await supabase.from('activity_logs').insert({
           user_id: user.id,
           action: `Voice control ban applied (offense #${count}, ${banHours}h)`,
@@ -372,81 +378,50 @@ export default function VoiceControlScreen() {
         }).catch(() => {});
       }
     } catch (_e) {}
+
+    // Stop call and show ban screen
     await handleEnd(false);
     setBanInfo({ until: banUntil, offenseCount: count });
   }, [user?.id, supabase]);
-
-  // ─── RINGTONE ────────────────────────────────────────────────────────────
-  const playRingtone = useCallback(async () => {
-    try {
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: false,
-      });
-      // Use a real phone ringing sound
-      const { sound } = await Audio.Sound.createAsync(
-        { uri: 'https://www.soundjay.com/phone/sounds/phone-ringing-1.mp3' },
-        { shouldPlay: true, isLooping: true, volume: 0.85 }
-      );
-      ringSoundRef.current = sound;
-    } catch (_e) {
-      // Haptic-only fallback when audio unavailable
-      const hapticRing = async () => {
-        for (let i = 0; i < 4; i++) {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          await new Promise(r => setTimeout(r, 180));
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-          await new Promise(r => setTimeout(r, 1000));
-        }
-      };
-      hapticRing();
-    }
-  }, []);
-
-  const stopRingtone = useCallback(async () => {
-    if (ringSoundRef.current) {
-      try {
-        await ringSoundRef.current.stopAsync();
-        await ringSoundRef.current.unloadAsync();
-      } catch (_e) {}
-      ringSoundRef.current = null;
-    }
-  }, []);
 
   // ─── CONNECT ────────────────────────────────────────────────────────────
   useEffect(() => {
     if (banLoading || banInfo) return;
 
     isConnectingRef.current = true;
+    let stopped = false;
 
-    // Start ringtone immediately
-    playRingtone();
+    // Haptic ring simulation
+    const ring = async () => {
+      for (let i = 0; i < 3 && !stopped; i++) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        await new Promise(r => setTimeout(r, 200));
+        if (!stopped) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+        await new Promise(r => setTimeout(r, 1100));
+      }
+    };
+    ring();
 
     const timer = setTimeout(async () => {
-      // Stop ringtone — call connected
-      await stopRingtone();
+      stopped = true;
       isConnectingRef.current = false;
       setPhase('active');
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
-      // Create background chat conversation
+      // Create chat conversation
       try {
         const convId = await createConversation();
         if (convId) setCallConversationId(convId);
       } catch (_e) {}
 
-      // Start call timer
+      // Start duration timer
       callTimerRef.current = setInterval(() => setCallDuration(d => d + 1), 1000);
 
-      // AI greets user
+      // AI greets
       if (autoGreeting) await greetUser();
-    }, 4000);
+    }, 3500);
 
-    return () => {
-      clearTimeout(timer);
-      stopRingtone();
-    };
+    return () => { stopped = true; clearTimeout(timer); };
   }, [banLoading, banInfo, autoGreeting]);
 
   // ─── GREET ────────────────────────────────────────────────────────────────
@@ -455,7 +430,6 @@ export default function VoiceControlScreen() {
       "Hey! Good to hear your voice. How can I help you today?",
       "Hello! I am here and ready to assist you.",
       "Hi there! What is on your mind today?",
-      "Good to connect with you! What can I do for you?",
     ];
     const text = greetings[Math.floor(Math.random() * greetings.length)];
     await speakText(text);
@@ -465,6 +439,7 @@ export default function VoiceControlScreen() {
   const speakText = useCallback(async (text: string) => {
     if (isPausedRef.current) return;
     try {
+      // Stop current audio
       if (soundRef.current) {
         try { await soundRef.current.stopAsync(); await soundRef.current.unloadAsync(); } catch {}
         soundRef.current = null;
@@ -491,6 +466,7 @@ export default function VoiceControlScreen() {
         if (!isPausedRef.current) setTimeout(() => startListening(), 400);
       };
 
+      // Device TTS fallback signal
       if (data?.fallback === true || data?.code === 'USE_DEVICE_TTS') {
         speakWithDevice(text, selectedVoice, speechRate, onDone);
         return;
@@ -556,6 +532,7 @@ export default function VoiceControlScreen() {
       isRecordingRef.current = true;
       setIsUserSpeaking(true);
       setStatusLabel('Listening...');
+      // Auto-stop after 8s
       setTimeout(() => { if (isRecordingRef.current) stopAndProcess(); }, 8000);
     } catch (e: any) {
       console.log('[Voice] startListening error:', e?.message);
@@ -592,6 +569,7 @@ export default function VoiceControlScreen() {
 
       const userText = txData.text.trim();
 
+      // ── Moderation check ──────────────────────────────────────────────────
       if (containsBadWord(userText)) {
         const count = voiceOffenseCountRef.current + 1;
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -609,11 +587,13 @@ export default function VoiceControlScreen() {
       setStatusLabel('');
       setIsAITyping(true);
 
+      // Save to conversation
       const convId = callConversationId || currentConversation?.id;
       if (convId) {
         try { await sendMessage(userText, convId as any, undefined, false, 'gemini'); } catch (_e) {}
       }
 
+      // Get AI response
       const contextMsgs = messages.slice(-8).map(m => ({ role: m.role, content: m.content }));
       const { data: aiData } = await supabase.functions.invoke('chat', {
         body: {
@@ -637,6 +617,7 @@ export default function VoiceControlScreen() {
       const aiMsg: ConvMessage = { role: 'assistant', content: aiReply, timestamp: Date.now() };
       setMessages(prev => [...prev, aiMsg]);
 
+      // Save AI message to conversation
       if (convId) {
         try { await sendMessage(aiReply, convId as any, undefined, false, 'gemini'); } catch (_e) {}
       }
@@ -689,9 +670,6 @@ export default function VoiceControlScreen() {
     isPausedRef.current = true;
     isConnectingRef.current = false;
 
-    // Stop ringtone if still playing
-    await stopRingtone();
-
     if (recordingRef.current) {
       try { await recordingRef.current.stopAndUnloadAsync(); } catch {}
       recordingRef.current = null;
@@ -705,7 +683,7 @@ export default function VoiceControlScreen() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     setPhase('ended');
     if (navigate) setTimeout(() => router.replace('/home'), 300);
-  }, [router, stopRingtone]);
+  }, [router]);
 
   // ─── TEXT MODE TOGGLE ─────────────────────────────────────────────────────
   const handleTextModeToggle = useCallback(() => {
@@ -719,13 +697,17 @@ export default function VoiceControlScreen() {
   const handleSendText = useCallback(async () => {
     const text = userInput.trim();
     if (!text) return;
+
+    // Moderation
     if (containsBadWord(text)) {
       Alert.alert('Warning', 'Please keep the conversation respectful.', [{ text: 'OK' }]);
       return;
     }
+
     setUserInput('');
     const msg: ConvMessage = { role: 'user', content: text, timestamp: Date.now() };
     setMessages(prev => [...prev, msg]);
+
     if (isRecordingRef.current && recordingRef.current) {
       try { await recordingRef.current.stopAndUnloadAsync(); } catch {}
       recordingRef.current = null;
@@ -733,6 +715,7 @@ export default function VoiceControlScreen() {
     }
     setIsUserSpeaking(false);
     setIsAITyping(true);
+
     const contextMsgs = messages.slice(-6).map(m => ({ role: m.role, content: m.content }));
     const { data: aiData } = await supabase.functions.invoke('chat', {
       body: {
@@ -741,6 +724,7 @@ export default function VoiceControlScreen() {
         model: 'gemini',
       },
     });
+
     setIsAITyping(false);
     const aiReply = aiData?.message || aiData?.content || "I heard you. How can I help?";
     const aiMsg: ConvMessage = { role: 'assistant', content: aiReply, timestamp: Date.now() };
@@ -748,19 +732,18 @@ export default function VoiceControlScreen() {
     await speakText(aiReply.slice(0, 400));
   }, [userInput, messages, callConversationId, supabase, speakText]);
 
-  // Scroll to bottom on new messages
+  // Scroll to bottom
   useEffect(() => {
     if (messages.length > 0 || isAITyping) {
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 150);
     }
   }, [messages, isAITyping]);
 
-  // Cleanup on unmount
+  // Cleanup
   useEffect(() => {
     return () => {
       if (callTimerRef.current) clearInterval(callTimerRef.current);
       soundRef.current?.unloadAsync().catch(() => {});
-      ringSoundRef.current?.unloadAsync().catch(() => {});
       recordingRef.current?.stopAndUnloadAsync().catch(() => {});
       try { Speech.stop(); } catch {}
     };
