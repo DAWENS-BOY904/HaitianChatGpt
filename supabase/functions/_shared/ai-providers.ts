@@ -34,6 +34,7 @@ export async function callOnSpaceAI(messages: AIMessage[]): Promise<AIResponse> 
     return { content: '', model: 'onspace-ai', error: 'FALLBACK_NEEDED' };
   }
 
+  // Try multiple models in priority order
   const models = [
     'google/gemini-3-flash-preview',
     'google/gemini-2.5-flash',
@@ -96,12 +97,11 @@ export async function callOpenAI(messages: AIMessage[]): Promise<AIResponse> {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o',
+        model: 'google/gemini-3-flash-preview',
         messages: messages.map(m => ({ role: m.role, content: m.content })),
         temperature: 0.7,
         max_tokens: 4096,
       }),
-      signal: AbortSignal.timeout(30000),
     });
 
     const data = await response.json();
@@ -118,12 +118,13 @@ export async function callOpenAI(messages: AIMessage[]): Promise<AIResponse> {
  */
 export async function callGemini(messages: AIMessage[], modelName: string = 'gemini-1.5-flash'): Promise<AIResponse> {
   const apiKey = Deno.env.get('GOOGLE_AI_API_KEY');
-
+  
   if (!apiKey) {
     return { content: '', model: 'google-gemini', error: 'FALLBACK_NEEDED' };
   }
 
   try {
+    // Map to valid v1beta model names
     let validModelName = 'gemini-1.5-flash';
     if (modelName.includes('2.0') || modelName.includes('flash-exp')) {
       validModelName = 'gemini-2.0-flash-exp';
@@ -161,12 +162,14 @@ export async function callGemini(messages: AIMessage[], modelName: string = 'gem
     );
 
     if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      console.error('Gemini API error:', errorData);
       return { content: '', model: 'google-gemini', error: 'FALLBACK_NEEDED' };
     }
 
     const data = await response.json();
     const content = data.candidates?.[0]?.content?.parts?.[0]?.text;
-
+    
     if (!content) {
       return { content: '', model: 'google-gemini', error: 'FALLBACK_NEEDED' };
     }
@@ -174,6 +177,7 @@ export async function callGemini(messages: AIMessage[], modelName: string = 'gem
     return { content, model: `google-gemini (${validModelName})` };
 
   } catch (error: any) {
+    console.error('Gemini Fetch Error:', error);
     return { content: '', model: 'google-gemini', error: 'FALLBACK_NEEDED' };
   }
 }
@@ -183,7 +187,7 @@ export async function callGemini(messages: AIMessage[], modelName: string = 'gem
  */
 export async function callClaude(messages: AIMessage[]): Promise<AIResponse> {
   const apiKey = Deno.env.get('ANTHROPIC_API_KEY');
-
+  
   if (!apiKey) {
     return { content: '', model: 'claude-3-5', error: 'FALLBACK_NEEDED' };
   }
@@ -280,161 +284,10 @@ export async function callGroq(messages: AIMessage[]): Promise<AIResponse> {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// IMAGE GENERATION — FIXED DALL-E 3 + STABILITY AI FALLBACK
-// ─────────────────────────────────────────────────────────────────────────────
-
 /**
- * Build an enhanced image prompt for logos and designs
- */
-function buildEnhancedImagePrompt(userPrompt: string): string {
-  const lowerPrompt = userPrompt.toLowerCase();
-  const isLogo = lowerPrompt.includes('logo') || lowerPrompt.includes('brand') || lowerPrompt.includes('icon');
-  const isDesign = lowerPrompt.includes('design') || lowerPrompt.includes('banner') || lowerPrompt.includes('poster');
-
-  if (isLogo) {
-    return `Professional logo design: ${userPrompt}. High quality, clean vector-style design, transparent background preferred, modern typography, suitable for business use. Sharp edges, vibrant colors, scalable design. Studio quality, ultra high resolution.`;
-  }
-  if (isDesign) {
-    return `Professional graphic design: ${userPrompt}. High quality, modern aesthetic, clean layout, vibrant colors, professional finish. Ultra high resolution, studio quality.`;
-  }
-  return `${userPrompt}. High quality, detailed, professional, ultra high resolution, photorealistic or artistic as appropriate.`;
-}
-
-/**
- * DALL-E 3 Image Generation via OpenAI (FIXED endpoint)
- */
-export async function generateImageWithDalle(prompt: string): Promise<{
-  imageUrl?: string;
-  revisedPrompt?: string;
-  error?: string;
-}> {
-  const apiKey = Deno.env.get('OPENAI_API_KEY');
-  if (!apiKey) {
-    console.log('[Image] OPENAI_API_KEY not set — skipping DALL-E');
-    return { error: 'Missing OPENAI_API_KEY' };
-  }
-
-  const enhancedPrompt = buildEnhancedImagePrompt(prompt);
-
-  try {
-    console.log('[Image] Trying DALL-E 3 via OpenAI...');
-    const response = await fetch('https://api.openai.com/v1/images/generations', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'dall-e-3',
-        prompt: enhancedPrompt.slice(0, 4000),
-        n: 1,
-        size: '1024x1024',
-        quality: 'hd',
-        style: 'vivid',
-        response_format: 'url',
-      }),
-      signal: AbortSignal.timeout(60000),
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      const errMsg = data.error?.message || `OpenAI Error: ${response.status}`;
-      console.log(`[Image] DALL-E 3 failed (${response.status}): ${errMsg.slice(0, 200)}`);
-      // If quota exceeded, try the b64_json format as alternative
-      if (response.status === 429) {
-        console.log('[Image] DALL-E quota exceeded');
-      }
-      return { error: errMsg };
-    }
-
-    const imageResult = data.data?.[0];
-    if (!imageResult) {
-      return { error: 'No image data in DALL-E response' };
-    }
-
-    // Handle both URL and base64 responses
-    const imageUrl = imageResult.url || (imageResult.b64_json ? `data:image/png;base64,${imageResult.b64_json}` : undefined);
-    if (!imageUrl) {
-      return { error: 'No image URL returned from DALL-E' };
-    }
-
-    console.log('[Image] DALL-E 3 success!');
-    return { imageUrl, revisedPrompt: imageResult.revised_prompt };
-
-  } catch (error: any) {
-    console.log('[Image] DALL-E 3 exception:', error.message);
-    return { error: error.message || 'DALL-E request failed' };
-  }
-}
-
-/**
- * Stability AI Image Generation (FALLBACK)
- * Uses the stable-diffusion-xl-1024-v1-0 model
- */
-export async function generateImageWithStabilityAI(prompt: string): Promise<{
-  imageUrl?: string;
-  error?: string;
-}> {
-  const apiKey = Deno.env.get('STABILITY_AI_API_KEY');
-  if (!apiKey) {
-    console.log('[Image] STABILITY_AI_API_KEY not set — skipping Stability AI');
-    return { error: 'Stability AI key not configured' };
-  }
-
-  const enhancedPrompt = buildEnhancedImagePrompt(prompt);
-
-  try {
-    console.log('[Image] Trying Stability AI SDXL...');
-    const response = await fetch('https://api.stability.ai/v1/generation/stable-diffusion-xl-1024-v1-0/text-to-image', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
-      body: JSON.stringify({
-        text_prompts: [
-          { text: enhancedPrompt.slice(0, 2000), weight: 1 },
-          { text: 'blurry, low quality, distorted, ugly, bad anatomy, watermark', weight: -0.8 },
-        ],
-        cfg_scale: 8,
-        height: 1024,
-        width: 1024,
-        samples: 1,
-        steps: 35,
-        style_preset: 'digital-art',
-      }),
-      signal: AbortSignal.timeout(60000),
-    });
-
-    if (!response.ok) {
-      const errText = await response.text().catch(() => response.statusText);
-      console.log(`[Image] Stability AI failed (${response.status}): ${errText.slice(0, 200)}`);
-      return { error: `Stability AI error: ${response.status}` };
-    }
-
-    const data = await response.json();
-    const artifact = data.artifacts?.[0];
-
-    if (!artifact?.base64) {
-      return { error: 'No image data from Stability AI' };
-    }
-
-    const imageUrl = `data:image/png;base64,${artifact.base64}`;
-    console.log('[Image] Stability AI success!');
-    return { imageUrl };
-
-  } catch (error: any) {
-    console.log('[Image] Stability AI exception:', error.message);
-    return { error: error.message };
-  }
-}
-
-/**
- * OnSpace AI Image Generation via chat completions
- * Tries multiple image-capable models
+ * OnSpace AI Image Generation — uses Gemini multimodal via chat/completions
+ * The /images/generations endpoint does not exist on OnSpace AI gateway.
+ * Instead, we use Gemini image generation models via chat/completions.
  */
 export async function generateImageWithOnSpaceAI(prompt: string): Promise<{
   imageUrl?: string;
@@ -447,9 +300,7 @@ export async function generateImageWithOnSpaceAI(prompt: string): Promise<{
     return { error: 'OnSpace AI not configured' };
   }
 
-  const enhancedPrompt = buildEnhancedImagePrompt(prompt);
-
-  // Try Gemini image generation models via OnSpace AI gateway
+  // Image-capable models on OnSpace AI gateway (Gemini multimodal)
   const imageModels = [
     'google/gemini-2.0-flash-exp',
     'google/gemini-2.5-flash',
@@ -470,7 +321,7 @@ export async function generateImageWithOnSpaceAI(prompt: string): Promise<{
           messages: [
             {
               role: 'user',
-              content: `Generate a high-quality image based on this description: ${enhancedPrompt}\n\nRespond with ONLY a base64 encoded PNG image in this exact format: data:image/png;base64,[BASE64_DATA]\n\nDo not include any text explanation.`,
+              content: `Generate a high-quality, detailed image based on this description: ${prompt}\n\nRespond with ONLY a base64 encoded PNG image in this exact format: data:image/png;base64,[BASE64_DATA]\n\nDo not include any text explanation.`,
             },
           ],
           max_tokens: 8192,
@@ -488,11 +339,13 @@ export async function generateImageWithOnSpaceAI(prompt: string): Promise<{
       const data = await response.json();
       const content: string = data.choices?.[0]?.message?.content || '';
 
+      // Check for base64 image in response
       if (content.startsWith('data:image/')) {
         console.log(`[OnSpace AI Image] Got base64 image from ${model}`);
         return { imageUrl: content.trim() };
       }
 
+      // Check if response contains a URL
       const urlMatch = content.match(/https?:\/\/[^\s"']+\.(png|jpg|jpeg|webp|gif)/i);
       if (urlMatch) {
         console.log(`[OnSpace AI Image] Got URL from ${model}: ${urlMatch[0]}`);
@@ -505,37 +358,39 @@ export async function generateImageWithOnSpaceAI(prompt: string): Promise<{
     }
   }
 
-  return { error: 'OnSpace AI image generation unavailable' };
+  return { error: 'OnSpace AI image generation unavailable — no image data returned' };
 }
 
 /**
- * Gemini Native Image Generation
+ * Gemini Image Generation
  */
 export async function generateImageWithGemini(prompt: string): Promise<{
   imageUrl?: string;
   error?: string;
 }> {
   const apiKey = Deno.env.get('GOOGLE_AI_API_KEY');
-
+  
   if (!apiKey) {
     return { error: 'Google AI API key not configured' };
   }
 
   try {
-    const enhancedPrompt = buildEnhancedImagePrompt(prompt);
+    // Try Gemini Imagen model
     const requestBody = {
       contents: [{
         role: 'user',
-        parts: [{ text: `Generate a high quality image of: ${enhancedPrompt}` }]
+        parts: [{ text: `Generate a high quality image of: ${prompt}` }]
       }],
       generationConfig: {
         responseModalities: ['TEXT', 'IMAGE']
       }
     };
 
+    // Try gemini-2.0-flash-exp-image-generation first, then fallback
     const models = [
       'gemini-2.0-flash-exp-image-generation',
       'gemini-2.0-flash-preview-image-generation',
+      'gemini-1.5-flash',
     ];
 
     for (const modelName of models) {
@@ -545,7 +400,6 @@ export async function generateImageWithGemini(prompt: string): Promise<{
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(requestBody),
-          signal: AbortSignal.timeout(45000),
         }
       );
 
@@ -557,11 +411,10 @@ export async function generateImageWithGemini(prompt: string): Promise<{
       const data = await response.json();
       const parts = data.candidates?.[0]?.content?.parts || [];
       const imagePart = parts.find((p: any) => p.inlineData);
-
+      
       if (imagePart?.inlineData?.data) {
         const mimeType = imagePart.inlineData.mimeType || 'image/png';
         const dataUrl = `data:${mimeType};base64,${imagePart.inlineData.data}`;
-        console.log(`[Gemini Image] Success with ${modelName}`);
         return { imageUrl: dataUrl };
       }
     }
@@ -569,117 +422,118 @@ export async function generateImageWithGemini(prompt: string): Promise<{
     return { error: 'No image data received from Gemini' };
 
   } catch (error: any) {
-    return { error: error.message || 'Gemini image error' };
+    return { error: error.message || 'Unknown error during image generation' };
+  }
+}
+
+/**
+ * DALL-E 3 Image Generation (OpenAI)
+ */
+export async function generateImageWithDalle(prompt: string): Promise<{
+  imageUrl?: string;
+  revisedPrompt?: string;
+  error?: string;
+}> {
+  const apiKey = Deno.env.get('OPENAI_API_KEY');
+  if (!apiKey) return { error: 'Missing OPENAI_API_KEY' };
+
+  try {
+    const response = await fetch('https://api.openai.com/v1/images/generations', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'dall-e-3',
+        prompt: prompt.trim(),
+        n: 1,
+        size: '1024x1024',
+        quality: 'hd',
+        style: 'vivid',
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      return { error: data.error?.message || `OpenAI Error: ${response.status}` };
+    }
+
+    const imageResult = data.data?.[0];
+    if (!imageResult?.url) {
+      return { error: 'No image URL returned' };
+    }
+
+    return { imageUrl: imageResult.url, revisedPrompt: imageResult.revised_prompt };
+
+  } catch (error: any) {
+    return { error: error.message || 'Unknown generation error' };
   }
 }
 
 /**
  * SMART IMAGE GENERATION ROUTER
- * Priority: DALL-E 3 → Stability AI → Gemini → OnSpace AI
- * Uploads base64 images to Supabase storage and returns public URL
+ * Tries all available providers in order, uploads result to Supabase storage
  */
 export async function generateImageSmart(
   prompt: string,
-  preferredModel: string = 'gemini',
-  supabaseAdmin?: any
+  preferredModel: string = 'gemini'
 ): Promise<{
   imageUrl?: string;
   model: string;
   error?: string;
   revisedPrompt?: string;
 }> {
-  console.log('[Image] Smart generation for prompt:', prompt.slice(0, 100));
+  console.log('[Image] Starting smart image generation for prompt:', prompt.slice(0, 80));
 
-  // Helper to upload base64 to storage
-  async function uploadBase64Image(dataUrl: string): Promise<string | null> {
-    if (!supabaseAdmin) return null;
-    try {
-      const matches = dataUrl.match(/^data:(image\/[a-z+]+);base64,(.+)$/);
-      if (!matches) return null;
-      const mimeType = matches[1];
-      const ext = mimeType.split('/')[1]?.replace('+xml', '') || 'png';
-      const base64Data = matches[2];
-      const binary = atob(base64Data);
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-      const fileName = `ai-gen/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-      const { error: uploadErr } = await supabaseAdmin.storage
-        .from('chat-images')
-        .upload(fileName, bytes, { contentType: mimeType, upsert: true });
-      if (uploadErr) {
-        console.error('[Image] Storage upload error:', uploadErr.message);
-        return null;
-      }
-      const { data: urlData } = supabaseAdmin.storage.from('chat-images').getPublicUrl(fileName);
-      return urlData?.publicUrl || null;
-    } catch (e: any) {
-      console.error('[Image] Upload exception:', e.message);
-      return null;
-    }
-  }
-
-  async function resolveImageUrl(rawUrl: string): Promise<string> {
-    if (rawUrl.startsWith('data:image/')) {
-      const uploaded = await uploadBase64Image(rawUrl);
-      return uploaded || rawUrl; // Fall back to data URL if upload fails
-    }
-    return rawUrl;
-  }
-
-  // ── Priority 1: DALL-E 3 (OpenAI) ─────────────────────────────────────────
+  // Priority 1: DALL-E 3 (most reliable if OpenAI key is set)
   const dalleResult = await generateImageWithDalle(prompt);
   if (dalleResult.imageUrl) {
-    const resolvedUrl = await resolveImageUrl(dalleResult.imageUrl);
-    console.log('[Image] DALL-E 3 success, URL resolved:', resolvedUrl.startsWith('http') ? 'public URL' : 'data URL');
-    return { imageUrl: resolvedUrl, model: 'dalle-3', revisedPrompt: dalleResult.revisedPrompt };
+    console.log('[Image] DALL-E 3 success');
+    return { imageUrl: dalleResult.imageUrl, model: 'dalle-3', revisedPrompt: dalleResult.revisedPrompt };
   }
   console.log('[Image] DALL-E 3 failed:', dalleResult.error);
 
-  // ── Priority 2: Stability AI ───────────────────────────────────────────────
-  const stabilityResult = await generateImageWithStabilityAI(prompt);
-  if (stabilityResult.imageUrl) {
-    const resolvedUrl = await resolveImageUrl(stabilityResult.imageUrl);
-    console.log('[Image] Stability AI success');
-    return { imageUrl: resolvedUrl, model: 'stability-ai' };
-  }
-  console.log('[Image] Stability AI failed:', stabilityResult.error);
-
-  // ── Priority 3: Gemini native ──────────────────────────────────────────────
+  // Priority 2: Gemini native image generation
   const geminiResult = await generateImageWithGemini(prompt);
   if (geminiResult.imageUrl) {
-    const resolvedUrl = await resolveImageUrl(geminiResult.imageUrl);
     console.log('[Image] Gemini image success');
-    return { imageUrl: resolvedUrl, model: 'gemini-image' };
+    return { imageUrl: geminiResult.imageUrl, model: 'gemini-image' };
   }
   console.log('[Image] Gemini image failed:', geminiResult.error);
 
-  // ── Priority 4: OnSpace AI ─────────────────────────────────────────────────
+  // Priority 3: OnSpace AI (chat/completions with Gemini)
   const onspaceResult = await generateImageWithOnSpaceAI(prompt);
   if (onspaceResult.imageUrl) {
-    const resolvedUrl = await resolveImageUrl(onspaceResult.imageUrl);
     console.log('[Image] OnSpace AI image success');
-    return { imageUrl: resolvedUrl, model: 'onspace-ai' };
+    return { imageUrl: onspaceResult.imageUrl, model: 'onspace-ai' };
   }
-  console.log('[Image] OnSpace AI failed:', onspaceResult.error);
+  console.log('[Image] OnSpace AI image failed:', onspaceResult.error);
 
   return {
-    error: 'Image generation is temporarily unavailable. All providers failed.',
+    error: 'Image generation is currently unavailable. All providers failed.',
     model: 'none'
   };
 }
 
 /**
  * Main AI router with automatic fallback
+ * Priority: OnSpace AI → Groq → Claude → OpenAI → Gemini
+ * GUARANTEED: Always returns a valid content string, never empty.
  */
 export async function callAI(modelId: string, messages: AIMessage[], isImageTask: boolean = false): Promise<AIResponse> {
   console.log(`AI Request - model: ${modelId}, imageTask: ${isImageTask}`);
 
+  // For image tasks, don't use text-only models
   if (isImageTask && isTextOnlyModel(modelId)) {
     modelId = 'google-gemini';
   }
 
+  // PRIORITY ORDER: OnSpace AI first (always configured), then others
   const fallbackOrder = ['onspace-ai', 'groq-llama', 'claude-3', 'openai-gpt4', 'google-gemini'];
 
+  // If user selected a specific model, put it first
   if (modelId && modelId !== 'gemini' && modelId !== 'google-gemini') {
     const modelMap: Record<string, string> = {
       'openai': 'openai-gpt4',
@@ -739,7 +593,7 @@ export async function callAI(modelId: string, messages: AIMessage[], isImageTask
     }
   }
 
-  // HARD FALLBACK
+  // HARD FALLBACK — never return empty to the user
   console.log('All AI providers failed — returning guaranteed fallback response');
   return {
     content: "I'm sorry, I'm having trouble connecting right now. Please try again in a moment. If the issue persists, try rephrasing your question.",
@@ -749,7 +603,7 @@ export async function callAI(modelId: string, messages: AIMessage[], isImageTask
 }
 
 /**
- * Detect content type from user message
+ * Detect content type
  */
 export function detectContentType(userMessage: string): {
   type: 'image' | 'file' | 'both' | 'code' | 'text';
@@ -760,59 +614,68 @@ export function detectContentType(userMessage: string): {
   hasFileKeywords: boolean;
 } {
   const lowerMsg = userMessage.toLowerCase();
-
+  
   const imageKeywords = [
+    // English - logo
     'create a logo', 'create logo', 'generate logo', 'make a logo', 'design a logo', 'build a logo',
     'generate a logo', 'make me a logo', 'design me a logo',
+    // English - image/photo/picture
     'create an image', 'create image', 'generate image', 'make an image', 'design an image',
-    'generate a photo', 'create a photo', 'make a photo',
+    'generate a photo', 'create a photo', 'make a photo', 'take a photo',
     'generate a picture', 'make a picture', 'generate picture', 'create picture', 'create a picture',
+    // English - art/illustration
     'draw a', 'draw me', 'paint a', 'paint me', 'illustrate', 'sketch a', 'sketch me',
     'create art', 'generate art', 'make art', 'create artwork', 'generate artwork',
+    // English - icon/banner/thumbnail
     'create an icon', 'create icon', 'generate icon', 'make an icon', 'design an icon',
     'create a banner', 'generate banner', 'make a banner', 'design a banner',
     'create a thumbnail', 'generate thumbnail',
+    // English - visual
     'generate a visual', 'create a visual', 'make a visual',
     'create an illustration', 'generate an illustration',
+    // Haitian Creole
     'kreye yon logo', 'kreye logo', 'fe yon logo', 'fe logo', 'desine logo',
     'kreye foto', 'kreye imaj', 'fe foto', 'fe imaj', 'kreye yon imaj',
-    'fè yon logo', 'fè logo',
+    'fè yon logo', 'fè logo', 'kreye yon foto', 'fè foto',
+    // French
     'créer un logo', 'creer un logo', 'générer une image', 'generer une image',
     'créer une image', 'faire un logo', 'dessiner',
+    // Spanish
     'crear un logo', 'generar una imagen', 'crear una imagen', 'hacer un logo',
+    // Short patterns
     'photo of', 'picture of', 'image of', 'logo for', 'logo of',
   ];
-
+  
   const editKeywords = [
     'edit image', 'edit the image', 'modify image', 'edit photo', 'modify photo',
   ];
-
+  
   const fileKeywords = [
     'create a file', 'generate file', 'make a file', 'csv file', 'html file',
     'json file', 'txt file', 'create csv', 'create html', 'create json',
     'generate csv', 'generate html', 'generate json',
   ];
-
+  
   const hasImageKeywords = imageKeywords.some(keyword => lowerMsg.includes(keyword));
   const hasFileKeywords = fileKeywords.some(keyword => lowerMsg.includes(keyword));
   const hasEditKeywords = editKeywords.some(keyword => lowerMsg.includes(keyword));
-
+  
   if (hasEditKeywords) {
     return { type: 'image', thinkingMode: 'editing_image', suggestedModel: 'google-gemini', isImageTask: true, hasImageKeywords: true, hasFileKeywords: false };
   }
-
+  
   if (hasImageKeywords && hasFileKeywords) {
     return { type: 'both', thinkingMode: 'creating_image', suggestedModel: 'google-gemini', isImageTask: true, hasImageKeywords: true, hasFileKeywords: true };
   }
-
+  
   if (hasImageKeywords) {
     return { type: 'image', thinkingMode: 'creating_image', suggestedModel: 'google-gemini', isImageTask: true, hasImageKeywords: true, hasFileKeywords: false };
   }
-
+  
   if (hasFileKeywords) {
     return { type: 'file', thinkingMode: 'analyzing', suggestedModel: 'file-creator', isImageTask: false, hasImageKeywords: false, hasFileKeywords: true };
   }
-
+  
   return { type: 'text', thinkingMode: 'thinking', suggestedModel: 'onspace-ai', isImageTask: false, hasImageKeywords: false, hasFileKeywords: false };
 }
 
