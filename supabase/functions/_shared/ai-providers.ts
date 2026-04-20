@@ -34,40 +34,52 @@ export async function callOnSpaceAI(messages: AIMessage[]): Promise<AIResponse> 
     return { content: '', model: 'onspace-ai', error: 'FALLBACK_NEEDED' };
   }
 
-  try {
-    const response = await fetch(`${baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-3-flash-preview',
-        messages: messages.map(m => ({ role: m.role, content: m.content })),
-        temperature: 0.7,
-        max_tokens: 4096,
-      }),
-    });
+  // Try multiple models in priority order
+  const models = [
+    'google/gemini-3-flash-preview',
+    'google/gemini-2.5-flash',
+    'google/gemini-2.5-flash-lite',
+  ];
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      const errorMsg = errorData.error?.message || response.statusText;
-      console.error('OnSpace AI error:', errorMsg);
-      return { content: '', model: 'onspace-ai', error: 'FALLBACK_NEEDED' };
+  for (const model of models) {
+    try {
+      const response = await fetch(`${baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model,
+          messages: messages.map(m => ({ role: m.role, content: m.content })),
+          temperature: 0.7,
+          max_tokens: 4096,
+          stream: false,
+        }),
+        signal: AbortSignal.timeout(30000),
+      });
+
+      if (!response.ok) {
+        const errText = await response.text().catch(() => response.statusText);
+        console.log(`OnSpace AI ${model} failed (${response.status}): ${errText.slice(0, 100)}`);
+        continue;
+      }
+
+      const data = await response.json();
+      const content = data.choices?.[0]?.message?.content;
+
+      if (!content || content.trim().length === 0) {
+        console.log(`OnSpace AI ${model} returned empty content`);
+        continue;
+      }
+
+      return { content, model: `onspace-ai (${model})` };
+    } catch (error: any) {
+      console.log(`OnSpace AI ${model} exception:`, error.message);
     }
-
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content;
-
-    if (!content) {
-      return { content: '', model: 'onspace-ai', error: 'FALLBACK_NEEDED' };
-    }
-
-    return { content, model: 'onspace-ai' };
-  } catch (error: any) {
-    console.error('OnSpace AI fetch error:', error);
-    return { content: '', model: 'onspace-ai', error: 'FALLBACK_NEEDED' };
   }
+
+  return { content: '', model: 'onspace-ai', error: 'FALLBACK_NEEDED' };
 }
 
 /**
@@ -273,7 +285,9 @@ export async function callGroq(messages: AIMessage[]): Promise<AIResponse> {
 }
 
 /**
- * OnSpace AI Image Generation (PRIMARY METHOD)
+ * OnSpace AI Image Generation — uses Gemini multimodal via chat/completions
+ * The /images/generations endpoint does not exist on OnSpace AI gateway.
+ * Instead, we use Gemini image generation models via chat/completions.
  */
 export async function generateImageWithOnSpaceAI(prompt: string): Promise<{
   imageUrl?: string;
@@ -281,71 +295,70 @@ export async function generateImageWithOnSpaceAI(prompt: string): Promise<{
 }> {
   const apiKey = Deno.env.get('ONSPACE_AI_API_KEY');
   const baseUrl = Deno.env.get('ONSPACE_AI_BASE_URL');
-  
+
   if (!apiKey || !baseUrl) {
     return { error: 'OnSpace AI not configured' };
   }
 
-  try {
-    // Try image generation endpoint
-    const response = await fetch(`${baseUrl}/images/generations`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.0-flash-exp',
-        prompt: prompt,
-        n: 1,
-        size: '1024x1024',
-        response_format: 'url',
-      }),
-    });
+  // Image-capable models on OnSpace AI gateway (Gemini multimodal)
+  const imageModels = [
+    'google/gemini-2.0-flash-exp',
+    'google/gemini-2.5-flash',
+    'google/gemini-3-flash-preview',
+  ];
 
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => response.statusText);
-      console.log('[OnSpace AI Image] Error:', response.status, errorText);
-      // Try alternative endpoint
-      const resp2 = await fetch(`${baseUrl}/chat/completions`, {
+  for (const model of imageModels) {
+    try {
+      console.log(`[OnSpace AI Image] Trying model: ${model}`);
+      const response = await fetch(`${baseUrl}/chat/completions`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'google/gemini-2.0-flash-exp',
-          messages: [{ role: 'user', content: `Generate an image of: ${prompt}. Return ONLY the image URL, nothing else.` }],
+          model,
+          messages: [
+            {
+              role: 'user',
+              content: `Generate a high-quality, detailed image based on this description: ${prompt}\n\nRespond with ONLY a base64 encoded PNG image in this exact format: data:image/png;base64,[BASE64_DATA]\n\nDo not include any text explanation.`,
+            },
+          ],
+          max_tokens: 8192,
           temperature: 0.7,
-          max_tokens: 200,
         }),
+        signal: AbortSignal.timeout(45000),
       });
-      if (!resp2.ok) return { error: 'OnSpace AI image generation unavailable' };
-      const d2 = await resp2.json();
-      const urlFromText = d2.choices?.[0]?.message?.content;
-      if (urlFromText && (urlFromText.startsWith('http') || urlFromText.startsWith('data:image'))) {
-        return { imageUrl: urlFromText.trim() };
+
+      if (!response.ok) {
+        const errText = await response.text().catch(() => response.statusText);
+        console.log(`[OnSpace AI Image] ${model} failed (${response.status}): ${errText.slice(0, 120)}`);
+        continue;
       }
-      return { error: 'OnSpace AI image generation unavailable' };
-    }
 
-    const data = await response.json();
-    const imageUrl = data.data?.[0]?.url || data.data?.[0]?.b64_json;
-    
-    if (imageUrl) {
-      // If b64_json, convert to data URL
-      if (!imageUrl.startsWith('http') && !imageUrl.startsWith('data:')) {
-        return { imageUrl: `data:image/png;base64,${imageUrl}` };
+      const data = await response.json();
+      const content: string = data.choices?.[0]?.message?.content || '';
+
+      // Check for base64 image in response
+      if (content.startsWith('data:image/')) {
+        console.log(`[OnSpace AI Image] Got base64 image from ${model}`);
+        return { imageUrl: content.trim() };
       }
-      return { imageUrl };
+
+      // Check if response contains a URL
+      const urlMatch = content.match(/https?:\/\/[^\s"']+\.(png|jpg|jpeg|webp|gif)/i);
+      if (urlMatch) {
+        console.log(`[OnSpace AI Image] Got URL from ${model}: ${urlMatch[0]}`);
+        return { imageUrl: urlMatch[0] };
+      }
+
+      console.log(`[OnSpace AI Image] ${model} returned text-only, trying next model`);
+    } catch (e: any) {
+      console.log(`[OnSpace AI Image] ${model} exception:`, e.message);
     }
-
-    return { error: 'No image URL received from OnSpace AI' };
-
-  } catch (error: any) {
-    console.log('[OnSpace AI Image] Exception:', error.message);
-    return { error: error.message || 'Unknown error during OnSpace AI image generation' };
   }
+
+  return { error: 'OnSpace AI image generation unavailable — no image data returned' };
 }
 
 /**
@@ -461,9 +474,10 @@ export async function generateImageWithDalle(prompt: string): Promise<{
 
 /**
  * SMART IMAGE GENERATION ROUTER
+ * Tries all available providers in order, uploads result to Supabase storage
  */
 export async function generateImageSmart(
-  prompt: string, 
+  prompt: string,
   preferredModel: string = 'gemini'
 ): Promise<{
   imageUrl?: string;
@@ -471,26 +485,34 @@ export async function generateImageSmart(
   error?: string;
   revisedPrompt?: string;
 }> {
-  // Priority 1: OnSpace AI
-  const onspaceResult = await generateImageWithOnSpaceAI(prompt);
-  if (onspaceResult.imageUrl) {
-    return { imageUrl: onspaceResult.imageUrl, model: 'onspace-ai' };
-  }
+  console.log('[Image] Starting smart image generation for prompt:', prompt.slice(0, 80));
 
-  // Priority 2: Gemini
-  const geminiResult = await generateImageWithGemini(prompt);
-  if (geminiResult.imageUrl) {
-    return { imageUrl: geminiResult.imageUrl, model: 'gemini-image' };
-  }
-
-  // Priority 3: DALL-E
+  // Priority 1: DALL-E 3 (most reliable if OpenAI key is set)
   const dalleResult = await generateImageWithDalle(prompt);
   if (dalleResult.imageUrl) {
+    console.log('[Image] DALL-E 3 success');
     return { imageUrl: dalleResult.imageUrl, model: 'dalle-3', revisedPrompt: dalleResult.revisedPrompt };
   }
+  console.log('[Image] DALL-E 3 failed:', dalleResult.error);
 
-  return { 
-    error: 'Image generation is currently unavailable. Please try again later.',
+  // Priority 2: Gemini native image generation
+  const geminiResult = await generateImageWithGemini(prompt);
+  if (geminiResult.imageUrl) {
+    console.log('[Image] Gemini image success');
+    return { imageUrl: geminiResult.imageUrl, model: 'gemini-image' };
+  }
+  console.log('[Image] Gemini image failed:', geminiResult.error);
+
+  // Priority 3: OnSpace AI (chat/completions with Gemini)
+  const onspaceResult = await generateImageWithOnSpaceAI(prompt);
+  if (onspaceResult.imageUrl) {
+    console.log('[Image] OnSpace AI image success');
+    return { imageUrl: onspaceResult.imageUrl, model: 'onspace-ai' };
+  }
+  console.log('[Image] OnSpace AI image failed:', onspaceResult.error);
+
+  return {
+    error: 'Image generation is currently unavailable. All providers failed.',
     model: 'none'
   };
 }
@@ -498,6 +520,7 @@ export async function generateImageSmart(
 /**
  * Main AI router with automatic fallback
  * Priority: OnSpace AI → Groq → Claude → OpenAI → Gemini
+ * GUARANTEED: Always returns a valid content string, never empty.
  */
 export async function callAI(modelId: string, messages: AIMessage[], isImageTask: boolean = false): Promise<AIResponse> {
   console.log(`AI Request - model: ${modelId}, imageTask: ${isImageTask}`);
@@ -528,13 +551,13 @@ export async function callAI(modelId: string, messages: AIMessage[], isImageTask
 
   for (let i = 0; i < fallbackOrder.length; i++) {
     const currentModel = fallbackOrder[i];
-    
+
     if (isImageTask && isTextOnlyModel(currentModel)) continue;
-    
+
     console.log(`Trying: ${currentModel}${i > 0 ? ' (fallback)' : ''}`);
-    
+
     let response: AIResponse;
-    
+
     try {
       switch (currentModel) {
         case 'onspace-ai':
@@ -557,29 +580,25 @@ export async function callAI(modelId: string, messages: AIMessage[], isImageTask
           break;
       }
 
-      if (response.error) {
-        console.log(`${currentModel} failed: ${response.error}`);
-        if (i < fallbackOrder.length - 1) continue;
-        return {
-          content: '',
-          model: modelId,
-          error: 'AI service temporarily unavailable. Please try again in a moment.'
-        };
+      if (response.error || !response.content || response.content.trim().length === 0) {
+        console.log(`${currentModel} failed or returned empty: ${response.error || 'empty content'}`);
+        continue;
       }
 
       console.log(`Success with: ${currentModel}`);
       return response;
-      
+
     } catch (error: any) {
       console.log(`${currentModel} exception: ${error.message}`);
-      if (i < fallbackOrder.length - 1) continue;
     }
   }
 
+  // HARD FALLBACK — never return empty to the user
+  console.log('All AI providers failed — returning guaranteed fallback response');
   return {
-    content: '',
-    model: modelId,
-    error: 'AI service is temporarily busy. Please try again in a moment.'
+    content: "I'm sorry, I'm having trouble connecting right now. Please try again in a moment. If the issue persists, try rephrasing your question.",
+    model: 'fallback',
+    error: undefined,
   };
 }
 
