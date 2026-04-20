@@ -5,6 +5,7 @@ const CONFIG = {
   ONSPACE_AI_API_KEY: Deno.env.get('ONSPACE_AI_API_KEY'),
   ONSPACE_AI_BASE_URL: Deno.env.get('ONSPACE_AI_BASE_URL') || 'https://api.onspace.ai',
   OPENAI_API_KEY: Deno.env.get('OPENAI_API_KEY'),
+  GROQ_API_KEY: Deno.env.get('GROQ_API_KEY'),
   SUPABASE_URL: Deno.env.get('SUPABASE_URL'),
   SUPABASE_SERVICE_ROLE_KEY: Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'),
   DEFAULT_VOICE: 'alloy',
@@ -23,18 +24,71 @@ function generateFileName(): string {
   return `voice_${timestamp}_${random}.mp3`;
 }
 
-// ── Voice map for language/pitch hints ──────────────────────────────────────
-const VOICE_LANG_MAP: Record<string, { lang: string; gender: string }> = {
-  alloy:   { lang: 'en-US', gender: 'neutral' },
-  echo:    { lang: 'en-GB', gender: 'male'    },
-  fable:   { lang: 'en-GB', gender: 'male'    },
-  onyx:    { lang: 'en-US', gender: 'male'    },
-  nova:    { lang: 'en-US', gender: 'female'  },
-  shimmer: { lang: 'en-US', gender: 'female'  },
-  coral:   { lang: 'en-US', gender: 'female'  },
-};
+// ── Try OnSpace AI TTS via /audio/speech endpoint ──
+async function tryOnSpaceAITTS(text: string, voice: string, speed: number): Promise<ArrayBuffer | null> {
+  const apiKey = CONFIG.ONSPACE_AI_API_KEY;
+  const baseUrl = CONFIG.ONSPACE_AI_BASE_URL;
+  if (!apiKey) {
+    console.log('[TTS] ONSPACE_AI_API_KEY not set, skipping OnSpace AI TTS');
+    return null;
+  }
+  
+  // Try /v1/audio/speech endpoint (OpenAI-compatible TTS)
+  const endpoints = [
+    `${baseUrl}/v1/audio/speech`,
+    `${baseUrl}/audio/speech`,
+  ];
+  
+  for (const endpoint of endpoints) {
+    try {
+      console.log(`[TTS] Trying OnSpace AI TTS at: ${endpoint}`);
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'tts-1-hd',
+          voice,
+          input: text,
+          speed,
+          response_format: 'mp3',
+        }),
+        signal: AbortSignal.timeout(30000),
+      });
+      
+      console.log(`[TTS] OnSpace AI response status: ${response.status} at ${endpoint}`);
+      
+      if (!response.ok) {
+        const errText = await response.text().catch(() => response.statusText);
+        console.log(`[TTS] OnSpace AI TTS failed (${response.status}) at ${endpoint}: ${errText.slice(0, 200)}`);
+        continue; // try next endpoint
+      }
+      
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        const json = await response.json();
+        console.log('[TTS] OnSpace AI returned JSON instead of audio:', JSON.stringify(json).slice(0, 200));
+        continue;
+      }
+      
+      const buffer = await response.arrayBuffer();
+      if (!buffer || buffer.byteLength < 100) {
+        console.log('[TTS] OnSpace AI returned empty/small buffer');
+        continue;
+      }
+      console.log(`[TTS] OnSpace AI TTS success: ${buffer.byteLength} bytes`);
+      return buffer;
+    } catch (e: any) {
+      console.log(`[TTS] OnSpace AI TTS exception at ${endpoint}:`, e.message);
+    }
+  }
+  
+  return null;
+}
 
-// ── Try OpenAI TTS (most reliable for audio quality) ──────────────────────
+// ── Try OpenAI TTS ──
 async function tryOpenAITTS(text: string, voice: string, speed: number): Promise<ArrayBuffer | null> {
   const apiKey = CONFIG.OPENAI_API_KEY;
   if (!apiKey) {
@@ -53,17 +107,16 @@ async function tryOpenAITTS(text: string, voice: string, speed: number): Promise
         model: 'tts-1',
         voice,
         input: text,
-        speed: Math.max(0.25, Math.min(4.0, speed)),
-        response_format: 'mp3',
+        speed,
       }),
       signal: AbortSignal.timeout(45000),
     });
-
-    console.log(`[TTS] OpenAI response: ${response.status}`);
-
+    
+    console.log(`[TTS] OpenAI response status: ${response.status}`);
+    
     if (!response.ok) {
       const errText = await response.text().catch(() => response.statusText);
-      console.log(`[TTS] OpenAI TTS failed (${response.status}): ${errText.slice(0, 200)}`);
+      console.log(`[TTS] OpenAI TTS failed (${response.status}): ${errText.slice(0, 300)}`);
       return null;
     }
     const buffer = await response.arrayBuffer();
@@ -79,157 +132,39 @@ async function tryOpenAITTS(text: string, voice: string, speed: number): Promise
   }
 }
 
-// ── Try OnSpace AI TTS via chat/completions → base64 audio ─────────────────
-// OnSpace AI uses the /v1/audio/speech endpoint (OpenAI-compatible TTS)
-async function tryOnSpaceAITTS(text: string, voice: string, speed: number): Promise<ArrayBuffer | null> {
-  const apiKey = CONFIG.ONSPACE_AI_API_KEY;
-  const baseUrl = CONFIG.ONSPACE_AI_BASE_URL;
-  if (!apiKey) {
-    console.log('[TTS] ONSPACE_AI_API_KEY not set, skipping OnSpace AI TTS');
-    return null;
-  }
-
-  // Try multiple endpoint patterns
-  const endpoints = [
-    `${baseUrl}/v1/audio/speech`,
-    `${baseUrl}/audio/speech`,
-    `${baseUrl}/tts`,
-  ];
-
-  for (const endpoint of endpoints) {
-    try {
-      console.log(`[TTS] Trying OnSpace AI TTS at: ${endpoint}`);
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'tts-1-hd',
-          voice,
-          input: text,
-          speed: Math.max(0.25, Math.min(4.0, speed)),
-          response_format: 'mp3',
-        }),
-        signal: AbortSignal.timeout(30000),
-      });
-
-      console.log(`[TTS] OnSpace AI response: ${response.status} at ${endpoint}`);
-
-      if (!response.ok) {
-        const errText = await response.text().catch(() => response.statusText);
-        console.log(`[TTS] OnSpace AI failed (${response.status}): ${errText.slice(0, 150)}`);
-        continue;
-      }
-
-      const contentType = response.headers.get('content-type') || '';
-      if (contentType.includes('application/json')) {
-        const json = await response.json().catch(() => ({}));
-        console.log('[TTS] OnSpace AI returned JSON instead of audio:', JSON.stringify(json).slice(0, 200));
-        // Check if JSON contains base64 audio
-        if (json.audio || json.data) {
-          try {
-            const b64 = json.audio || json.data;
-            const decoded = atob(b64);
-            const bytes = Uint8Array.from(decoded, c => c.charCodeAt(0));
-            if (bytes.length > 100) {
-              console.log(`[TTS] OnSpace AI audio from JSON: ${bytes.length} bytes`);
-              return bytes.buffer;
-            }
-          } catch {}
-        }
-        continue;
-      }
-
-      const buffer = await response.arrayBuffer();
-      if (!buffer || buffer.byteLength < 100) {
-        console.log('[TTS] OnSpace AI returned empty/small buffer');
-        continue;
-      }
-      console.log(`[TTS] OnSpace AI TTS success: ${buffer.byteLength} bytes`);
-      return buffer;
-    } catch (e: any) {
-      console.log(`[TTS] OnSpace AI exception at ${endpoint}:`, e.message);
-    }
-  }
-
-  return null;
-}
-
-// ── Generate TTS via OnSpace AI chat/completions (text-based approach) ──────
-// This uses the AI to confirm TTS is requested, then falls back gracefully
-async function tryOnSpaceAIChatTTS(text: string, voice: string): Promise<ArrayBuffer | null> {
-  const apiKey = CONFIG.ONSPACE_AI_API_KEY;
-  const baseUrl = CONFIG.ONSPACE_AI_BASE_URL;
-  if (!apiKey || !baseUrl) return null;
-
-  // This is a last-resort attempt using the chat endpoint to get audio if supported
-  try {
-    console.log('[TTS] Trying OnSpace AI chat/completions for TTS...');
-    const response = await fetch(`${baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-3-flash-preview',
-        messages: [{ role: 'user', content: text }],
-        modalities: ['audio'],
-        audio: { voice, format: 'mp3' },
-      }),
-      signal: AbortSignal.timeout(25000),
-    });
-
-    if (!response.ok) return null;
-
-    const data = await response.json().catch(() => null);
-    if (!data) return null;
-
-    // Check for audio in response
-    const audioContent = data.choices?.[0]?.message?.audio?.data
-      || data.choices?.[0]?.message?.content;
-
-    if (audioContent && typeof audioContent === 'string' && audioContent.length > 100) {
-      try {
-        // Try to decode as base64
-        const decoded = atob(audioContent.replace(/^data:audio\/[^;]+;base64,/, ''));
-        const bytes = Uint8Array.from(decoded, c => c.charCodeAt(0));
-        if (bytes.length > 100) {
-          console.log(`[TTS] OnSpace AI chat TTS audio: ${bytes.length} bytes`);
-          return bytes.buffer;
-        }
-      } catch {}
-    }
-  } catch (e: any) {
-    console.log('[TTS] OnSpace AI chat TTS exception:', e.message);
-  }
-  return null;
-}
-
-// ── Device TTS fallback response ────────────────────────────────────────────
-function buildFallbackResponse(text: string, voice: string): Response {
-  const voiceInfo = VOICE_LANG_MAP[voice] || { lang: 'en-US', gender: 'neutral' };
+// ── Fallback: generate a minimal silent MP3 + return a text fallback signal ──
+// This allows the client to use Web Speech API as last resort
+async function buildFallbackResponse(text: string, voice: string): Promise<Response> {
+  // Map voice to Web Speech API voice hints
+  const voiceMap: Record<string, string> = {
+    alloy: 'en-US',
+    echo: 'en-GB',
+    fable: 'en-GB',
+    onyx: 'en-US',
+    nova: 'en-US',
+    shimmer: 'en-US',
+    coral: 'en-US',
+  };
+  const lang = voiceMap[voice] || 'en-US';
+  
   return new Response(
     JSON.stringify({
       success: false,
       fallback: true,
       text,
       voice,
-      lang: voiceInfo.lang,
-      gender: voiceInfo.gender,
+      lang,
       error: 'TTS providers unavailable — use device speech synthesis',
       code: 'USE_DEVICE_TTS',
     }),
-    {
-      status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    { 
+      status: 200, // 200 so client handles it gracefully
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
     }
   );
 }
 
-// ── Upload audio to Supabase storage ────────────────────────────────────────
+// ── Upload audio to storage ──
 async function uploadAudio(audioBytes: Uint8Array, supabaseAdmin: any): Promise<string | null> {
   const fileName = generateFileName();
   const filePath = `${CONFIG.FOLDER_PATH}/${fileName}`;
@@ -254,7 +189,7 @@ async function uploadAudio(audioBytes: Uint8Array, supabaseAdmin: any): Promise<
   return urlData?.publicUrl || null;
 }
 
-// ── Main handler ────────────────────────────────────────────────────────────
+// ── Main handler ──
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -268,6 +203,7 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // Verify Supabase config
     if (!CONFIG.SUPABASE_URL || !CONFIG.SUPABASE_SERVICE_ROLE_KEY) {
       console.error('[TTS] Supabase not configured');
       return new Response(
@@ -276,6 +212,7 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Parse body
     let body: any;
     try {
       body = await req.json();
@@ -288,6 +225,7 @@ Deno.serve(async (req) => {
 
     const { text, voice, speed, userId } = body;
 
+    // Validate text
     if (!text || typeof text !== 'string' || text.trim().length === 0) {
       return new Response(
         JSON.stringify({ success: false, error: 'Text is required' }),
@@ -301,37 +239,29 @@ Deno.serve(async (req) => {
       : (CONFIG.DEFAULT_VOICE as VoiceType);
     const finalSpeed = Math.max(0.25, Math.min(4.0, Number(speed) || CONFIG.DEFAULT_SPEED));
 
+    // Log environment status for debugging
     console.log(`[TTS] Request: voice=${finalVoice}, speed=${finalSpeed}, len=${finalText.length}, user=${userId || 'anon'}`);
-    console.log(`[TTS] Keys: OnSpace=${!!CONFIG.ONSPACE_AI_API_KEY}, OpenAI=${!!CONFIG.OPENAI_API_KEY}`);
-    console.log(`[TTS] BaseURL: ${CONFIG.ONSPACE_AI_BASE_URL}`);
+    console.log(`[TTS] Config: OnSpace=${!!CONFIG.ONSPACE_AI_API_KEY}, OpenAI=${!!CONFIG.OPENAI_API_KEY}, BaseURL=${CONFIG.ONSPACE_AI_BASE_URL}`);
 
-    // ── Provider priority: OpenAI → OnSpace AI → OnSpace Chat → device fallback ──
+    // ── Try providers in order: OnSpace AI → OpenAI ──
     let audioBuffer: ArrayBuffer | null = null;
     let usedProvider = '';
 
-    // 1. Try OpenAI first (most reliable audio quality)
-    audioBuffer = await tryOpenAITTS(finalText, finalVoice, finalSpeed);
-    if (audioBuffer) usedProvider = 'openai';
+    audioBuffer = await tryOnSpaceAITTS(finalText, finalVoice, finalSpeed);
+    if (audioBuffer) usedProvider = 'onspace-ai';
 
-    // 2. Try OnSpace AI /v1/audio/speech
     if (!audioBuffer) {
-      audioBuffer = await tryOnSpaceAITTS(finalText, finalVoice, finalSpeed);
-      if (audioBuffer) usedProvider = 'onspace-ai';
+      audioBuffer = await tryOpenAITTS(finalText, finalVoice, finalSpeed);
+      if (audioBuffer) usedProvider = 'openai';
     }
 
-    // 3. Try OnSpace AI via chat/completions with audio modality
+    // ── Fallback: return signal for device TTS ──
     if (!audioBuffer) {
-      audioBuffer = await tryOnSpaceAIChatTTS(finalText, finalVoice);
-      if (audioBuffer) usedProvider = 'onspace-ai-chat';
-    }
-
-    // 4. All providers failed → device TTS fallback
-    if (!audioBuffer) {
-      console.log('[TTS] All providers failed — returning device TTS fallback signal');
+      console.log('[TTS] All audio providers failed — returning device TTS fallback signal');
       return buildFallbackResponse(finalText, finalVoice);
     }
 
-    // Upload to Supabase storage
+    // Upload to storage
     const supabaseAdmin = createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_SERVICE_ROLE_KEY);
     const audioUint8 = new Uint8Array(audioBuffer);
     const audioUrl = await uploadAudio(audioUint8, supabaseAdmin);
