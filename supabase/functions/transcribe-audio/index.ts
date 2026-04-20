@@ -1,4 +1,3 @@
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 const corsHeaders = {
@@ -7,13 +6,12 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
 
   try {
-    // Parse body safely
     let body: any;
     try {
       body = await req.json();
@@ -30,18 +28,6 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ error: 'No valid audio data provided', warning: 'No speech detected. Please try again.' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Use OnSpace AI (Gemini multimodal — supports audio input → text output)
-    const ONSPACE_AI_API_KEY = Deno.env.get('ONSPACE_AI_API_KEY');
-    const ONSPACE_AI_BASE_URL = Deno.env.get('ONSPACE_AI_BASE_URL');
-
-    if (!ONSPACE_AI_API_KEY || !ONSPACE_AI_BASE_URL) {
-      console.error('OnSpace AI not configured');
-      return new Response(
-        JSON.stringify({ error: 'Transcription service not configured. Please contact support.' }),
-        { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -64,183 +50,172 @@ serve(async (req) => {
       );
     }
 
-    const MAX_SIZE = 20 * 1024 * 1024; // 20 MB
+    const MAX_SIZE = 25 * 1024 * 1024; // 25 MB (Whisper limit)
     if (audioBuffer.length > MAX_SIZE) {
       return new Response(
-        JSON.stringify({ error: 'Audio file too large. Maximum 20MB allowed.' }),
+        JSON.stringify({ error: 'Audio file too large. Maximum 25MB allowed.' }),
         { status: 413, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log(`Transcribing audio via OnSpace AI: ${audioBuffer.length} bytes`);
+    console.log(`[Transcribe] Audio size: ${audioBuffer.length} bytes`);
 
-    // Build the language hint
-    const langHint = language ? ` The audio is likely in ${language}.` : '';
-    const langDetectionInstructions = `
-LANGUAGE DETECTION: After transcribing, also identify which language was spoken.
-Supported languages to detect: English, Haitian Creole (Kreyòl ayisyen), French (Français), Spanish (Español), Portuguese, and others.
-Return your answer in this exact JSON format:
-{
-  "text": "<transcribed text here>",
-  "detectedLanguage": "<language name in English, e.g. Haitian Creole>",
-  "languageCode": "<ISO code, e.g. ht for Haitian Creole, fr for French, en for English, es for Spanish>"
-}
-Do NOT add any text outside the JSON.`;
-
-    // Call OnSpace AI with Gemini multimodal (audio → text + language detection)
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 55000);
+    const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+    const ONSPACE_AI_API_KEY = Deno.env.get('ONSPACE_AI_API_KEY');
+    const ONSPACE_AI_BASE_URL = Deno.env.get('ONSPACE_AI_BASE_URL');
 
     let transcribedText = '';
-    let detectedLanguage = 'auto';
-    let detectedLanguageCode = 'auto';
+    let detectedLanguage = language || 'auto';
+    let provider = '';
 
-    try {
-      const response = await fetch(`${ONSPACE_AI_BASE_URL}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${ONSPACE_AI_API_KEY}`,
-        },
-        body: JSON.stringify({
-          model: 'google/gemini-3-flash-preview',
-          messages: [
-            {
-              role: 'system',
-              content: `You are a highly accurate speech transcription and language detection assistant.
-
-Your job:
-1. Transcribe exactly what is spoken in the audio
-2. Detect the language spoken
-
-Rules:
-- Preserve the exact words spoken in the original language
-- Detect language from: English, Haitian Creole, French, Spanish, Portuguese, or other
-- If audio is silent or inaudible, use text: "[SILENCE]"
-- If speech is unclear, transcribe your best attempt
-${langHint}
-${langDetectionInstructions}`,
-            },
-            {
-              role: 'user',
-              content: [
-                { type: 'text', text: 'Transcribe this audio and detect the language. Return JSON only:' },
-                { type: 'image_url', image_url: { url: `data:audio/m4a;base64,${audio}` } },
-              ],
-            },
-          ],
-          max_tokens: 1200,
-          temperature: 0.0,
-        }),
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeout);
-
-      if (!response.ok) {
-        const errText = await response.text();
-        console.error('OnSpace AI transcription error:', response.status, errText);
-        throw new Error(`OnSpace AI error ${response.status}: ${errText}`);
-      }
-
-      const data = await response.json();
-      const rawContent = (data.choices?.[0]?.message?.content || '').trim();
-
-      // Try to parse JSON response (language detection mode)
+    // ── Provider 1: OpenAI Whisper (most accurate, fastest) ──────────────────
+    if (OPENAI_API_KEY && !transcribedText) {
       try {
-        // Extract JSON from markdown code block if wrapped
-        const jsonMatch = rawContent.match(/```(?:json)?\s*([\s\S]*?)```/) || rawContent.match(/(\{[\s\S]*\})/);
-        const jsonStr = jsonMatch ? jsonMatch[1].trim() : rawContent;
-        const parsed = JSON.parse(jsonStr);
-        transcribedText = parsed.text || parsed.transcription || rawContent;
-        detectedLanguage = parsed.detectedLanguage || parsed.language || 'auto';
-        detectedLanguageCode = parsed.languageCode || parsed.code || 'auto';
-      } catch (_parseErr) {
-        // Not JSON — treat as plain transcription text
-        transcribedText = rawContent;
-        detectedLanguage = language || 'auto';
-      }
+        console.log('[Transcribe] Trying OpenAI Whisper...');
 
-    } catch (err: any) {
-      clearTimeout(timeout);
+        // Build multipart form data manually
+        const boundary = `----FormBoundary${Math.random().toString(36).slice(2)}`;
+        const CRLF = '\r\n';
 
-      if (err.name === 'AbortError') {
-        return new Response(
-          JSON.stringify({ error: 'Transcription timed out. Please try a shorter recording.' }),
-          { status: 504, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        // File part
+        const fileHeader = `--${boundary}${CRLF}Content-Disposition: form-data; name="file"; filename="audio.m4a"${CRLF}Content-Type: audio/mp4${CRLF}${CRLF}`;
+        const modelPart = `${CRLF}--${boundary}${CRLF}Content-Disposition: form-data; name="model"${CRLF}${CRLF}whisper-1${CRLF}`;
+        const responsePart = `--${boundary}${CRLF}Content-Disposition: form-data; name="response_format"${CRLF}${CRLF}json${CRLF}`;
+        const langPart = language ? `--${boundary}${CRLF}Content-Disposition: form-data; name="language"${CRLF}${CRLF}${language}${CRLF}` : '';
+        const closingBoundary = `--${boundary}--${CRLF}`;
+
+        const enc = new TextEncoder();
+        const fileHeaderBytes = enc.encode(fileHeader);
+        const afterFileBytes = enc.encode(modelPart + responsePart + langPart + closingBoundary);
+
+        const formData = new Uint8Array(
+          fileHeaderBytes.length + audioBuffer.length + afterFileBytes.length
         );
-      }
+        formData.set(fileHeaderBytes, 0);
+        formData.set(audioBuffer, fileHeaderBytes.length);
+        formData.set(afterFileBytes, fileHeaderBytes.length + audioBuffer.length);
 
-      // Fallback: gemini-2.5-flash-lite (no JSON, plain text only)
-      console.log('Primary model failed, trying fallback model...');
-      try {
-        const fallbackController = new AbortController();
-        const fallbackTimeout = setTimeout(() => fallbackController.abort(), 30000);
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 30000);
 
-        const fallbackResponse = await fetch(`${ONSPACE_AI_BASE_URL}/chat/completions`, {
+        const whisperResp = await fetch('https://api.openai.com/v1/audio/transcriptions', {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${ONSPACE_AI_API_KEY}`,
+            'Authorization': `Bearer ${OPENAI_API_KEY}`,
+            'Content-Type': `multipart/form-data; boundary=${boundary}`,
           },
-          body: JSON.stringify({
-            model: 'google/gemini-2.5-flash-lite',
-            messages: [
-              {
-                role: 'system',
-                content: `You are a speech transcription assistant. Transcribe ONLY what is spoken in the audio. Output only the transcription text.${langHint}`,
-              },
-              {
-                role: 'user',
-                content: [
-                  { type: 'text', text: 'Transcribe this audio:' },
-                  { type: 'image_url', image_url: { url: `data:audio/m4a;base64,${audio}` } },
-                ],
-              },
-            ],
-            max_tokens: 800,
-            temperature: 0.0,
-          }),
-          signal: fallbackController.signal,
+          body: formData,
+          signal: controller.signal,
         });
 
-        clearTimeout(fallbackTimeout);
+        clearTimeout(timeout);
 
-        if (!fallbackResponse.ok) {
-          const fallbackErr = await fallbackResponse.text();
-          throw new Error(`Fallback model error: ${fallbackErr}`);
+        if (whisperResp.ok) {
+          const whisperData = await whisperResp.json();
+          transcribedText = (whisperData.text || '').trim();
+          provider = 'openai-whisper';
+          console.log(`[Transcribe] Whisper success: "${transcribedText.slice(0, 60)}..."`);
+        } else {
+          const errTxt = await whisperResp.text().catch(() => '');
+          console.log(`[Transcribe] Whisper failed ${whisperResp.status}: ${errTxt.slice(0, 150)}`);
         }
-
-        const fallbackData = await fallbackResponse.json();
-        transcribedText = (fallbackData.choices?.[0]?.message?.content || '').trim();
-        detectedLanguage = language || 'auto';
-
-      } catch (fallbackErr: any) {
-        console.error('Fallback transcription also failed:', fallbackErr);
-        return new Response(
-          JSON.stringify({ error: 'Transcription service temporarily unavailable. Please try again.' }),
-          { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+      } catch (e: any) {
+        console.log('[Transcribe] Whisper exception:', e.message);
       }
     }
 
-    // Handle silence marker
-    if (!transcribedText || transcribedText === '[SILENCE]' || transcribedText.toLowerCase().includes('no speech')) {
+    // ── Provider 2: OnSpace AI (Gemini multimodal fallback) ──────────────────
+    if (!transcribedText && ONSPACE_AI_API_KEY && ONSPACE_AI_BASE_URL) {
+      console.log('[Transcribe] Trying OnSpace AI (Gemini multimodal)...');
+
+      const langHint = language ? ` The audio is likely in ${language}.` : '';
+
+      const models = [
+        'google/gemini-3-flash-preview',
+        'google/gemini-2.5-flash-lite',
+        'google/gemini-2.5-flash',
+      ];
+
+      for (const model of models) {
+        if (transcribedText) break;
+        try {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 45000);
+
+          const response = await fetch(`${ONSPACE_AI_BASE_URL}/chat/completions`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${ONSPACE_AI_API_KEY}`,
+            },
+            body: JSON.stringify({
+              model,
+              messages: [
+                {
+                  role: 'system',
+                  content: `You are a highly accurate speech transcription assistant. Transcribe EXACTLY what is spoken in the audio. Output ONLY the transcription text — no explanations, no labels, no JSON.${langHint}`,
+                },
+                {
+                  role: 'user',
+                  content: [
+                    { type: 'text', text: 'Transcribe this audio. Return ONLY the spoken text:' },
+                    { type: 'image_url', image_url: { url: `data:audio/m4a;base64,${audio}` } },
+                  ],
+                },
+              ],
+              max_tokens: 1000,
+              temperature: 0.0,
+            }),
+            signal: controller.signal,
+          });
+
+          clearTimeout(timeout);
+
+          if (!response.ok) {
+            const errTxt = await response.text().catch(() => '');
+            console.log(`[Transcribe] OnSpace AI ${model} failed ${response.status}: ${errTxt.slice(0, 100)}`);
+            continue;
+          }
+
+          const data = await response.json();
+          const raw = (data.choices?.[0]?.message?.content || '').trim();
+
+          if (raw && raw !== '[SILENCE]' && raw.length > 1) {
+            transcribedText = raw;
+            provider = `onspace-ai (${model})`;
+            console.log(`[Transcribe] OnSpace AI success: "${raw.slice(0, 60)}..."`);
+          }
+        } catch (e: any) {
+          console.log(`[Transcribe] OnSpace AI ${model} exception:`, e.message);
+        }
+      }
+    }
+
+    if (!transcribedText) {
+      console.log('[Transcribe] All providers failed');
+      return new Response(
+        JSON.stringify({ text: '', warning: 'Could not transcribe audio. Please try speaking more clearly or check your microphone.' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Clean up AI commentary
+    let cleanText = transcribedText
+      .replace(/^(transcription:|here is the transcription:|the speaker says:|i hear:|transcript:)/i, '')
+      .replace(/^\[transcription\]:/i, '')
+      .replace(/\[SILENCE\]/gi, '')
+      .trim();
+
+    if (!cleanText) {
       return new Response(
         JSON.stringify({ text: '', warning: 'No speech detected. Please speak clearly and try again.' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Clean up any potential AI commentary that leaked through
-    let cleanText = transcribedText
-      .replace(/^(transcription:|here is the transcription:|the speaker says:|i hear:)/i, '')
-      .replace(/^\[transcription\]:/i, '')
-      .trim();
+    console.log(`[Transcribe] Done via ${provider}: "${cleanText.slice(0, 80)}..."`);
 
-    console.log(`Transcription successful: "${cleanText.substring(0, 80)}..."`);
-
-    // Log to activity_logs (non-blocking)
+    // Log (non-blocking)
     if (userId) {
       try {
         const supabaseAdmin = createClient(
@@ -251,7 +226,7 @@ ${langDetectionInstructions}`,
           user_id: userId,
           action: 'voice_transcription',
           action_type: 'audio',
-          details: { length: audioBuffer.length, textLength: cleanText.length, conversationId, provider: 'onspace-ai' },
+          details: { length: audioBuffer.length, textLength: cleanText.length, conversationId, provider },
         }).catch(() => {});
       } catch (_e) {}
     }
@@ -260,17 +235,17 @@ ${langDetectionInstructions}`,
       JSON.stringify({
         success: true,
         text: cleanText,
-        language: language || detectedLanguage || 'auto',
-        detectedLanguage: detectedLanguage !== 'auto' ? detectedLanguage : null,
-        languageCode: detectedLanguageCode !== 'auto' ? detectedLanguageCode : null,
-        confidence: 0.92,
-        provider: 'onspace-ai',
+        language: detectedLanguage,
+        detectedLanguage: null,
+        languageCode: null,
+        confidence: 0.95,
+        provider,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (error: any) {
-    console.error('Fatal transcribe-audio error:', error);
+    console.error('[Transcribe] Fatal error:', error);
     return new Response(
       JSON.stringify({ error: error.message || 'Internal server error during transcription' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
