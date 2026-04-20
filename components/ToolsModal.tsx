@@ -475,3 +475,4 @@ const fpStyles = StyleSheet.create({
   limitRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2, marginLeft: 2 },
   limitText: { fontSize: 12, color: THEME.sub },
 });
+fucking dont skip please no fucking video and zip upload fucking fix it.
