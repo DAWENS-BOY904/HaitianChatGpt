@@ -574,12 +574,6 @@ export default function HomeScreen() {
   const [conversationMenuVisible, setConversationMenuVisible] = useState(false);
   const [sideMenuVisible, setSideMenuVisible] = useState(false);
   const [chatHistoryVisible, setChatHistoryVisible] = useState(false);
-  const isGuest = !user;
-  const [guestMessageCount, setGuestMessageCount] = useState(0);
-  const GUEST_MESSAGE_LIMIT = 35;
-  const [guestLoginModal, setGuestLoginModal] = useState(false);
-  const [guestLockModal, setGuestLockModal] = useState(false);
-  const [guestLockFeature, setGuestLockFeature] = useState('');
   const [currentAIMode, setCurrentAIMode] = useState<AIMode>('instant');
   const [sending, setSending] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -1147,13 +1141,6 @@ export default function HomeScreen() {
     const currentEditingId = editingMessageId;
 
     if ((!currentText && currentMedia.length === 0) || sending) return;
-
-    if (isGuest) {
-      if (guestMessageCount >= GUEST_MESSAGE_LIMIT) {
-        setGuestLoginModal(true);
-        return;
-      }
-    }
     if (!currentEditingId && !canSendMessage() && sessionBonusMessages <= 0) {
       if (!user) {
         showAlert('Sign In Required', 'Sign in to start chatting with AI.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Sign In', onPress: () => router.push('/login') }]);
@@ -1231,7 +1218,6 @@ export default function HomeScreen() {
     } finally {
       setSending(false);
       setGenerating(false);
-      if (isGuest) setGuestMessageCount(prev => prev + 1);
     }
   };
 
@@ -1636,19 +1622,10 @@ export default function HomeScreen() {
                   <TouchableOpacity onPress={() => setSideMenuVisible(true)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                     <Ionicons name="menu" size={24} color={colors.text} />
                   </TouchableOpacity>
-                  {isGuest ? (
-                    <TouchableOpacity
-                      style={{ backgroundColor: '#F0F0F5', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8 }}
-                      onPress={() => router.push('/login')}
-                    >
-                      <Text style={{ color: '#000', fontWeight: '600', fontSize: 15 }}>Sign up</Text>
-                    </TouchableOpacity>
-                  ) : (
-                    <TouchableOpacity style={styles.upgradeBtn} onPress={() => router.push('/subscription')}>
-                      <Ionicons name="sparkles" size={13} color="#7C6FF7" />
-                      <Text style={styles.upgradeBtnText}>Upgrade</Text>
-                    </TouchableOpacity>
-                  )}
+                  <TouchableOpacity style={styles.upgradeBtn} onPress={() => router.push('/subscription')}>
+                    <Ionicons name="sparkles" size={13} color="#7C6FF7" />
+                    <Text style={styles.upgradeBtnText}>Upgrade</Text>
+                  </TouchableOpacity>
                   <View style={styles.headerEmptyRight}>
                     <TouchableOpacity style={styles.headerIconBtn} onPress={() => setGroupStartModalVisible(true)}>
                       <Ionicons name="person-add-outline" size={22} color={colors.text} />
@@ -1799,16 +1776,14 @@ export default function HomeScreen() {
               {renderMediaPreview()}
 
               {editingMessageId ? (
-                    <View style={[{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingBottom: 6 }]}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#1A1A2A', borderRadius: 18, paddingHorizontal: 14, paddingVertical: 8, gap: 8 }}>
-                        <Ionicons name="pencil" size={16} color="#007AFF" />
-                        <Text style={{ color: '#007AFF', fontSize: 15, fontWeight: '600' }}>Edit</Text>
-                        <TouchableOpacity onPress={handleCancelEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                          <Ionicons name="close" size={16} color="rgba(255,255,255,0.5)" />
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  ) : null}
+                <View style={styles.editingIndicator}>
+                  <Ionicons name="pencil" size={16} color={colors.primary} />
+                  <Text style={styles.editingText}>Editing message...</Text>
+                  <TouchableOpacity onPress={handleCancelEdit}>
+                    <Text style={{ fontSize: 12, color: colors.primary, fontWeight: '600' }}>Cancel</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : null}
 
               {quizMode ? (
                 <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 6 }}>
@@ -1971,19 +1946,10 @@ export default function HomeScreen() {
             <ToolsModal
               visible={toolsVisible}
               onClose={() => setToolsVisible(false)}
-              onSelectTool={(tool) => {
-                if (isGuest) { setGuestLockFeature(tool); setGuestLockModal(true); return; }
-                setInputText(prev => `${prev}[${tool}] `);
-              }}
-              onPickMedia={(media) => {
-                if (isGuest) { setGuestLockFeature('file upload'); setGuestLockModal(true); return; }
-                handleMediaPicked(media);
-              }}
+              onSelectTool={(tool) => setInputText(prev => `${prev}[${tool}] `)}
+              onPickMedia={handleMediaPicked}
               onSelectAIModel={(model) => handleAIModelSelect(model as AIModelKey)}
-              onOpenCamera={() => {
-                if (isGuest) { setGuestLockFeature('camera'); setGuestLockModal(true); return; }
-                router.push('/camera');
-              }}
+              onOpenCamera={() => router.push('/camera')}
               currentModel={currentAIModel}
               onOpenQuiz={() => { setQuizMode(true); setQuizConnectVisible(true); }}
               onOpenPresets={() => setPresetsModalVisible(true)}
@@ -1991,7 +1957,7 @@ export default function HomeScreen() {
 
             <ConversationMenuModal visible={conversationMenuVisible} onClose={() => setConversationMenuVisible(false)} onShare={handleShareConversation} onRename={() => { setConversationMenuVisible(false); setRenameModalVisible(true); }} onReport={() => router.push('/bugreport')} onArchive={() => { setConversationMenuVisible(false); setArchiveConfirmVisible(true); }} onDelete={() => { setConversationMenuVisible(false); handleDeleteConversation(); }} onAddPeople={handleAddPeople} conversationTitle={currentConversation?.title} />
 
-            <SideMenu visible={sideMenuVisible} onClose={() => setSideMenuVisible(false)} currentProject={{ name: 'Haitian AI Chat' }} currentAIMode={currentAIMode} onSelectAIMode={handleSelectAIMode} onNewChat={handleNewChat} onChatHistory={() => { setSideMenuVisible(false); setChatHistoryVisible(true); }} onSettings={() => { setSideMenuVisible(false); router.push('/settings'); }} onProfile={() => { setSideMenuVisible(false); router.push('/profile'); }} userCoins={coins} isUnlimited={isUnlimited} isAdmin={isAdmin} isGuest={isGuest} />
+            <SideMenu visible={sideMenuVisible} onClose={() => setSideMenuVisible(false)} currentProject={{ name: 'Haitian AI Chat' }} currentAIMode={currentAIMode} onSelectAIMode={handleSelectAIMode} onNewChat={handleNewChat} onChatHistory={() => { setSideMenuVisible(false); setChatHistoryVisible(true); }} onSettings={() => { setSideMenuVisible(false); router.push('/settings'); }} onProfile={() => { setSideMenuVisible(false); router.push('/profile'); }} userCoins={coins} isUnlimited={isUnlimited} isAdmin={isAdmin} />
 
             <ChatHistoryModal visible={chatHistoryVisible} onClose={() => setChatHistoryVisible(false)} onSelectChat={() => { setChatHistoryVisible(false); }} onNewChat={() => { handleNewChat(); setChatHistoryVisible(false); }} currentChatId={currentConversation?.id} />
 
@@ -2222,72 +2188,6 @@ export default function HomeScreen() {
             <CustomizeAIModal visible={customizeAIVisible} onClose={() => setCustomizeAIVisible(false)} onSave={(instructions, respondAuto) => { setGroupCustomInstructions(instructions); setGroupRespondAuto(respondAuto); }} initialInstructions={groupCustomInstructions} initialRespondAuto={groupRespondAuto} />
             <InviteLinkModal visible={inviteLinkVisible} onClose={() => setInviteLinkVisible(false)} isPlus={isUnlimited} />
             <NotificationPermissionModal visible={notifPermModalVisible} onAllow={handleAllowNotifications} onSkip={() => setNotifPermModalVisible(false)} />
-
-            {/* Guest mode: 35-message limit modal (Photo 8 style) */}
-            <Modal visible={guestLoginModal} transparent animationType="fade" onRequestClose={() => setGuestLoginModal(false)}>
-              <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}>
-                <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
-                <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setGuestLoginModal(false)} />
-                <View style={{ backgroundColor: '#1C1C1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 28, paddingBottom: insets.bottom + 28 }}>
-                  <TouchableOpacity style={{ position: 'absolute', top: 14, right: 16, width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center' }} onPress={() => setGuestLoginModal(false)}>
-                    <Ionicons name="close" size={16} color="rgba(255,255,255,0.7)" />
-                  </TouchableOpacity>
-                  <Text style={{ color: '#FFF', fontSize: 20, fontWeight: '700', textAlign: 'center', marginBottom: 10, marginTop: 8 }}>Log in to keep chatting</Text>
-                  <Text style={{ color: 'rgba(255,255,255,0.55)', fontSize: 14, textAlign: 'center', lineHeight: 21, marginBottom: 24 }}>{'You have reached your 35-message guest limit. Log in to continue chatting or wait 24 hours.'}</Text>
-                  <View style={{ gap: 12 }}>
-                    {Platform.OS === 'ios' ? (
-                      <TouchableOpacity style={{ backgroundColor: '#FFFFFF', borderRadius: 50, paddingVertical: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }} onPress={() => { setGuestLoginModal(false); router.push('/login'); }}>
-                        <Ionicons name="logo-apple" size={20} color="#000" />
-                        <Text style={{ color: '#000', fontSize: 16, fontWeight: '700' }}>Continue with Apple</Text>
-                      </TouchableOpacity>
-                    ) : null}
-                    <TouchableOpacity style={{ backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 50, paddingVertical: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' }} onPress={() => { setGuestLoginModal(false); router.push('/login'); }}>
-                      <Ionicons name="logo-google" size={20} color="#FFF" />
-                      <Text style={{ color: '#FFF', fontSize: 16, fontWeight: '600' }}>Continue with Google</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={{ backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 50, paddingVertical: 15, alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' }} onPress={() => { setGuestLoginModal(false); router.push('/login'); }}>
-                      <Text style={{ color: '#FFF', fontSize: 16, fontWeight: '600' }}>Sign up</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={{ backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 50, paddingVertical: 15, alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' }} onPress={() => { setGuestLoginModal(false); router.push('/login'); }}>
-                      <Text style={{ color: '#FFF', fontSize: 16, fontWeight: '600' }}>Log in</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              </View>
-            </Modal>
-
-            {/* Guest mode: feature lock modal (Photo 8 style) */}
-            <Modal visible={guestLockModal} transparent animationType="fade" onRequestClose={() => setGuestLockModal(false)}>
-              <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}>
-                <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
-                <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setGuestLockModal(false)} />
-                <View style={{ backgroundColor: '#1C1C1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 28, paddingBottom: insets.bottom + 28 }}>
-                  <TouchableOpacity style={{ position: 'absolute', top: 14, right: 16, width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center' }} onPress={() => setGuestLockModal(false)}>
-                    <Ionicons name="close" size={16} color="rgba(255,255,255,0.7)" />
-                  </TouchableOpacity>
-                  <Text style={{ color: '#FFF', fontSize: 20, fontWeight: '700', textAlign: 'center', marginBottom: 10, marginTop: 8 }}>Log in to try advanced features</Text>
-                  <Text style={{ color: 'rgba(255,255,255,0.55)', fontSize: 14, textAlign: 'center', lineHeight: 21, marginBottom: 24 }}>{'Get smarter responses, upload files, analyze images, and more by logging in.'}</Text>
-                  <View style={{ gap: 12 }}>
-                    {Platform.OS === 'ios' ? (
-                      <TouchableOpacity style={{ backgroundColor: '#FFFFFF', borderRadius: 50, paddingVertical: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }} onPress={() => { setGuestLockModal(false); router.push('/login'); }}>
-                        <Ionicons name="logo-apple" size={20} color="#000" />
-                        <Text style={{ color: '#000', fontSize: 16, fontWeight: '700' }}>Continue with Apple</Text>
-                      </TouchableOpacity>
-                    ) : null}
-                    <TouchableOpacity style={{ backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 50, paddingVertical: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' }} onPress={() => { setGuestLockModal(false); router.push('/login'); }}>
-                      <Ionicons name="logo-google" size={20} color="#FFF" />
-                      <Text style={{ color: '#FFF', fontSize: 16, fontWeight: '600' }}>Continue with Google</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={{ backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 50, paddingVertical: 15, alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' }} onPress={() => { setGuestLockModal(false); router.push('/login'); }}>
-                      <Text style={{ color: '#FFF', fontSize: 16, fontWeight: '600' }}>Sign up</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={{ backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 50, paddingVertical: 15, alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' }} onPress={() => { setGuestLockModal(false); router.push('/login'); }}>
-                      <Text style={{ color: '#FFF', fontSize: 16, fontWeight: '600' }}>Log in</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              </View>
-            </Modal>
 
             {showBlurOverlay ? (
               <Animated.View style={[styles.blurOverlayContainer, { opacity: fadeAnim }]}>
