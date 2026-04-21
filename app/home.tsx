@@ -1724,8 +1724,7 @@ export default function HomeScreen() {
                           </TouchableOpacity>
                         </View>
                       ) : (
-                        <View style={{ flex: 1 }}>
-                          <View style={{ flex: 1 }} />
+                        <View style={{ flex: 1, justifyContent: 'flex-end' }}>
                           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 14, gap: 10 }}>
                             {smartSuggestions.map((s, i) => {
                               const anim = suggestionAnims[i] || { opacity: new Animated.Value(1), translateY: new Animated.Value(0) };
@@ -1748,10 +1747,12 @@ export default function HomeScreen() {
                       data={displayMessages}
                       renderItem={renderMessage}
                       keyExtractor={item => item.id}
-                      contentContainerStyle={{ paddingVertical: Spacing.md }}
+                      contentContainerStyle={{ paddingVertical: Spacing.md, paddingBottom: 8 }}
                       onScroll={handleScrollEvent}
-                      scrollEventThrottle={8}
+                      scrollEventThrottle={16}
                       maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+                      initialNumToRender={12}
+                      updateCellsBatchingPeriod={50}
                       ListHeaderComponent={groupChatMode && (messages || []).length > 0 ? (
                         <View style={{ paddingHorizontal: 16, paddingBottom: 16, alignItems: 'center', gap: 10 }}>
                           <Text style={{ color: colors.textSecondary, fontSize: 13, textAlign: 'center' }}>
@@ -1791,9 +1792,10 @@ export default function HomeScreen() {
                         </>
                       }
                       onContentSizeChange={() => { if (isAtBottom || generating || sending) flatListRef.current?.scrollToEnd({ animated: false }); }}
-                      maxToRenderPerBatch={10}
-                      windowSize={10}
+                      maxToRenderPerBatch={8}
+                      windowSize={15}
                       removeClippedSubviews={Platform.OS === 'android'}
+                      disableVirtualization={false}
                     />
                   )}
                 </View>
