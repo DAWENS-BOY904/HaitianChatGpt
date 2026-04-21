@@ -9,9 +9,9 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
-  Image,
   Modal,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { BlurView } from 'expo-blur';
 import { useAuth, useAlert, getSupabaseClient } from '@/template';
 import { useTheme } from '../hooks/useTheme';
@@ -56,7 +56,11 @@ const logoStyles = StyleSheet.create({
 function AILogo({ size = 64 }: { size?: number }) {
   return (
     <View style={[logoStyles.logoWrapper, { width: size, height: size, borderRadius: size / 2 }]}>
-      <Image source={{ uri: AI_LOGO_URL }} style={{ width: size, height: size, borderRadius: size / 2 }} resizeMode="cover" />
+      <Image
+        source={{ uri: AI_LOGO_URL }}
+        style={{ width: size, height: size, borderRadius: size / 2 }}
+        contentFit="cover"
+      />
     </View>
   );
 }
@@ -788,4 +792,3 @@ const guestStyles = StyleSheet.create({
   secondaryBtn: { alignItems: 'center', paddingVertical: 10 },
   secondaryBtnText: { color: 'rgba(255,255,255,0.45)', fontSize: 15 },
 });
-fix logo an poul paret komsi li pa montrew li nn kare li paret pi soti an ron.
