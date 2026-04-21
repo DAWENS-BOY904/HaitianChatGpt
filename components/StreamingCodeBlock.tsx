@@ -1137,4 +1137,3 @@ const runStyles = StyleSheet.create({
   tabText: { fontSize: 13, fontWeight: '600', color: 'rgba(255,255,255,0.45)' },
   tabTextActive: { color: '#fff' },
 });
-if you see this make the change in real time all make this better li kite space san message re look photo an and make it better also make thinking better and fix home page lag and bug le message yo ap ekri fix all better good real.
