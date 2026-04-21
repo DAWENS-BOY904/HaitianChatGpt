@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
@@ -59,8 +60,8 @@ function formatTime(ts: number): string {
   return `${((h % 12) || 12)}:${m} ${h >= 12 ? 'PM' : 'AM'}`;
 }
 
-// ─── Voice system prompt ─────────────────────────────────────────────────────
-const VOICE_SYSTEM_PROMPT = `You are Dawinix, a warm and respectful AI voice assistant created by the Haitian Community.
+// ─── Voice system prompt factory — injects detected language ─────────────────
+const VOICE_SYSTEM_PROMPT_BASE = `You are Dawinix, a warm and respectful AI voice assistant created by the Haitian Community.
 
 CORE RULES (MANDATORY):
 - ALWAYS treat every person with deep respect, kindness, and dignity — no exceptions
@@ -75,19 +76,21 @@ CORE RULES (MANDATORY):
 - Real-time voice conversation — be concise, natural, and human-sounding
 - Use a warm, friendly tone as if speaking to a trusted friend`;
 
-// ─── Language display names ──────────────────────────────────────────────────
-const LANG_DISPLAY: Record<string, string> = {
-  en: 'English', fr: 'French', es: 'Spanish', ht: 'Haitian Creole',
-  pt: 'Portuguese', de: 'German', it: 'Italian', ar: 'Arabic',
-  zh: 'Chinese', ja: 'Japanese', ko: 'Korean', ru: 'Russian',
-  hi: 'Hindi', nl: 'Dutch', pl: 'Polish',
-};
-
-function getLangDisplay(code: string): string {
-  if (!code) return '';
-  const base = code.toLowerCase().split('-')[0];
-  return LANG_DISPLAY[base] || code;
+function buildVoicePrompt(lang: string | null): string {
+  if (!lang || lang.startsWith('en')) return VOICE_SYSTEM_PROMPT_BASE;
+  return VOICE_SYSTEM_PROMPT_BASE +
+    `\n\nDETECTED USER LANGUAGE: ${lang}\nCRITICAL: The user is speaking ${lang}. You MUST reply ONLY in ${lang}. Never switch to English unless the user explicitly asks.`;
 }
+
+// Language badge display names
+const LANG_BADGE: Record<string, string> = {
+  en: '🇺🇸 English', 'en-US': '🇺🇸 English', 'en-GB': '🇬🇧 English',
+  fr: '🇫🇷 French', ht: '🇭🇹 Kreyòl', es: '🇪🇸 Spanish',
+  pt: '🇧🇷 Portuguese', de: '🇩🇪 German', it: '🇮🇹 Italian',
+  zh: '🇨🇳 Chinese', ja: '🇯🇵 Japanese', ko: '🇰🇷 Korean',
+  ar: '🇸🇦 Arabic', ru: '🇷🇺 Russian', hi: '🇮🇳 Hindi',
+  nl: '🇳🇱 Dutch', pl: '🇵🇱 Polish', tr: '🇹🇷 Turkish',
+};
 
 // ─── Animated connecting dots ────────────────────────────────────────────────
 function ConnectingDots() {
@@ -109,34 +112,6 @@ function ConnectingDots() {
         <Animated.View key={i} style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#FFF', opacity: anim }} />
       ))}
     </View>
-  );
-}
-
-// ─── Language badge (animated) ───────────────────────────────────────────────
-function LanguageBadge({ lang }: { lang: string | null }) {
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    if (lang) {
-      Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }).start();
-    } else {
-      Animated.timing(fadeAnim, { toValue: 0, duration: 200, useNativeDriver: true }).start();
-    }
-  }, [lang]);
-  if (!lang) return null;
-  return (
-    <Animated.View style={{ opacity: fadeAnim, alignItems: 'center', marginBottom: 8 }}>
-      <View style={{
-        flexDirection: 'row', alignItems: 'center', gap: 6,
-        backgroundColor: 'rgba(16,163,127,0.18)', borderRadius: 20,
-        paddingHorizontal: 14, paddingVertical: 6,
-        borderWidth: 1, borderColor: 'rgba(16,163,127,0.4)',
-      }}>
-        <Ionicons name="globe-outline" size={14} color="#10A37F" />
-        <Text style={{ color: '#10A37F', fontSize: 13, fontWeight: '600' }}>
-          {getLangDisplay(lang)}
-        </Text>
-      </View>
-    </Animated.View>
   );
 }
 
@@ -266,21 +241,31 @@ function BannedScreen({ banUntil, offenseCount, onContactSupport, onBack }: {
       </View>
       <Text style={{ color: '#FFF', fontSize: 22, fontWeight: '700', textAlign: 'center', marginBottom: 12 }}>Voice Control Restricted</Text>
       <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 15, textAlign: 'center', lineHeight: 22, marginBottom: 8 }}>
-        You have been temporarily restricted from voice control due to {offenseCount} repeated violations.
+        You have been temporarily restricted from voice control due to {offenseCount} repeated violations (inappropriate language).
       </Text>
       <Text style={{ color: '#FF3B30', fontSize: 17, fontWeight: '600', marginBottom: 32 }}>
         Restriction lifts in: {label}
       </Text>
-      <TouchableOpacity style={{ backgroundColor: '#10A37F', borderRadius: 14, paddingHorizontal: 32, paddingVertical: 14, marginBottom: 16, width: '100%', alignItems: 'center' }} onPress={onContactSupport}>
+      <TouchableOpacity
+        style={{ backgroundColor: '#10A37F', borderRadius: 14, paddingHorizontal: 32, paddingVertical: 14, marginBottom: 16, width: '100%', alignItems: 'center' }}
+        onPress={onContactSupport}
+      >
         <Text style={{ color: '#FFF', fontSize: 16, fontWeight: '700' }}>Contact Support</Text>
       </TouchableOpacity>
-      <TouchableOpacity style={{ borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)', borderRadius: 14, paddingHorizontal: 32, paddingVertical: 14, width: '100%', alignItems: 'center' }} onPress={onBack}>
+      <TouchableOpacity
+        style={{ borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)', borderRadius: 14, paddingHorizontal: 32, paddingVertical: 14, width: '100%', alignItems: 'center' }}
+        onPress={onBack}
+      >
         <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 16 }}>Go Back</Text>
       </TouchableOpacity>
+      <Text style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, textAlign: 'center', marginTop: 20, lineHeight: 18 }}>
+        This restriction applies across your account.{'\n'}Further violations may result in longer bans.
+      </Text>
     </View>
   );
 }
 
+// ─── Call ended banner ────────────────────────────────────────────────────────
 export function CallEndedBanner({ duration, onDismiss, onFeedback }: {
   duration: number; onDismiss: () => void; onFeedback: (t: 'up' | 'down') => void;
 }) {
@@ -294,9 +279,15 @@ export function CallEndedBanner({ duration, onDismiss, onFeedback }: {
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}>
           <Ionicons name="call" size={18} color="rgba(255,255,255,0.7)" />
           <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 14, fontWeight: '500' }}>Call ended {label}</Text>
-          <TouchableOpacity onPress={() => onFeedback('up')} style={{ marginLeft: 'auto' }}><Ionicons name="thumbs-up-outline" size={20} color="rgba(255,255,255,0.7)" /></TouchableOpacity>
-          <TouchableOpacity onPress={() => onFeedback('down')} style={{ marginLeft: 12 }}><Ionicons name="thumbs-down-outline" size={20} color="rgba(255,255,255,0.7)" /></TouchableOpacity>
-          <TouchableOpacity onPress={onDismiss} style={{ marginLeft: 12 }}><Ionicons name="close" size={18} color="rgba(255,255,255,0.5)" /></TouchableOpacity>
+          <TouchableOpacity onPress={() => onFeedback('up')} style={{ marginLeft: 'auto' }}>
+            <Ionicons name="thumbs-up-outline" size={20} color="rgba(255,255,255,0.7)" />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => onFeedback('down')} style={{ marginLeft: 12 }}>
+            <Ionicons name="thumbs-down-outline" size={20} color="rgba(255,255,255,0.7)" />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={onDismiss} style={{ marginLeft: 12 }}>
+            <Ionicons name="close" size={18} color="rgba(255,255,255,0.5)" />
+          </TouchableOpacity>
         </View>
         <View style={{ height: 3, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 2 }}>
           <View style={{ height: 3, backgroundColor: '#10A37F', borderRadius: 2, width: `${progress * 100}%` as any }} />
@@ -307,16 +298,14 @@ export function CallEndedBanner({ duration, onDismiss, onFeedback }: {
 }
 
 // ─── expo-speech fallback ─────────────────────────────────────────────────────
-function speakWithDevice(text: string, voice: string, rate: number, lang: string | null, onDone: () => void) {
-  // Use detected language if available, otherwise fall back to voice mapping
-  const voiceLangMap: Record<string, string> = {
+function speakWithDevice(text: string, voice: string, rate: number, onDone: () => void) {
+  const langMap: Record<string, string> = {
     echo: 'en-GB', fable: 'en-GB',
     alloy: 'en-US', onyx: 'en-US', nova: 'en-US', shimmer: 'en-US', coral: 'en-US',
   };
-  const language = lang || voiceLangMap[voice] || 'en-US';
   try {
     Speech.speak(text, {
-      language,
+      language: langMap[voice] ?? 'en-US',
       rate: Math.min(rate * 0.9, 1.4),
       pitch: voice === 'onyx' ? 0.8 : voice === 'shimmer' ? 1.2 : 1.0,
       onDone,
@@ -359,15 +348,14 @@ export default function VoiceControlScreen() {
   const [textModeOn, setTextModeOn] = useState(true);
   const [showTextModeToast, setShowTextModeToast] = useState(false);
   const [showKeyboard, setShowKeyboard] = useState(false);
+  const [voiceAndKeyboard, setVoiceAndKeyboard] = useState(false);
   const [userInput, setUserInput] = useState('');
   const [messages, setMessages] = useState<ConvMessage[]>([]);
   const [currentAIText, setCurrentAIText] = useState('');
   const [statusLabel, setStatusLabel] = useState('');
   const [callDuration, setCallDuration] = useState(0);
   const [callConversationId, setCallConversationId] = useState<string | null>(null);
-
-  // ── Language detection state ──────────────────────────────────────────────
-  const [detectedLanguage, setDetectedLanguage] = useState<string | null>(null);
+  const [detectedLang, setDetectedLang] = useState<string | null>(null);
   const detectedLangRef = useRef<string | null>(null);
 
   // Ban state
@@ -389,7 +377,7 @@ export default function VoiceControlScreen() {
   const allowInterrupt = (settings as any).voice_interruption ?? false;
   const autoGreeting = (settings as any).auto_greeting ?? true;
 
-  // ─── CHECK BAN ────────────────────────────────────────────────────────────
+  // ─── CHECK BAN STATUS ────────────────────────────────────────────────────
   useEffect(() => {
     const checkBan = async () => {
       setBanLoading(true);
@@ -404,7 +392,9 @@ export default function VoiceControlScreen() {
           .single();
         if (data?.banned_until) {
           const until = new Date(data.banned_until);
-          if (until > new Date()) setBanInfo({ until, offenseCount: data.offense_count });
+          if (until > new Date()) {
+            setBanInfo({ until, offenseCount: data.offense_count });
+          }
         }
       } catch (_e) {}
       setBanLoading(false);
@@ -412,6 +402,7 @@ export default function VoiceControlScreen() {
     checkBan();
   }, [user?.id]);
 
+  // ─── APPLY BAN ────────────────────────────────────────────────────────────
   const applyVoiceBan = useCallback(async () => {
     voiceOffenseCountRef.current += 1;
     const count = voiceOffenseCountRef.current;
@@ -420,11 +411,18 @@ export default function VoiceControlScreen() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     try {
       if (user?.id) {
+        const banUntilISO = banUntil.toISOString();
         await supabase.from('voice_bans').insert({
           user_id: user.id,
           offense_count: count,
-          banned_until: banUntil.toISOString(),
+          banned_until: banUntilISO,
           reason: `Inappropriate language in voice control (offense #${count})`,
+        }).catch(() => {});
+        await supabase.from('activity_logs').insert({
+          user_id: user.id,
+          action: `Voice control ban applied (offense #${count}, ${banHours}h)`,
+          action_type: 'voice_ban',
+          details: { offense_count: count, ban_hours: banHours, banned_until: banUntil.toISOString() },
         }).catch(() => {});
       }
     } catch (_e) {}
@@ -435,59 +433,82 @@ export default function VoiceControlScreen() {
   // ─── RINGTONE ────────────────────────────────────────────────────────────
   const playRingtone = useCallback(async () => {
     try {
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true, staysActiveInBackground: false });
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+      });
       const { sound } = await Audio.Sound.createAsync(
         { uri: 'https://cdn.pixabay.com/audio/2025/07/30/audio_a4cedca394.mp3?filename=dragon-studio-phone-ringing-382734.mp3' },
         { shouldPlay: true, isLooping: true, volume: 0.85 }
       );
       ringSoundRef.current = sound;
     } catch (_e) {
-      for (let i = 0; i < 3; i++) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        await new Promise(r => setTimeout(r, 1000));
-      }
+      const hapticRing = async () => {
+        for (let i = 0; i < 4; i++) {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          await new Promise(r => setTimeout(r, 180));
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+          await new Promise(r => setTimeout(r, 1000));
+        }
+      };
+      hapticRing();
     }
   }, []);
 
   const stopRingtone = useCallback(async () => {
     if (ringSoundRef.current) {
-      try { await ringSoundRef.current.stopAsync(); await ringSoundRef.current.unloadAsync(); } catch (_e) {}
+      try {
+        await ringSoundRef.current.stopAsync();
+        await ringSoundRef.current.unloadAsync();
+      } catch (_e) {}
       ringSoundRef.current = null;
     }
   }, []);
 
-  // ─── CONNECT ─────────────────────────────────────────────────────────────
+  // ─── CONNECT ────────────────────────────────────────────────────────────
   useEffect(() => {
     if (banLoading || banInfo) return;
+
     isConnectingRef.current = true;
     playRingtone();
+
     const timer = setTimeout(async () => {
       await stopRingtone();
       isConnectingRef.current = false;
       setPhase('active');
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
       try {
         const convId = await createConversation();
         if (convId) setCallConversationId(convId);
       } catch (_e) {}
+
       callTimerRef.current = setInterval(() => setCallDuration(d => d + 1), 1000);
+
       if (autoGreeting) await greetUser();
     }, 4000);
-    return () => { clearTimeout(timer); stopRingtone(); };
+
+    return () => {
+      clearTimeout(timer);
+      stopRingtone();
+    };
   }, [banLoading, banInfo, autoGreeting]);
 
+  // ─── GREET ────────────────────────────────────────────────────────────────
   const greetUser = useCallback(async () => {
     const greetings = [
       "Hey! Good to hear your voice. How can I help you today?",
-      "Hello! I am Dawinix, ready to assist you.",
+      "Hello! I am here and ready to assist you.",
       "Hi there! What is on your mind today?",
       "Good to connect with you! What can I do for you?",
     ];
-    await speakText(greetings[Math.floor(Math.random() * greetings.length)]);
+    const text = greetings[Math.floor(Math.random() * greetings.length)];
+    await speakText(text);
   }, []);
 
-  // ─── SPEAK TEXT — passes detected language to TTS ─────────────────────────
-  const speakText = useCallback(async (text: string) => {
+  // ─── SPEAK TEXT (always uses real ElevenLabs/OpenAI TTS) ─────────────────
+  const speakText = useCallback(async (text: string, lang?: string | null) => {
     if (isPausedRef.current) return;
     try {
       if (soundRef.current) {
@@ -500,15 +521,15 @@ export default function VoiceControlScreen() {
       setCurrentAIText(text);
       setIsAITyping(false);
 
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true, staysActiveInBackground: false });
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+      });
 
+      const activeLang = lang || detectedLangRef.current || 'en';
       const { data, error } = await supabase.functions.invoke('generate-tts', {
-        body: {
-          text: text.slice(0, 500),
-          voice: selectedVoice,
-          speed: speechRate,
-          detectedLanguage: detectedLangRef.current, // pass for multilingual TTS model selection
-        },
+        body: { text: text.slice(0, 500), voice: selectedVoice, speed: speechRate, language: activeLang },
       });
 
       const onDone = () => {
@@ -518,17 +539,20 @@ export default function VoiceControlScreen() {
       };
 
       if (data?.fallback === true || data?.code === 'USE_DEVICE_TTS') {
-        speakWithDevice(text, selectedVoice, speechRate, detectedLangRef.current, onDone);
+        speakWithDevice(text, selectedVoice, speechRate, onDone);
         return;
       }
 
       const audioUrl = data?.audioUrl || data?.audio_url;
       if (error || !audioUrl) {
-        speakWithDevice(text, selectedVoice, speechRate, detectedLangRef.current, onDone);
+        speakWithDevice(text, selectedVoice, speechRate, onDone);
         return;
       }
 
-      const { sound } = await Audio.Sound.createAsync({ uri: audioUrl }, { shouldPlay: true, volume: 1.0 });
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: audioUrl },
+        { shouldPlay: true, volume: 1.0 }
+      );
       soundRef.current = sound;
       sound.setOnPlaybackStatusUpdate((s) => {
         if (s.isLoaded && s.didJustFinish) {
@@ -543,11 +567,11 @@ export default function VoiceControlScreen() {
       console.log('[Voice] speakText error:', e?.message);
       setIsAISpeaking(false);
       setCurrentAIText('');
-      speakWithDevice(text, selectedVoice, speechRate, detectedLangRef.current, () => {
+      speakWithDevice(text, selectedVoice, speechRate, () => {
         if (!isPausedRef.current) setTimeout(() => startListening(), 600);
       });
     }
-  }, [selectedVoice, speechRate, supabase]);
+  }, [selectedVoice, speechRate, supabase, detectedLangRef]);
 
   // ─── START LISTENING ──────────────────────────────────────────────────────
   const startListening = useCallback(async () => {
@@ -557,19 +581,26 @@ export default function VoiceControlScreen() {
         try { await recordingRef.current.stopAndUnloadAsync(); } catch {}
         recordingRef.current = null;
       }
+
       const { status } = await Audio.requestPermissionsAsync();
       if (status !== 'granted') return;
+
       await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true, playsInSilentModeIOS: true,
-        shouldDuckAndroid: true, staysActiveInBackground: false,
-        interruptionModeIOS: 1, interruptionModeAndroid: 1,
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+        shouldDuckAndroid: true,
+        staysActiveInBackground: false,
+        interruptionModeIOS: 1,
+        interruptionModeAndroid: 1,
       });
       if (Platform.OS === 'android') await new Promise(r => setTimeout(r, 100));
+
       const { recording } = await Audio.Recording.createAsync({
         android: { extension: '.m4a', outputFormat: Audio.AndroidOutputFormat.MPEG_4, audioEncoder: Audio.AndroidAudioEncoder.AAC, sampleRate: 16000, numberOfChannels: 1, bitRate: 64000 },
         ios: { extension: '.m4a', audioQuality: Audio.IOSAudioQuality.MEDIUM, sampleRate: 16000, numberOfChannels: 1, bitRate: 64000, linearPCMBitDepth: 16, linearPCMIsBigEndian: false, linearPCMIsFloat: false },
         web: { mimeType: 'audio/webm', bitsPerSecond: 64000 },
       });
+
       recordingRef.current = recording;
       isRecordingRef.current = true;
       setIsUserSpeaking(true);
@@ -584,12 +615,13 @@ export default function VoiceControlScreen() {
     }
   }, []);
 
-  // ─── STOP + PROCESS ───────────────────────────────────────────────────────
+  // ─── STOP + PROCESS (voice input → AI → TTS) ─────────────────────────────
   const stopAndProcess = useCallback(async () => {
     if (!recordingRef.current || !isRecordingRef.current) return;
     isRecordingRef.current = false;
     setIsUserSpeaking(false);
     setStatusLabel('Processing...');
+
     try {
       await recordingRef.current.stopAndUnloadAsync();
       const uri = recordingRef.current.getURI();
@@ -598,7 +630,7 @@ export default function VoiceControlScreen() {
 
       const base64Audio = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
       const { data: txData } = await supabase.functions.invoke('transcribe-audio', {
-        body: { audio: base64Audio, userId: user?.id, detectLanguage: true },
+        body: { audio: base64Audio, userId: user?.id },
       });
 
       if (!txData?.text?.trim()) {
@@ -609,15 +641,10 @@ export default function VoiceControlScreen() {
 
       const userText = txData.text.trim();
 
-      // ── Language detection from transcription ─────────────────────────────
+      // ── Capture + store detected language ──
       if (txData.detectedLanguage) {
-        const lang = txData.detectedLanguage;
-        setDetectedLanguage(lang);
-        detectedLangRef.current = lang;
-        // Auto-clear badge after 6 seconds if no new message
-        setTimeout(() => {
-          setDetectedLanguage(prev => prev === lang ? null : prev);
-        }, 6000);
+        detectedLangRef.current = txData.detectedLanguage;
+        setDetectedLang(txData.detectedLanguage);
       }
 
       if (containsBadWord(userText)) {
@@ -625,7 +652,7 @@ export default function VoiceControlScreen() {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         Alert.alert(
           `Warning #${count}`,
-          `Inappropriate language detected. ${count >= 3 ? 'You will be restricted from voice control.' : `${3 - count} warning(s) remaining.`}`,
+          `Inappropriate language detected. ${count >= 3 ? 'You will be restricted from voice control.' : `${3 - count} warning(s) remaining before restriction.`}`,
           [{ text: 'I Understand', style: 'destructive', onPress: () => { if (count >= 3) { applyVoiceBan(); } else { voiceOffenseCountRef.current = count; if (!isPausedRef.current) startListening(); } } }]
         );
         setStatusLabel('');
@@ -639,21 +666,15 @@ export default function VoiceControlScreen() {
 
       const convId = callConversationId || currentConversation?.id;
 
-      // Language-aware system prompt
-      const langName = detectedLangRef.current ? getLangDisplay(detectedLangRef.current) : null;
-      const langHint = langName
-        ? `\n\nCRITICAL: The user is speaking ${langName}. You MUST respond ONLY in ${langName}. Do not switch languages under any circumstance.`
-        : '';
-
+      // Use messages ref snapshot for context
       const contextMsgs = messages.slice(-8).map(m => ({ role: m.role, content: m.content }));
       const { data: aiData } = await supabase.functions.invoke('chat', {
         body: {
           messages: [
-            { role: 'system', content: VOICE_SYSTEM_PROMPT + langHint },
+            { role: 'system', content: buildVoicePrompt(detectedLangRef.current) },
             ...contextMsgs,
             { role: 'user', content: userText },
           ],
-          conversationId: convId || `voice-${Date.now()}`,
           model: 'gemini',
         },
       });
@@ -665,18 +686,25 @@ export default function VoiceControlScreen() {
       const aiMsg: ConvMessage = { role: 'assistant', content: rawReply, timestamp: Date.now() };
       setMessages(prev => [...prev, aiMsg]);
 
+      // Save to conversation
       if (convId) {
         try { await sendMessage(userText, convId as any, undefined, false, 'gemini'); } catch (_e) {}
       }
 
-      await speakText(spokenText);
-    } catch (e) {
+      await speakText(spokenText, detectedLangRef.current);
+
+    } catch (e: any) {
+      console.log('[Voice] stopAndProcess error:', e?.message);
       setIsAITyping(false);
       setStatusLabel('');
-      if (!isPausedRef.current) setTimeout(() => startListening(), 500);
+      const fallback = 'Sorry, I could not process that. Please try again.';
+      const errMsg: ConvMessage = { role: 'assistant', content: fallback, timestamp: Date.now() };
+      setMessages(prev => [...prev, errMsg]);
+      await speakText(fallback, detectedLangRef.current);
     }
-  }, [messages, callConversationId, currentConversation, supabase, user, sendMessage, speakText, startListening, applyVoiceBan]);
+  }, [supabase, user?.id, callConversationId, currentConversation?.id, applyVoiceBan, messages, startListening, speakText]);
 
+  // ─── INTERRUPT ────────────────────────────────────────────────────────────
   const handleInterrupt = useCallback(async () => {
     if (!allowInterrupt) return;
     if (soundRef.current) { try { await soundRef.current.stopAsync(); } catch {} }
@@ -686,6 +714,7 @@ export default function VoiceControlScreen() {
     if (!isPausedRef.current) startListening();
   }, [allowInterrupt, startListening]);
 
+  // ─── PAUSE / RESUME ───────────────────────────────────────────────────────
   const handlePause = useCallback(async () => {
     const newPaused = !isPaused;
     setIsPaused(newPaused);
@@ -708,20 +737,31 @@ export default function VoiceControlScreen() {
     }
   }, [isPaused, startListening]);
 
+  // ─── END CALL ─────────────────────────────────────────────────────────────
   const handleEnd = useCallback(async (navigate = true) => {
     if (callTimerRef.current) clearInterval(callTimerRef.current);
     isRecordingRef.current = false;
     isPausedRef.current = true;
     isConnectingRef.current = false;
+
     await stopRingtone();
-    if (recordingRef.current) { try { await recordingRef.current.stopAndUnloadAsync(); } catch {} recordingRef.current = null; }
-    if (soundRef.current) { try { await soundRef.current.stopAsync(); await soundRef.current.unloadAsync(); } catch {} soundRef.current = null; }
+
+    if (recordingRef.current) {
+      try { await recordingRef.current.stopAndUnloadAsync(); } catch {}
+      recordingRef.current = null;
+    }
+    if (soundRef.current) {
+      try { await soundRef.current.stopAsync(); await soundRef.current.unloadAsync(); } catch {}
+      soundRef.current = null;
+    }
     try { Speech.stop(); } catch {}
+
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     setPhase('ended');
     if (navigate) setTimeout(() => router.replace('/home'), 300);
   }, [router, stopRingtone]);
 
+  // ─── TEXT MODE TOGGLE ─────────────────────────────────────────────────────
   const handleTextModeToggle = useCallback(() => {
     const next = !textModeOn;
     setTextModeOn(next);
@@ -729,7 +769,7 @@ export default function VoiceControlScreen() {
     setTimeout(() => setShowTextModeToast(false), 1800);
   }, [textModeOn]);
 
-  // ─── SEND TEXT MESSAGE → AI → TTS ─────────────────────────────────────────
+  // ─── SEND TEXT MESSAGE → AI → TTS (fully working, always speaks back) ────
   const handleSendText = useCallback(async () => {
     const text = userInput.trim();
     if (!text) return;
@@ -739,6 +779,7 @@ export default function VoiceControlScreen() {
     }
     setUserInput('');
 
+    // Stop current voice recording before speaking to avoid audio collision
     if (isRecordingRef.current && recordingRef.current) {
       try { await recordingRef.current.stopAndUnloadAsync(); } catch {}
       recordingRef.current = null;
@@ -752,20 +793,14 @@ export default function VoiceControlScreen() {
     setStatusLabel('Thinking...');
 
     const contextMsgs = messages.slice(-8).map(m => ({ role: m.role, content: m.content }));
-    const langName = detectedLangRef.current ? getLangDisplay(detectedLangRef.current) : null;
-    const langHint = langName
-      ? `\n\nCRITICAL: The user is speaking ${langName}. You MUST respond ONLY in ${langName}.`
-      : '';
-
     try {
       const { data: aiData } = await supabase.functions.invoke('chat', {
         body: {
           messages: [
-            { role: 'system', content: VOICE_SYSTEM_PROMPT + langHint },
+            { role: 'system', content: buildVoicePrompt(detectedLangRef.current) },
             ...contextMsgs,
             { role: 'user', content: text },
           ],
-          conversationId: callConversationId || `voice-${Date.now()}`,
           model: 'gemini',
         },
       });
@@ -778,22 +813,27 @@ export default function VoiceControlScreen() {
 
       const aiMsg: ConvMessage = { role: 'assistant', content: rawReply, timestamp: Date.now() };
       setMessages(prev => [...prev, aiMsg]);
-      await speakText(spokenText);
+
+      // Always speak the AI reply via real TTS (ElevenLabs/OpenAI)
+      await speakText(spokenText, detectedLangRef.current);
     } catch (_err) {
       setIsAITyping(false);
       setStatusLabel('');
       const fallback = 'Sorry, I could not process that. Please try again.';
-      setMessages(prev => [...prev, { role: 'assistant', content: fallback, timestamp: Date.now() }]);
-      await speakText(fallback);
+      const errMsg: ConvMessage = { role: 'assistant', content: fallback, timestamp: Date.now() };
+      setMessages(prev => [...prev, errMsg]);
+      await speakText(fallback, detectedLangRef.current);
     }
   }, [userInput, messages, callConversationId, supabase, speakText]);
 
+  // Scroll to bottom on new messages
   useEffect(() => {
     if (messages.length > 0 || isAITyping) {
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 150);
     }
   }, [messages, isAITyping]);
 
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (callTimerRef.current) clearInterval(callTimerRef.current);
@@ -806,6 +846,7 @@ export default function VoiceControlScreen() {
 
   const formatDuration = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
 
+  // ─── BAN SCREEN ───────────────────────────────────────────────────────────
   if (banLoading) {
     return (
       <View style={{ flex: 1, backgroundColor: '#0a0a0a', alignItems: 'center', justifyContent: 'center' }}>
@@ -813,6 +854,7 @@ export default function VoiceControlScreen() {
       </View>
     );
   }
+
   if (banInfo) {
     return (
       <BannedScreen
@@ -838,12 +880,31 @@ export default function VoiceControlScreen() {
         {/* HEADER */}
         <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
           <TouchableOpacity onPress={handleTextModeToggle} style={styles.headerBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <Ionicons name={textModeOn ? 'document-text' : 'document-text-outline'} size={22} color={textModeOn ? '#FFFFFF' : 'rgba(255,255,255,0.55)'} />
+            <Ionicons
+              name={textModeOn ? 'document-text' : 'document-text-outline'}
+              size={22}
+              color={textModeOn ? '#FFFFFF' : 'rgba(255,255,255,0.55)'}
+            />
           </TouchableOpacity>
           <View style={{ alignItems: 'center' }}>
             <Text style={styles.headerTitle}>Haitian AI</Text>
             {phase === 'active' ? (
-              <Text style={styles.timerText}>{isPaused ? 'Paused' : formatDuration(callDuration)}</Text>
+              <>
+                <Text style={styles.timerText}>{isPaused ? 'Paused' : formatDuration(callDuration)}</Text>
+                {detectedLang ? (
+                  <View style={{
+                    flexDirection: 'row', alignItems: 'center',
+                    backgroundColor: 'rgba(16,163,127,0.22)',
+                    borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2,
+                    borderWidth: 1, borderColor: 'rgba(16,163,127,0.45)',
+                    marginTop: 3,
+                  }}>
+                    <Text style={{ color: '#10A37F', fontSize: 11, fontWeight: '600' }}>
+                      {LANG_BADGE[detectedLang] || `🌐 ${detectedLang.toUpperCase()}`}
+                    </Text>
+                  </View>
+                ) : null}
+              </>
             ) : null}
           </View>
           <TouchableOpacity onPress={() => router.push('/voice-settings')} style={styles.headerBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
@@ -889,9 +950,6 @@ export default function VoiceControlScreen() {
               </View>
             )}
 
-            {/* Language Detection Badge */}
-            <LanguageBadge lang={detectedLanguage} />
-
             {/* Status / interrupt */}
             <View style={{ alignItems: 'center', paddingBottom: 10 }}>
               {isAISpeaking && allowInterrupt ? (
@@ -924,7 +982,12 @@ export default function VoiceControlScreen() {
             <Text style={styles.ctrlLabel}>End</Text>
           </View>
           <View style={{ alignItems: 'center' }}>
-            <TouchableOpacity style={[styles.pauseBtn, isPaused && styles.pauseBtnActive]} onPress={handlePause} disabled={phase !== 'active'} activeOpacity={0.8}>
+            <TouchableOpacity
+              style={[styles.pauseBtn, isPaused && styles.pauseBtnActive]}
+              onPress={handlePause}
+              disabled={phase !== 'active'}
+              activeOpacity={0.8}
+            >
               {isPaused ? (
                 <Ionicons name="play" size={26} color="#FFFFFF" />
               ) : (
@@ -938,24 +1001,46 @@ export default function VoiceControlScreen() {
           </View>
         </View>
 
+        {/* Keyboard toggle */}
         <TouchableOpacity
           style={[styles.keyboardRow, { bottom: insets.bottom + 5 }]}
-          onPress={() => setShowKeyboard(prev => !prev)}
+          onPress={() => {
+            const next = !showKeyboard;
+            setShowKeyboard(next);
+            if (next && !isPaused && phase === 'active') {
+              setVoiceAndKeyboard(true);
+            } else {
+              setVoiceAndKeyboard(false);
+            }
+          }}
         >
           <Ionicons name="keypad-outline" size={15} color="rgba(255,255,255,0.45)" />
           <Text style={styles.keyboardText}>
-            {showKeyboard ? 'Tap to hide keyboard' : 'Tap to show keyboard'}
+            {showKeyboard ? (isUserSpeaking ? 'Listening + Keyboard active' : 'Tap to hide keyboard') : 'Tap to show keyboard'}
           </Text>
         </TouchableOpacity>
 
+        {/* Keyboard input — text typing sends message to AI + gets TTS response */}
         {showKeyboard ? (
           <BlurView intensity={80} tint="dark" style={[styles.inputBar, { paddingBottom: insets.bottom + 14 }]}>
             <TouchableOpacity
-              style={[styles.voiceMicBtn, { backgroundColor: isUserSpeaking ? '#10A37F' : 'rgba(255,255,255,0.12)' }]}
-              onPress={() => { if (isUserSpeaking) { stopAndProcess(); } else if (!isPaused && phase === 'active') { startListening(); } }}
+              style={[styles.voiceMicBtn, {
+                backgroundColor: isUserSpeaking ? '#10A37F' : 'rgba(255,255,255,0.12)',
+              }]}
+              onPress={() => {
+                if (isUserSpeaking) {
+                  stopAndProcess();
+                } else if (!isPaused && phase === 'active') {
+                  startListening();
+                }
+              }}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <Ionicons name={isUserSpeaking ? 'mic' : 'mic-outline'} size={18} color={isUserSpeaking ? '#FFF' : 'rgba(255,255,255,0.7)'} />
+              <Ionicons
+                name={isUserSpeaking ? 'mic' : 'mic-outline'}
+                size={18}
+                color={isUserSpeaking ? '#FFF' : 'rgba(255,255,255,0.7)'}
+              />
             </TouchableOpacity>
             <TextInput
               style={styles.textInput}
