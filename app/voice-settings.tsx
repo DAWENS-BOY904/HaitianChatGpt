@@ -14,32 +14,50 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BlurView } from 'expo-blur';
 import { Audio } from 'expo-av';
 import * as Speech from 'expo-speech';
 import { useSettings } from '../hooks/useSettings';
 import { useAlert } from '@/template';
 import { getSupabaseClient } from '@/template';
 
-const VOICE_IMAGES: Record<string, any> = {
-  alloy:   require('../assets/images/voice-alloy.jpg'),
-  echo:    require('../assets/images/voice-echo.jpg'),
-  fable:   require('../assets/images/voice-fable.jpg'),
-  onyx:    require('../assets/images/voice-onyx.jpg'),
-  nova:    require('../assets/images/voice-nova.jpg'),
-  shimmer: require('../assets/images/voice-shimmer.jpg'),
-  coral:   require('../assets/images/voice-coral.jpg'),
-};
+// ── Real ElevenLabs voice IDs with metadata ────────────────────────────────
+interface ElevenLabsVoice {
+  voice_id: string;
+  name: string;
+  description: string;
+  gender: 'male' | 'female' | 'neutral';
+  accent: string;
+  color: string;
+  preview_url?: string;
+  labels?: Record<string, string>;
+}
 
-// Each voice has a UNIQUE ElevenLabs voice — no two share the same voice actor
-const AI_VOICES = [
-  { id: 'alloy',   name: 'Alloy',   description: 'Adam — Warm & neutral male (ElevenLabs)',        gender: 'male'   as const, previewText: 'Hello! I am Alloy. How can I help you today?',         accent: 'American', color: '#007AFF', elevenLabsId: 'pNInz6obpgDQGcFmaJgB' },
-  { id: 'echo',    name: 'Echo',    description: 'Arnold — Calm & clear British male (ElevenLabs)',  gender: 'male'   as const, previewText: 'Hello, I am Echo. Ready to assist whenever you need.',  accent: 'British',  color: '#5856D6', elevenLabsId: 'VR6AewLTigWG4xSOukaG' },
-  { id: 'fable',   name: 'Fable',   description: 'Sam — Expressive & energetic (ElevenLabs)',        gender: 'male'   as const, previewText: 'Hey there! Fable here, excited to work with you!',      accent: 'British',  color: '#FF9F0A', elevenLabsId: 'yoZ06aMxZJJ28mfd3POQ' },
-  { id: 'onyx',    name: 'Onyx',    description: 'Thomas — Deep & authoritative (ElevenLabs)',        gender: 'male'   as const, previewText: 'Good day. I am Onyx. How may I be of service?',         accent: 'American', color: '#636366', elevenLabsId: 'GBv7mTt0atIp3Br8iCZE' },
-  { id: 'nova',    name: 'Nova',    description: 'Rachel — Warm & friendly female (ElevenLabs)',      gender: 'female' as const, previewText: 'Hi! I am Nova, happy to help you with anything.',        accent: 'American', color: '#FF2D55', elevenLabsId: '21m00Tcm4TlvDq8ikWAM' },
-  { id: 'shimmer', name: 'Shimmer', description: 'Domi — Bright & upbeat female (ElevenLabs)',        gender: 'female' as const, previewText: 'Hello! Shimmer here. What can I do for you today?',     accent: 'American', color: '#FFD60A', elevenLabsId: 'AZnzlk1XvdvUeBnXmlld' },
-  { id: 'coral',   name: 'Coral',   description: 'Bella — Soft & gentle female (ElevenLabs)',         gender: 'female' as const, previewText: 'Hello, I am Coral. I am right here for you.',            accent: 'American', color: '#FF6B6B', elevenLabsId: 'EXAVITQu4vr4xnSDxMaL' },
+// Curated set — includes user-specified IDs + library voices
+const CURATED_VOICE_IDS = [
+  'PzuBz8h2SxBvQ7lnUC44',
+  'jv41DhCf464zw0TI7I1w',
+  'kJKMPwrIKzwVkMKOfRtr',
+  'flHkNRp1BlvT73UL6gyz',
+  'mRdG9GYEjJmIzqbYTidv',
+];
+
+// Static fallback voices (used when API unavailable)
+const FALLBACK_VOICES: ElevenLabsVoice[] = [
+  { voice_id: 'pNInz6obpgDQGcFmaJgB', name: 'Adam',    description: 'Warm, deep male voice',      gender: 'male',   accent: 'American', color: '#007AFF' },
+  { voice_id: '21m00Tcm4TlvDq8ikWAM', name: 'Rachel',  description: 'Warm, friendly female voice', gender: 'female', accent: 'American', color: '#FF2D55' },
+  { voice_id: 'AZnzlk1XvdvUeBnXmlld', name: 'Domi',    description: 'Bright, upbeat female voice', gender: 'female', accent: 'American', color: '#FFD60A' },
+  { voice_id: 'EXAVITQu4vr4xnSDxMaL', name: 'Bella',   description: 'Soft, gentle female voice',   gender: 'female', accent: 'American', color: '#FF6B6B' },
+  { voice_id: 'VR6AewLTigWG4xSOukaG', name: 'Arnold',  description: 'Calm, clear male voice',      gender: 'male',   accent: 'American', color: '#5856D6' },
+  { voice_id: 'GBv7mTt0atIp3Br8iCZE', name: 'Thomas',  description: 'Deep, authoritative male',    gender: 'male',   accent: 'American', color: '#636366' },
+  { voice_id: 'yoZ06aMxZJJ28mfd3POQ', name: 'Sam',     description: 'Expressive, energetic male',  gender: 'male',   accent: 'British',  color: '#FF9F0A' },
+  { voice_id: 'ThT5KcBeYPX3keUQqHPh', name: 'Dorothy', description: 'Wise, clear female voice',    gender: 'female', accent: 'British',  color: '#10A37F' },
+  { voice_id: 'pqHfZKP75CvOlQylNhV4', name: 'Bill',    description: 'Professional deep male',      gender: 'male',   accent: 'American', color: '#34C759' },
+  // User-specified voice IDs
+  { voice_id: 'PzuBz8h2SxBvQ7lnUC44', name: 'Voice 1', description: 'Custom voice from ElevenLabs library', gender: 'female', accent: 'Custom', color: '#BF5AF2' },
+  { voice_id: 'jv41DhCf464zw0TI7I1w', name: 'Voice 2', description: 'Custom voice from ElevenLabs library', gender: 'male',   accent: 'Custom', color: '#FF6B35' },
+  { voice_id: 'kJKMPwrIKzwVkMKOfRtr', name: 'Voice 3', description: 'Custom voice from ElevenLabs library', gender: 'female', accent: 'Custom', color: '#00C7BE' },
+  { voice_id: 'flHkNRp1BlvT73UL6gyz', name: 'Voice 4', description: 'Custom voice from ElevenLabs library', gender: 'male',   accent: 'Custom', color: '#FF9F0A' },
+  { voice_id: 'mRdG9GYEjJmIzqbYTidv', name: 'Voice 5', description: 'Custom voice from ElevenLabs library', gender: 'female', accent: 'Custom', color: '#5AC8FA' },
 ];
 
 const SPEECH_RATES = [
@@ -49,16 +67,13 @@ const SPEECH_RATES = [
   { id: '1.5', label: 'Fastest', speed: 1.5 },
 ];
 
-function speakWithDevice(text: string, voice: string, rate: number, onDone: () => void) {
-  const langMap: Record<string, string> = {
-    echo: 'en-GB', fable: 'en-GB',
-    alloy: 'en-US', onyx: 'en-US', nova: 'en-US', shimmer: 'en-US', coral: 'en-US',
-  };
+const GENDER_COLORS = { male: '#007AFF', female: '#FF2D55', neutral: '#636366' };
+
+function speakWithDevice(text: string, rate: number, onDone: () => void) {
   try {
     Speech.speak(text, {
-      language: langMap[voice] ?? 'en-US',
+      language: 'en-US',
       rate: Math.min(rate * 0.9, 1.4),
-      pitch: voice === 'onyx' ? 0.8 : voice === 'shimmer' ? 1.2 : 1.0,
       onDone,
       onError: () => onDone(),
     });
@@ -72,53 +87,112 @@ export default function VoiceSettingsScreen() {
   const { settings, updateSetting } = useSettings();
   const supabase = getSupabaseClient();
 
-  const [selectedVoice, setSelectedVoice] = useState<string>((settings as any).voice_selection || 'alloy');
+  const [selectedVoice, setSelectedVoice] = useState<string>((settings as any).voice_selection || 'pNInz6obpgDQGcFmaJgB');
   const [speechRate, setSpeechRate] = useState<string>((settings as any).speech_rate?.toString() || '1.0');
   const [voiceInterrupt, setVoiceInterrupt] = useState<boolean>((settings as any).voice_interruption ?? false);
   const [autoGreeting, setAutoGreeting] = useState<boolean>((settings as any).auto_greeting ?? true);
   const [darkMode, setDarkMode] = useState<boolean>(true);
   const [playingVoice, setPlayingVoice] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [voices, setVoices] = useState<ElevenLabsVoice[]>(FALLBACK_VOICES);
+  const [loadingVoices, setLoadingVoices] = useState(true);
+  const [voiceLoadError, setVoiceLoadError] = useState(false);
   const soundRef = useRef<Audio.Sound | null>(null);
 
-  // Theme tokens
-  const bg       = darkMode ? '#000000'              : '#F2F2F7';
-  const card      = darkMode ? '#1C1C1E'              : '#FFFFFF';
-  const border    = darkMode ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.08)';
-  const primary   = darkMode ? '#FFFFFF'              : '#000000';
-  const secondary = darkMode ? 'rgba(255,255,255,0.45)' : '#8E8E93';
-  const surface   = darkMode ? '#2C2C2E'              : '#F2F2F7';
-  const accent    = '#10A37F';
+  const bg        = darkMode ? '#000000'               : '#F2F2F7';
+  const card       = darkMode ? '#1C1C1E'               : '#FFFFFF';
+  const border     = darkMode ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.08)';
+  const primary    = darkMode ? '#FFFFFF'               : '#000000';
+  const secondary  = darkMode ? 'rgba(255,255,255,0.45)' : '#8E8E93';
+  const surface    = darkMode ? '#2C2C2E'               : '#F2F2F7';
+  const accent     = '#10A37F';
 
-  // Preview voice (TTS edge function first, expo-speech fallback)
-  const playVoicePreview = useCallback(async (voiceId: string, previewText: string) => {
+  // ── Fetch ElevenLabs voices dynamically ─────────────────────────────────
+  useEffect(() => {
+    fetchElevenLabsVoices();
+  }, []);
+
+  const fetchElevenLabsVoices = async () => {
+    setLoadingVoices(true);
+    setVoiceLoadError(false);
+    try {
+      // Call via our edge function to keep API key server-side
+      const { data, error } = await supabase.functions.invoke('generate-tts', {
+        body: { action: 'list_voices' },
+      });
+
+      if (error || !data?.voices || !Array.isArray(data.voices)) {
+        throw new Error('No voices returned');
+      }
+
+      // Map API response to our format + merge curated voices
+      const apiVoices: ElevenLabsVoice[] = data.voices.map((v: any, i: number) => ({
+        voice_id: v.voice_id,
+        name: v.name || `Voice ${i + 1}`,
+        description: v.description || [v.labels?.description, v.labels?.use_case, v.labels?.accent].filter(Boolean).join(' — ') || 'ElevenLabs voice',
+        gender: (v.labels?.gender === 'male' ? 'male' : v.labels?.gender === 'female' ? 'female' : 'neutral') as 'male' | 'female' | 'neutral',
+        accent: v.labels?.accent || 'English',
+        color: ['#007AFF','#FF2D55','#5856D6','#FF9F0A','#10A37F','#BF5AF2','#00C7BE','#FFD60A'][i % 8],
+        preview_url: v.preview_url,
+      }));
+
+      if (apiVoices.length === 0) throw new Error('Empty voice list');
+      setVoices(apiVoices);
+    } catch (e) {
+      console.log('[VoiceSettings] Using fallback voices:', e);
+      setVoices(FALLBACK_VOICES);
+      setVoiceLoadError(true);
+    } finally {
+      setLoadingVoices(false);
+    }
+  };
+
+  // ── Play ElevenLabs preview URL or device TTS fallback ──────────────────
+  const playVoicePreview = useCallback(async (voice: ElevenLabsVoice) => {
     if (playingVoice !== null) {
-      // Stop current playback
       if (soundRef.current) {
         try { await soundRef.current.stopAsync(); await soundRef.current.unloadAsync(); } catch {}
         soundRef.current = null;
       }
       try { Speech.stop(); } catch {}
-      if (playingVoice === voiceId) { setPlayingVoice(null); return; }
+      if (playingVoice === voice.voice_id) { setPlayingVoice(null); return; }
     }
 
-    setPlayingVoice(voiceId);
+    setPlayingVoice(voice.voice_id);
+
+    const previewText = `Hello! I am ${voice.name}. How can I help you today?`;
+
     try {
+      // Try ElevenLabs preview URL first (no API key needed for preview_url)
+      if (voice.preview_url) {
+        await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true, staysActiveInBackground: false });
+        const { sound } = await Audio.Sound.createAsync({ uri: voice.preview_url }, { shouldPlay: true, volume: 1.0 });
+        soundRef.current = sound;
+        sound.setOnPlaybackStatusUpdate((s) => {
+          if (s.isLoaded && s.didJustFinish) {
+            sound.unloadAsync().catch(() => {});
+            soundRef.current = null;
+            setPlayingVoice(null);
+          }
+        });
+        return;
+      }
+
+      // Fall back to TTS edge function
       const { data } = await supabase.functions.invoke('generate-tts', {
-        body: { text: previewText, voice: voiceId, speed: parseFloat(speechRate) },
+        body: { text: previewText, voice: voice.voice_id, speed: parseFloat(speechRate) },
       });
 
       const onDone = () => { setPlayingVoice(null); soundRef.current = null; };
 
-      // Device TTS fallback
       if (data?.fallback === true || data?.code === 'USE_DEVICE_TTS') {
-        speakWithDevice(previewText, voiceId, parseFloat(speechRate), onDone);
+        speakWithDevice(previewText, parseFloat(speechRate), onDone);
         return;
       }
 
       const audioUrl = data?.audioUrl || data?.audio_url;
       if (!audioUrl) {
-        speakWithDevice(previewText, voiceId, parseFloat(speechRate), onDone);
+        speakWithDevice(previewText, parseFloat(speechRate), onDone);
         return;
       }
 
@@ -132,16 +206,9 @@ export default function VoiceSettingsScreen() {
         }
       });
     } catch (_e) {
-      speakWithDevice(previewText, voiceId, parseFloat(speechRate), () => setPlayingVoice(null));
+      speakWithDevice(previewText, parseFloat(speechRate), () => setPlayingVoice(null));
     }
   }, [playingVoice, supabase, speechRate]);
-
-  // Test current selected voice
-  const handleTestVoice = useCallback(async () => {
-    const voice = AI_VOICES.find(v => v.id === selectedVoice);
-    if (!voice) return;
-    await playVoicePreview(voice.id, voice.previewText);
-  }, [selectedVoice, playVoicePreview]);
 
   const handleSave = useCallback(async () => {
     setSaving(true);
@@ -166,6 +233,8 @@ export default function VoiceSettingsScreen() {
     };
   }, []);
 
+  const selectedVoiceInfo = voices.find(v => v.voice_id === selectedVoice);
+
   return (
     <View style={{ flex: 1, backgroundColor: bg }}>
       {/* HEADER */}
@@ -174,14 +243,18 @@ export default function VoiceSettingsScreen() {
           <Ionicons name="chevron-back" size={22} color={primary} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: primary }]}>Voice Settings</Text>
-        <TouchableOpacity onPress={handleSave} style={[styles.saveBtn, { backgroundColor: accent, opacity: saving ? 0.7 : 1 }]} disabled={saving}>
+        <TouchableOpacity
+          onPress={handleSave}
+          style={[styles.saveBtn, { backgroundColor: accent, opacity: saving ? 0.7 : 1 }]}
+          disabled={saving}
+        >
           {saving ? <ActivityIndicator size="small" color="#FFF" /> : <Text style={styles.saveBtnText}>Save</Text>}
         </TouchableOpacity>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: insets.bottom + 48 }}>
 
-        {/* APPEARANCE */}
+        {/* APPEARANCE TOGGLE */}
         <View style={[styles.section, { marginTop: 20 }]}>
           <Text style={[styles.sectionTitle, { color: primary }]}>Appearance</Text>
           <View style={[styles.row, { backgroundColor: card, borderColor: border }]}>
@@ -202,7 +275,7 @@ export default function VoiceSettingsScreen() {
           <View style={[styles.row, { backgroundColor: card, borderColor: border, marginBottom: 8 }]}>
             <View style={{ flex: 1, paddingRight: 12 }}>
               <Text style={[styles.rowTitle, { color: primary }]}>Voice Interrupt</Text>
-              <Text style={[styles.rowDesc, { color: secondary }]}>Interrupt the AI while it speaks. When off, AI finishes before listening.</Text>
+              <Text style={[styles.rowDesc, { color: secondary }]}>Interrupt AI while it speaks. Off = AI finishes before listening.</Text>
             </View>
             <Switch value={voiceInterrupt} onValueChange={setVoiceInterrupt} trackColor={{ false: darkMode ? '#3A3A3C' : '#D1D1D6', true: accent + 'AA' }} thumbColor={voiceInterrupt ? accent : (darkMode ? '#AEAEB2' : '#FFF')} />
           </View>
@@ -236,94 +309,128 @@ export default function VoiceSettingsScreen() {
           </View>
         </View>
 
-        {/* TEST VOICE BUTTON */}
+        {/* SELECTED VOICE TEST */}
+        {selectedVoiceInfo ? (
+          <View style={styles.section}>
+            <TouchableOpacity
+              style={[styles.testBtn, { backgroundColor: card, borderColor: accent + '55' }]}
+              onPress={() => playVoicePreview(selectedVoiceInfo)}
+              activeOpacity={0.8}
+            >
+              {playingVoice === selectedVoice ? (
+                <>
+                  <ActivityIndicator size="small" color={accent} />
+                  <Text style={[styles.testBtnText, { color: accent }]}>Playing preview...</Text>
+                  <Text style={[styles.testBtnSub, { color: secondary }]}>Tap to stop</Text>
+                </>
+              ) : (
+                <>
+                  <Ionicons name="play-circle" size={28} color={accent} />
+                  <Text style={[styles.testBtnText, { color: primary }]}>Test Selected Voice</Text>
+                  <Text style={[styles.testBtnSub, { color: secondary }]}>
+                    Preview "{selectedVoiceInfo.name}"
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
+        {/* VOICE SELECTION */}
         <View style={styles.section}>
-          <TouchableOpacity
-            style={[styles.testBtn, { backgroundColor: card, borderColor: accent + '55' }]}
-            onPress={handleTestVoice}
-            activeOpacity={0.8}
-          >
-            {playingVoice === selectedVoice ? (
-              <>
-                <ActivityIndicator size="small" color={accent} />
-                <Text style={[styles.testBtnText, { color: accent }]}>Playing preview...</Text>
-                <Text style={[styles.testBtnSub, { color: secondary }]}>Tap to stop</Text>
-              </>
-            ) : (
-              <>
-                <Ionicons name="play-circle" size={28} color={accent} />
-                <Text style={[styles.testBtnText, { color: primary }]}>Test Selected Voice</Text>
-                <Text style={[styles.testBtnSub, { color: secondary }]}>
-                  Preview "{AI_VOICES.find(v => v.id === selectedVoice)?.name}" voice
-                </Text>
-              </>
-            )}
-          </TouchableOpacity>
-        </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+            <Text style={[styles.sectionTitle, { color: primary, marginBottom: 0 }]}>Choose AI Voice</Text>
+            <TouchableOpacity onPress={fetchElevenLabsVoices} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Ionicons name="refresh" size={18} color={secondary} />
+            </TouchableOpacity>
+          </View>
+          <Text style={[styles.sectionDesc, { color: secondary }]}>
+            {loadingVoices ? 'Loading voices from ElevenLabs...' : voiceLoadError ? 'Using offline voices — tap ↻ to retry' : `${voices.length} voices available — tap ▶ to preview`}
+          </Text>
 
-        {/* AI VOICE SELECTION */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: primary }]}>Choose AI Voice</Text>
-          <Text style={[styles.sectionDesc, { color: secondary }]}>Tap ▶ to preview. Selected voice is used in every conversation.</Text>
-
-          {AI_VOICES.map(voice => {
-            const isSel = selectedVoice === voice.id;
-            const isPlay = playingVoice === voice.id;
-            return (
-              <TouchableOpacity
-                key={voice.id}
-                style={[styles.voiceCard, { backgroundColor: isSel ? (darkMode ? accent + '15' : accent + '08') : card, borderColor: isSel ? accent : border }]}
-                onPress={() => { setSelectedVoice(voice.id); }}
-                activeOpacity={0.8}
-              >
-                {/* Avatar */}
-                <View style={[styles.avatarWrap, { borderColor: isSel ? accent : 'transparent' }]}>
-                  <Image source={VOICE_IMAGES[voice.id]} style={styles.avatarImg} contentFit="cover" transition={200} />
-                  <View style={[styles.genderBadge, { backgroundColor: voice.gender === 'male' ? '#007AFF' : '#FF2D55' }]}>
-                    <Ionicons name={voice.gender === 'male' ? 'male' : 'female'} size={8} color="#FFF" />
+          {loadingVoices ? (
+            <View style={{ alignItems: 'center', paddingVertical: 32 }}>
+              <ActivityIndicator size="large" color={accent} />
+              <Text style={{ color: secondary, fontSize: 14, marginTop: 12 }}>Loading ElevenLabs voices...</Text>
+            </View>
+          ) : (
+            voices.map(voice => {
+              const isSel = selectedVoice === voice.voice_id;
+              const isPlay = playingVoice === voice.voice_id;
+              const genderColor = GENDER_COLORS[voice.gender] || '#636366';
+              return (
+                <TouchableOpacity
+                  key={voice.voice_id}
+                  style={[
+                    styles.voiceCard,
+                    { backgroundColor: isSel ? (darkMode ? accent + '15' : accent + '08') : card, borderColor: isSel ? accent : border }
+                  ]}
+                  onPress={() => setSelectedVoice(voice.voice_id)}
+                  activeOpacity={0.8}
+                >
+                  {/* Avatar circle with initials */}
+                  <View style={[
+                    styles.avatarCircle,
+                    { backgroundColor: voice.color + '22', borderColor: isSel ? accent : 'transparent' }
+                  ]}>
+                    <Text style={{ fontSize: 18, fontWeight: '700', color: voice.color }}>
+                      {voice.name[0]?.toUpperCase() || '?'}
+                    </Text>
+                    {/* Gender dot */}
+                    <View style={[styles.genderDot, { backgroundColor: genderColor }]} />
                   </View>
-                </View>
 
-                {/* Info */}
-                <View style={{ flex: 1, marginLeft: 12 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                    <Text style={[styles.voiceName, { color: primary }]}>{voice.name}</Text>
-                    <View style={[styles.accentTag, { backgroundColor: voice.color + '22' }]}>
-                      <Text style={[styles.accentText, { color: voice.color }]}>{voice.accent}</Text>
+                  {/* Voice info */}
+                  <View style={{ flex: 1, marginLeft: 12 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                      <Text style={[styles.voiceName, { color: primary }]}>{voice.name}</Text>
+                      {voice.accent && voice.accent !== 'Custom' ? (
+                        <View style={[styles.accentTag, { backgroundColor: voice.color + '22' }]}>
+                          <Text style={[styles.accentText, { color: voice.color }]}>{voice.accent}</Text>
+                        </View>
+                      ) : null}
+                      {voice.voice_id.length > 12 && !voice.name.startsWith('Voice') ? (
+                        <View style={[styles.accentTag, { backgroundColor: '#BF5AF222' }]}>
+                          <Text style={[styles.accentText, { color: '#BF5AF2' }]}>ElevenLabs</Text>
+                        </View>
+                      ) : null}
                     </View>
+                    <Text style={[styles.voiceDesc, { color: secondary }]} numberOfLines={1}>{voice.description}</Text>
+                    {CURATED_VOICE_IDS.includes(voice.voice_id) ? (
+                      <Text style={{ color: '#BF5AF2', fontSize: 10, fontWeight: '600', marginTop: 2 }}>Library Voice</Text>
+                    ) : null}
                   </View>
-                  <Text style={[styles.voiceDesc, { color: secondary }]}>{voice.description}</Text>
-                </View>
 
-                {/* Controls */}
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  {isSel ? (
-                    <View style={[styles.checkCircle, { backgroundColor: accent }]}>
-                      <Ionicons name="checkmark" size={12} color="#FFF" />
-                    </View>
-                  ) : null}
-                  <TouchableOpacity
-                    style={[styles.playBtn, { backgroundColor: isSel ? accent + '22' : surface }]}
-                    onPress={() => playVoicePreview(voice.id, voice.previewText)}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
-                    {isPlay ? (
-                      <ActivityIndicator size="small" color={accent} />
-                    ) : (
-                      <Ionicons name="play" size={16} color={isSel ? accent : secondary} />
-                    )}
-                  </TouchableOpacity>
-                </View>
-              </TouchableOpacity>
-            );
-          })}
+                  {/* Controls */}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    {isSel ? (
+                      <View style={[styles.checkCircle, { backgroundColor: accent }]}>
+                        <Ionicons name="checkmark" size={12} color="#FFF" />
+                      </View>
+                    ) : null}
+                    <TouchableOpacity
+                      style={[styles.playBtn, { backgroundColor: isSel ? accent + '22' : surface }]}
+                      onPress={() => playVoicePreview(voice)}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      {isPlay ? (
+                        <ActivityIndicator size="small" color={accent} />
+                      ) : (
+                        <Ionicons name="play" size={16} color={isSel ? accent : secondary} />
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </TouchableOpacity>
+              );
+            })
+          )}
         </View>
 
         {/* INFO CARD */}
         <View style={[styles.infoCard, { backgroundColor: card, borderColor: border, marginHorizontal: 16, marginTop: 8 }]}>
           <Ionicons name="information-circle-outline" size={18} color={accent} />
           <Text style={[styles.infoText, { color: secondary }]}>
-            Voice is powered by AI TTS. If the AI voice is unavailable, the app uses your device speech as fallback. Settings apply immediately after saving.
+            Voices are powered by ElevenLabs AI. The app automatically detects your spoken language and uses the correct multilingual voice model. If a voice is unavailable, device TTS is used as fallback.
           </Text>
         </View>
 
@@ -353,9 +460,8 @@ const styles = StyleSheet.create({
   testBtnText: { fontSize: 16, fontWeight: '600', flex: 1 },
   testBtnSub: { fontSize: 13 },
   voiceCard: { flexDirection: 'row', alignItems: 'center', padding: 14, borderRadius: 18, borderWidth: 1.5, marginBottom: 10 },
-  avatarWrap: { width: 56, height: 56, borderRadius: 28, borderWidth: 2, overflow: 'hidden', position: 'relative' },
-  avatarImg: { width: 56, height: 56, borderRadius: 28 },
-  genderBadge: { position: 'absolute', bottom: 0, right: 0, width: 16, height: 16, borderRadius: 8, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: '#FFF' },
+  avatarCircle: { width: 52, height: 52, borderRadius: 26, borderWidth: 2, alignItems: 'center', justifyContent: 'center', position: 'relative' },
+  genderDot: { position: 'absolute', bottom: 0, right: 0, width: 14, height: 14, borderRadius: 7, borderWidth: 2, borderColor: '#FFF' },
   voiceName: { fontSize: 15, fontWeight: '700' },
   voiceDesc: { fontSize: 12, lineHeight: 17 },
   accentTag: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 8 },
