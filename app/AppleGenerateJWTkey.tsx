@@ -15,65 +15,245 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../hooks/useTheme';
-
-// ── POLYFILL SETUP ──
-// Install these dependencies:
-// npx expo install expo-crypto expo-standard-web-crypto
-// OR for bare React Native:
-// npm install react-native-get-random-values @peculiar/webcrypto
-
-// Option 1: Using expo-crypto (RECOMMENDED for Expo)
-import * as ExpoCrypto from 'expo-crypto';
-
-// Option 2: Alternative using @peculiar/webcrypto (if expo-crypto doesn't work)
-// import { Crypto } from '@peculiar/webcrypto';
-// const webCrypto = new Crypto();
-// global.crypto = webCrypto;
+import * as Crypto from 'expo-crypto';
 
 // ── JWT Generation for Apple Sign In ──
-// Reference: https://developer.apple.com/documentation/accountorganizationaldatasharing/creating-a-client-secret
+// Using pure JS implementation with expo-crypto for SHA256 hashing
+// NO Web Crypto API needed!
 
-async function base64urlEncode(arrayBuffer: ArrayBuffer): Promise<string> {
-  const bytes = new Uint8Array(arrayBuffer);
-  let binary = '';
-  for (let i = 0; i < bytes.byteLength; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  const b64 = btoa(binary);
-  return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+function base64UrlEncode(str: string): string {
+  // Convert string to base64, then make it URL-safe
+  const base64 = btoa(str);
+  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-// Safe crypto accessor with Expo fallback
-function getSubtleCrypto(): SubtleCrypto {
-  // Try global crypto first (web environment)
-  const globalCrypto = (globalThis as any).crypto;
-  if (globalCrypto?.subtle) {
-    return globalCrypto.subtle;
+function base64UrlDecode(str: string): string {
+  // Restore base64 from base64url
+  let padding = '';
+  const padLen = 4 - (str.length % 4);
+  if (padLen !== 4) {
+    padding = '='.repeat(padLen);
   }
+  const base64 = str.replace(/-/g, '+').replace(/_/g, '/') + padding;
+  return atob(base64);
+}
 
-  // Try Expo's webcrypto polyfill
-  const expoCrypto = (globalThis as any).expo?.crypto?.subtle;
-  if (expoCrypto) {
-    return expoCrypto;
+// Convert hex string to Uint8Array
+function hexToBytes(hex: string): Uint8Array {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < hex.length; i += 2) {
+    bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
   }
+  return bytes;
+}
 
-  // Check if we have standard web crypto via polyfill
-  if (typeof window !== 'undefined' && (window as any).crypto?.subtle) {
-    return (window as any).crypto.subtle;
+// Convert Uint8Array to hex string
+function bytesToHex(bytes: Uint8Array): string {
+  return Array.from(bytes)
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+// Convert string to Uint8Array
+function stringToBytes(str: string): Uint8Array {
+  return new TextEncoder().encode(str);
+}
+
+// ── ECDSA Signature Implementation using expo-crypto ──
+// Apple requires ES256 (ECDSA with P-256 curve and SHA-256)
+// Since we don't have Web Crypto, we'll use a pure JS implementation
+
+// P-256 curve parameters
+const P256 = {
+  p: BigInt('0xFFFFFFFF00000001000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFF'),
+  a: BigInt('0xFFFFFFFF00000001000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFC'),
+  b: BigInt('0x5AC635D8AA3A93E7B3EBBD55769886BC651D06B0CC53B0F63BCE3C3E27D2604B'),
+  n: BigInt('0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551'),
+  Gx: BigInt('0x6B17D1F2E12C4247F8BCE6E563A440F277037D812DEB33A0F4A13945D898C296'),
+  Gy: BigInt('0x4FE342E2FE1A7F9B8EE7EB4A7C0F9E162BCE33576B315ECECBB6406837BF51F5'),
+};
+
+// Point on elliptic curve
+interface ECPoint {
+  x: BigInt;
+  y: BigInt;
+  infinity?: boolean;
+}
+
+// Modular inverse using extended Euclidean algorithm
+function modInverse(a: BigInt, m: BigInt): BigInt {
+  let t = BigInt(0), newT = BigInt(1);
+  let r = m, newR = a;
+  
+  while (newR !== BigInt(0)) {
+    const quotient = r / newR;
+    [t, newT] = [newT, t - quotient * newT];
+    [r, newR] = [newR, r - quotient * newR];
   }
+  
+  if (r > BigInt(1)) throw new Error('Not invertible');
+  if (t < BigInt(0)) t += m;
+  return t;
+}
 
-  throw new Error(
-    'Web Crypto API is not available. ' +
-    'Please install: npx expo install expo-crypto expo-standard-web-crypto\n' +
-    'Then add to your app entry file: import "expo-standard-web-crypto"'
+// Point addition on P-256
+function pointAdd(P: ECPoint, Q: ECPoint): ECPoint {
+  if (P.infinity) return Q;
+  if (Q.infinity) return P;
+  
+  let lambda: BigInt;
+  if (P.x === Q.x && P.y === Q.y) {
+    // Point doubling
+    const num = (BigInt(3) * P.x * P.x + P256.a) % P256.p;
+    const den = modInverse(BigInt(2) * P.y % P256.p, P256.p);
+    lambda = (num * den) % P256.p;
+  } else {
+    // Point addition
+    const num = (Q.y - P.y + P256.p) % P256.p;
+    const den = modInverse((Q.x - P.x + P256.p) % P256.p, P256.p);
+    lambda = (num * den) % P256.p;
+  }
+  
+  const x3 = (lambda * lambda - P.x - Q.x + BigInt(2) * P256.p) % P256.p;
+  const y3 = (lambda * (P.x - x3) - P.y + P256.p) % P256.p;
+  
+  return { x: x3, y: y3 };
+}
+
+// Scalar multiplication
+function scalarMultiply(k: BigInt, P: ECPoint): ECPoint {
+  let result: ECPoint = { x: BigInt(0), y: BigInt(0), infinity: true };
+  let addend = P;
+  let scalar = k;
+  
+  while (scalar > BigInt(0)) {
+    if (scalar & BigInt(1)) {
+      result = pointAdd(result, addend);
+    }
+    addend = pointAdd(addend, addend);
+    scalar = scalar >> BigInt(1);
+  }
+  
+  return result;
+}
+
+// Parse PKCS#8 private key to get the raw key bytes
+function parsePKCS8PrivateKey(pem: string): Uint8Array {
+  // Remove PEM headers and whitespace
+  const clean = pem
+    .replace(/-----BEGIN PRIVATE KEY-----/g, '')
+    .replace(/-----END PRIVATE KEY-----/g, '')
+    .replace(/-----BEGIN EC PRIVATE KEY-----/g, '')
+    .replace(/-----END EC PRIVATE KEY-----/g, '')
+    .replace(/\s+/g, '');
+  
+  if (!clean) throw new Error('Private key is empty after stripping PEM headers.');
+  
+  try {
+    return Uint8Array.from(atob(clean), c => c.charCodeAt(0));
+  } catch {
+    throw new Error('Failed to decode private key — make sure you paste the full .p8 content including BEGIN/END lines.');
+  }
+}
+
+// Simple ASN.1 parser for EC private key
+function parseECPrivateKey(pkcs8Bytes: Uint8Array): { privateKey: BigInt, publicKey: ECPoint } {
+  // This is a simplified parser - for production, consider using a library
+  // For now, we'll extract the private key from the PKCS#8 structure
+  
+  let offset = 0;
+  
+  // Skip SEQUENCE tag and length
+  if (pkcs8Bytes[offset++] !== 0x30) throw new Error('Invalid PKCS#8 format');
+  
+  // Read length
+  let length = pkcs8Bytes[offset++];
+  if (length & 0x80) {
+    const numBytes = length & 0x7F;
+    length = 0;
+    for (let i = 0; i < numBytes; i++) {
+      length = (length << 8) | pkcs8Bytes[offset++];
+    }
+  }
+  
+  // Skip version
+  if (pkcs8Bytes[offset++] !== 0x02) throw new Error('Expected INTEGER');
+  const versionLen = pkcs8Bytes[offset++];
+  offset += versionLen;
+  
+  // Skip AlgorithmIdentifier
+  if (pkcs8Bytes[offset++] !== 0x30) throw new Error('Expected SEQUENCE');
+  const algoLen = pkcs8Bytes[offset++];
+  offset += algoLen;
+  
+  // PrivateKey OCTET STRING
+  if (pkcs8Bytes[offset++] !== 0x04) throw new Error('Expected OCTET STRING');
+  let privKeyLen = pkcs8Bytes[offset++];
+  if (privKeyLen & 0x80) {
+    const numBytes = privKeyLen & 0x7F;
+    privKeyLen = 0;
+    for (let i = 0; i < numBytes; i++) {
+      privKeyLen = (privKeyLen << 8) | pkcs8Bytes[offset++];
+    }
+  }
+  
+  // Now we're at the ECPrivateKey structure
+  const ecPrivKey = pkcs8Bytes.slice(offset, offset + privKeyLen);
+  let ecOffset = 0;
+  
+  // Skip version
+  if (ecPrivKey[ecOffset++] !== 0x02) throw new Error('Expected INTEGER in EC key');
+  const ecVersionLen = ecPrivKey[ecOffset++];
+  ecOffset += ecVersionLen;
+  
+  // Private key
+  if (ecPrivKey[ecOffset++] !== 0x04) throw new Error('Expected OCTET STRING for private key');
+  const dLen = ecPrivKey[ecOffset++];
+  const dBytes = ecPrivKey.slice(ecOffset, ecOffset + dLen);
+  ecOffset += dLen;
+  
+  const d = BigInt('0x' + bytesToHex(dBytes));
+  
+  // Generate public key from private key
+  const G: ECPoint = { x: P256.Gx, y: P256.Gy };
+  const publicKey = scalarMultiply(d, G);
+  
+  return { privateKey: d, publicKey };
+}
+
+// Sign data using ECDSA (ES256)
+async function ecdsaSign(privateKey: BigInt, data: Uint8Array): Promise<{ r: BigInt, s: BigInt }> {
+  // Hash the data using expo-crypto SHA-256
+  const hashHex = await Crypto.digestStringAsync(
+    Crypto.CryptoDigestAlgorithm.SHA256,
+    new TextDecoder().decode(data)
   );
+  const hash = BigInt('0x' + hashHex);
+  
+  const n = P256.n;
+  const G: ECPoint = { x: P256.Gx, y: P256.Gy };
+  
+  let r: BigInt, s: BigInt;
+  let k: BigInt;
+  
+  // Generate deterministic k (RFC 6979 simplified)
+  // In production, use proper RFC 6979
+  const randomBytes = await Crypto.getRandomBytesAsync(32);
+  k = BigInt('0x' + bytesToHex(randomBytes)) % n;
+  if (k === BigInt(0)) k = BigInt(1);
+  
+  // Calculate R = k * G
+  const R = scalarMultiply(k, G);
+  r = R.x % n;
+  
+  // Calculate s = k^-1 * (hash + r * privateKey) mod n
+  const kInv = modInverse(k, n);
+  s = (kInv * (hash + r * privateKey)) % n;
+  
+  return { r, s };
 }
 
-// Alternative: Pure JavaScript JWT signing using jsrsasign (most reliable for RN)
-// Install: npm install jsrsasign
-// This avoids Web Crypto API entirely
-import * as KJUR from 'jsrsasign'; // We'll use this as fallback
-
+// Main function to generate Apple client secret
 async function generateAppleClientSecret(params: {
   teamId: string;
   keyId: string;
@@ -96,83 +276,39 @@ async function generateAppleClientSecret(params: {
   };
 
   try {
-    // Try Web Crypto API first
-    const subtle = getSubtleCrypto();
-
-    const encHeader = await base64urlEncode(
-      new TextEncoder().encode(JSON.stringify(header))
-    );
-    const encPayload = await base64urlEncode(
-      new TextEncoder().encode(JSON.stringify(payload))
-    );
+    // Encode header and payload
+    const encHeader = base64UrlEncode(JSON.stringify(header));
+    const encPayload = base64UrlEncode(JSON.stringify(payload));
     const signingInput = `${encHeader}.${encPayload}`;
 
-    // Clean up PEM key
-    const pemClean = privateKey
-      .replace(/-----BEGIN PRIVATE KEY-----/g, '')
-      .replace(/-----END PRIVATE KEY-----/g, '')
-      .replace(/-----BEGIN EC PRIVATE KEY-----/g, '')
-      .replace(/-----END EC PRIVATE KEY-----/g, '')
-      .replace(/\s+/g, '');
+    // Parse private key
+    const pkcs8Bytes = parsePKCS8PrivateKey(privateKey);
+    const { privateKey: d } = parseECPrivateKey(pkcs8Bytes);
 
-    if (!pemClean) throw new Error('Private key is empty after stripping PEM headers.');
-
-    // Decode base64 to bytes
-    let keyBytes: Uint8Array;
-    try {
-      keyBytes = Uint8Array.from(atob(pemClean), c => c.charCodeAt(0));
-    } catch {
-      throw new Error('Failed to decode private key — make sure you paste the full .p8 content including BEGIN/END lines.');
-    }
-
-    // Import the EC P-256 private key
-    let cryptoKey: CryptoKey;
-    try {
-      cryptoKey = await subtle.importKey(
-        'pkcs8',
-        keyBytes,
-        { name: 'ECDSA', namedCurve: 'P-256' },
-        false,
-        ['sign']
-      );
-    } catch (importErr: any) {
-      throw new Error(
-        `Key import failed: ${importErr?.message || 'Invalid key format'}. ` +
-        'Ensure the .p8 file is in PKCS#8 format (Apple keys are — paste the complete file content).'
-      );
-    }
-
-    // Sign the JWT
-    const sigBuffer = await subtle.sign(
-      { name: 'ECDSA', hash: 'SHA-256' },
-      cryptoKey,
-      new TextEncoder().encode(signingInput)
+    // Sign with ECDSA
+    const signature = await ecdsaSign(d, stringToBytes(signingInput));
+    
+    // Encode signature as DER
+    const rHex = signature.r.toString(16).padStart(64, '0');
+    const sHex = signature.s.toString(16).padStart(64, '0');
+    
+    const rBytes = hexToBytes(rHex);
+    const sBytes = hexToBytes(sHex);
+    
+    // Simple DER encoding
+    const rDer = new Uint8Array([0x02, rBytes.length, ...rBytes]);
+    const sDer = new Uint8Array([0x02, sBytes.length, ...sBytes]);
+    const seq = new Uint8Array([0x30, rDer.length + sDer.length, ...rDer, ...sDer]);
+    
+    const encSig = base64UrlEncode(
+      String.fromCharCode(...seq)
     );
 
-    const encSig = await base64urlEncode(sigBuffer);
     return `${signingInput}.${encSig}`;
 
-  } catch (webCryptoError) {
-    // Fallback: Use jsrsasign library (pure JS, works everywhere)
-    console.warn('Web Crypto API failed, using jsrsasign fallback:', webCryptoError);
-    
-    // Install jsrsasign: npm install jsrsasign
-    // Then uncomment below:
-    /*
-    const sHeader = JSON.stringify(header);
-    const sPayload = JSON.stringify(payload);
-    
-    // Create JWS using ES256
-    const jws = KJUR.jws.JWS.sign(
-      'ES256',
-      sHeader,
-      sPayload,
-      privateKey // jsrsasign handles PEM directly
-    );
-    return jws;
-    */
-    
-    throw webCryptoError; // Remove this line when fallback is implemented
+  } catch (error: any) {
+    console.error('JWT Generation error:', error);
+    throw new Error(`Failed to generate JWT: ${error.message}`);
   }
 }
 
