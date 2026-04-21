@@ -276,7 +276,6 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  const requestStartTime = Date.now();
   try {
     let body: any;
     try {
@@ -758,39 +757,6 @@ IMPORTANT:
       .from('conversations')
       .update({ updated_at: new Date().toISOString() })
       .eq('id', conversationId);
-
-    // ── Push notification for long-running requests (>5s) ──────────────────
-    const requestDurationMs = Date.now() - requestStartTime;
-    if (requestDurationMs > 5000) {
-      try {
-        const { data: profileData } = await supabaseAdmin
-          .from('user_profiles')
-          .select('push_token')
-          .eq('id', user.id)
-          .single();
-
-        if (profileData?.push_token) {
-          const preview = cleanMessage.replace(/[#*`\[\]]/g, '').slice(0, 80);
-          const convTitle = 'AI Response Ready';
-          await fetch('https://exp.host/--/api/v2/push/send', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'Accept-Encoding': 'gzip, deflate' },
-            body: JSON.stringify({
-              to: profileData.push_token,
-              sound: 'default',
-              title: convTitle,
-              body: preview + (cleanMessage.length > 80 ? '…' : ''),
-              data: { conversationId, screen: 'home' },
-              badge: 1,
-              priority: 'high',
-            }),
-          }).catch(() => {});
-          console.log(`[chat] Push notification sent to user ${user.id} after ${Math.round(requestDurationMs / 1000)}s`);
-        }
-      } catch (notifErr) {
-        console.log('[chat] Push notification error (non-fatal):', notifErr);
-      }
-    }
 
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
