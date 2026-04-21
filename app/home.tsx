@@ -2356,4 +2356,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-
+fix ai image create li kreye image la but li paret tou noir fix pou image li kreye pou u an paret fix thinking poul paret nan home page koz mw pa wel fix all better and make sure all safe wiith no lag.
