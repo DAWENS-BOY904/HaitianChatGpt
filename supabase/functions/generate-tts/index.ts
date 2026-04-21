@@ -154,15 +154,18 @@ async function tryElevenLabsTTS(text: string, voice: string): Promise<ArrayBuffe
 // ── Provider 3: OnSpace AI — standard OpenAI-compatible /audio/speech ──────
 async function tryOnSpaceAISpeech(text: string, voice: string, speed: number): Promise<ArrayBuffer | null> {
   const apiKey = CONFIG.ONSPACE_AI_API_KEY;
-  const baseUrl = CONFIG.ONSPACE_AI_BASE_URL;
-  if (!apiKey || !baseUrl) {
+  const rawBaseUrl = CONFIG.ONSPACE_AI_BASE_URL;
+  if (!apiKey || !rawBaseUrl) {
     console.log('[TTS] OnSpace AI keys not set — skipping');
     return null;
   }
 
+  // Normalize: strip trailing /v1 so we can build clean paths
+  const baseUrl = rawBaseUrl.replace(/\/v1\/?$/, '');
+
   const endpoints = [
-    `${baseUrl}/audio/speech`,
     `${baseUrl}/v1/audio/speech`,
+    `${baseUrl}/audio/speech`,
   ];
 
   for (const endpoint of endpoints) {
@@ -226,12 +229,14 @@ async function tryOnSpaceAISpeech(text: string, voice: string, speed: number): P
 // ── Provider 4: OnSpace AI via chat/completions with audio modality ─────────
 async function tryOnSpaceAIChatAudio(text: string, voice: string): Promise<ArrayBuffer | null> {
   const apiKey = CONFIG.ONSPACE_AI_API_KEY;
-  const baseUrl = CONFIG.ONSPACE_AI_BASE_URL;
-  if (!apiKey || !baseUrl) return null;
+  const rawBaseUrl = CONFIG.ONSPACE_AI_BASE_URL;
+  if (!apiKey || !rawBaseUrl) return null;
+
+  const baseUrl = rawBaseUrl.replace(/\/v1\/?$/, '');
 
   const audioEndpoints = [
-    { url: `${baseUrl}/chat/completions`, model: 'openai/gpt-4o-audio-preview' },
-    { url: `${baseUrl}/chat/completions`, model: 'google/gemini-3-flash-preview' },
+    { url: `${baseUrl}/v1/chat/completions`, model: 'openai/gpt-4o-audio-preview' },
+    { url: `${baseUrl}/v1/chat/completions`, model: 'google/gemini-2.5-flash' },
   ];
 
   for (const { url, model } of audioEndpoints) {
@@ -370,7 +375,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    const { text, voice, speed, userId } = body;
+    const { text, voice, speed, userId, language } = body;
 
     if (!text || typeof text !== 'string' || text.trim().length === 0) {
       return new Response(
@@ -385,24 +390,26 @@ Deno.serve(async (req) => {
       : (CONFIG.DEFAULT_VOICE as VoiceType);
     const finalSpeed = Math.max(0.25, Math.min(4.0, Number(speed) || CONFIG.DEFAULT_SPEED));
 
-    console.log(`[TTS] Request: voice=${finalVoice}, speed=${finalSpeed}, len=${finalText.length}`);
+    const detectedLang = typeof language === 'string' ? language : '';
+    console.log(`[TTS] Request: voice=${finalVoice}, speed=${finalSpeed}, len=${finalText.length}, lang=${detectedLang || 'auto'}`);
     console.log(`[TTS] Available keys: OpenAI=${!!CONFIG.OPENAI_API_KEY}, ElevenLabs=${!!CONFIG.ELEVENLABS_API_KEY}, OnSpace=${!!CONFIG.ONSPACE_AI_API_KEY}`);
 
     // ── Provider priority chain ──
     let audioBuffer: ArrayBuffer | null = null;
     let usedProvider = '';
 
-    // 1. OpenAI (best quality)
+    // 1. OpenAI (best quality, multilingual)
     audioBuffer = await tryOpenAITTS(finalText, finalVoice, finalSpeed);
     if (audioBuffer) usedProvider = 'openai';
 
-    // 2. ElevenLabs (high-quality fallback)
+    // 2. ElevenLabs — skip if quota/auth issues detected (401 = account restricted)
     if (!audioBuffer) {
-      audioBuffer = await tryElevenLabsTTS(finalText, finalVoice);
-      if (audioBuffer) usedProvider = 'elevenlabs';
+      const elBuffer = await tryElevenLabsTTS(finalText, finalVoice);
+      if (elBuffer) { audioBuffer = elBuffer; usedProvider = 'elevenlabs'; }
+      // ElevenLabs 401 (unusual activity) is non-fatal — silently continue to next provider
     }
 
-    // 3. OnSpace AI /audio/speech
+    // 3. OnSpace AI /v1/audio/speech (URL normalized to avoid duplicate /v1)
     if (!audioBuffer) {
       audioBuffer = await tryOnSpaceAISpeech(finalText, finalVoice, finalSpeed);
       if (audioBuffer) usedProvider = 'onspace-speech';
@@ -443,6 +450,7 @@ Deno.serve(async (req) => {
           textLength: finalText.length,
           audioSizeKB: parseFloat((audioUint8.length / 1024).toFixed(1)),
           provider: usedProvider,
+          language: detectedLang || 'auto',
         },
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
