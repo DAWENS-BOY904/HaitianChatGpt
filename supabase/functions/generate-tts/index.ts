@@ -26,9 +26,6 @@ const CONFIG = {
 
 type VoiceType = typeof CONFIG.VALID_VOICES[number];
 
-// ── Extended valid voice IDs (all ElevenLabs voice IDs from voice-settings are accepted) ──
-// Any string longer than 5 chars is treated as a valid voice ID (raw ElevenLabs ID).
-
 // ── Voice metadata ──────────────────────────────────────────────────────────
 const VOICE_LANG_MAP: Record<string, { lang: string; gender: string }> = {
   alloy:   { lang: 'en-US', gender: 'neutral' },
@@ -48,8 +45,7 @@ const VOICE_LANG_MAP: Record<string, { lang: string; gender: string }> = {
   'mRdG9GYEjJmIzqbYTidv': { lang: 'en-US', gender: 'female' },
 };
 
-// Map named voices (legacy aliases) to UNIQUE ElevenLabs voice IDs.
-// Any raw ElevenLabs voice ID (length > 12) is passed through directly.
+// Map named voices to UNIQUE ElevenLabs voice IDs
 const ELEVENLABS_VOICE_MAP: Record<string, string> = {
   alloy:   'pNInz6obpgDQGcFmaJgB', // Adam      — warm neutral male (American)
   echo:    'VR6AewLTigWG4xSOukaG', // Arnold    — calm British male
@@ -60,34 +56,13 @@ const ELEVENLABS_VOICE_MAP: Record<string, string> = {
   coral:   'EXAVITQu4vr4xnSDxMaL', // Bella     — soft gentle female
   ash:     'pqHfZKP75CvOlQylNhV4', // Bill      — professional deep male
   sage:    'ThT5KcBeYPX3keUQqHPh', // Dorothy   — wise clear female
-  // Known curated voice IDs — passed directly
+  // Custom voice IDs — used directly
   'PzuBz8h2SxBvQ7lnUC44': 'PzuBz8h2SxBvQ7lnUC44',
   'jv41DhCf464zw0TI7I1w': 'jv41DhCf464zw0TI7I1w',
   'kJKMPwrIKzwVkMKOfRtr': 'kJKMPwrIKzwVkMKOfRtr',
   'flHkNRp1BlvT73UL6gyz': 'flHkNRp1BlvT73UL6gyz',
   'mRdG9GYEjJmIzqbYTidv': 'mRdG9GYEjJmIzqbYTidv',
-  // Known named ElevenLabs voice IDs from voice-settings FALLBACK_VOICES
-  'pNInz6obpgDQGcFmaJgB': 'pNInz6obpgDQGcFmaJgB', // Adam
-  '21m00Tcm4TlvDq8ikWAM': '21m00Tcm4TlvDq8ikWAM', // Rachel
-  'AZnzlk1XvdvUeBnXmlld': 'AZnzlk1XvdvUeBnXmlld', // Domi
-  'EXAVITQu4vr4xnSDxMaL': 'EXAVITQu4vr4xnSDxMaL', // Bella
-  'VR6AewLTigWG4xSOukaG': 'VR6AewLTigWG4xSOukaG', // Arnold
-  'GBv7mTt0atIp3Br8iCZE': 'GBv7mTt0atIp3Br8iCZE', // Thomas
-  'yoZ06aMxZJJ28mfd3POQ': 'yoZ06aMxZJJ28mfd3POQ', // Sam
-  'ThT5KcBeYPX3keUQqHPh': 'ThT5KcBeYPX3keUQqHPh', // Dorothy
-  'pqHfZKP75CvOlQylNhV4': 'pqHfZKP75CvOlQylNhV4', // Bill
 };
-
-// Resolve any voice string to a valid ElevenLabs voice ID.
-// Raw IDs (length > 10 chars that aren't named aliases) are returned as-is.
-function resolveElevenLabsVoiceId(voice: string): string {
-  // Direct map hit
-  if (ELEVENLABS_VOICE_MAP[voice]) return ELEVENLABS_VOICE_MAP[voice];
-  // Raw ElevenLabs-style ID (≥10 chars, not a short alias)
-  if (voice.length >= 10) return voice;
-  // Unknown short alias — default to Adam
-  return 'pNInz6obpgDQGcFmaJgB';
-}
 
 // Map detected language codes to ElevenLabs model IDs for multilingual support
 function getElevenLabsModel(detectedLang?: string): string {
@@ -163,7 +138,7 @@ async function tryElevenLabsTTS(text: string, voice: string, detectedLang?: stri
     return null;
   }
 
-  const voiceId = resolveElevenLabsVoiceId(voice);
+  const voiceId = ELEVENLABS_VOICE_MAP[voice] || ELEVENLABS_VOICE_MAP['alloy'];
   const modelId = getElevenLabsModel(detectedLang);
 
   try {
@@ -451,20 +426,18 @@ Deno.serve(async (req) => {
     console.log(`[TTS] Request: voice=${finalVoice}, speed=${finalSpeed}, len=${finalText.length}, lang=${detectedLanguage || 'auto'}`);
     console.log(`[TTS] Available keys: OpenAI=${!!CONFIG.OPENAI_API_KEY}, ElevenLabs=${!!CONFIG.ELEVENLABS_API_KEY}, OnSpace=${!!CONFIG.ONSPACE_AI_API_KEY}`);
 
-    // ── Provider priority: ElevenLabs → OpenAI → OnSpace AI → Device fallback ──
-    // ElevenLabs is FIRST because it supports real custom voice IDs selected by the user.
-    // OpenAI and OnSpace AI are used as fallbacks and map custom IDs to 'nova'.
+    // ── Provider priority: OpenAI → ElevenLabs → OnSpace AI → Device fallback ──
     let audioBuffer: ArrayBuffer | null = null;
     let usedProvider = '';
 
-    // 1. ElevenLabs — high quality, supports every custom voice ID from voice-settings
-    audioBuffer = await tryElevenLabsTTS(finalText, finalVoice, detectedLanguage);
-    if (audioBuffer) usedProvider = 'elevenlabs';
+    // 1. OpenAI (most reliable, great multilingual support)
+    audioBuffer = await tryOpenAITTS(finalText, finalVoice, finalSpeed, detectedLanguage);
+    if (audioBuffer) usedProvider = 'openai';
 
-    // 2. OpenAI — great multilingual support, reliable fallback
+    // 2. ElevenLabs (high quality, supports custom voice IDs)
     if (!audioBuffer) {
-      audioBuffer = await tryOpenAITTS(finalText, finalVoice, finalSpeed, detectedLanguage);
-      if (audioBuffer) usedProvider = 'openai';
+      audioBuffer = await tryElevenLabsTTS(finalText, finalVoice, detectedLanguage);
+      if (audioBuffer) usedProvider = 'elevenlabs';
     }
 
     // 3. OnSpace AI /v1/audio/speech
