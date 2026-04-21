@@ -13,7 +13,6 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
-import { WebView } from 'react-native-webview';
 import { BorderRadius } from '../constants/theme';
 
 const { width: SCREEN_W } = Dimensions.get('window');
@@ -22,30 +21,27 @@ const { width: SCREEN_W } = Dimensions.get('window');
 //  ChatGPT-inspired dark theme (One Dark Pro)
 // ─────────────────────────────────────────────
 const C = {
-  bg:         '#1e1e1e',
-  header:     '#2d2d2d',
-  border:     '#3e3e3e',
-  scrollBg:   '#161616',
-  keyword:    '#c678dd',
-  string:     '#98c379',
-  comment:    '#5c6370',
-  number:     '#d19a66',
-  tag:        '#e06c75',
-  attr:       '#e5c07b',
-  attrVal:    '#98c379',
-  type:       '#61afef',
-  plain:      '#abb2bf',
-  lineNum:    '#4a4a4a',
-  placeholder:'#e5c07b',
+  bg:         '#1e1e1e',   // card background
+  header:     '#2d2d2d',   // header bar
+  border:     '#3e3e3e',   // card border
+  scrollBg:   '#161616',   // scroll area bg
+  // syntax
+  keyword:    '#c678dd',   // purple   — const, let, import, async …
+  string:     '#98c379',   // green    — "strings"
+  comment:    '#5c6370',   // grey     — // comments
+  number:     '#d19a66',   // orange   — 42, 3.14
+  tag:        '#e06c75',   // red      — HTML tags
+  attr:       '#e5c07b',   // yellow   — attributes
+  attrVal:    '#98c379',   // green    — attribute values
+  type:       '#61afef',   // blue     — ClassName, Type
+  plain:      '#abb2bf',   // grey-white — default
+  lineNum:    '#4a4a4a',   // dim line numbers
+  placeholder:'#e5c07b',  // orange   — YOUR_API_KEY
   phBg:       'rgba(229,192,123,0.12)',
-  // terminal
-  termBg:     '#0d1117',
-  termText:   '#39ff14',
-  termPrompt: '#58a6ff',
 };
 
 // ─────────────────────────────────────────────
-//  Language metadata
+//  Language metadata (label + color)
 // ─────────────────────────────────────────────
 interface LangMeta { label: string; color: string; abbr: string }
 
@@ -95,31 +91,8 @@ function getLangMeta(lang: string): LangMeta {
   return LANG_META[key] || { label: lang || 'Code', color: '#888', abbr: '</>' };
 }
 
-// ─── Which languages get run/play button ─────────────────────────────────────
-function canRun(lang: string): boolean {
-  const l = (lang || '').toLowerCase();
-  return ['html', 'htm', 'css', 'javascript', 'js', 'jsx', 'typescript', 'ts', 'tsx',
-          'python', 'py', 'bash', 'sh'].includes(l);
-}
-
-// ─── Which languages get live preview tab ────────────────────────────────────
-function hasPreviewTab(lang: string): boolean {
-  const l = (lang || '').toLowerCase();
-  return ['html', 'htm', 'css', 'javascript', 'js', 'jsx', 'typescript', 'ts', 'tsx'].includes(l);
-}
-
-// ─── Is terminal/bash ─────────────────────────────────────────────────────────
-function isTerminalLang(lang: string): boolean {
-  return ['bash', 'sh', 'shell'].includes((lang || '').toLowerCase());
-}
-
-// ─── Is Python ────────────────────────────────────────────────────────────────
-function isPythonLang(lang: string): boolean {
-  return ['python', 'py'].includes((lang || '').toLowerCase());
-}
-
 // ─────────────────────────────────────────────
-//  Language icon badge
+//  Language icon badge (colored letter/abbr block)
 // ─────────────────────────────────────────────
 const LangIconBadge = memo(function LangIconBadge({ lang, size = 20 }: { lang: string; size?: number }) {
   const meta = getLangMeta(lang);
@@ -154,6 +127,9 @@ function hasApiKeyPlaceholders(code: string): boolean {
   return PLACEHOLDER_PATTERNS.some(re => { re.lastIndex = 0; return re.test(code); });
 }
 
+// ─────────────────────────────────────────────
+//  Token type
+// ─────────────────────────────────────────────
 type Token = { text: string; color: string; isPlaceholder?: boolean };
 
 function checkPlaceholders(tokens: Token[]): Token[] {
@@ -176,11 +152,12 @@ function checkPlaceholders(tokens: Token[]): Token[] {
 }
 
 // ─────────────────────────────────────────────
-//  Syntax tokenizer
+//  Syntax tokenizer (One Dark Pro inspired)
 // ─────────────────────────────────────────────
 function tokenize(line: string, lang: string): Token[] {
   const l = (lang || '').toLowerCase();
 
+  // HTML / XML
   if (['html', 'xml', 'htm'].includes(l)) {
     const tokens: Token[] = [];
     const re = /(<!--[\s\S]*?-->)|(<\/?)(\w[\w-]*)((?:\s+[\w:-]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]*))?)*)\s*(\/?>)/g;
@@ -192,6 +169,7 @@ function tokenize(line: string, lang: string): Token[] {
         tokens.push({ text: m[2], color: C.tag });
         tokens.push({ text: m[3], color: C.tag });
         if (m[4]) {
+          // Fixed attr regex: match name=("val" | 'val')
           const attrRe = /([\w:-]+)(\s*=\s*)("[^"]*"|'[^']*')/g;
           let lastA = 0, ma: RegExpExecArray | null;
           const attrStr = m[4];
@@ -212,6 +190,7 @@ function tokenize(line: string, lang: string): Token[] {
     return checkPlaceholders(tokens);
   }
 
+  // JS / TS / JSX / TSX
   if (['js', 'ts', 'tsx', 'jsx', 'javascript', 'typescript'].includes(l)) {
     const tokens: Token[] = [];
     const re = /(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|(["'`](?:[^"'`\\]|\\.)*["'`])|(\b(?:const|let|var|function|return|import|export|default|from|if|else|for|while|do|class|extends|new|typeof|instanceof|async|await|try|catch|finally|throw|of|in|switch|case|break|continue|void|null|undefined|true|false|this|super|type|interface|enum|implements|static|abstract|readonly|public|private|protected|declare|namespace|module|require|delete|debugger|yield|with)\b)|(\b[A-Z][a-zA-Z0-9_]*\b)|(\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b)/g;
@@ -229,6 +208,7 @@ function tokenize(line: string, lang: string): Token[] {
     return checkPlaceholders(tokens);
   }
 
+  // CSS / SCSS
   if (['css', 'scss'].includes(l)) {
     const tokens: Token[] = [];
     const re = /(\/\*[\s\S]*?\*\/)|([.#]?[\w-]+\s*(?={))|([a-z-]+\s*(?=:))|(\b\d+(?:px|em|rem|%|vh|vw|s|ms|pt|cm|mm)?\b)|("([^"]*)")|('([^']*)')/g;
@@ -246,6 +226,7 @@ function tokenize(line: string, lang: string): Token[] {
     return checkPlaceholders(tokens);
   }
 
+  // Python
   if (['python', 'py'].includes(l)) {
     const tokens: Token[] = [];
     const re = /(#[^\n]*)|("""[\s\S]*?"""|'''[\s\S]*?'''|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')|(\b(?:def|class|import|from|return|if|elif|else|for|while|in|not|and|or|is|True|False|None|lambda|with|as|try|except|finally|raise|pass|break|continue|yield|async|await|global|nonlocal|del|assert|print)\b)|(\b[A-Z][a-zA-Z0-9_]*\b)|(@[\w.]+)|(\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b)/g;
@@ -264,6 +245,7 @@ function tokenize(line: string, lang: string): Token[] {
     return checkPlaceholders(tokens);
   }
 
+  // JSON
   if (l === 'json') {
     const tokens: Token[] = [];
     const re = /("(?:[^"\\]|\\.)*"\s*:)|("(?:[^"\\]|\\.)*")|(\b(?:true|false|null)\b)|(-?\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b)/g;
@@ -280,6 +262,7 @@ function tokenize(line: string, lang: string): Token[] {
     return checkPlaceholders(tokens);
   }
 
+  // Bash / Shell
   if (['bash', 'sh', 'shell'].includes(l)) {
     const tokens: Token[] = [];
     const re = /(#[^\n]*)|(["'])(?:(?=(\\?))\3.)*?\2|(\b(?:echo|cd|ls|mkdir|rm|cp|mv|sudo|export|source|if|then|else|fi|for|do|done|while|case|esac|function|return|exit|set|unset|local|readonly|declare)\b)|(--?[\w-]+)|(\$[\w{][^)\s]*)/g;
@@ -297,6 +280,7 @@ function tokenize(line: string, lang: string): Token[] {
     return checkPlaceholders(tokens);
   }
 
+  // SQL
   if (l === 'sql') {
     const tokens: Token[] = [];
     const re = /(--[^\n]*)|('(?:[^'\\]|\\.)*')|(\b(?:SELECT|FROM|WHERE|INSERT|UPDATE|DELETE|CREATE|DROP|ALTER|TABLE|INDEX|DATABASE|JOIN|LEFT|RIGHT|INNER|OUTER|ON|AS|AND|OR|NOT|IN|IS|NULL|ORDER|BY|GROUP|HAVING|LIMIT|OFFSET|DISTINCT|COUNT|SUM|AVG|MAX|MIN|UNION|ALL|EXISTS|INTO|VALUES|SET|PRIMARY|KEY|FOREIGN|REFERENCES|CASCADE)\b)/gi;
@@ -312,6 +296,7 @@ function tokenize(line: string, lang: string): Token[] {
     return checkPlaceholders(tokens);
   }
 
+  // Default — plain text with placeholder check
   return checkPlaceholders([{ text: line, color: C.plain }]);
 }
 
@@ -329,12 +314,16 @@ const BlinkingCursor = memo(function BlinkingCursor() {
     return () => anim.stop();
   }, []);
   return (
-    <Animated.View style={{ opacity, width: 2, height: 14, backgroundColor: C.plain, marginLeft: 1, alignSelf: 'center' }} />
+    <Animated.View style={{
+      opacity, width: 2, height: 14,
+      backgroundColor: C.plain, marginLeft: 1,
+      alignSelf: 'center',
+    }} />
   );
 });
 
 // ─────────────────────────────────────────────
-//  Copy button
+//  Copy button with success flash
 // ─────────────────────────────────────────────
 const CopyButton = memo(function CopyButton({ code }: { code: string }) {
   const [copied, setCopied] = useState(false);
@@ -345,7 +334,7 @@ const CopyButton = memo(function CopyButton({ code }: { code: string }) {
   }, [code]);
   return (
     <TouchableOpacity
-      style={hdrStyles.iconBtn}
+      style={hdrStyles.copyBtn}
       onPress={onCopy}
       hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
       activeOpacity={0.7}
@@ -360,266 +349,7 @@ const CopyButton = memo(function CopyButton({ code }: { code: string }) {
 });
 
 // ─────────────────────────────────────────────
-//  Build HTML for WebView preview
-// ─────────────────────────────────────────────
-function buildPreviewHtml(code: string, lang: string): string {
-  const l = (lang || '').toLowerCase();
-
-  // If the code is already a full HTML document
-  if (['html', 'htm'].includes(l)) {
-    if (code.includes('<!DOCTYPE') || code.includes('<html')) {
-      return code;
-    }
-    // Partial HTML — wrap it
-    return `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <style>
-    * { box-sizing: border-box; }
-    body { margin: 0; font-family: system-ui, sans-serif; background: #fff; }
-  </style>
-</head>
-<body>${code}</body>
-</html>`;
-  }
-
-  // CSS only
-  if (l === 'css' || l === 'scss') {
-    return `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <style>${code}</style>
-</head>
-<body>
-  <div class="container">
-    <h1>CSS Preview</h1>
-    <p>Your styles are applied here.</p>
-    <button>Sample Button</button>
-    <div class="box">Sample Box</div>
-  </div>
-</body>
-</html>`;
-  }
-
-  // JavaScript / TypeScript
-  if (['js', 'jsx', 'javascript', 'ts', 'tsx', 'typescript'].includes(l)) {
-    // Strip TS-only syntax for browser execution
-    const jsCode = code
-      .replace(/:\s*(string|number|boolean|any|void|never|unknown|object|null|undefined)(\[\])?\b/g, '')
-      .replace(/interface\s+\w+\s*\{[^}]*\}/g, '')
-      .replace(/<[A-Z][a-zA-Z]*>/g, '')
-      .replace(/\bconst\s+(\w+)\s*:\s*\w+\s*=/g, 'const $1 =');
-
-    return `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <style>
-    body { margin: 0; font-family: monospace; background: #0d1117; color: #c9d1d9; padding: 16px; }
-    #output { white-space: pre-wrap; font-size: 14px; line-height: 1.6; }
-    .log { color: #58a6ff; }
-    .error { color: #ff7b72; }
-    .result { color: #3fb950; }
-  </style>
-</head>
-<body>
-  <div id="output"></div>
-  <script>
-    const out = document.getElementById('output');
-    const origLog = console.log;
-    const origErr = console.error;
-    const origWarn = console.warn;
-    function appendLine(text, cls) {
-      const el = document.createElement('div');
-      el.className = cls || 'log';
-      el.textContent = text;
-      out.appendChild(el);
-    }
-    console.log = (...args) => { origLog(...args); appendLine(args.map(String).join(' '), 'log'); };
-    console.error = (...args) => { origErr(...args); appendLine('Error: ' + args.join(' '), 'error'); };
-    console.warn = (...args) => { origWarn(...args); appendLine('Warning: ' + args.join(' '), 'log'); };
-    window.onerror = (msg, src, line) => { appendLine('Runtime Error (line ' + line + '): ' + msg, 'error'); };
-    try {
-      ${jsCode}
-    } catch(e) { appendLine('Execution Error: ' + e.message, 'error'); }
-  </script>
-</body>
-</html>`;
-  }
-
-  return `<!DOCTYPE html><html><body><pre>${code}</pre></body></html>`;
-}
-
-// ─────────────────────────────────────────────
-//  Build terminal HTML for bash output
-// ─────────────────────────────────────────────
-function buildTerminalHtml(code: string): string {
-  const lines = code.split('\n');
-  const linesHtml = lines.map(line => {
-    const escaped = line.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    if (line.trim().startsWith('#')) {
-      return `<div class="comment">${escaped}</div>`;
-    }
-    return `<div><span class="prompt">$ </span><span class="cmd">${escaped}</span></div>
-<div class="output">[Command output would appear here]</div>`;
-  });
-  return `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <style>
-    * { box-sizing: border-box; }
-    body { margin: 0; background: ${C.termBg}; color: ${C.termText}; font-family: 'Courier New', monospace; font-size: 13px; padding: 16px; line-height: 1.7; }
-    .prompt { color: ${C.termPrompt}; font-weight: bold; }
-    .cmd { color: #e6edf3; }
-    .output { color: rgba(57,255,20,0.65); margin-left: 14px; margin-bottom: 4px; font-size: 12px; }
-    .comment { color: #5c6370; font-style: italic; }
-    .header { color: ${C.termPrompt}; border-bottom: 1px solid #30363d; padding-bottom: 8px; margin-bottom: 12px; font-size: 12px; }
-  </style>
-</head>
-<body>
-  <div class="header">Terminal Simulation — commands shown below</div>
-  ${linesHtml.join('\n')}
-</body>
-</html>`;
-}
-
-// ─────────────────────────────────────────────
-//  Build Python simulation HTML
-// ─────────────────────────────────────────────
-function buildPythonHtml(code: string): string {
-  const escaped = code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  return `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <style>
-    * { box-sizing: border-box; }
-    body { margin: 0; background: #0d1117; color: #c9d1d9; font-family: 'Courier New', monospace; font-size: 13px; padding: 16px; line-height: 1.7; }
-    .header { color: #58a6ff; border-bottom: 1px solid #30363d; padding-bottom: 8px; margin-bottom: 12px; font-size: 12px; }
-    .code-area { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 12px; white-space: pre-wrap; margin-bottom: 12px; color: #e6edf3; }
-    .output-label { color: #3fb950; font-weight: bold; margin-bottom: 4px; font-size: 12px; }
-    .output { background: #0d1117; border: 1px solid #30363d; border-radius: 4px; padding: 10px; color: #3fb950; white-space: pre-wrap; font-size: 12px; min-height: 48px; }
-    .note { color: #8b949e; font-size: 11px; margin-top: 8px; font-style: italic; }
-  </style>
-</head>
-<body>
-  <div class="header">Python Code Preview</div>
-  <div class="code-area">${escaped}</div>
-  <div class="output-label">Output</div>
-  <div class="output">[Python output — run in a Python environment to see real results]</div>
-  <div class="note">Note: Python runs server-side. This is a static preview of your code.</div>
-</body>
-</html>`;
-}
-
-// ─────────────────────────────────────────────
-//  Full-screen code runner modal
-// ─────────────────────────────────────────────
-const CodeRunnerModal = memo(function CodeRunnerModal({
-  visible, code, language, fileName, onClose,
-}: {
-  visible: boolean; code: string; language: string; fileName?: string; onClose: () => void;
-}) {
-  const meta = getLangMeta(language);
-  const [tab, setTab] = useState<'preview' | 'code'>('preview');
-  const isTerminal = isTerminalLang(language);
-  const isPython = isPythonLang(language);
-  const isHtmlLike = hasPreviewTab(language);
-
-  let previewHtml = '';
-  let tabLabel = 'Preview';
-  if (isTerminal) { previewHtml = buildTerminalHtml(code); tabLabel = 'Terminal'; }
-  else if (isPython) { previewHtml = buildPythonHtml(code); tabLabel = 'Output'; }
-  else { previewHtml = buildPreviewHtml(code, language); tabLabel = 'Preview'; }
-
-  return (
-    <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
-      <SafeAreaView style={runStyles.root}>
-        {/* Header */}
-        <View style={runStyles.header}>
-          <TouchableOpacity onPress={onClose} style={runStyles.closeBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-            <Ionicons name="chevron-down" size={22} color="rgba(255,255,255,0.7)" />
-          </TouchableOpacity>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <LangIconBadge lang={language} size={22} />
-            <Text style={[runStyles.langLabel, { color: meta.color }]}>{fileName || meta.label}</Text>
-          </View>
-          <CopyButton code={code} />
-        </View>
-
-        {/* Tab bar */}
-        <View style={runStyles.tabBar}>
-          <TouchableOpacity
-            style={[runStyles.tab, tab === 'preview' && runStyles.tabActive]}
-            onPress={() => setTab('preview')}
-          >
-            <Ionicons
-              name={isTerminal ? 'terminal-outline' : isPython ? 'code-slash-outline' : 'globe-outline'}
-              size={15}
-              color={tab === 'preview' ? '#fff' : 'rgba(255,255,255,0.45)'}
-            />
-            <Text style={[runStyles.tabText, tab === 'preview' && runStyles.tabTextActive]}>{tabLabel}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[runStyles.tab, tab === 'code' && runStyles.tabActive]}
-            onPress={() => setTab('code')}
-          >
-            <Ionicons name="code-slash" size={15} color={tab === 'code' ? '#fff' : 'rgba(255,255,255,0.45)'} />
-            <Text style={[runStyles.tabText, tab === 'code' && runStyles.tabTextActive]}>Code</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Content */}
-        {tab === 'preview' ? (
-          <View style={{ flex: 1, backgroundColor: isTerminal || isPython ? C.termBg : '#fff' }}>
-            <WebView
-              source={{ html: previewHtml }}
-              style={{ flex: 1 }}
-              javaScriptEnabled
-              domStorageEnabled
-              originWhitelist={['*']}
-              scrollEnabled
-            />
-          </View>
-        ) : (
-          // Code tab — full scrollable view
-          <ScrollView style={{ flex: 1, backgroundColor: C.bg }} nestedScrollEnabled showsVerticalScrollIndicator indicatorStyle="white">
-            <ScrollView horizontal showsHorizontalScrollIndicator indicatorStyle="white" contentContainerStyle={fsStyles.codeContent}>
-              <View style={fsStyles.lineNums}>
-                {code.split('\n').map((_, i) => (
-                  <Text key={i} style={fsStyles.lineNum}>{i + 1}</Text>
-                ))}
-              </View>
-              <View style={fsStyles.codeLines}>
-                {code.split('\n').map((line, i) => (
-                  <View key={i} style={fsStyles.codeLine}>
-                    {tokenize(line, language).map((t, ti) =>
-                      t.isPlaceholder ? (
-                        <View key={ti} style={{ backgroundColor: C.phBg, borderRadius: 3 }}>
-                          <Text style={[fsStyles.codeText, { color: t.color }]}>{t.text}</Text>
-                        </View>
-                      ) : (
-                        <Text key={ti} style={[fsStyles.codeText, { color: t.color }]}>{t.text}</Text>
-                      )
-                    )}
-                  </View>
-                ))}
-              </View>
-            </ScrollView>
-          </ScrollView>
-        )}
-      </SafeAreaView>
-    </Modal>
-  );
-});
-
-// ─────────────────────────────────────────────
-//  Full-screen code viewer (existing, kept for expand button)
+//  Full-screen code viewer (slide-up modal)
 // ─────────────────────────────────────────────
 const FullScreenViewer = memo(function FullScreenViewer({
   visible, code, language, fileName, onClose,
@@ -631,6 +361,7 @@ const FullScreenViewer = memo(function FullScreenViewer({
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
       <SafeAreaView style={fsStyles.root}>
+        {/* header */}
         <View style={fsStyles.header}>
           <TouchableOpacity onPress={onClose} style={fsStyles.closeBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
             <Ionicons name="chevron-down" size={22} color="rgba(255,255,255,0.7)" />
@@ -641,13 +372,16 @@ const FullScreenViewer = memo(function FullScreenViewer({
           </View>
           <CopyButton code={code} />
         </View>
+        {/* code */}
         <ScrollView style={{ flex: 1, backgroundColor: C.bg }} nestedScrollEnabled showsVerticalScrollIndicator indicatorStyle="white">
           <ScrollView horizontal showsHorizontalScrollIndicator indicatorStyle="white" contentContainerStyle={fsStyles.codeContent}>
+            {/* line numbers */}
             <View style={fsStyles.lineNums}>
               {lines.map((_, i) => (
                 <Text key={i} style={fsStyles.lineNum}>{i + 1}</Text>
               ))}
             </View>
+            {/* code */}
             <View style={fsStyles.codeLines}>
               {lines.map((line, i) => (
                 <View key={i} style={fsStyles.codeLine}>
@@ -671,33 +405,6 @@ const FullScreenViewer = memo(function FullScreenViewer({
 });
 
 // ─────────────────────────────────────────────
-//  Inline Preview Tab (HTML/JS only — inside card)
-// ─────────────────────────────────────────────
-const InlinePreviewTab = memo(function InlinePreviewTab({ code, language }: { code: string; language: string }) {
-  const html = buildPreviewHtml(code, language);
-  const [loaded, setLoaded] = useState(false);
-  return (
-    <View style={{ height: 260, backgroundColor: '#fff', borderBottomLeftRadius: 12, borderBottomRightRadius: 12, overflow: 'hidden' }}>
-      {!loaded && (
-        <View style={{ position: 'absolute', inset: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f5f5f5', zIndex: 1 }}>
-          <Ionicons name="globe-outline" size={28} color="#ccc" />
-          <Text style={{ color: '#aaa', fontSize: 13, marginTop: 8 }}>Loading preview...</Text>
-        </View>
-      )}
-      <WebView
-        source={{ html }}
-        style={{ flex: 1 }}
-        javaScriptEnabled
-        domStorageEnabled
-        originWhitelist={['*']}
-        onLoad={() => setLoaded(true)}
-        scrollEnabled
-      />
-    </View>
-  );
-});
-
-// ─────────────────────────────────────────────
 //  Main CodeBlock — ChatGPT card style
 // ─────────────────────────────────────────────
 interface CodeBlockProps {
@@ -710,7 +417,7 @@ interface CodeBlockProps {
   speed?: number;
 }
 
-const COLLAPSE_LINES = 14;
+const COLLAPSE_LINES = 14; // lines shown before "Show more"
 
 export const CodeBlock = memo(function CodeBlock({
   code,
@@ -721,18 +428,11 @@ export const CodeBlock = memo(function CodeBlock({
   const meta = getLangMeta(language);
   const [expanded, setExpanded] = useState(false);
   const [fullScreen, setFullScreen] = useState(false);
-  const [runnerOpen, setRunnerOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'code' | 'preview'>('code');
   const [atBottom, setAtBottom] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
   const vertScrollRef = useRef<ScrollView>(null);
 
-  const showRunBtn = canRun(language);
-  const showPreviewTab = hasPreviewTab(language);
-  const isTerminal = isTerminalLang(language);
-  const isPython = isPythonLang(language);
-
-  // ── Streaming display ──
+  // ── Streaming character-by-character display ──
   const [displayedCode, setDisplayedCode] = useState(streaming ? '' : code);
   const streamTimerRef = useRef<NodeJS.Timeout | null>(null);
   const charIdxRef = useRef(streaming ? 0 : code.length);
@@ -772,19 +472,17 @@ export const CodeBlock = memo(function CodeBlock({
 
   const hasPlaceholders = hasApiKeyPlaceholders(code);
 
+  // Scroll-to-bottom button inside card
   const handleScrollToBottom = useCallback(() => {
     vertScrollRef.current?.scrollToEnd({ animated: true });
   }, []);
 
-  // Run/play button label
-  const runLabel = isTerminal ? 'Terminal' : isPython ? 'Output' : 'Preview';
-  const runIcon: any = isTerminal ? 'terminal-outline' : isPython ? 'play-circle-outline' : 'play-circle-outline';
-
   return (
     <>
+      {/* ── Card wrapper ── */}
       <View style={cardStyles.wrapper}>
 
-        {/* ── Header ── */}
+        {/* ── Header row: [icon + label] ──────── [expand] [copy] ── */}
         <View style={cardStyles.header}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <LangIconBadge lang={language} size={20} />
@@ -793,7 +491,6 @@ export const CodeBlock = memo(function CodeBlock({
             </Text>
           </View>
           <View style={hdrStyles.actions}>
-            {/* Expand button */}
             <TouchableOpacity
               onPress={() => setFullScreen(true)}
               style={hdrStyles.iconBtn}
@@ -801,41 +498,9 @@ export const CodeBlock = memo(function CodeBlock({
             >
               <Ionicons name="expand-outline" size={15} color="rgba(255,255,255,0.45)" />
             </TouchableOpacity>
-
-            {/* Run / Play button — only for supported languages */}
-            {showRunBtn && (
-              <TouchableOpacity
-                onPress={() => setRunnerOpen(true)}
-                style={[hdrStyles.iconBtn, hdrStyles.runBtn]}
-                hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
-              >
-                <Ionicons name={runIcon} size={15} color="#30D158" />
-              </TouchableOpacity>
-            )}
-
             <CopyButton code={code} />
           </View>
         </View>
-
-        {/* ── Preview tab selector (HTML/JS only) ── */}
-        {showPreviewTab && !isActivelyStreaming && (
-          <View style={cardStyles.tabRow}>
-            <TouchableOpacity
-              style={[cardStyles.tabBtn, activeTab === 'code' && cardStyles.tabBtnActive]}
-              onPress={() => setActiveTab('code')}
-            >
-              <Ionicons name="code-slash" size={12} color={activeTab === 'code' ? '#fff' : 'rgba(255,255,255,0.4)'} />
-              <Text style={[cardStyles.tabBtnText, activeTab === 'code' && { color: '#fff' }]}>Code</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[cardStyles.tabBtn, activeTab === 'preview' && cardStyles.tabBtnActive]}
-              onPress={() => setActiveTab('preview')}
-            >
-              <Ionicons name="globe-outline" size={12} color={activeTab === 'preview' ? '#fff' : 'rgba(255,255,255,0.4)'} />
-              <Text style={[cardStyles.tabBtnText, activeTab === 'preview' && { color: '#fff' }]}>Preview</Text>
-            </TouchableOpacity>
-          </View>
-        )}
 
         {/* ── Placeholder warning ── */}
         {hasPlaceholders && (
@@ -845,75 +510,74 @@ export const CodeBlock = memo(function CodeBlock({
           </View>
         )}
 
-        {/* ── Preview tab content ── */}
-        {showPreviewTab && activeTab === 'preview' && !isActivelyStreaming ? (
-          <InlinePreviewTab code={code} language={language} />
-        ) : (
-          /* ── Code scroll area ── */
-          <View style={cardStyles.scrollOuter}>
+        {/* ── Code scroll area ── */}
+        <View style={cardStyles.scrollOuter}>
+          <ScrollView
+            ref={vertScrollRef}
+            style={{ flex: 1 }}
+            nestedScrollEnabled
+            showsVerticalScrollIndicator={false}
+            onScroll={(e) => {
+              const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+              const dist = contentSize.height - layoutMeasurement.height - contentOffset.y;
+              setAtBottom(dist < 40);
+            }}
+            scrollEventThrottle={16}
+          >
             <ScrollView
-              ref={vertScrollRef}
-              style={{ flex: 1 }}
-              nestedScrollEnabled
-              showsVerticalScrollIndicator={false}
-              onScroll={(e) => {
-                const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
-                const dist = contentSize.height - layoutMeasurement.height - contentOffset.y;
-                setAtBottom(dist < 40);
-              }}
-              scrollEventThrottle={16}
+              ref={scrollRef}
+              horizontal
+              showsHorizontalScrollIndicator
+              indicatorStyle="white"
+              decelerationRate="fast"
+              contentContainerStyle={cardStyles.codeContent}
             >
-              <ScrollView
-                ref={scrollRef}
-                horizontal
-                showsHorizontalScrollIndicator
-                indicatorStyle="white"
-                decelerationRate="fast"
-                contentContainerStyle={cardStyles.codeContent}
-              >
-                <View style={cardStyles.lineNums}>
-                  {displayLines.map((_, i) => (
-                    <Text key={i} style={cardStyles.lineNum}>{i + 1}</Text>
-                  ))}
-                </View>
-                <View style={cardStyles.codeLines}>
-                  {displayLines.map((line, i) => {
-                    const isLastLine = i === displayLines.length - 1;
-                    return (
-                      <View key={i} style={cardStyles.codeLine}>
-                        {tokenize(line, language).map((t, ti) =>
-                          t.isPlaceholder ? (
-                            <View key={ti} style={{ backgroundColor: C.phBg, borderRadius: 3 }}>
-                              <Text style={[cardStyles.codeText, { color: t.color }]}>{t.text}</Text>
-                            </View>
-                          ) : (
-                            <Text key={ti} style={[cardStyles.codeText, { color: t.color }]}>{t.text}</Text>
-                          )
-                        )}
-                        {isActivelyStreaming && isLastLine && <BlinkingCursor />}
-                      </View>
-                    );
-                  })}
-                </View>
-              </ScrollView>
-            </ScrollView>
+              {/* Line numbers */}
+              <View style={cardStyles.lineNums}>
+                {displayLines.map((_, i) => (
+                  <Text key={i} style={cardStyles.lineNum}>{i + 1}</Text>
+                ))}
+              </View>
 
-            {isLong && expanded && !atBottom && (
-              <TouchableOpacity
-                style={cardStyles.scrollDownBtn}
-                onPress={handleScrollToBottom}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <View style={cardStyles.scrollDownCircle}>
-                  <Ionicons name="chevron-down" size={16} color="rgba(255,255,255,0.8)" />
-                </View>
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
+              {/* Code lines */}
+              <View style={cardStyles.codeLines}>
+                {displayLines.map((line, i) => {
+                  const isLastLine = i === displayLines.length - 1;
+                  return (
+                    <View key={i} style={cardStyles.codeLine}>
+                      {tokenize(line, language).map((t, ti) =>
+                        t.isPlaceholder ? (
+                          <View key={ti} style={{ backgroundColor: C.phBg, borderRadius: 3 }}>
+                            <Text style={[cardStyles.codeText, { color: t.color }]}>{t.text}</Text>
+                          </View>
+                        ) : (
+                          <Text key={ti} style={[cardStyles.codeText, { color: t.color }]}>{t.text}</Text>
+                        )
+                      )}
+                      {isActivelyStreaming && isLastLine && <BlinkingCursor />}
+                    </View>
+                  );
+                })}
+              </View>
+            </ScrollView>
+          </ScrollView>
+
+          {/* Scroll-to-bottom chevron (ChatGPT style) */}
+          {isLong && expanded && !atBottom && (
+            <TouchableOpacity
+              style={cardStyles.scrollDownBtn}
+              onPress={handleScrollToBottom}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <View style={cardStyles.scrollDownCircle}>
+                <Ionicons name="chevron-down" size={16} color="rgba(255,255,255,0.8)" />
+              </View>
+            </TouchableOpacity>
+          )}
+        </View>
 
         {/* ── Show more / less ── */}
-        {isLong && activeTab === 'code' && (
+        {isLong && (
           <TouchableOpacity style={cardStyles.expandRow} onPress={() => setExpanded(e => !e)} activeOpacity={0.7}>
             <Text style={cardStyles.expandText}>
               {expanded ? 'Show less' : `Show ${lineCount - COLLAPSE_LINES} more lines`}
@@ -925,18 +589,9 @@ export const CodeBlock = memo(function CodeBlock({
             />
           </TouchableOpacity>
         )}
-
-        {/* ── Run button strip at bottom (terminal feel) ── */}
-        {showRunBtn && !isActivelyStreaming && activeTab === 'code' && (
-          <TouchableOpacity style={cardStyles.runStrip} onPress={() => setRunnerOpen(true)} activeOpacity={0.8}>
-            <Ionicons name={runIcon} size={14} color="#30D158" />
-            <Text style={cardStyles.runStripText}>{runLabel}</Text>
-            <Ionicons name="chevron-forward" size={13} color="rgba(48,209,88,0.6)" />
-          </TouchableOpacity>
-        )}
       </View>
 
-      {/* Modals */}
+      {/* ── Full-screen viewer ── */}
       <FullScreenViewer
         visible={fullScreen}
         code={code}
@@ -944,17 +599,11 @@ export const CodeBlock = memo(function CodeBlock({
         fileName={fileName}
         onClose={() => setFullScreen(false)}
       />
-      <CodeRunnerModal
-        visible={runnerOpen}
-        code={code}
-        language={language}
-        fileName={fileName}
-        onClose={() => setRunnerOpen(false)}
-      />
     </>
   );
 });
 
+// Alias
 export const StreamingCodeBlock = CodeBlock;
 
 // ─────────────────────────────────────────────
@@ -963,7 +612,7 @@ export const StreamingCodeBlock = CodeBlock;
 const hdrStyles = StyleSheet.create({
   actions: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   iconBtn: { padding: 5, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
-  runBtn: { backgroundColor: 'rgba(48,209,88,0.1)', borderRadius: 6 },
+  copyBtn: { padding: 5, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
 });
 
 const cardStyles = StyleSheet.create({
@@ -990,32 +639,10 @@ const cardStyles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: C.border,
   },
-  langLabel: { fontSize: 13, fontWeight: '600', letterSpacing: 0.1 },
-  tabRow: {
-    flexDirection: 'row',
-    backgroundColor: C.header,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: C.border,
-    paddingHorizontal: 12,
-    paddingBottom: 8,
-    gap: 6,
-  },
-  tabBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: 'transparent',
-  },
-  tabBtnActive: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
-  },
-  tabBtnText: {
-    fontSize: 12,
+  langLabel: {
+    fontSize: 13,
     fontWeight: '600',
-    color: 'rgba(255,255,255,0.4)',
+    letterSpacing: 0.1,
   },
   phWarn: {
     flexDirection: 'row',
@@ -1028,8 +655,16 @@ const cardStyles = StyleSheet.create({
     borderBottomColor: 'rgba(229,192,123,0.2)',
   },
   phWarnText: { fontSize: 11, color: C.placeholder, fontWeight: '500', flex: 1 },
-  scrollOuter: { maxHeight: 340, position: 'relative' },
-  codeContent: { paddingVertical: 12, flexDirection: 'row', alignItems: 'flex-start', minWidth: '100%' },
+  scrollOuter: {
+    maxHeight: 340,
+    position: 'relative',
+  },
+  codeContent: {
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    minWidth: '100%',
+  },
   lineNums: {
     paddingLeft: 12,
     paddingRight: 10,
@@ -1039,101 +674,106 @@ const cardStyles = StyleSheet.create({
     minWidth: 36,
   },
   lineNum: {
-    fontSize: 12, lineHeight: 19, color: C.lineNum,
+    fontSize: 12,
+    lineHeight: 19,
+    color: C.lineNum,
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
     includeFontPadding: false,
   },
   codeLines: { paddingLeft: 14, paddingRight: 24, flexShrink: 0 },
-  codeLine: { flexDirection: 'row', flexWrap: 'nowrap', minHeight: 19, alignItems: 'center' },
+  codeLine: {
+    flexDirection: 'row',
+    flexWrap: 'nowrap',
+    minHeight: 19,
+    alignItems: 'center',
+  },
   codeText: {
-    fontSize: 13, lineHeight: 19,
+    fontSize: 13,
+    lineHeight: 19,
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
     includeFontPadding: false,
   },
-  scrollDownBtn: { position: 'absolute', bottom: 10, alignSelf: 'center', left: 0, right: 0, alignItems: 'center' },
+  scrollDownBtn: {
+    position: 'absolute',
+    bottom: 10,
+    alignSelf: 'center',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
   scrollDownCircle: {
-    width: 30, height: 30, borderRadius: 15,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     backgroundColor: 'rgba(45,45,45,0.92)',
-    borderWidth: StyleSheet.hairlineWidth, borderColor: C.border,
-    alignItems: 'center', justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: C.border,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   expandRow: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5,
-    paddingVertical: 9, backgroundColor: C.header,
-    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: C.border,
-  },
-  expandText: { fontSize: 12, color: 'rgba(255,255,255,0.5)', fontWeight: '500' },
-  runStrip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 7,
-    paddingHorizontal: 14,
+    justifyContent: 'center',
+    gap: 5,
     paddingVertical: 9,
-    backgroundColor: 'rgba(48,209,88,0.06)',
+    backgroundColor: C.header,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(48,209,88,0.15)',
+    borderTopColor: C.border,
   },
-  runStripText: { fontSize: 12, color: '#30D158', fontWeight: '600', flex: 1 },
+  expandText: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.5)',
+    fontWeight: '500',
+  },
 });
 
 const fsStyles = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.bg },
   header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: C.header, paddingHorizontal: 14, paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: C.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: C.header,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: C.border,
   },
   closeBtn: { padding: 4 },
   langLabel: { fontSize: 14, fontWeight: '700' },
-  codeContent: { paddingVertical: 12, flexDirection: 'row', alignItems: 'flex-start', minWidth: '100%' },
+  codeContent: {
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    minWidth: '100%',
+  },
   lineNums: {
-    paddingLeft: 14, paddingRight: 10,
-    borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: C.border,
-    alignItems: 'flex-end', minWidth: 42,
+    paddingLeft: 14,
+    paddingRight: 10,
+    borderRightWidth: StyleSheet.hairlineWidth,
+    borderRightColor: C.border,
+    alignItems: 'flex-end',
+    minWidth: 42,
   },
   lineNum: {
-    fontSize: 13, lineHeight: 20, color: C.lineNum,
+    fontSize: 13,
+    lineHeight: 20,
+    color: C.lineNum,
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
     includeFontPadding: false,
   },
   codeLines: { paddingLeft: 14, paddingRight: 28 },
-  codeLine: { flexDirection: 'row', flexWrap: 'nowrap', minHeight: 20, alignItems: 'center' },
+  codeLine: {
+    flexDirection: 'row',
+    flexWrap: 'nowrap',
+    minHeight: 20,
+    alignItems: 'center',
+  },
   codeText: {
-    fontSize: 14, lineHeight: 20,
+    fontSize: 14,
+    lineHeight: 20,
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
     includeFontPadding: false,
   },
-});
-
-const runStyles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: C.bg },
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: C.header, paddingHorizontal: 14, paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: C.border,
-  },
-  closeBtn: { padding: 4 },
-  langLabel: { fontSize: 14, fontWeight: '700' },
-  tabBar: {
-    flexDirection: 'row',
-    backgroundColor: C.header,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: C.border,
-    paddingHorizontal: 14,
-    paddingBottom: 10,
-    paddingTop: 8,
-    gap: 8,
-  },
-  tab: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 10,
-    backgroundColor: 'transparent',
-  },
-  tabActive: { backgroundColor: 'rgba(255,255,255,0.12)' },
-  tabText: { fontSize: 13, fontWeight: '600', color: 'rgba(255,255,255,0.45)' },
-  tabTextActive: { color: '#fff' },
 });
