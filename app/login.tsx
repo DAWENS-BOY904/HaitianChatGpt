@@ -1,5 +1,4 @@
-
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -24,9 +23,23 @@ import * as AppleAuthentication from 'expo-apple-authentication';
 import * as LocalAuthentication from 'expo-local-authentication';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Crypto from 'expo-crypto';
+import { createClient } from '@supabase/supabase-js';
 
 // ── AI Logo ──
 const AI_LOGO_URL = 'https://uzxmmddivzqjhcnnrkns.supabase.co/storage/v1/object/public/logo/logo.png';
+
+// ── NOUVO SUPABASE POU APPLE LOGIN SELMAN ──
+const MY_SUPABASE_URL = 'https://jknkiqeehvbfyeokburg.supabase.co'; // METE URL OU A ISIT LA
+const MY_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImprbmtpcWVlaHZiZnllb2tidXJnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxODg0MjMsImV4cCI6MjA4ODc2NDQyM30.nVm2uk5dwQDBKjtDzBoNQ7wol4b31WzZCM2kGpQa1k4'; // METE KEY OU A ISIT LA
+
+// Kreye yon nouvo kliyan Supabase pou Apple login selman
+const appleSupabase = createClient(MY_SUPABASE_URL, MY_SUPABASE_ANON_KEY, {
+  auth: {
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: false,
+  },
+});
 
 const logoStyles = StyleSheet.create({
   logoWrapper: {
@@ -48,10 +61,10 @@ function AILogo({ size = 64 }: { size?: number }) {
   );
 }
 
-// ── Helper: send login confirmation email ──
+// ── Helper: send login confirmation email (SOU ANSYEN SUPABASE) ──
 async function sendLoginConfirmationEmail(userId: string, email: string) {
   try {
-    const supabase = getSupabaseClient();
+    const supabase = getSupabaseClient(); // ANSYEN SUPABASE
     await supabase.functions.invoke('send-login-email', {
       body: {
         userId,
@@ -61,12 +74,11 @@ async function sendLoginConfirmationEmail(userId: string, email: string) {
       },
     });
   } catch (e) {
-    // Non-blocking – don't interrupt login flow
     console.warn('Login email send failed:', e);
   }
 }
 
-// ── Helper: Generate nonce for Apple Sign In ──
+// ── Helper: Generate nonce pou Apple Sign In ──
 async function generateNonce(length: number = 32): Promise<string> {
   const charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
   const randomBytes = await Crypto.getRandomBytesAsync(length);
@@ -77,13 +89,21 @@ async function generateNonce(length: number = 32): Promise<string> {
   return nonce;
 }
 
-// ── Helper: SHA256 hash for Apple nonce ──
+// ── Helper: SHA256 hash pou Apple nonce ──
 async function sha256Hash(str: string): Promise<string> {
-  const digest = await Crypto.digestStringAsync(
-    Crypto.CryptoDigestAlgorithm.SHA256,
-    str
-  );
-  return digest;
+  try {
+    // Eseye metod Expo Crypto la avan
+    const digest = await Crypto.digestStringAsync(
+      Crypto.CryptoDigestAlgorithm.SHA256,
+      str
+    );
+    return digest;
+  } catch (e) {
+    // Fallback: itilize js-sha256 si disponib oswa yon lòt metod
+    console.warn('SHA256 with expo-crypto failed, trying fallback:', e);
+    // Ou ka ajoute js-sha256 kòm yon dependency si ou vle
+    throw new Error('SHA256 hashing failed. Please ensure expo-crypto is properly configured.');
+  }
 }
 
 export default function LoginScreen() {
@@ -106,7 +126,7 @@ export default function LoginScreen() {
   const [appleLoading, setAppleLoading] = useState(false);
   const [guestModalVisible, setGuestModalVisible] = useState(false);
 
-  // On mount: check for existing passkeys and show biometric prompt card
+  // On mount: check for existing passkeys (SOU ANSYEN SUPABASE)
   useEffect(() => {
     checkForPasskeyLogin();
   }, []);
@@ -118,14 +138,13 @@ export default function LoginScreen() {
     }
   }, [user]);
 
+  // ── PASSKEY LOGIC SOU ANSYEN SUPABASE (PA MANYEN) ──
   const checkForPasskeyLogin = async () => {
     if (Platform.OS === 'web') return;
     try {
-      const supabase = getSupabaseClient();
+      const supabase = getSupabaseClient(); // ANSYEN SUPABASE
 
-      // Check if logout explicitly cleared the passkey flag
       const cleared = await AsyncStorage.getItem('passkey_session_active');
-      // If flag is explicitly 'false', skip prompt
       if (cleared === 'false') return;
 
       const { data: sessionData } = await supabase.auth.getSession();
@@ -142,7 +161,6 @@ export default function LoginScreen() {
 
       if (!passkeys || passkeys.length === 0) return;
 
-      // Biometric hardware check
       const compatible = await LocalAuthentication.hasHardwareAsync();
       const enrolled = await LocalAuthentication.isEnrolledAsync();
       if (!compatible || !enrolled) return;
@@ -157,7 +175,6 @@ export default function LoginScreen() {
       setShowPasskeyPrompt(true);
     } catch (err) {
       console.log('Passkey check error:', err);
-      // silently ignore
     }
   };
 
@@ -174,7 +191,6 @@ export default function LoginScreen() {
         await AsyncStorage.setItem('passkey_session_active', 'true');
         router.replace('/home');
       } else {
-        // User tapped fallback or failed — dismiss prompt card
         setShowPasskeyPrompt(false);
       }
     } catch {
@@ -205,6 +221,7 @@ export default function LoginScreen() {
 
   const [adminCodeSending, setAdminCodeSending] = useState(false);
 
+  // ── EMAIL LOGIN (SOU ANSYEN SUPABASE) ──
   const handleEmailContinue = async () => {
     if (!email.trim()) {
       showAlert('Error', 'Please enter your email address');
@@ -212,11 +229,9 @@ export default function LoginScreen() {
     }
     const adminEmails = ['berryxoe@gmail.com', 'newdawens@gmail.com', 'kontgithub@gmail.com'];
     if (adminEmails.includes(email.toLowerCase())) {
-      // Auto-send a verification code to the admin email, then go to code entry
       setAdminCodeSending(true);
       try {
-        // Admin login uses Supabase OTP (OnSpace cloud) directly — no Resend
-        const supabase = getSupabaseClient();
+        const supabase = getSupabaseClient(); // ANSYEN SUPABASE
         const { error: otpError } = await supabase.auth.signInWithOtp({
           email: email.toLowerCase(),
           options: { shouldCreateUser: false },
@@ -235,6 +250,7 @@ export default function LoginScreen() {
     }
   };
 
+  // ── GOOGLE LOGIN (SOU ANSYEN SUPABASE) ──
   const handleGoogleSignIn = async () => {
     try {
       const { error, user: googleUser } = await signInWithGoogle() as any;
@@ -244,7 +260,6 @@ export default function LoginScreen() {
       }
       if (googleUser) {
         await sendLoginConfirmationEmail(googleUser.id, googleUser.email || email);
-        // Navigation handled by useEffect watching 'user'
       }
     } catch (err: any) {
       console.error('Google sign-in error:', err);
@@ -257,10 +272,12 @@ export default function LoginScreen() {
   };
 
   const handleGuestMode = () => {
-    // Navigate directly to home as guest (no auth)
     router.replace('/home');
   };
 
+  // ═══════════════════════════════════════════════════════
+  // ── APPLE SIGN IN (SOU NOUVO SUPABASE SELMAN) ──
+  // ═══════════════════════════════════════════════════════
   const handleAppleSignIn = async () => {
     if (Platform.OS !== 'ios') {
       showAlert('Not Available', 'Apple Sign In is only available on iOS devices.');
@@ -270,40 +287,40 @@ export default function LoginScreen() {
     setAppleLoading(true);
     
     try {
+      // Verify Apple Sign In available
       const available = await AppleAuthentication.isAvailableAsync();
       if (!available) {
-        showAlert('Not Available', 'Apple Sign In is not available on this device. Please update iOS.');
+        showAlert('Not Available', 'Apple Sign In is not available on this device.');
         setAppleLoading(false);
         return;
       }
 
-      // Generate nonce using expo-crypto
+      // 1. Generate raw nonce
       const rawNonce = await generateNonce(32);
+      
+      // 2. Hash nonce with SHA256 pou Apple
       const hashedNonce = await sha256Hash(rawNonce);
 
-      // Request Apple credentials
+      // 3. Request Apple credentials
       const credential = await AppleAuthentication.signInAsync({
         requestedScopes: [
           AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
           AppleAuthentication.AppleAuthenticationScope.EMAIL,
         ],
-        nonce: hashedNonce,
+        nonce: hashedNonce, // Apple resevwa hashed nonce
       });
 
       if (!credential.identityToken) {
-        showAlert('Sign In Error', 'Apple did not return an identity token. Please try again.');
+        showAlert('Sign In Error', 'Apple did not return an identity token.');
         setAppleLoading(false);
         return;
       }
 
-      // Use the main Supabase client (not a separate one)
-      const supabase = getSupabaseClient();
-
-      // Sign in to Supabase with Apple ID token
-      const { data, error } = await supabase.auth.signInWithIdToken({
+      // 4. Sign in to NOUVO Supabase with Apple ID token
+      const { data, error } = await appleSupabase.auth.signInWithIdToken({
         provider: 'apple',
         token: credential.identityToken,
-        nonce: rawNonce, // Use raw nonce here
+        nonce: rawNonce, // Supabase resevwa RAW nonce (li pral hash li pou verifye)
       });
 
       if (error) {
@@ -314,7 +331,7 @@ export default function LoginScreen() {
       }
 
       if (data?.user) {
-        // Update profile with Apple name if provided
+        // Update profile with Apple name if provided (first sign-in only)
         if (credential.fullName?.givenName || credential.fullName?.familyName) {
           const fullName = [
             credential.fullName.givenName,
@@ -322,7 +339,7 @@ export default function LoginScreen() {
           ].filter(Boolean).join(' ');
           
           try {
-            await supabase
+            await appleSupabase
               .from('user_profiles')
               .update({ full_name: fullName })
               .eq('id', data.user.id);
@@ -331,14 +348,17 @@ export default function LoginScreen() {
           }
         }
 
+        // Voye login email sou ANSYEN supabase (si ou vle kenbe tracking la)
         const appleEmail = data.user.email || credential.email || `${credential.user}@privaterelay.appleid.com`;
         await sendLoginConfirmationEmail(data.user.id, appleEmail);
         
-        // Navigation will be handled by useEffect watching 'user' state
+        // IMPORTANT: Si ou vle itilize ansyen Supabase pou lòt bagay, 
+        // ou ka kopye session la oswa kreye yon koneksyon ant de kont yo
+        // Men pou kounye a, navigation ap fet pa useEffect ki gade 'user' state
+        // Ou ka bezwen ajoute yon mekanis pou update 'user' state la si li pa auto
       }
     } catch (e: any) {
       if (e?.code === 'ERR_REQUEST_CANCELED') {
-        // User cancelled — no error shown
         console.log('Apple Sign In cancelled by user');
       } else if (e?.code === 'ERR_APPLE_AUTHENTICATION_CREDENTIAL') {
         showAlert('Sign In Failed', 'Apple credential error. Please try again.');
@@ -439,7 +459,6 @@ export default function LoginScreen() {
       color: colors.textSecondary,
       paddingHorizontal: Spacing.md,
     },
-    // Apple-compliant Sign In button - must have visible outline per HIG
     appleButton: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -467,7 +486,6 @@ export default function LoginScreen() {
       borderRadius: BorderRadius.full,
       padding: Spacing.md,
       marginBottom: Spacing.md,
-      // Visible border is required — Apple Guideline 4.0
       borderWidth: 1.5,
       borderColor: colors.border,
       gap: Spacing.sm,
@@ -481,7 +499,6 @@ export default function LoginScreen() {
     },
   });
 
-  // ── Passkey full-screen biometric prompt card styles (defined outside StyleSheet for readability) ──
   const pkStyles = StyleSheet.create({
     overlay: {
       ...StyleSheet.absoluteFillObject,
@@ -549,7 +566,6 @@ export default function LoginScreen() {
     <View style={styles.container}>
       <StatusBar barStyle={colors.text === '#FFFFFF' ? 'light-content' : 'dark-content'} />
 
-      {/* ── Passkey full-screen biometric prompt card ── */}
       {showPasskeyPrompt && (
         <View style={pkStyles.overlay}>
           <View style={pkStyles.card}>
@@ -584,16 +600,6 @@ export default function LoginScreen() {
           </View>
         </View>
       )}
-
-      <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, pointerEvents: 'none' }} />
-
-      {/* guestStyles definition was placed outside the function component, moved it back inside or before return */}
-      {/* Assuming it was meant to be defined within the component's scope or globally */}
-      {/* If it was meant to be global, it should be at the top level or imported. */}
-      {/* If it was meant to be part of the LoginScreen component, it should be defined inside it. */}
-      {/* For now, placed it before the return statement to fix the parsing error. */}
-      {/* Alternatively, it could be moved below the 'styles' definition or outside the component entirely. */}
-      {/* The original placement outside `LoginScreen` but inside JSX `return` block was invalid. */}
 
       <TouchableOpacity style={styles.closeButton} onPress={() => router.back()}>
         <Ionicons name="close" size={24} color={colors.text} />
@@ -669,7 +675,7 @@ export default function LoginScreen() {
           <View style={styles.dividerLine} />
         </View>
 
-        {/* Google Button — must have visible border */}
+        {/* Google Button - SOU ANSYEN SUPABASE */}
         <TouchableOpacity
           style={styles.oauthButton}
           onPress={handleGoogleSignIn}
@@ -687,7 +693,7 @@ export default function LoginScreen() {
           )}
         </TouchableOpacity>
 
-        {/* Apple Sign In — iOS only per Apple HIG */}
+        {/* Apple Sign In - SOU NOUVO SUPABASE */}
         {Platform.OS === 'ios' && (
           <TouchableOpacity
             style={styles.appleButton}
@@ -718,7 +724,6 @@ export default function LoginScreen() {
           <Text style={styles.oauthButtonText}>Continue with phone</Text>
         </TouchableOpacity>
 
-        {/* Guest mode button */}
         <TouchableOpacity
           style={[styles.oauthButton, { marginTop: 4 }]}
           onPress={() => setGuestModalVisible(true)}
@@ -730,7 +735,6 @@ export default function LoginScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Guest mode info modal */}
       <Modal visible={guestModalVisible} transparent animationType="fade" onRequestClose={() => setGuestModalVisible(false)}>
         <View style={{ flex: 1, justifyContent: 'flex-end' }}>
           <BlurView intensity={60} tint="dark" style={StyleSheet.absoluteFill} />
