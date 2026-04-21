@@ -10,7 +10,7 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.onspace.dawinix",
+      "bundleIdentifier": "com.onspace.dawinix-ht",
       "buildNumber": "1.0.0",
       "usesAppleSignIn": true
     },
@@ -19,7 +19,7 @@
         "foregroundImage": "./assets/images/logo.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.onspace.dawinix",
+      "package": "com.onspace.dawinix-ht",
       "versionCode": 1,
       "edgeToEdgeEnabled": true
     },
