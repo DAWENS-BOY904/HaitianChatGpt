@@ -210,34 +210,60 @@ const ShimmerLabel = memo(function ShimmerLabel({ text, color }: { text: string;
   );
 });
 
+// ── Cycling status labels (Thinking / Analyzing / Generating) ───────────────
+const STATUS_CYCLES: Record<IntentType, string[]> = {
+  message:    ['Thinking…', 'Analyzing…', 'Generating…', 'Refining…'],
+  image:      ['Thinking…', 'Designing…', 'Rendering…', 'Polishing…'],
+  file:       ['Analyzing…', 'Writing code…', 'Generating…', 'Finalizing…'],
+  web_search: ['Searching…', 'Browsing…', 'Reading…', 'Summarizing…'],
+};
+
+function useCyclingLabel(intent: IntentType): string {
+  const labels = STATUS_CYCLES[intent] || STATUS_CYCLES.message;
+  const [idx, setIdx] = useState(0);
+  const fadeAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    const cycle = setInterval(() => {
+      Animated.timing(fadeAnim, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => {
+        setIdx(i => (i + 1) % labels.length);
+        Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }).start();
+      });
+    }, 2200);
+    return () => clearInterval(cycle);
+  }, [intent]);
+
+  return labels[idx];
+}
+
 // ── Dynamic step label hook ────────────────────────────────────────────────
 type StepConfig = { label: string; minSec: number; maxSec: number };
 
 function useStepLabel(intent: IntentType, elapsed: number): string {
   const steps: Record<IntentType, StepConfig[]> = {
     message: [
-      { label: 'Step 1: Understanding your question…', minSec: 0, maxSec: 4 },
-      { label: 'Step 2: Gathering knowledge…', minSec: 4, maxSec: 9 },
-      { label: 'Step 3: Composing your answer…', minSec: 9, maxSec: 18 },
-      { label: 'Step 4: Refining response…', minSec: 18, maxSec: 999 },
+      { label: 'Thinking…', minSec: 0, maxSec: 3 },
+      { label: 'Analyzing your question…', minSec: 3, maxSec: 7 },
+      { label: 'Generating response…', minSec: 7, maxSec: 15 },
+      { label: 'Refining answer…', minSec: 15, maxSec: 999 },
     ],
     image: [
-      { label: 'Step 1: Interpreting your prompt…', minSec: 0, maxSec: 4 },
-      { label: 'Step 2: Designing composition…', minSec: 4, maxSec: 10 },
-      { label: 'Step 3: Rendering image…', minSec: 10, maxSec: 22 },
-      { label: 'Step 4: Applying final details…', minSec: 22, maxSec: 999 },
+      { label: 'Thinking…', minSec: 0, maxSec: 3 },
+      { label: 'Designing composition…', minSec: 3, maxSec: 9 },
+      { label: 'Rendering image…', minSec: 9, maxSec: 20 },
+      { label: 'Applying final details…', minSec: 20, maxSec: 999 },
     ],
     file: [
-      { label: 'Step 1: Analyzing request…', minSec: 0, maxSec: 4 },
-      { label: 'Step 2: Writing code…', minSec: 4, maxSec: 10 },
-      { label: 'Step 3: Building file structure…', minSec: 10, maxSec: 20 },
-      { label: 'Step 4: Finalizing output…', minSec: 20, maxSec: 999 },
+      { label: 'Analyzing request…', minSec: 0, maxSec: 3 },
+      { label: 'Writing code…', minSec: 3, maxSec: 9 },
+      { label: 'Building file structure…', minSec: 9, maxSec: 18 },
+      { label: 'Finalizing output…', minSec: 18, maxSec: 999 },
     ],
     web_search: [
-      { label: 'Step 1: Formulating search query…', minSec: 0, maxSec: 3 },
-      { label: 'Step 2: Browsing the web…', minSec: 3, maxSec: 8 },
-      { label: 'Step 3: Reading results…', minSec: 8, maxSec: 14 },
-      { label: 'Step 4: Summarizing findings…', minSec: 14, maxSec: 999 },
+      { label: 'Searching the web…', minSec: 0, maxSec: 3 },
+      { label: 'Browsing results…', minSec: 3, maxSec: 7 },
+      { label: 'Reading pages…', minSec: 7, maxSec: 13 },
+      { label: 'Summarizing findings…', minSec: 13, maxSec: 999 },
     ],
   };
 
@@ -351,6 +377,23 @@ const ImageShimmerCard = memo(function ImageShimmerCard({
   );
 });
 
+// ── Fade+scale entry wrapper ─────────────────────────────────────────────
+const AnimatedEntry = memo(function AnimatedEntry({ children, style }: { children: React.ReactNode; style?: any }) {
+  const opacity = useRef(new Animated.Value(0)).current;
+  const scale = useRef(new Animated.Value(0.92)).current;
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(opacity, { toValue: 1, duration: 280, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      Animated.spring(scale, { toValue: 1, tension: 260, friction: 22, useNativeDriver: true }),
+    ]).start();
+  }, []);
+  return (
+    <Animated.View style={[{ opacity, transform: [{ scale }] }, style]}>
+      {children}
+    </Animated.View>
+  );
+});
+
 // ── Main ThinkingIndicator ────────────────────────────────────────────────
 export function ThinkingIndicator({
   userMessage = '',
@@ -363,17 +406,14 @@ export function ThinkingIndicator({
   const intent = detectIntent(userMessage, mode);
   const elapsed = useElapsedSeconds();
   const stepLabel = useStepLabel(intent, elapsed);
+  const cyclingLabel = useCyclingLabel(intent);
+  const labelFadeAnim = useRef(new Animated.Value(1)).current;
 
   // Accent color (green default)
   const accentColor = '#10A37F';
-  const glowColor =
-    intent === 'image' ? '#8B5CF6'
-    : intent === 'web_search' ? '#5AC8FA'
-    : intent === 'file' ? '#FF9F0A'
-    : accentColor;
 
   const showCancel = elapsed >= 10 && !!onCancel;
-  const elapsedLabel = elapsed >= 5 ? ` (${elapsed}s)` : '';
+  const elapsedLabel = elapsed >= 5 ? ` · ${elapsed}s` : '';
 
   // ── Completed state ──
   if (completed) {
@@ -384,24 +424,28 @@ export function ThinkingIndicator({
       message: '✓ Done',
     };
     return (
-      <View style={[styles.wrapper, style]}>
-        <Text style={{ color: colors.textSecondary, fontSize: 13, fontWeight: '500' }}>{doneMap[intent]}</Text>
-      </View>
+      <AnimatedEntry>
+        <View style={[styles.wrapper, style]}>
+          <Text style={{ color: colors.textSecondary, fontSize: 13, fontWeight: '500' }}>{doneMap[intent]}</Text>
+        </View>
+      </AnimatedEntry>
     );
   }
 
   // ── Image creation — show shimmer card ──
   if (intent === 'image') {
     return (
-      <View style={[styles.imageWrapper, style]}>
-        <ImageShimmerCard
-          isDark={isDark}
-          accentColor="#8B5CF6"
-          elapsed={elapsed}
-          onCancel={onCancel}
-          stepLabel={stepLabel}
-        />
-      </View>
+      <AnimatedEntry>
+        <View style={[styles.imageWrapper, style]}>
+          <ImageShimmerCard
+            isDark={isDark}
+            accentColor="#8B5CF6"
+            elapsed={elapsed}
+            onCancel={onCancel}
+            stepLabel={stepLabel}
+          />
+        </View>
+      </AnimatedEntry>
     );
   }
 
@@ -410,46 +454,56 @@ export function ThinkingIndicator({
     const q = userMessage?.replace(/search|find|look up|google|browse|web|latest|news|current/gi, '').trim();
     const baseQ = q && q.length > 3 ? `"${q.slice(0, 28)}${q.length > 28 ? '…' : ''}"` : '';
     return (
-      <View style={[styles.containerCard, { borderColor: isDark ? 'rgba(90,200,250,0.25)' : 'rgba(90,200,250,0.4)' }, style]}>
-        <ShimmerGlowBorder color="#5AC8FA" visible />
-        <View style={styles.rowContent}>
-          <SpinningBadge icon="globe-outline" iconColor="#5AC8FA" ringColor="#5AC8FA" bgColor="rgba(90,200,250,0.15)" />
-          <View style={{ flex: 1, gap: 3 }}>
-            <Text style={{ color: colors.text, fontSize: 14, fontWeight: '600' }}>
-              {stepLabel}{elapsedLabel}
-            </Text>
-            {baseQ ? <Text style={{ color: colors.textSecondary, fontSize: 12 }}>Searching {baseQ}</Text> : null}
+      <AnimatedEntry>
+        <View style={[styles.containerCard, { borderColor: isDark ? 'rgba(90,200,250,0.25)' : 'rgba(90,200,250,0.4)' }, style]}>
+          <ShimmerGlowBorder color="#5AC8FA" visible />
+          <View style={styles.rowContent}>
+            <SpinningBadge icon="globe-outline" iconColor="#5AC8FA" ringColor="#5AC8FA" bgColor="rgba(90,200,250,0.15)" />
+            <View style={{ flex: 1, gap: 3 }}>
+              <Text style={{ color: colors.text, fontSize: 14, fontWeight: '600' }}>
+                {stepLabel}{elapsedLabel}
+              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <ThinkingDots color="#5AC8FA" />
+                {baseQ ? <Text style={{ color: colors.textSecondary, fontSize: 12 }}>Searching {baseQ}</Text> : null}
+              </View>
+            </View>
+            {showCancel && (
+              <TouchableOpacity onPress={onCancel} style={styles.cancelBtn}>
+                <Ionicons name="close-circle" size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
+            )}
           </View>
-          {showCancel && (
-            <TouchableOpacity onPress={onCancel} style={styles.cancelBtn}>
-              <Ionicons name="close-circle" size={20} color={colors.textSecondary} />
-            </TouchableOpacity>
-          )}
         </View>
-      </View>
+      </AnimatedEntry>
     );
   }
 
   // ── File / code generation ──
   if (intent === 'file') {
     return (
-      <View style={[styles.containerCard, { borderColor: isDark ? 'rgba(255,159,10,0.25)' : 'rgba(255,159,10,0.4)' }, style]}>
-        <ShimmerGlowBorder color="#FF9F0A" visible />
-        <View style={styles.rowContent}>
-          <SpinningBadge icon="code-slash-outline" iconColor="#FF9F0A" ringColor="#FF9F0A" bgColor="rgba(255,159,10,0.15)" />
-          <View style={{ flex: 1, gap: 3 }}>
-            <Text style={{ color: colors.text, fontSize: 14, fontWeight: '600' }}>
-              {stepLabel}{elapsedLabel}
-            </Text>
-            <Text style={{ color: colors.textSecondary, fontSize: 12 }}>Generating code & files…</Text>
+      <AnimatedEntry>
+        <View style={[styles.containerCard, { borderColor: isDark ? 'rgba(255,159,10,0.25)' : 'rgba(255,159,10,0.4)' }, style]}>
+          <ShimmerGlowBorder color="#FF9F0A" visible />
+          <View style={styles.rowContent}>
+            <SpinningBadge icon="code-slash-outline" iconColor="#FF9F0A" ringColor="#FF9F0A" bgColor="rgba(255,159,10,0.15)" />
+            <View style={{ flex: 1, gap: 3 }}>
+              <Text style={{ color: colors.text, fontSize: 14, fontWeight: '600' }}>
+                {stepLabel}{elapsedLabel}
+              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <ThinkingDots color="#FF9F0A" />
+                <Text style={{ color: colors.textSecondary, fontSize: 12 }}>Building…</Text>
+              </View>
+            </View>
+            {showCancel && (
+              <TouchableOpacity onPress={onCancel} style={styles.cancelBtn}>
+                <Ionicons name="close-circle" size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
+            )}
           </View>
-          {showCancel && (
-            <TouchableOpacity onPress={onCancel} style={styles.cancelBtn}>
-              <Ionicons name="close-circle" size={20} color={colors.textSecondary} />
-            </TouchableOpacity>
-          )}
         </View>
-      </View>
+      </AnimatedEntry>
     );
   }
 
@@ -460,28 +514,30 @@ export function ThinkingIndicator({
   const borderColor = isDark ? 'rgba(16,163,127,0.2)' : 'rgba(16,163,127,0.3)';
 
   return (
-    <View style={[styles.containerCard, { borderColor }, style]}>
-      <ShimmerGlowBorder color={accentColor} visible />
-      <View style={styles.rowContent}>
-        <SpinningBadge icon="bulb-outline" iconColor={iconColor} ringColor={ringColor} bgColor={bgColor} />
-        <View style={{ flex: 1, gap: 3 }}>
-          <Text style={{ color: colors.text, fontSize: 14, fontWeight: '600' }}>
-            {stepLabel}
-          </Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <ThinkingDots color={colors.textSecondary} />
-            {elapsed >= 5 ? (
-              <Text style={{ color: colors.textSecondary, fontSize: 12 }}>{elapsed}s</Text>
-            ) : null}
+    <AnimatedEntry>
+      <View style={[styles.containerCard, { borderColor }, style]}>
+        <ShimmerGlowBorder color={accentColor} visible />
+        <View style={styles.rowContent}>
+          <SpinningBadge icon="sparkles-outline" iconColor={iconColor} ringColor={accentColor + '55'} bgColor={bgColor} />
+          <View style={{ flex: 1, gap: 4 }}>
+            <Text style={{ color: colors.text, fontSize: 14, fontWeight: '600' }}>
+              {cyclingLabel}
+            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <ThinkingDots color={accentColor} />
+              {elapsed >= 5 ? (
+                <Text style={{ color: colors.textSecondary, fontSize: 12 }}>{elapsed}s</Text>
+              ) : null}
+            </View>
           </View>
+          {showCancel && (
+            <TouchableOpacity onPress={onCancel} style={styles.cancelBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Ionicons name="close-circle" size={20} color={colors.textSecondary} />
+            </TouchableOpacity>
+          )}
         </View>
-        {showCancel && (
-          <TouchableOpacity onPress={onCancel} style={styles.cancelBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Ionicons name="close-circle" size={20} color={colors.textSecondary} />
-          </TouchableOpacity>
-        )}
       </View>
-    </View>
+    </AnimatedEntry>
   );
 }
 
