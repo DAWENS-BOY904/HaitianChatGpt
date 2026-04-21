@@ -79,14 +79,6 @@ export default function VerifyCodeScreen() {
     }
   };
 
-  const [shouldNavigateHome, setShouldNavigateHome] = useState(false);
-
-  useEffect(() => {
-    if (shouldNavigateHome) {
-      router.replace('/home');
-    }
-  }, [shouldNavigateHome]);
-
   const handleVerify = async (codeValue?: string) => {
     const otp = codeValue || code.join('');
     
@@ -103,8 +95,7 @@ export default function VerifyCodeScreen() {
         setCode(['', '', '', '', '', '']);
         inputRefs.current[0]?.focus();
       } else if (otpUser) {
-        // Defer navigation until after Root Layout is mounted
-        setTimeout(() => setShouldNavigateHome(true), 100);
+        setTimeout(() => router.replace('/home'), 100);
       }
       return;
     }
@@ -116,7 +107,6 @@ export default function VerifyCodeScreen() {
       setCode(['', '', '', '', '', '']);
       inputRefs.current[0]?.focus();
     }
-    // Non-admin: AuthRouter handles redirect automatically after verifyOTPAndLogin
   };
 
   const handleResendEmail = async () => {
@@ -267,7 +257,7 @@ export default function VerifyCodeScreen() {
     <View style={styles.container}>
       <StatusBar barStyle={colors.text === '#FFFFFF' ? 'light-content' : 'dark-content'} />
 
-      <TouchableOpacity style={styles.closeButton} onPress={() => router.canGoBack() ? router.back() : router.replace('/home')}>
+      <TouchableOpacity style={styles.closeButton} onPress={() => router.replace('/home')}>
         <Ionicons name="close" size={28} color={colors.text} />
       </TouchableOpacity>
 

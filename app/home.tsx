@@ -1537,7 +1537,7 @@ export default function HomeScreen() {
     micBtn: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
     sendButton: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', marginRight: 2 },
     stopButton: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#FF3B30', alignItems: 'center', justifyContent: 'center' },
-    voiceOrbBtn: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center', marginBottom: 2, shadowColor: accentColor, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.4, shadowRadius: 6, elevation: 4 },
+    voiceOrbBtn: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center', marginBottom: 2, shadowColor: colors.primary, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.4, shadowRadius: 6, elevation: 4 },
     emptyState: { flex: 1 },
     loadingContainer: { padding: Spacing.md, alignItems: 'center' },
     documentPreview: { width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', padding: 4 },
@@ -2333,4 +2333,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-fix error Cannot access 'accentColor' before initialization Cannot access 'accentColor'.
+
