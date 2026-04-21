@@ -2333,4 +2333,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-
+if see this make change in guest mode remove the icon person for the group and the temporary to they not in guest mode only signup button pran plas yo and fix you can send message 35 like i said and no photo upload all toolmodal require login to use themand when not in guest mode temporary function are not work so fix it.
