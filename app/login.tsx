@@ -788,3 +788,4 @@ const guestStyles = StyleSheet.create({
   secondaryBtn: { alignItems: 'center', paddingVertical: 10 },
   secondaryBtnText: { color: 'rgba(255,255,255,0.45)', fontSize: 15 },
 });
+allow apple login to allow n web for iphone only and in app for iphone ios ipad only.
