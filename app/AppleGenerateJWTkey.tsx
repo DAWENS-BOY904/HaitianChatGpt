@@ -156,68 +156,74 @@ function parsePKCS8PrivateKey(pem: string): Uint8Array {
   }
 }
 
-// Simple ASN.1 parser for EC private key
+// ── ASN.1 helper: read a tag-length and return { tag, contentOffset, contentLen } ──
+function readTLV(buf: Uint8Array, offset: number): { tag: number; contentOffset: number; contentLen: number } {
+  const tag = buf[offset++];
+  let lenByte = buf[offset++];
+  let contentLen: number;
+  if (lenByte & 0x80) {
+    const numBytes = lenByte & 0x7f;
+    contentLen = 0;
+    for (let i = 0; i < numBytes; i++) {
+      contentLen = (contentLen << 8) | buf[offset++];
+    }
+  } else {
+    contentLen = lenByte;
+  }
+  return { tag, contentOffset: offset, contentLen };
+}
+
+// Simple ASN.1 parser for PKCS#8 EC private key (RFC 5958 / RFC 5915)
+// Handles both P-256 keys from Apple .p8 files
 function parseECPrivateKey(pkcs8Bytes: Uint8Array): { privateKey: BigInt, publicKey: ECPoint } {
-  // This is a simplified parser - for production, consider using a library
-  // For now, we'll extract the private key from the PKCS#8 structure
-  
   let offset = 0;
-  
-  // Skip SEQUENCE tag and length
-  if (pkcs8Bytes[offset++] !== 0x30) throw new Error('Invalid PKCS#8 format');
-  
-  // Read length
-  let length = pkcs8Bytes[offset++];
-  if (length & 0x80) {
-    const numBytes = length & 0x7F;
-    length = 0;
-    for (let i = 0; i < numBytes; i++) {
-      length = (length << 8) | pkcs8Bytes[offset++];
-    }
-  }
-  
-  // Skip version
-  if (pkcs8Bytes[offset++] !== 0x02) throw new Error('Expected INTEGER');
-  const versionLen = pkcs8Bytes[offset++];
-  offset += versionLen;
-  
-  // Skip AlgorithmIdentifier
-  if (pkcs8Bytes[offset++] !== 0x30) throw new Error('Expected SEQUENCE');
-  const algoLen = pkcs8Bytes[offset++];
-  offset += algoLen;
-  
-  // PrivateKey OCTET STRING
-  if (pkcs8Bytes[offset++] !== 0x04) throw new Error('Expected OCTET STRING');
-  let privKeyLen = pkcs8Bytes[offset++];
-  if (privKeyLen & 0x80) {
-    const numBytes = privKeyLen & 0x7F;
-    privKeyLen = 0;
-    for (let i = 0; i < numBytes; i++) {
-      privKeyLen = (privKeyLen << 8) | pkcs8Bytes[offset++];
-    }
-  }
-  
-  // Now we're at the ECPrivateKey structure
-  const ecPrivKey = pkcs8Bytes.slice(offset, offset + privKeyLen);
+
+  // --- Outer SEQUENCE (PKCS#8 OneAsymmetricKey) ---
+  const outer = readTLV(pkcs8Bytes, offset);
+  if (outer.tag !== 0x30) throw new Error('Invalid PKCS#8: expected outer SEQUENCE (0x30), got 0x' + outer.tag.toString(16));
+  offset = outer.contentOffset;
+
+  // --- version INTEGER ---
+  const ver = readTLV(pkcs8Bytes, offset);
+  if (ver.tag !== 0x02) throw new Error('Invalid PKCS#8: expected version INTEGER (0x02), got 0x' + ver.tag.toString(16));
+  offset = ver.contentOffset + ver.contentLen;
+
+  // --- AlgorithmIdentifier SEQUENCE ---
+  const algo = readTLV(pkcs8Bytes, offset);
+  if (algo.tag !== 0x30) throw new Error('Invalid PKCS#8: expected AlgorithmIdentifier SEQUENCE (0x30), got 0x' + algo.tag.toString(16));
+  offset = algo.contentOffset + algo.contentLen;
+
+  // --- privateKey OCTET STRING (contains ECPrivateKey) ---
+  const privOctet = readTLV(pkcs8Bytes, offset);
+  if (privOctet.tag !== 0x04) throw new Error('Invalid PKCS#8: expected privateKey OCTET STRING (0x04), got 0x' + privOctet.tag.toString(16));
+
+  // ECPrivateKey (RFC 5915) is the content of the octet string
+  const ecBuf = pkcs8Bytes.slice(privOctet.contentOffset, privOctet.contentOffset + privOctet.contentLen);
   let ecOffset = 0;
-  
-  // Skip version
-  if (ecPrivKey[ecOffset++] !== 0x02) throw new Error('Expected INTEGER in EC key');
-  const ecVersionLen = ecPrivKey[ecOffset++];
-  ecOffset += ecVersionLen;
-  
-  // Private key
-  if (ecPrivKey[ecOffset++] !== 0x04) throw new Error('Expected OCTET STRING for private key');
-  const dLen = ecPrivKey[ecOffset++];
-  const dBytes = ecPrivKey.slice(ecOffset, ecOffset + dLen);
-  ecOffset += dLen;
-  
+
+  // ECPrivateKey ::= SEQUENCE { ... }
+  const ecSeq = readTLV(ecBuf, ecOffset);
+  if (ecSeq.tag !== 0x30) throw new Error('Invalid ECPrivateKey: expected SEQUENCE (0x30), got 0x' + ecSeq.tag.toString(16));
+  ecOffset = ecSeq.contentOffset;
+
+  // version INTEGER (must be 1)
+  const ecVer = readTLV(ecBuf, ecOffset);
+  if (ecVer.tag !== 0x02) throw new Error('Invalid ECPrivateKey: expected version INTEGER (0x02), got 0x' + ecVer.tag.toString(16));
+  ecOffset = ecVer.contentOffset + ecVer.contentLen;
+
+  // privateKey OCTET STRING (32 bytes for P-256)
+  const dOctet = readTLV(ecBuf, ecOffset);
+  if (dOctet.tag !== 0x04) throw new Error('Invalid ECPrivateKey: expected privateKey OCTET STRING (0x04), got 0x' + dOctet.tag.toString(16));
+  const dBytes = ecBuf.slice(dOctet.contentOffset, dOctet.contentOffset + dOctet.contentLen);
+
+  if (dBytes.length === 0) throw new Error('EC private key scalar is empty — check that you pasted the full .p8 file.');
+
   const d = BigInt('0x' + bytesToHex(dBytes));
-  
-  // Generate public key from private key
+
+  // Derive public key Q = d * G
   const G: ECPoint = { x: P256.Gx, y: P256.Gy };
   const publicKey = scalarMultiply(d, G);
-  
+
   return { privateKey: d, publicKey };
 }
 
