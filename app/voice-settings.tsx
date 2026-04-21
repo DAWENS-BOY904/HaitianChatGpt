@@ -471,3 +471,4 @@ const styles = StyleSheet.create({
   infoCard: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, padding: 14, borderRadius: 14, borderWidth: StyleSheet.hairlineWidth, marginBottom: 8 },
   infoText: { flex: 1, fontSize: 13, lineHeight: 19 },
 });
+if you read that message make sure you make all change fix this page better in mobile and for all voice elevenlabs add real logo photo for all better real and when i  click save white mode lipa rete so fix poul stay ni nn voice controle and The ElevenLabs 401 error says 'unusual activity on Free Tier'. Add logic to detect this specific error in generate-tts and immediately skip to OpenAI instead of returning a device TTS fallback, so users on a free ElevenLabs plan still hear high-quality AI voice output.
