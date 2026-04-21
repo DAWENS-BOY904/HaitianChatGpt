@@ -153,220 +153,6 @@ const MarkdownTable = memo(function MarkdownTable({ tableText, colors }: { table
   );
 });
 
-// ── Full Markdown Renderer (ChatGPT-style) ──
-const MarkdownRenderer = memo(function MarkdownRenderer({
-  text,
-  colors,
-  isUser,
-  isStreaming,
-}: {
-  text: string;
-  colors: any;
-  isUser: boolean;
-  isStreaming?: boolean;
-}) {
-  const textColor = isUser ? '#FFFFFF' : colors.text;
-  const mutedColor = isUser ? 'rgba(255,255,255,0.65)' : colors.textSecondary;
-
-  // Inline token renderer (bold, italic, inline-code)
-  const renderInline = (lineText: string, keyPfx: string): React.ReactNode[] => {
-    const parts: React.ReactNode[] = [];
-    const re = /(\*\*\*([^*]+)\*\*\*|\*\*([^*]+)\*\*|\*([^*]+)\*|`([^`]+)`|__([^_]+)__)/g;
-    let last = 0;
-    let m: RegExpExecArray | null;
-    let ki = 0;
-    while ((m = re.exec(lineText)) !== null) {
-      if (m.index > last) {
-        parts.push(<Text key={`${keyPfx}-il-${ki++}`} style={{ color: textColor }}>{lineText.slice(last, m.index)}</Text>);
-      }
-      if (m[2]) {
-        // bold italic
-        parts.push(<Text key={`${keyPfx}-il-${ki++}`} style={{ fontWeight: '700', fontStyle: 'italic', color: textColor }}>{m[2]}</Text>);
-      } else if (m[3]) {
-        // bold
-        parts.push(<Text key={`${keyPfx}-il-${ki++}`} style={{ fontWeight: '700', color: textColor }}>{m[3]}</Text>);
-      } else if (m[4]) {
-        // italic
-        parts.push(<Text key={`${keyPfx}-il-${ki++}`} style={{ fontStyle: 'italic', color: textColor }}>{m[4]}</Text>);
-      } else if (m[5]) {
-        // inline code
-        parts.push(
-          <Text key={`${keyPfx}-il-${ki++}`} style={{
-            fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-            fontSize: 13,
-            backgroundColor: isUser ? 'rgba(255,255,255,0.2)' : 'rgba(120,120,128,0.18)',
-            color: isUser ? '#fff' : colors.primary,
-            paddingHorizontal: 5,
-            borderRadius: 4,
-          }}>{m[5]}</Text>
-        );
-      } else if (m[6]) {
-        // __bold__
-        parts.push(<Text key={`${keyPfx}-il-${ki++}`} style={{ fontWeight: '700', color: textColor }}>{m[6]}</Text>);
-      }
-      last = m.index + m[0].length;
-    }
-    if (last < lineText.length) {
-      parts.push(<Text key={`${keyPfx}-il-${ki++}`} style={{ color: textColor }}>{lineText.slice(last)}</Text>);
-    }
-    return parts.length > 0 ? parts : [<Text key={`${keyPfx}-il-0`} style={{ color: textColor }}>{lineText}</Text>];
-  };
-
-  const lines = text.split('\n');
-  const elements: React.ReactNode[] = [];
-  let i = 0;
-  let keyIdx = 0;
-  const nextKey = () => `mk-${keyIdx++}`;
-
-  while (i < lines.length) {
-    const line = lines[i];
-    const trimmed = line.trim();
-
-    // Empty line
-    if (!trimmed) {
-      elements.push(<View key={nextKey()} style={{ height: 5 }} />);
-      i++;
-      continue;
-    }
-
-    // Horizontal rule
-    if (/^(-{3,}|\*{3,}|_{3,})$/.test(trimmed)) {
-      elements.push(
-        <View key={nextKey()} style={{
-          height: StyleSheet.hairlineWidth,
-          backgroundColor: isUser ? 'rgba(255,255,255,0.28)' : colors.border,
-          marginVertical: 10,
-        }} />
-      );
-      i++;
-      continue;
-    }
-
-    // H1
-    if (/^# /.test(trimmed)) {
-      const k = nextKey();
-      elements.push(
-        <Text key={k} style={{ fontSize: 20, fontWeight: '700', color: textColor, marginTop: 12, marginBottom: 4, lineHeight: 28 }}>
-          {renderInline(trimmed.replace(/^# /, ''), k)}
-        </Text>
-      );
-      i++; continue;
-    }
-
-    // H2
-    if (/^## /.test(trimmed)) {
-      const k = nextKey();
-      elements.push(
-        <Text key={k} style={{ fontSize: 17, fontWeight: '700', color: textColor, marginTop: 10, marginBottom: 3, lineHeight: 24 }}>
-          {renderInline(trimmed.replace(/^## /, ''), k)}
-        </Text>
-      );
-      i++; continue;
-    }
-
-    // H3
-    if (/^### /.test(trimmed)) {
-      const k = nextKey();
-      elements.push(
-        <Text key={k} style={{ fontSize: 15, fontWeight: '700', color: textColor, marginTop: 8, marginBottom: 2, lineHeight: 22 }}>
-          {renderInline(trimmed.replace(/^### /, ''), k)}
-        </Text>
-      );
-      i++; continue;
-    }
-
-    // H4-H6
-    if (/^#{4,6} /.test(trimmed)) {
-      const k = nextKey();
-      elements.push(
-        <Text key={k} style={{ fontSize: 14, fontWeight: '700', color: textColor, marginTop: 6, marginBottom: 2, lineHeight: 20 }}>
-          {renderInline(trimmed.replace(/^#{4,6} /, ''), k)}
-        </Text>
-      );
-      i++; continue;
-    }
-
-    // Numbered list
-    if (/^\d+\. /.test(trimmed)) {
-      const num = trimmed.match(/^(\d+)\. /)?.[1] || '1';
-      const itemText = trimmed.replace(/^\d+\. /, '');
-      const k = nextKey();
-      elements.push(
-        <View key={k} style={{ flexDirection: 'row', marginBottom: 3, paddingLeft: 2 }}>
-          <Text style={{ color: mutedColor, fontSize: 15, lineHeight: 23, minWidth: 22, fontWeight: '600' }}>{num}.</Text>
-          <Text style={{ color: textColor, fontSize: 15, lineHeight: 23, flex: 1, flexWrap: 'wrap' }}>
-            {renderInline(itemText, k)}
-          </Text>
-        </View>
-      );
-      i++; continue;
-    }
-
-    // Bullet list (-, *, •)
-    if (/^[-*•] /.test(trimmed)) {
-      const itemText = trimmed.replace(/^[-*•] /, '');
-      const k = nextKey();
-      elements.push(
-        <View key={k} style={{ flexDirection: 'row', marginBottom: 3, paddingLeft: 2 }}>
-          <Text style={{ color: mutedColor, fontSize: 16, lineHeight: 23, minWidth: 18, marginTop: 0 }}>{'•'}</Text>
-          <Text style={{ color: textColor, fontSize: 15, lineHeight: 23, flex: 1, flexWrap: 'wrap' }}>
-            {renderInline(itemText, k)}
-          </Text>
-        </View>
-      );
-      i++; continue;
-    }
-
-    // Indented bullet
-    if (/^ {2,}[-*•] /.test(line)) {
-      const itemText = line.replace(/^ {2,}[-*•] /, '');
-      const k = nextKey();
-      elements.push(
-        <View key={k} style={{ flexDirection: 'row', marginBottom: 2, paddingLeft: 18 }}>
-          <Text style={{ color: mutedColor, fontSize: 14, lineHeight: 22, minWidth: 16 }}>{'◦'}</Text>
-          <Text style={{ color: textColor, fontSize: 14, lineHeight: 22, flex: 1, flexWrap: 'wrap' }}>
-            {renderInline(itemText, k)}
-          </Text>
-        </View>
-      );
-      i++; continue;
-    }
-
-    // Blockquote
-    if (/^> /.test(trimmed)) {
-      const qText = trimmed.replace(/^> /, '');
-      const k = nextKey();
-      elements.push(
-        <View key={k} style={{
-          borderLeftWidth: 3,
-          borderLeftColor: isUser ? 'rgba(255,255,255,0.5)' : colors.primary,
-          paddingLeft: 12, marginVertical: 4,
-        }}>
-          <Text style={{ color: mutedColor, fontSize: 14, lineHeight: 22, fontStyle: 'italic' }}>
-            {renderInline(qText, k)}
-          </Text>
-        </View>
-      );
-      i++; continue;
-    }
-
-    // Plain paragraph
-    const k = nextKey();
-    const isLastLine = i === lines.length - 1;
-    elements.push(
-      <Text key={k} style={{ color: textColor, fontSize: 15, lineHeight: 23, flexWrap: 'wrap', marginBottom: 1 }}>
-        {renderInline(trimmed, k)}
-        {isStreaming && isLastLine ? (
-          <Text style={{ color: mutedColor, fontSize: 16 }}>{'▋'}</Text>
-        ) : null}
-      </Text>
-    );
-    i++;
-  }
-
-  return <View>{elements}</View>;
-});
-
 const extractInlineImages = (text: string): { text: string; images: string[] } => {
   const images: string[] = [];
   const mdImgRegex = /!\[([^\]]*)\]\((https?:\/\/[^\)]+)\)/g;
@@ -393,12 +179,19 @@ const splitTablesFromText = (text: string): Array<{ type: 'text' | 'table'; cont
     const isTableRow = /^\s*\|.+\|\s*$/.test(line);
     if (isTableRow) {
       if (!inTable) {
-        if (currentText.length > 0) { result.push({ type: 'text', content: currentText.join('\n') }); currentText = []; }
+        if (currentText.length > 0) {
+          result.push({ type: 'text', content: currentText.join('\n') });
+          currentText = [];
+        }
         inTable = true;
       }
       currentTable.push(line);
     } else {
-      if (inTable) { result.push({ type: 'table', content: currentTable.join('\n') }); currentTable = []; inTable = false; }
+      if (inTable) {
+        result.push({ type: 'table', content: currentTable.join('\n') });
+        currentTable = [];
+        inTable = false;
+      }
       currentText.push(line);
     }
   }
@@ -436,7 +229,9 @@ const DownloadLinkCard = memo(function DownloadLinkCard({ label, colors }: { lab
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6, marginBottom: 2 }}>
       <Text style={{ fontSize: 18 }}>{'👉'}</Text>
-      <Text style={{ fontSize: 15, color: colors.primary, textDecorationLine: 'underline', fontWeight: '500' }}>{label}</Text>
+      <Text style={{ fontSize: 15, color: colors.primary, textDecorationLine: 'underline', fontWeight: '500' }}>
+        {label}
+      </Text>
       <Text style={{ fontSize: 14, color: colors.primary }}>{'↗'}</Text>
     </View>
   );
@@ -448,8 +243,12 @@ const MessageCard = memo(function MessageCard({ content, colors }: { content: st
   const [copied, setCopied] = useState(false);
   const { showAlert } = useAlert();
 
-  const handleCopy = async () => { await Clipboard.setStringAsync(editedContent); setCopied(true); setTimeout(() => setCopied(false), 2000); };
-  const handleShare = async () => { try { await Share.share({ message: editedContent, title: 'Message' }); } catch {} };
+  const handleCopy = async () => {
+    await Clipboard.setStringAsync(editedContent);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   const handleDownload = async () => {
     try {
       const fileName = `message_${Date.now()}.txt`;
@@ -457,16 +256,30 @@ const MessageCard = memo(function MessageCard({ content, colors }: { content: st
       await FileSystem.writeAsStringAsync(fileUri, editedContent, { encoding: FileSystem.EncodingType.UTF8 });
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(fileUri, { mimeType: 'text/plain', dialogTitle: 'Save Message', UTI: 'public.plain-text' });
-      } else { await Share.share({ message: editedContent, title: 'Message' }); }
-    } catch { showAlert('Error', 'Failed to download message'); }
+      } else {
+        await Share.share({ message: editedContent, title: 'Message' });
+      }
+    } catch {
+      showAlert('Error', 'Failed to download message');
+    }
+  };
+
+  const handleShare = async () => {
+    try { await Share.share({ message: editedContent, title: 'Message' }); } catch {}
   };
 
   if (isEditing) {
     return (
       <Modal visible animationType="slide" presentationStyle="pageSheet">
         <View style={{ flex: 1, backgroundColor: colors.background }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: Platform.OS === 'ios' ? 56 : 24, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: colors.border }}>
-            <TouchableOpacity onPress={() => setIsEditing(false)}><Ionicons name="close" size={24} color={colors.text} /></TouchableOpacity>
+          <View style={{
+            flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+            paddingHorizontal: 16, paddingTop: Platform.OS === 'ios' ? 56 : 24,
+            paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: colors.border,
+          }}>
+            <TouchableOpacity onPress={() => setIsEditing(false)}>
+              <Ionicons name="close" size={24} color={colors.text} />
+            </TouchableOpacity>
             <Text style={{ color: colors.text, fontSize: 17, fontWeight: '600' }}>Message</Text>
             <View style={{ flexDirection: 'row', gap: 12 }}>
               <TouchableOpacity onPress={handleCopy}><Ionicons name="copy-outline" size={22} color={colors.text} /></TouchableOpacity>
@@ -475,7 +288,9 @@ const MessageCard = memo(function MessageCard({ content, colors }: { content: st
           </View>
           <ScrollView style={{ flex: 1, padding: 20 }}>
             <View style={{ backgroundColor: colors.surface, borderRadius: 16, padding: 20, minHeight: 300 }}>
-              <Text style={{ color: colors.text, fontSize: 16, lineHeight: 26 }} selectable>{editedContent}</Text>
+              <Text style={{ color: colors.text, fontSize: 16, lineHeight: 26, fontWeight: '400' }} selectable>
+                {editedContent}
+              </Text>
             </View>
           </ScrollView>
         </View>
@@ -488,17 +303,28 @@ const MessageCard = memo(function MessageCard({ content, colors }: { content: st
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: `${colors.background}80` }}>
         <Text style={{ color: colors.textSecondary, fontSize: 13, fontWeight: '500' }}>Message</Text>
         <View style={{ flexDirection: 'row', gap: 16 }}>
-          <TouchableOpacity onPress={() => setIsEditing(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}><Ionicons name="pencil-outline" size={18} color={colors.textSecondary} /></TouchableOpacity>
-          <TouchableOpacity onPress={handleCopy} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}><Ionicons name={copied ? 'checkmark' : 'copy-outline'} size={18} color={copied ? colors.primary : colors.textSecondary} /></TouchableOpacity>
-          <TouchableOpacity onPress={handleShare} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}><Ionicons name="share-outline" size={18} color={colors.textSecondary} /></TouchableOpacity>
+          <TouchableOpacity onPress={() => setIsEditing(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Ionicons name="pencil-outline" size={18} color={colors.textSecondary} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleCopy} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Ionicons name={copied ? 'checkmark' : 'copy-outline'} size={18} color={copied ? colors.primary : colors.textSecondary} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleShare} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Ionicons name="share-outline" size={18} color={colors.textSecondary} />
+          </TouchableOpacity>
         </View>
       </View>
       <ScrollView style={{ maxHeight: 320 }} showsVerticalScrollIndicator={false}>
         <View style={{ padding: 16 }}>
-          <Text style={{ color: colors.text, fontSize: 15, lineHeight: 24 }}>{editedContent}</Text>
+          <Text style={{ color: colors.text, fontSize: 15, lineHeight: 24, fontWeight: '400' }}>
+            {editedContent}
+          </Text>
         </View>
       </ScrollView>
-      <TouchableOpacity onPress={handleDownload} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: `${colors.primary}10` }}>
+      <TouchableOpacity
+        onPress={handleDownload}
+        style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: `${colors.primary}10` }}
+      >
         <Ionicons name="download-outline" size={16} color={colors.primary} />
         <Text style={{ color: colors.primary, fontSize: 14, fontWeight: '600' }}>Download Message</Text>
       </TouchableOpacity>
@@ -518,6 +344,42 @@ function parseDownloadCard(content: string): { text: string; downloadLabel?: str
   return { text: [before, after].filter(Boolean).join('\n\n'), downloadLabel: label };
 }
 
+// ── Inline markdown renderer (bold, italic, code) ──
+function renderInlineMarkdown(text: string, baseStyle: any, colors: any): React.ReactNode {
+  const parts: React.ReactNode[] = [];
+  const regex = /(\*\*([^*]+)\*\*|\*([^*]+)\*|`([^`]+)`)/g;
+  let lastIndex = 0;
+  let match;
+  let keyIdx = 0;
+
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(<Text key={`t${keyIdx++}`}>{text.slice(lastIndex, match.index)}</Text>);
+    }
+    if (match[2]) {
+      parts.push(<Text key={`b${keyIdx++}`} style={{ fontWeight: '700' }}>{match[2]}</Text>);
+    } else if (match[3]) {
+      parts.push(<Text key={`i${keyIdx++}`} style={{ fontStyle: 'italic' }}>{match[3]}</Text>);
+    } else if (match[4]) {
+      parts.push(
+        <Text key={`c${keyIdx++}`} style={{
+          fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+          fontSize: 13,
+          backgroundColor: 'rgba(120,120,128,0.2)',
+          color: colors.primary,
+          paddingHorizontal: 4,
+          borderRadius: 4,
+        }}>{match[4]}</Text>
+      );
+    }
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < text.length) {
+    parts.push(<Text key={`t${keyIdx++}`}>{text.slice(lastIndex)}</Text>);
+  }
+  return parts.length > 0 ? parts : text;
+}
+
 // ── Format timestamp ──
 function formatMessageTime(dateStr: string): string {
   try {
@@ -530,12 +392,17 @@ function formatMessageTime(dateStr: string): string {
     yesterday.setDate(yesterday.getDate() - 1);
     if (d.toDateString() === yesterday.toDateString()) return `Yesterday, ${timeStr}`;
     return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ', ' + timeStr;
-  } catch { return ''; }
+  } catch {
+    return '';
+  }
 }
 
-// ── Blur Context Menu ──
+// ── Blur Context Menu (like Photo 1) ──
 const BlurContextMenu = memo(function BlurContextMenu({
-  visible, timeLabel, items, onClose,
+  visible,
+  timeLabel,
+  items,
+  onClose,
 }: {
   visible: boolean;
   timeLabel: string;
@@ -567,7 +434,9 @@ const BlurContextMenu = memo(function BlurContextMenu({
         <Animated.View style={[ctxStyles.menuWrap, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}>
           <BlurView intensity={85} tint="dark" style={ctxStyles.blurBox}>
             {timeLabel ? (
-              <View style={ctxStyles.timeRow}><Text style={ctxStyles.timeText}>{timeLabel}</Text></View>
+              <View style={ctxStyles.timeRow}>
+                <Text style={ctxStyles.timeText}>{timeLabel}</Text>
+              </View>
             ) : null}
             {items.map((item, i) => (
               <TouchableOpacity
@@ -588,13 +457,47 @@ const BlurContextMenu = memo(function BlurContextMenu({
 });
 
 const ctxStyles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' },
-  menuWrap: { width: 260, borderRadius: 18, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.45, shadowRadius: 24, elevation: 24 },
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  menuWrap: {
+    width: 260,
+    borderRadius: 18,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.45,
+    shadowRadius: 24,
+    elevation: 24,
+  },
   blurBox: { borderRadius: 18, overflow: 'hidden' },
-  timeRow: { paddingHorizontal: 18, paddingTop: 14, paddingBottom: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(255,255,255,0.1)' },
-  timeText: { color: 'rgba(255,255,255,0.5)', fontSize: 13, textAlign: 'center', fontWeight: '500' },
-  menuItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingVertical: 15 },
-  menuItemBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.08)' },
+  timeRow: {
+    paddingHorizontal: 18,
+    paddingTop: 14,
+    paddingBottom: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(255,255,255,0.1)',
+  },
+  timeText: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 13,
+    textAlign: 'center',
+    fontWeight: '500',
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 18,
+    paddingVertical: 15,
+  },
+  menuItemBorder: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(255,255,255,0.08)',
+  },
   menuLabel: { fontSize: 17, color: 'rgba(255,255,255,0.92)', fontWeight: '400' },
   destructiveLabel: { color: '#FF453A' },
 });
@@ -623,10 +526,12 @@ export const MessageItem = memo(function MessageItem({
   const [selectedLink, setSelectedLink] = useState('');
   const [selectedImageUrl, setSelectedImageUrl] = useState('');
   const [fileData, setFileData] = useState({ name: '', content: '', type: '' });
-  const [modals, setModals] = useState({ link: false, webView: false, imageViewer: false, imageEdit: false, file: false });
+  const [modals, setModals] = useState({
+    link: false, webView: false, imageViewer: false, imageEdit: false, file: false,
+  });
   const [downloadingImage, setDownloadingImage] = useState(false);
 
-  // Entrance animation
+  // ── Entrance animation ──
   const entranceOpacity = useRef(new Animated.Value(0)).current;
   const entranceTranslateY = useRef(new Animated.Value(16)).current;
   useEffect(() => {
@@ -644,7 +549,10 @@ export const MessageItem = memo(function MessageItem({
     try {
       setDownloadingImage(true);
       const { status } = await MediaLibrary.requestPermissionsAsync();
-      if (status !== 'granted') { Alert.alert('Permission Required', 'Please allow access to save images.'); return; }
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Please allow access to save images to your library.');
+        return;
+      }
       const ext = imageUrl.split('.').pop()?.split('?')[0] || 'jpg';
       const fileUri = `${FileSystem.documentDirectory}temp_image_${Date.now()}.${ext}`;
       const downloadResult = await FileSystem.downloadAsync(imageUrl, fileUri);
@@ -652,11 +560,16 @@ export const MessageItem = memo(function MessageItem({
       const asset = await MediaLibrary.createAssetAsync(downloadResult.uri);
       await MediaLibrary.createAlbumAsync('HaitianChatGPT', asset, false);
       showAlert('Success', 'Image saved to your photo library!');
-    } catch { Alert.alert('Error', 'Failed to save image.'); }
-    finally { setDownloadingImage(false); }
+    } catch {
+      Alert.alert('Error', 'Failed to save image. Please try again.');
+    } finally {
+      setDownloadingImage(false);
+    }
   }, [showAlert]);
 
-  const handleLongPress = useCallback(() => setShowContextMenu(true), []);
+  const handleLongPress = useCallback(() => {
+    setShowContextMenu(true);
+  }, []);
 
   const handleCopy = useCallback(async () => {
     await Clipboard.setStringAsync(message.content);
@@ -680,12 +593,25 @@ export const MessageItem = memo(function MessageItem({
         await supabase.from('message_likes').upsert({ message_id: message.id, user_id: user.id, like_type: type });
         setLiked(type);
       }
-    } catch { showAlert('Error', 'Failed to save feedback'); }
+    } catch {
+      showAlert('Error', 'Failed to save feedback');
+    }
   }, [liked, message.id, user, supabase, showAlert]);
 
-  const handleLinkPress = useCallback((url: string) => { setSelectedLink(url); toggleModal('link', true); }, [toggleModal]);
-  const handleImagePress = useCallback((imageUrl: string) => { setSelectedImageUrl(imageUrl); toggleModal('imageViewer', true); }, [toggleModal]);
-  const handleImageEdit = useCallback(() => { toggleModal('imageViewer', false); toggleModal('imageEdit', true); }, [toggleModal]);
+  const handleLinkPress = useCallback((url: string) => {
+    setSelectedLink(url);
+    toggleModal('link', true);
+  }, [toggleModal]);
+
+  const handleImagePress = useCallback((imageUrl: string) => {
+    setSelectedImageUrl(imageUrl);
+    toggleModal('imageViewer', true);
+  }, [toggleModal]);
+
+  const handleImageEdit = useCallback(() => {
+    toggleModal('imageViewer', false);
+    toggleModal('imageEdit', true);
+  }, [toggleModal]);
 
   const handleApplyImageEdits = useCallback(async (editPrompt: string) => {
     try {
@@ -693,8 +619,14 @@ export const MessageItem = memo(function MessageItem({
         body: { editImageUrl: selectedImageUrl, editPrompt, messages: [], conversationId: 'temp' },
       });
       if (error) throw error;
-      if (data.imageUrl) { setSelectedImageUrl(data.imageUrl); toggleModal('imageEdit', false); toggleModal('imageViewer', true); }
-    } catch (error) { throw error; }
+      if (data.imageUrl) {
+        setSelectedImageUrl(data.imageUrl);
+        toggleModal('imageEdit', false);
+        toggleModal('imageViewer', true);
+      }
+    } catch (error) {
+      throw error;
+    }
   }, [selectedImageUrl, supabase, toggleModal]);
 
   const handleFileDownload = useCallback((fileName: string, fileContent: string, fileType: string) => {
@@ -702,7 +634,7 @@ export const MessageItem = memo(function MessageItem({
     toggleModal('file', true);
   }, [toggleModal]);
 
-  // Parse special blocks
+  // ── Parse all special blocks ──
   const parsed = useMemo(() => {
     const { text: t1, sources } = parseSources(message.content);
     const { text: t2, entries: analysisEntries } = parseAnalysis(t1);
@@ -719,11 +651,9 @@ export const MessageItem = memo(function MessageItem({
     return { inlineImages: images, cleanedBeforeCard: text };
   }, [message.role, beforeCard]);
 
-  // Split content into text/code parts
   const contentParts = useMemo(() => {
     const textToProcess = cleanedBeforeCard;
     const parts: Array<{ type: 'text' | 'code'; content: string; language?: string }> = [];
-    // Support both ```lang\ncode``` and ```lang code``` patterns
     const codeBlockRegex = /```(\w+)?\n([\s\S]*?)```/g;
     let lastIndex = 0;
     let match;
@@ -746,59 +676,180 @@ export const MessageItem = memo(function MessageItem({
     let lastIndex = 0;
     let match;
     while ((match = urlRegex.exec(text)) !== null) {
-      if (match.index > lastIndex) parts.push({ type: 'text', content: text.substring(lastIndex, match.index) });
+      if (match.index > lastIndex) {
+        parts.push({ type: 'text', content: text.substring(lastIndex, match.index) });
+      }
       parts.push({ type: 'link', content: match[0], url: match[0] });
       lastIndex = match.index + match[0].length;
     }
-    if (lastIndex < text.length) parts.push({ type: 'text', content: text.substring(lastIndex) });
+    if (lastIndex < text.length) {
+      parts.push({ type: 'text', content: text.substring(lastIndex) });
+    }
     return parts.length > 0 ? parts : [{ type: 'text', content: text }];
   }, []);
 
-  const hasGeneratedImage = useMemo(() => Boolean(message.image_url && isImageUrl(message.image_url)), [message.image_url]);
+  const hasGeneratedImage = useMemo(
+    () => Boolean(message.image_url && isImageUrl(message.image_url)),
+    [message.image_url]
+  );
 
   const shouldStreamPart = useCallback(
     (isLastPart: boolean) => streaming && isGenerating && message.role === 'assistant' && isLastPart,
     [streaming, isGenerating, message.role]
   );
 
+  // Build context menu items based on message role
   const contextMenuItems = useMemo(() => {
     const items: Array<{ icon: string; label: string; onPress: () => void; destructive?: boolean }> = [];
     items.push({ icon: 'copy-outline', label: 'Copy', onPress: handleCopy });
-    if (message.role === 'user' && onEdit) items.push({ icon: 'pencil-outline', label: 'Edit', onPress: handleEdit });
+    if (message.role === 'user' && onEdit) {
+      items.push({ icon: 'pencil-outline', label: 'Edit', onPress: handleEdit });
+    }
     if (message.role === 'assistant') {
-      items.push({ icon: 'text-outline', label: 'Select Text', onPress: () => { setShowContextMenu(false); setTimeout(() => setShowSelectTextModal(true), 100); } });
+      items.push({
+        icon: 'text-outline', label: 'Select Text', onPress: () => {
+          setShowContextMenu(false);
+          setTimeout(() => setShowSelectTextModal(true), 100);
+        }
+      });
     }
     return items;
   }, [message.role, onEdit, handleCopy, handleEdit]);
 
   const imgCardStyles = useMemo(() => StyleSheet.create({
     cardWrap: { marginTop: 4, marginBottom: 4 },
-    label: { color: colors.textSecondary, fontSize: 13, fontWeight: '500', marginBottom: 8, paddingLeft: 2 },
-    imageContainer: { borderRadius: 18, overflow: 'hidden', backgroundColor: colors.surface, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.18, shadowRadius: 12, elevation: 8 },
-    image: { width: Math.min(SCREEN_WIDTH - 48, 340), height: Math.min(SCREEN_WIDTH - 48, 340), borderRadius: 18 },
+    label: {
+      color: colors.textSecondary,
+      fontSize: 13,
+      fontWeight: '500',
+      marginBottom: 8,
+      paddingLeft: 2,
+    },
+    imageContainer: {
+      borderRadius: 18,
+      overflow: 'hidden',
+      backgroundColor: colors.surface,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.18,
+      shadowRadius: 12,
+      elevation: 8,
+    },
+    image: {
+      width: Math.min(SCREEN_WIDTH - 48, 340),
+      height: Math.min(SCREEN_WIDTH - 48, 340),
+      borderRadius: 18,
+    },
   }), [colors]);
 
   const styles = useMemo(() => StyleSheet.create({
-    container: { paddingHorizontal: Spacing.md, paddingVertical: 10, marginVertical: 2, maxWidth: '78%' },
-    userMessage: { alignSelf: 'flex-end', backgroundColor: colors.primary, borderRadius: 18, borderBottomRightRadius: 4, marginRight: Spacing.sm },
-    assistantMessage: { alignSelf: 'flex-start', backgroundColor: 'transparent', borderRadius: 0, marginLeft: Spacing.sm, maxWidth: '92%' },
-    messageImage: { width: '100%', height: 220, borderRadius: BorderRadius.md, marginBottom: Spacing.sm },
-    downloadOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: BorderRadius.md, justifyContent: 'center', alignItems: 'center' },
-    downloadButton: { position: 'absolute', bottom: 12, right: 12, backgroundColor: 'rgba(0,0,0,0.75)', borderRadius: BorderRadius.full, width: 44, height: 44, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#fff' },
-    fileAttachment: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.background, borderRadius: BorderRadius.md, padding: Spacing.md, marginBottom: Spacing.sm, borderWidth: 1, borderColor: colors.border, gap: Spacing.md },
-    fileIcon: { width: 48, height: 48, borderRadius: BorderRadius.md, backgroundColor: `${colors.primary}15`, alignItems: 'center', justifyContent: 'center' },
+    container: {
+      paddingHorizontal: Spacing.md,
+      paddingVertical: 10,
+      marginVertical: 2,
+      maxWidth: '78%',
+    },
+    userMessage: {
+      alignSelf: 'flex-end',
+      backgroundColor: colors.primary,
+      borderRadius: 18,
+      borderBottomRightRadius: 4,
+      marginRight: Spacing.sm,
+    },
+    assistantMessage: {
+      alignSelf: 'flex-start',
+      backgroundColor: 'transparent',
+      borderRadius: 0,
+      marginLeft: Spacing.sm,
+      maxWidth: '92%',
+    },
+    messageImage: {
+      width: '100%',
+      height: 220,
+      borderRadius: BorderRadius.md,
+      marginBottom: Spacing.sm,
+    },
+    downloadOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: 'rgba(0,0,0,0.6)',
+      borderRadius: BorderRadius.md,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    downloadButton: {
+      position: 'absolute',
+      bottom: 12,
+      right: 12,
+      backgroundColor: 'rgba(0,0,0,0.75)',
+      borderRadius: BorderRadius.full,
+      width: 44,
+      height: 44,
+      justifyContent: 'center',
+      alignItems: 'center',
+      borderWidth: 2,
+      borderColor: '#fff',
+    },
+    fileAttachment: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.background,
+      borderRadius: BorderRadius.md,
+      padding: Spacing.md,
+      marginBottom: Spacing.sm,
+      borderWidth: 1,
+      borderColor: colors.border,
+      gap: Spacing.md,
+    },
+    fileIcon: {
+      width: 48,
+      height: 48,
+      borderRadius: BorderRadius.md,
+      backgroundColor: `${colors.primary}15`,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
     fileInfo: { flex: 1 },
     fileName: { ...Typography.body, color: colors.text, fontWeight: '600', fontSize: 14 },
     fileMeta: { ...Typography.caption, color: colors.textSecondary, fontSize: 12, marginTop: 2 },
     messageText: { fontSize: 15, lineHeight: 23, flexShrink: 1, flexWrap: 'wrap' },
     userMessageText: { color: '#FFFFFF' },
     assistantMessageText: { color: colors.text },
-    editedLabel: { ...Typography.caption, fontSize: 11, marginTop: Spacing.xs, fontStyle: 'italic', opacity: 0.7, color: message.role === 'user' ? 'rgba(255,255,255,0.7)' : colors.textSecondary },
-    actionsContainer: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, marginTop: Spacing.sm, paddingTop: Spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: message.role === 'user' ? 'rgba(255,255,255,0.2)' : colors.border, flexWrap: 'wrap' },
-    actionButton: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: Spacing.sm, paddingVertical: 6, borderRadius: BorderRadius.sm, backgroundColor: message.role === 'user' ? 'rgba(255,255,255,0.15)' : colors.background },
+    editedLabel: {
+      ...Typography.caption, fontSize: 11, marginTop: Spacing.xs,
+      fontStyle: 'italic', opacity: 0.7,
+      color: message.role === 'user' ? 'rgba(255,255,255,0.7)' : colors.textSecondary,
+    },
+    actionsContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: Spacing.xs,
+      marginTop: Spacing.sm,
+      paddingTop: Spacing.sm,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: message.role === 'user' ? 'rgba(255,255,255,0.2)' : colors.border,
+      flexWrap: 'wrap',
+    },
+    actionButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      paddingHorizontal: Spacing.sm,
+      paddingVertical: 6,
+      borderRadius: BorderRadius.sm,
+      backgroundColor: message.role === 'user' ? 'rgba(255,255,255,0.15)' : colors.background,
+    },
     actionButtonActive: { backgroundColor: colors.primary },
-    linkText: { color: message.role === 'user' ? '#FFFFFF' : colors.primary, textDecorationLine: 'underline', fontWeight: '500' },
-    userImagePreview: { width: SCREEN_WIDTH * 0.55, height: SCREEN_WIDTH * 0.4, borderRadius: BorderRadius.md, marginBottom: Spacing.sm },
+    linkText: {
+      color: message.role === 'user' ? '#FFFFFF' : colors.primary,
+      textDecorationLine: 'underline',
+      fontWeight: '500',
+    },
+    userImagePreview: {
+      width: SCREEN_WIDTH * 0.55,
+      height: SCREEN_WIDTH * 0.4,
+      borderRadius: BorderRadius.md,
+      marginBottom: Spacing.sm,
+    },
   }), [colors, message.role]);
 
   const isStreaming = streaming && isGenerating && message.role === 'assistant';
@@ -810,12 +861,24 @@ export const MessageItem = memo(function MessageItem({
         <Pressable
           onLongPress={handleLongPress}
           delayLongPress={350}
-          style={[styles.container, message.role === 'user' ? styles.userMessage : styles.assistantMessage]}
+          style={[
+            styles.container,
+            message.role === 'user' ? styles.userMessage : styles.assistantMessage,
+          ]}
         >
           {/* User uploaded image */}
           {message.role === 'user' && message.image_url && (
-            <TouchableOpacity onPress={() => handleImagePress(message.image_url!)} style={{ borderRadius: BorderRadius.md, overflow: 'hidden', marginBottom: Spacing.sm }} activeOpacity={0.9}>
-              <Image source={{ uri: message.image_url }} style={styles.userImagePreview} contentFit="cover" transition={200} />
+            <TouchableOpacity
+              onPress={() => handleImagePress(message.image_url!)}
+              style={{ borderRadius: BorderRadius.md, overflow: 'hidden', marginBottom: Spacing.sm }}
+              activeOpacity={0.9}
+            >
+              <Image
+                source={{ uri: message.image_url }}
+                style={styles.userImagePreview}
+                contentFit="cover"
+                transition={200}
+              />
             </TouchableOpacity>
           )}
 
@@ -823,12 +886,28 @@ export const MessageItem = memo(function MessageItem({
           {hasGeneratedImage && message.role === 'assistant' && (
             <View style={imgCardStyles.cardWrap}>
               <Text style={imgCardStyles.label}>Image created</Text>
-              <TouchableOpacity onPress={() => handleImagePress(message.image_url!)} activeOpacity={0.9} disabled={downloadingImage} style={imgCardStyles.imageContainer}>
-                <Image source={{ uri: message.image_url }} style={imgCardStyles.image} contentFit="cover" transition={400} />
+              <TouchableOpacity
+                onPress={() => handleImagePress(message.image_url!)}
+                activeOpacity={0.9}
+                disabled={downloadingImage}
+                style={imgCardStyles.imageContainer}
+              >
+                <Image
+                  source={{ uri: message.image_url }}
+                  style={imgCardStyles.image}
+                  contentFit="cover"
+                  transition={400}
+                />
                 {downloadingImage ? (
-                  <View style={styles.downloadOverlay}><ActivityIndicator color="#fff" size="large" /><Text style={{ color: '#fff', marginTop: 8, fontSize: 13 }}>Saving...</Text></View>
+                  <View style={styles.downloadOverlay}>
+                    <ActivityIndicator color="#fff" size="large" />
+                    <Text style={{ color: '#fff', marginTop: 8, fontSize: 13 }}>Saving...</Text>
+                  </View>
                 ) : (
-                  <TouchableOpacity style={styles.downloadButton} onPress={(e) => { e.stopPropagation(); handleDownloadImage(message.image_url!); }}>
+                  <TouchableOpacity
+                    style={styles.downloadButton}
+                    onPress={(e) => { e.stopPropagation(); handleDownloadImage(message.image_url!); }}
+                  >
                     <Ionicons name="download" size={22} color="#fff" />
                   </TouchableOpacity>
                 )}
@@ -838,8 +917,13 @@ export const MessageItem = memo(function MessageItem({
 
           {/* File Attachment */}
           {message.file_url && message.file_name && (
-            <TouchableOpacity style={styles.fileAttachment} onPress={() => handleFileDownload(message.file_name!, '', message.file_type || 'txt')}>
-              <View style={styles.fileIcon}><Ionicons name={getFileIcon(message.file_type)} size={26} color={colors.primary} /></View>
+            <TouchableOpacity
+              style={styles.fileAttachment}
+              onPress={() => handleFileDownload(message.file_name!, '', message.file_type || 'txt')}
+            >
+              <View style={styles.fileIcon}>
+                <Ionicons name={getFileIcon(message.file_type)} size={26} color={colors.primary} />
+              </View>
               <View style={styles.fileInfo}>
                 <Text style={styles.fileName} numberOfLines={1}>{message.file_name}</Text>
                 <Text style={styles.fileMeta}>{message.file_type?.toUpperCase() || 'FILE'}</Text>
@@ -848,7 +932,7 @@ export const MessageItem = memo(function MessageItem({
             </TouchableOpacity>
           )}
 
-          {/* Message Content — text + code blocks */}
+          {/* Message Content */}
           {contentParts.map((part, index) => {
             const isLastPart = index === contentParts.length - 1 && !hasCard;
             const shouldStream = shouldStreamPart(isLastPart);
@@ -866,30 +950,6 @@ export const MessageItem = memo(function MessageItem({
               );
             }
 
-            // Assistant messages: full markdown renderer
-            if (message.role === 'assistant') {
-              const textSegments = splitTablesFromText(part.content);
-              return (
-                <View key={`text-${index}`}>
-                  {textSegments.map((seg, si) => {
-                    if (seg.type === 'table') {
-                      return <MarkdownTable key={`table-${si}`} tableText={seg.content} colors={colors} />;
-                    }
-                    return (
-                      <MarkdownRenderer
-                        key={`seg-${si}`}
-                        text={seg.content}
-                        colors={colors}
-                        isUser={false}
-                        isStreaming={isStreaming && isLastPart && si === textSegments.length - 1}
-                      />
-                    );
-                  })}
-                </View>
-              );
-            }
-
-            // User messages: simple text with link detection
             const textSegments = splitTablesFromText(part.content);
             return (
               <View key={`text-${index}`}>
@@ -899,17 +959,31 @@ export const MessageItem = memo(function MessageItem({
                   }
                   const textParts = parseTextWithLinks(seg.content);
                   return (
-                    <Text key={`seg-${si}`} style={[styles.messageText, styles.userMessageText]}>
+                    <Text
+                      key={`seg-${si}`}
+                      selectable={message.role === 'assistant'}
+                      style={[
+                        styles.messageText,
+                        message.role === 'user' ? styles.userMessageText : styles.assistantMessageText,
+                      ]}
+                    >
                       {textParts.map((textPart, textIndex) => {
                         if (textPart.type === 'link') {
                           return (
-                            <Text key={`link-${textIndex}`} style={styles.linkText} onPress={() => handleLinkPress(textPart.url)}>
+                            <Text
+                              key={`link-${textIndex}`}
+                              style={styles.linkText}
+                              onPress={() => handleLinkPress(textPart.url)}
+                            >
                               {textPart.content}
                             </Text>
                           );
                         }
                         return <Text key={`txt-${textIndex}`}>{textPart.content}</Text>;
                       })}
+                      {isStreaming && isLastPart && si === textSegments.length - 1 ? (
+                        <BlinkingCursor color={colors.textSecondary} />
+                      ) : null}
                     </Text>
                   );
                 })}
@@ -919,42 +993,82 @@ export const MessageItem = memo(function MessageItem({
 
           {/* Inline AI-generated images from text */}
           {inlineImages.length > 0 && inlineImages.map((imgUrl, i) => (
-            <TouchableOpacity key={`inline-img-${i}`} onPress={() => handleImagePress(imgUrl)} activeOpacity={0.9} style={{ borderRadius: BorderRadius.md, overflow: 'hidden', marginVertical: Spacing.sm }}>
-              <Image source={{ uri: imgUrl }} style={styles.messageImage} contentFit="cover" transition={200} />
-              <TouchableOpacity style={styles.downloadButton} onPress={(e) => { e.stopPropagation(); handleDownloadImage(imgUrl); }}>
+            <TouchableOpacity
+              key={`inline-img-${i}`}
+              onPress={() => handleImagePress(imgUrl)}
+              activeOpacity={0.9}
+              style={{ borderRadius: BorderRadius.md, overflow: 'hidden', marginVertical: Spacing.sm }}
+            >
+              <Image
+                source={{ uri: imgUrl }}
+                style={styles.messageImage}
+                contentFit="cover"
+                transition={200}
+              />
+              <TouchableOpacity
+                style={styles.downloadButton}
+                onPress={(e) => { e.stopPropagation(); handleDownloadImage(imgUrl); }}
+              >
                 <Ionicons name="download" size={22} color="#fff" />
               </TouchableOpacity>
             </TouchableOpacity>
           ))}
 
           {/* Download card */}
-          {downloadLabel && message.role === 'assistant' && <DownloadLinkCard label={downloadLabel} colors={colors} />}
-
-          {/* Styled Message Card */}
-          {hasCard && message.role === 'assistant' && <MessageCard content={cardContent} colors={colors} />}
-
-          {/* Sources */}
-          {message.role === 'assistant' && sources.length > 0 && <SourcesButton sources={sources} />}
-
-          {/* Edited */}
-          {message.edited && (
-            <Text style={styles.editedLabel}>(edited {message.edited_at ? new Date(message.edited_at).toLocaleTimeString() : ''})</Text>
+          {downloadLabel && message.role === 'assistant' && (
+            <DownloadLinkCard label={downloadLabel} colors={colors} />
           )}
 
-          {/* Action buttons */}
+          {/* Styled Message Card */}
+          {hasCard && message.role === 'assistant' && (
+            <MessageCard content={cardContent} colors={colors} />
+          )}
+
+          {/* Sources pill */}
+          {message.role === 'assistant' && sources.length > 0 && (
+            <SourcesButton sources={sources} />
+          )}
+
+          {/* Edited Indicator */}
+          {message.edited && (
+            <Text style={styles.editedLabel}>
+              (edited {message.edited_at ? new Date(message.edited_at).toLocaleTimeString() : ''})
+            </Text>
+          )}
+
+          {/* Action Buttons — assistant only, hide while streaming */}
           {message.role === 'assistant' && !isGenerating && (
             <View style={styles.actionsContainer}>
               <TouchableOpacity style={styles.actionButton} onPress={handleCopy}>
                 <Ionicons name="copy-outline" size={14} color={colors.text} />
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.actionButton, liked === 'like' && styles.actionButtonActive]} onPress={() => handleLike('like')}>
-                <Ionicons name={liked === 'like' ? 'thumbs-up' : 'thumbs-up-outline'} size={14} color={liked === 'like' ? '#FFFFFF' : colors.text} />
+              <TouchableOpacity
+                style={[styles.actionButton, liked === 'like' && styles.actionButtonActive]}
+                onPress={() => handleLike('like')}
+              >
+                <Ionicons
+                  name={liked === 'like' ? 'thumbs-up' : 'thumbs-up-outline'}
+                  size={14}
+                  color={liked === 'like' ? '#FFFFFF' : colors.text}
+                />
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.actionButton, liked === 'dislike' && styles.actionButtonActive]} onPress={() => handleLike('dislike')}>
-                <Ionicons name={liked === 'dislike' ? 'thumbs-down' : 'thumbs-down-outline'} size={14} color={liked === 'dislike' ? '#FFFFFF' : colors.text} />
+              <TouchableOpacity
+                style={[styles.actionButton, liked === 'dislike' && styles.actionButtonActive]}
+                onPress={() => handleLike('dislike')}
+              >
+                <Ionicons
+                  name={liked === 'dislike' ? 'thumbs-down' : 'thumbs-down-outline'}
+                  size={14}
+                  color={liked === 'dislike' ? '#FFFFFF' : colors.text}
+                />
               </TouchableOpacity>
-              {analysisEntries.length > 0 && <TerminalButton onPress={() => setAnalysisVisible(true)} />}
-              <TouchableOpacity style={styles.actionButton} onPress={() => setShowActionsModal(true)}>
+              {analysisEntries.length > 0 && (
+                <TerminalButton onPress={() => setAnalysisVisible(true)} />
+              )}
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={() => setShowActionsModal(true)}
+              >
                 <Ionicons name="ellipsis-horizontal" size={14} color={colors.text} />
               </TouchableOpacity>
             </View>
@@ -964,34 +1078,78 @@ export const MessageItem = memo(function MessageItem({
 
       {/* Analysis Modal */}
       {analysisEntries.length > 0 && (
-        <AnalysisModal visible={analysisVisible} onClose={() => setAnalysisVisible(false)} entries={analysisEntries} title="Analysis" />
+        <AnalysisModal
+          visible={analysisVisible}
+          onClose={() => setAnalysisVisible(false)}
+          entries={analysisEntries}
+          title="Analysis"
+        />
       )}
 
-      <BlurContextMenu visible={showContextMenu} timeLabel={timeLabel} items={contextMenuItems} onClose={() => setShowContextMenu(false)} />
+      {/* ── Blur Context Menu (Photo 1 style) ── */}
+      <BlurContextMenu
+        visible={showContextMenu}
+        timeLabel={timeLabel}
+        items={contextMenuItems}
+        onClose={() => setShowContextMenu(false)}
+      />
 
-      {/* Select Text Modal */}
-      <Modal visible={showSelectTextModal} transparent={false} animationType="slide" onRequestClose={() => setShowSelectTextModal(false)}>
+      {/* Select Text Modal — AI messages (native selectable, Photo 3 style) */}
+      <Modal
+        visible={showSelectTextModal}
+        transparent={false}
+        animationType="slide"
+        onRequestClose={() => setShowSelectTextModal(false)}
+      >
         <View style={{ flex: 1, backgroundColor: colors.background }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: Platform.OS === 'ios' ? 56 : 28, paddingBottom: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border }}>
+          <View style={{
+            flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+            paddingHorizontal: 16,
+            paddingTop: Platform.OS === 'ios' ? 56 : 28,
+            paddingBottom: 14,
+            borderBottomWidth: StyleSheet.hairlineWidth,
+            borderBottomColor: colors.border,
+          }}>
             <TouchableOpacity onPress={() => setShowSelectTextModal(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
               <Ionicons name="close" size={24} color={colors.text} />
             </TouchableOpacity>
             <Text style={{ color: colors.text, fontSize: 17, fontWeight: '600' }}>Select Text</Text>
-            <TouchableOpacity onPress={async () => { await Clipboard.setStringAsync(message.content); showAlert('Copied!', 'Message copied to clipboard'); setShowSelectTextModal(false); }} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <TouchableOpacity
+              onPress={async () => { await Clipboard.setStringAsync(message.content); showAlert('Copied!', 'Message copied to clipboard'); setShowSelectTextModal(false); }}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
               <Text style={{ color: colors.primary, fontSize: 15, fontWeight: '600' }}>Copy All</Text>
             </TouchableOpacity>
           </View>
-          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20, paddingBottom: 60 }} keyboardShouldPersistTaps="always">
-            <Text selectable selectionColor={`${colors.primary}55`} style={{ color: colors.text, fontSize: 16, lineHeight: 26 }}>
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={{ padding: 20, paddingBottom: 60 }}
+            keyboardShouldPersistTaps="always"
+          >
+            <Text
+              selectable
+              selectionColor={`${colors.primary}55`}
+              style={{ color: colors.text, fontSize: 16, lineHeight: 26, fontWeight: '400' }}
+            >
               {message.content}
             </Text>
           </ScrollView>
-          <View style={{ flexDirection: 'row', gap: 12, paddingHorizontal: 16, paddingBottom: Platform.OS === 'ios' ? 34 : 20, paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }}>
-            <TouchableOpacity style={{ flex: 1, backgroundColor: colors.surface, borderRadius: 12, paddingVertical: 13, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderWidth: 1, borderColor: colors.border }} onPress={async () => { await Share.share({ message: message.content }); }}>
+          <View style={{
+            flexDirection: 'row', gap: 12, paddingHorizontal: 16,
+            paddingBottom: Platform.OS === 'ios' ? 34 : 20, paddingTop: 12,
+            borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border,
+          }}>
+            <TouchableOpacity
+              style={{ flex: 1, backgroundColor: colors.surface, borderRadius: 12, paddingVertical: 13, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderWidth: 1, borderColor: colors.border }}
+              onPress={async () => { await Share.share({ message: message.content }); }}
+            >
               <Ionicons name="share-outline" size={18} color={colors.text} />
               <Text style={{ color: colors.text, fontSize: 15, fontWeight: '600' }}>Share</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={{ flex: 1, backgroundColor: colors.primary, borderRadius: 12, paddingVertical: 13, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6 }} onPress={async () => { await Clipboard.setStringAsync(message.content); showAlert('Copied!', 'Copied'); setShowSelectTextModal(false); }}>
+            <TouchableOpacity
+              style={{ flex: 1, backgroundColor: colors.primary, borderRadius: 12, paddingVertical: 13, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6 }}
+              onPress={async () => { await Clipboard.setStringAsync(message.content); showAlert('Copied!', 'Message copied to clipboard'); setShowSelectTextModal(false); }}
+            >
               <Ionicons name="copy-outline" size={18} color="#FFF" />
               <Text style={{ color: '#FFF', fontSize: 15, fontWeight: '600' }}>Copy All</Text>
             </TouchableOpacity>
@@ -999,12 +1157,44 @@ export const MessageItem = memo(function MessageItem({
         </View>
       </Modal>
 
-      <LinkSafetyModal visible={modals.link} url={selectedLink} onClose={() => toggleModal('link', false)} onOpenLink={() => { toggleModal('link', false); toggleModal('webView', true); }} />
-      <WebViewModal visible={modals.webView} url={selectedLink} onClose={() => toggleModal('webView', false)} />
-      <ImageViewerModal visible={modals.imageViewer} imageUrl={selectedImageUrl} onClose={() => toggleModal('imageViewer', false)} onEdit={handleImageEdit} title="Image" />
-      <ImageEditModal visible={modals.imageEdit} imageUrl={selectedImageUrl} onClose={() => toggleModal('imageEdit', false)} onApplyEdits={handleApplyImageEdits} />
-      <FileDownloadModal visible={modals.file} fileName={fileData.name} fileContent={fileData.content} fileType={fileData.type} onClose={() => toggleModal('file', false)} />
-      <MessageActionsModal visible={showActionsModal} onClose={() => setShowActionsModal(false)} message={message} onLike={handleLike} />
+      {/* Sub-modals */}
+      <LinkSafetyModal
+        visible={modals.link}
+        url={selectedLink}
+        onClose={() => toggleModal('link', false)}
+        onOpenLink={() => { toggleModal('link', false); toggleModal('webView', true); }}
+      />
+      <WebViewModal
+        visible={modals.webView}
+        url={selectedLink}
+        onClose={() => toggleModal('webView', false)}
+      />
+      <ImageViewerModal
+        visible={modals.imageViewer}
+        imageUrl={selectedImageUrl}
+        onClose={() => toggleModal('imageViewer', false)}
+        onEdit={handleImageEdit}
+        title="Image"
+      />
+      <ImageEditModal
+        visible={modals.imageEdit}
+        imageUrl={selectedImageUrl}
+        onClose={() => toggleModal('imageEdit', false)}
+        onApplyEdits={handleApplyImageEdits}
+      />
+      <FileDownloadModal
+        visible={modals.file}
+        fileName={fileData.name}
+        fileContent={fileData.content}
+        fileType={fileData.type}
+        onClose={() => toggleModal('file', false)}
+      />
+      <MessageActionsModal
+        visible={showActionsModal}
+        onClose={() => setShowActionsModal(false)}
+        message={message}
+        onLike={handleLike}
+      />
     </>
   );
 });
