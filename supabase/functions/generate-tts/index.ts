@@ -193,9 +193,14 @@ async function tryElevenLabsTTS(text: string, voice: string, detectedLang?: stri
     if (!response.ok) {
       const errText = await response.text().catch(() => response.statusText);
       console.log(`[TTS] ElevenLabs failed (${response.status}): ${errText.slice(0, 300)}`);
-      // 401 = API key issue or unusual activity — skip silently
+      // 401 with 'unusual_activity' = Free Tier flagged — skip silently so OpenAI takes over
       if (response.status === 401 || response.status === 403) {
-        console.log('[TTS] ElevenLabs auth failed — skipping to next provider');
+        const isUnusualActivity = errText.includes('unusual_activity') || errText.includes('Unusual activity');
+        if (isUnusualActivity) {
+          console.log('[TTS] ElevenLabs Free Tier unusual activity — skipping to OpenAI');
+        } else {
+          console.log('[TTS] ElevenLabs auth failed — skipping to next provider');
+        }
       }
       return null;
     }
