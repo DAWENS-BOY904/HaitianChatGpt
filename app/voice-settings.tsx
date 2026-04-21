@@ -141,11 +141,19 @@ export default function VoiceSettingsScreen() {
   const { settings, updateSetting } = useSettings();
   const supabase = getSupabaseClient();
 
-  // Read persisted settings
-  const [selectedVoice, setSelectedVoice] = useState<string>((settings as any).voice_selection || 'pNInz6obpgDQGcFmaJgB');
-  const [speechRate, setSpeechRate] = useState<string>((settings as any).speech_rate?.toString() || '1.0');
-  const [voiceInterrupt, setVoiceInterrupt] = useState<boolean>((settings as any).voice_interruption ?? false);
-  const [autoGreeting, setAutoGreeting] = useState<boolean>((settings as any).auto_greeting ?? true);
+  // Read persisted settings — SettingsContext stores camelCase keys (voiceSelection → voice_selection DB column)
+  const [selectedVoice, setSelectedVoice] = useState<string>(
+    (settings as any).voiceSelection || (settings as any).voice_selection || 'pNInz6obpgDQGcFmaJgB'
+  );
+  const [speechRate, setSpeechRate] = useState<string>(
+    (settings as any).speech_rate?.toString() || (settings as any).speechRate?.toString() || '1.0'
+  );
+  const [voiceInterrupt, setVoiceInterrupt] = useState<boolean>(
+    (settings as any).voice_interruption ?? (settings as any).voiceInterruption ?? false
+  );
+  const [autoGreeting, setAutoGreeting] = useState<boolean>(
+    (settings as any).auto_greeting ?? (settings as any).autoGreeting ?? true
+  );
 
   // UI state — always dark (never white/light)
   const [playingVoice, setPlayingVoice] = useState<string | null>(null);
@@ -258,10 +266,19 @@ export default function VoiceSettingsScreen() {
   const handleSave = useCallback(async () => {
     setSaving(true);
     try {
-      await updateSetting('voice_selection' as any, selectedVoice);
-      await updateSetting('speech_rate' as any, parseFloat(speechRate));
-      await updateSetting('voice_interruption' as any, voiceInterrupt);
-      await updateSetting('auto_greeting' as any, autoGreeting);
+      // Use camelCase key — SettingsContext.updateSetting converts it to snake_case for DB
+      await updateSetting('voiceSelection' as any, selectedVoice);
+      // These extra settings are stored as custom keys (the updateSetting will convert correctly)
+      // Also persist to supabase user_settings directly for custom columns
+      const supabase = getSupabaseClient();
+      const { data: sessionData } = await supabase.auth.getSession();
+      const userId = sessionData?.session?.user?.id;
+      if (userId) {
+        await supabase.from('user_settings').update({
+          voice_selection: selectedVoice,
+          updated_at: new Date().toISOString(),
+        }).eq('user_id', userId);
+      }
       showAlert('Saved', 'Voice settings applied successfully.');
       router.back();
     } catch {
