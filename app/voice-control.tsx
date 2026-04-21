@@ -61,26 +61,24 @@ function formatTime(ts: number): string {
 
 // ─── Per-voice persona prompts ───────────────────────────────────────────────
 const VOICE_PERSONAS: Record<string, string> = {
-  // Named ElevenLabs voices
-  'pNInz6obpgDQGcFmaJgB': 'You speak in a warm, calm, trustworthy male voice. You are composed, reassuring, and knowledgeable. Respond with confidence and warmth.',
-  '21m00Tcm4TlvDq8ikWAM': 'You speak in a warm, friendly, approachable female voice. You are cheerful, supportive, and encouraging. Respond with positivity and care.',
-  'AZnzlk1XvdvUeBnXmlld': 'You speak in a bright, upbeat, energetic female voice. You are enthusiastic, motivating, and lively. Respond with energy and excitement.',
-  'EXAVITQu4vr4xnSDxMaL': 'You speak in a soft, gentle, nurturing female voice. You are patient, caring, and empathetic. Respond with gentleness and compassion.',
-  'VR6AewLTigWG4xSOukaG': 'You speak in a calm, clear, professional male voice. You are precise, confident, and articulate. Respond with clarity and professionalism.',
-  'GBv7mTt0atIp3Br8iCZE': 'You speak in a deep, authoritative male voice. You are knowledgeable, direct, and commanding. Respond with authority and expertise.',
-  'yoZ06aMxZJJ28mfd3POQ': 'You speak in an expressive, energetic British male voice. You are witty, engaging, and dynamic. Respond with personality and British charm.',
-  'ThT5KcBeYPX3keUQqHPh': 'You speak in a wise, measured British female voice. You are thoughtful, articulate, and insightful. Respond with wisdom and elegance.',
-  'pqHfZKP75CvOlQylNhV4': 'You speak in a professional, deep male voice. You are reliable, clear, and composed. Respond with confidence and professionalism.',
-  // User-specified curated library voices
-  'PzuBz8h2SxBvQ7lnUC44': 'You speak in an expressive, dynamic female voice called Aria. You are creative, inspiring, and imaginative. Respond with passion and creativity.',
-  'jv41DhCf464zw0TI7I1w': 'You speak in a confident, strong male voice called Marcus. You are bold, motivating, and decisive. Respond with strength and conviction.',
-  'kJKMPwrIKzwVkMKOfRtr': 'You speak in a natural, conversational female voice called Sofia. You are relatable, friendly, and down-to-earth. Respond naturally and warmly.',
-  'flHkNRp1BlvT73UL6gyz': 'You speak in a dynamic, energetic male voice called Ryan. You are enthusiastic, uplifting, and spirited. Respond with energy and positivity.',
-  'mRdG9GYEjJmIzqbYTidv': 'You speak in a smooth, melodic female voice called Luna. You are calm, soothing, and graceful. Respond with serenity and warmth.',
+  'pNInz6obpgDQGcFmaJgB': 'You speak in a warm, calm, trustworthy male voice. You are composed and reassuring.',
+  '21m00Tcm4TlvDq8ikWAM': 'You speak in a warm, friendly, approachable female voice. You are cheerful and supportive.',
+  'AZnzlk1XvdvUeBnXmlld': 'You speak in a bright, upbeat, energetic female voice. You are enthusiastic and encouraging.',
+  'EXAVITQu4vr4xnSDxMaL': 'You speak in a soft, gentle, nurturing female voice. You are patient and caring.',
+  'VR6AewLTigWG4xSOukaG': 'You speak in a calm, clear, professional male voice. You are precise and confident.',
+  'GBv7mTt0atIp3Br8iCZE': 'You speak in a deep, authoritative male voice. You are knowledgeable and direct.',
+  'yoZ06aMxZJJ28mfd3POQ': 'You speak in an expressive, energetic British male voice. You are witty and engaging.',
+  'ThT5KcBeYPX3keUQqHPh': 'You speak in a wise, measured British female voice. You are thoughtful and articulate.',
+  'pqHfZKP75CvOlQylNhV4': 'You speak in a professional, deep male voice. You are reliable and clear.',
+  'PzuBz8h2SxBvQ7lnUC44': 'You speak in an expressive, dynamic female voice. You are creative and inspiring.',
+  'jv41DhCf464zw0TI7I1w': 'You speak in a confident, strong male voice. You are bold and motivating.',
+  'kJKMPwrIKzwVkMKOfRtr': 'You speak in a natural, conversational female voice. You are relatable and friendly.',
+  'flHkNRp1BlvT73UL6gyz': 'You speak in a dynamic, energetic male voice. You are enthusiastic and uplifting.',
+  'mRdG9GYEjJmIzqbYTidv': 'You speak in a smooth, melodic female voice. You are calm and soothing.',
 };
 
 function getVoicePersona(voiceId: string): string {
-  return VOICE_PERSONAS[voiceId] || 'You speak in a warm, professional voice. You are helpful, friendly, and supportive. Respond with care and expertise.';
+  return VOICE_PERSONAS[voiceId] || 'You speak in a warm, professional voice. You are helpful and friendly.';
 }
 
 // ─── Voice system prompt ─────────────────────────────────────────────────────
@@ -100,8 +98,7 @@ CORE RULES (MANDATORY):
 - Use a warm, friendly tone as if speaking to a trusted friend`;
 
 function buildSystemPrompt(voiceId: string, langHint = ''): string {
-  const persona = getVoicePersona(voiceId);
-  return `${BASE_VOICE_PROMPT}\n\nYOUR VOICE PERSONA:\n${persona}${langHint}`;
+  return `${BASE_VOICE_PROMPT}\n\nYOUR VOICE PERSONA: ${getVoicePersona(voiceId)}${langHint}`;
 }
 
 // ─── Language display names ──────────────────────────────────────────────────
@@ -336,12 +333,18 @@ export function CallEndedBanner({ duration, onDismiss, onFeedback }: {
 }
 
 // ─── expo-speech fallback ─────────────────────────────────────────────────────
-function speakWithDevice(text: string, rate: number, lang: string | null, onDone: () => void) {
-  const language = lang || 'en-US';
+function speakWithDevice(text: string, voice: string, rate: number, lang: string | null, onDone: () => void) {
+  // Use detected language if available, otherwise fall back to voice mapping
+  const voiceLangMap: Record<string, string> = {
+    echo: 'en-GB', fable: 'en-GB',
+    alloy: 'en-US', onyx: 'en-US', nova: 'en-US', shimmer: 'en-US', coral: 'en-US',
+  };
+  const language = lang || voiceLangMap[voice] || 'en-US';
   try {
     Speech.speak(text, {
       language,
       rate: Math.min(rate * 0.9, 1.4),
+      pitch: voice === 'onyx' ? 0.8 : voice === 'shimmer' ? 1.2 : 1.0,
       onDone,
       onError: () => onDone(),
     });
@@ -408,14 +411,12 @@ export default function VoiceControlScreen() {
   const isPausedRef = useRef(false);
   const isConnectingRef = useRef(true);
 
-  // ── Read voice selection from settings — supports both camelCase and snake_case keys ──
-  // SettingsContext stores voiceSelection (camelCase) mapping to voice_selection DB column
-  const selectedVoice = (settings as any).voiceSelection || (settings as any).voice_selection || 'pNInz6obpgDQGcFmaJgB';
-  const speechRate = parseFloat(
-    (settings as any).speech_rate?.toString() || (settings as any).speechRate?.toString() || '1.0'
-  );
-  const allowInterrupt = (settings as any).voice_interruption ?? (settings as any).voiceInterruption ?? false;
-  const autoGreeting = (settings as any).auto_greeting ?? (settings as any).autoGreeting ?? true;
+  // voice_selection stores a raw ElevenLabs voice ID (e.g. 'pNInz6obpgDQGcFmaJgB')
+  // Fall back to Adam (warm neutral) if nothing saved yet
+  const selectedVoice = (settings as any).voice_selection || 'pNInz6obpgDQGcFmaJgB';
+  const speechRate = parseFloat((settings as any).speech_rate?.toString() || '1.0');
+  const allowInterrupt = (settings as any).voice_interruption ?? false;
+  const autoGreeting = (settings as any).auto_greeting ?? true;
 
   // ─── CHECK BAN ────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -514,110 +515,6 @@ export default function VoiceControlScreen() {
     await speakText(greetings[Math.floor(Math.random() * greetings.length)]);
   }, []);
 
-  // ─── CALL AI via raw fetch (handles SSE streaming) ────────────────────────
-  const callChatAI = useCallback(async (
-    msgs: Array<{ role: string; content: string }>,
-    convId: string
-  ): Promise<string> => {
-    const supabaseUrl = (process.env.EXPO_PUBLIC_SUPABASE_URL || '').replace(/\/$/, '');
-    const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
-
-    if (!supabaseUrl || !supabaseAnonKey) {
-      console.log('[VoiceChat] Missing Supabase env vars');
-      return '';
-    }
-
-    // Get the current session token for authenticated requests
-    let authToken = supabaseAnonKey;
-    try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      if (sessionData?.session?.access_token) {
-        authToken = sessionData.session.access_token;
-      }
-    } catch (_e) {}
-
-    const chatConvId = convId || `voice-${Date.now()}`;
-    const endpoint = `${supabaseUrl}/functions/v1/chat`;
-
-    try {
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`,
-          'apikey': supabaseAnonKey,
-        },
-        body: JSON.stringify({
-          messages: msgs,
-          conversationId: chatConvId,
-          aiModel: 'google-gemini',
-          userId: user?.id,
-        }),
-        signal: AbortSignal.timeout(30000),
-      });
-
-      if (!response.ok) {
-        const errText = await response.text().catch(() => '');
-        console.log('[VoiceChat] Chat HTTP error:', response.status, errText.slice(0, 150));
-        return '';
-      }
-
-      const contentType = response.headers.get('content-type') || '';
-      let fullText = '';
-
-      if (contentType.includes('text/event-stream')) {
-        // Parse SSE streaming response
-        const reader = response.body?.getReader();
-        if (reader) {
-          const decoder = new TextDecoder();
-          let buffer = '';
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split('\n');
-            buffer = lines.pop() || '';
-            for (const line of lines) {
-              if (!line.startsWith('data: ')) continue;
-              const jsonStr = line.slice(6).trim();
-              if (!jsonStr || jsonStr === '[DONE]') continue;
-              try {
-                const parsed = JSON.parse(jsonStr);
-                if (parsed.token) fullText += parsed.token;
-                if (parsed.done) break;
-              } catch (_e) {}
-            }
-          }
-        } else {
-          // Fallback: collect full SSE text
-          const text = await response.text();
-          for (const line of text.split('\n')) {
-            if (!line.startsWith('data: ')) continue;
-            const jsonStr = line.slice(6).trim();
-            if (!jsonStr || jsonStr === '[DONE]') continue;
-            try {
-              const parsed = JSON.parse(jsonStr);
-              if (parsed.token) fullText += parsed.token;
-            } catch (_e) {}
-          }
-        }
-      } else {
-        // Regular JSON response
-        try {
-          const json = await response.json();
-          fullText = json.message || json.content || json.response || json.text || '';
-        } catch (_e) {
-          fullText = await response.text().catch(() => '');
-        }
-      }
-
-      return fullText.trim();
-    } catch (e: any) {
-      console.log('[VoiceChat] Fetch error:', e?.message);
-      return '';
-    }
-  }, [supabase, user]);
-
   // ─── SPEAK TEXT — always uses ElevenLabs via edge function ─────────────────
   const speakText = useCallback(async (text: string) => {
     if (isPausedRef.current) return;
@@ -646,20 +543,20 @@ export default function VoiceControlScreen() {
         staysActiveInBackground: false,
       });
 
-      // selectedVoice is a raw ElevenLabs voice ID saved from voice-settings
+      // selectedVoice is already a raw ElevenLabs voice ID saved from voice-settings
       const { data, error } = await supabase.functions.invoke('generate-tts', {
         body: {
           text: text.slice(0, 500),
           voice: selectedVoice,          // raw ElevenLabs voice ID
           speed: speechRate,
-          detectedLanguage: detectedLangRef.current,
+          detectedLanguage: detectedLangRef.current, // multilingual model selection
         },
       });
 
       // Edge function signals device TTS fallback
       if (data?.fallback === true || data?.code === 'USE_DEVICE_TTS') {
         console.log('[Voice] ElevenLabs unavailable — using device TTS');
-        speakWithDevice(text, speechRate, detectedLangRef.current, onDone);
+        speakWithDevice(text, selectedVoice, speechRate, detectedLangRef.current, onDone);
         return;
       }
 
@@ -667,7 +564,7 @@ export default function VoiceControlScreen() {
 
       if (error || !audioUrl) {
         console.log('[Voice] No audio URL from TTS edge function — using device TTS');
-        speakWithDevice(text, speechRate, detectedLangRef.current, onDone);
+        speakWithDevice(text, selectedVoice, speechRate, detectedLangRef.current, onDone);
         return;
       }
 
@@ -688,7 +585,8 @@ export default function VoiceControlScreen() {
       console.log('[Voice] speakText error:', e?.message);
       setIsAISpeaking(false);
       setCurrentAIText('');
-      speakWithDevice(text, speechRate, detectedLangRef.current, () => {
+      // Always fall back to device TTS so user still hears response
+      speakWithDevice(text, selectedVoice, speechRate, detectedLangRef.current, () => {
         if (!isPausedRef.current) setTimeout(() => startListening(), 600);
       });
     }
@@ -759,6 +657,7 @@ export default function VoiceControlScreen() {
         const lang = txData.detectedLanguage;
         setDetectedLanguage(lang);
         detectedLangRef.current = lang;
+        // Auto-clear badge after 6 seconds if no new message
         setTimeout(() => {
           setDetectedLanguage(prev => prev === lang ? null : prev);
         }, 6000);
@@ -777,44 +676,47 @@ export default function VoiceControlScreen() {
       }
 
       const userMsg: ConvMessage = { role: 'user', content: userText, timestamp: Date.now() };
-      const updatedMsgs = [...messagesRef.current, userMsg];
-      messagesRef.current = updatedMsgs;
-      setMessages(updatedMsgs);
+      const updatedMsgsVoice = [...messagesRef.current, userMsg];
+      messagesRef.current = updatedMsgsVoice;
+      setMessages(updatedMsgsVoice);
       setStatusLabel('');
       setIsAITyping(true);
 
       const convId = callConversationId || currentConversation?.id;
-      const chatConvId = convId || `voice-${Date.now()}`;
 
-      // Build language-aware prompt with per-voice persona
+      // Language-aware system prompt with per-voice persona
       const langName = detectedLangRef.current ? getLangDisplay(detectedLangRef.current) : null;
       const langHint = langName
-        ? `\n\nCRITICAL: The user is speaking ${langName}. You MUST respond ONLY in ${langName}. Do not switch languages.`
+        ? `\n\nCRITICAL: The user is speaking ${langName}. You MUST respond ONLY in ${langName}. Do not switch languages under any circumstance.`
         : '';
 
-      const contextMsgs = updatedMsgs.slice(-8).map(m => ({ role: m.role, content: m.content }));
-      const allMsgs = [
-        { role: 'system', content: buildSystemPrompt(selectedVoice, langHint) },
-        ...contextMsgs,
-      ];
-
-      // Use raw fetch to properly handle SSE streaming from chat edge function
-      let rawReply = await callChatAI(allMsgs, chatConvId);
-
-      // Retry with just the user message if first attempt failed
-      if (!rawReply) {
-        rawReply = await callChatAI(
-          [
-            { role: 'system', content: buildSystemPrompt(selectedVoice) },
-            { role: 'user', content: userText },
-          ],
-          `voice-retry-${Date.now()}`
-        );
+      const contextMsgs = updatedMsgsVoice.slice(-8).map(m => ({ role: m.role, content: m.content }));
+      let rawReply = '';
+      try {
+        const { data: aiData, error: aiErr } = await supabase.functions.invoke('chat', {
+          body: {
+            messages: [
+              { role: 'system', content: buildSystemPrompt(selectedVoice, langHint) },
+              ...contextMsgs,
+            ],
+            conversationId: convId || `voice-${Date.now()}`,
+            model: 'gemini',
+            userId: user?.id,
+          },
+        });
+        if (aiErr) throw new Error(aiErr.message);
+        rawReply = aiData?.message || aiData?.content || aiData?.response || aiData?.text || '';
+        if (!rawReply) throw new Error('empty');
+      } catch (_chatErr) {
+        // Retry with minimal body
+        try {
+          const { data: retryData } = await supabase.functions.invoke('chat', {
+            body: { messages: [{ role: 'user', content: userText }], conversationId: `voice-${Date.now()}`, model: 'gemini' },
+          });
+          rawReply = retryData?.message || retryData?.content || retryData?.response || '';
+        } catch (_e2) {}
       }
-
-      if (!rawReply) {
-        rawReply = 'I heard you. Could you tell me a little more so I can help you better?';
-      }
+      if (!rawReply) rawReply = 'I heard you. Could you tell me a little more so I can help you better?';
 
       setIsAITyping(false);
       const spokenText = stripMarkdownForVoice(rawReply);
@@ -833,7 +735,7 @@ export default function VoiceControlScreen() {
       setStatusLabel('');
       if (!isPausedRef.current) setTimeout(() => startListening(), 500);
     }
-  }, [callConversationId, currentConversation, supabase, user, sendMessage, speakText, startListening, applyVoiceBan, callChatAI, selectedVoice]);
+  }, [messages, callConversationId, currentConversation, supabase, user, sendMessage, speakText, startListening, applyVoiceBan]);
 
   const handleInterrupt = useCallback(async () => {
     if (!allowInterrupt) return;
@@ -905,9 +807,9 @@ export default function VoiceControlScreen() {
     }
 
     const msg: ConvMessage = { role: 'user', content: text, timestamp: Date.now() };
-    const updatedMsgs = [...messagesRef.current, msg];
-    messagesRef.current = updatedMsgs;
-    setMessages(updatedMsgs);
+    const updatedMsgsText = [...messagesRef.current, msg];
+    messagesRef.current = updatedMsgsText;
+    setMessages(updatedMsgsText);
     setIsAITyping(true);
     setStatusLabel('Thinking...');
 
@@ -915,27 +817,34 @@ export default function VoiceControlScreen() {
     const langHint = langName
       ? `\n\nCRITICAL: The user is speaking ${langName}. You MUST respond ONLY in ${langName}.`
       : '';
-    const contextMsgs = updatedMsgs.slice(-8).map(m => ({ role: m.role, content: m.content }));
-    const allMsgs = [
-      { role: 'system', content: buildSystemPrompt(selectedVoice, langHint) },
-      ...contextMsgs,
-    ];
+    const contextMsgs = updatedMsgsText.slice(-8).map(m => ({ role: m.role, content: m.content }));
 
-    const textChatConvId = callConversationId || `voice-${Date.now()}`;
-
-    // Use raw fetch to properly handle SSE streaming
-    let rawReply = await callChatAI(allMsgs, textChatConvId);
-    if (!rawReply) {
-      rawReply = await callChatAI(
-        [
-          { role: 'system', content: buildSystemPrompt(selectedVoice) },
-          { role: 'user', content: text },
-        ],
-        `voice-retry-${Date.now()}`
-      );
+    let rawReply = '';
+    try {
+      const { data: aiData, error: aiErr } = await supabase.functions.invoke('chat', {
+        body: {
+          messages: [
+            { role: 'system', content: buildSystemPrompt(selectedVoice, langHint) },
+            ...contextMsgs,
+          ],
+          conversationId: callConversationId || `voice-${Date.now()}`,
+          model: 'gemini',
+          userId: user?.id,
+        },
+      });
+      if (aiErr) throw new Error(aiErr.message);
+      rawReply = aiData?.message || aiData?.content || aiData?.response || aiData?.text || '';
+      if (!rawReply) throw new Error('empty');
+    } catch (_e1) {
+      try {
+        const { data: retryData } = await supabase.functions.invoke('chat', {
+          body: { messages: [{ role: 'user', content: text }], conversationId: `voice-${Date.now()}`, model: 'gemini' },
+        });
+        rawReply = retryData?.message || retryData?.content || retryData?.response || '';
+      } catch (_e2) {}
     }
 
-    if (!rawReply) rawReply = 'I heard you! How can I help you with that?';
+    if (!rawReply) rawReply = 'I heard you! Could you rephrase that so I can help you better?';
 
     setIsAITyping(false);
     setStatusLabel('');
@@ -944,7 +853,7 @@ export default function VoiceControlScreen() {
     messagesRef.current = [...messagesRef.current, aiMsg];
     setMessages(prev => [...prev, aiMsg]);
     await speakText(spokenText);
-  }, [userInput, callConversationId, selectedVoice, callChatAI, speakText]);
+  }, [userInput, callConversationId, supabase, user, selectedVoice, speakText]);
 
   useEffect(() => {
     if (messages.length > 0 || isAITyping) {
