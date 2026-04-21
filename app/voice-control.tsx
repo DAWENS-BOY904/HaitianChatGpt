@@ -59,8 +59,30 @@ function formatTime(ts: number): string {
   return `${((h % 12) || 12)}:${m} ${h >= 12 ? 'PM' : 'AM'}`;
 }
 
+// ─── Per-voice persona prompts ───────────────────────────────────────────────
+const VOICE_PERSONAS: Record<string, string> = {
+  'pNInz6obpgDQGcFmaJgB': 'You speak in a warm, calm, trustworthy male voice. You are composed and reassuring.',
+  '21m00Tcm4TlvDq8ikWAM': 'You speak in a warm, friendly, approachable female voice. You are cheerful and supportive.',
+  'AZnzlk1XvdvUeBnXmlld': 'You speak in a bright, upbeat, energetic female voice. You are enthusiastic and encouraging.',
+  'EXAVITQu4vr4xnSDxMaL': 'You speak in a soft, gentle, nurturing female voice. You are patient and caring.',
+  'VR6AewLTigWG4xSOukaG': 'You speak in a calm, clear, professional male voice. You are precise and confident.',
+  'GBv7mTt0atIp3Br8iCZE': 'You speak in a deep, authoritative male voice. You are knowledgeable and direct.',
+  'yoZ06aMxZJJ28mfd3POQ': 'You speak in an expressive, energetic British male voice. You are witty and engaging.',
+  'ThT5KcBeYPX3keUQqHPh': 'You speak in a wise, measured British female voice. You are thoughtful and articulate.',
+  'pqHfZKP75CvOlQylNhV4': 'You speak in a professional, deep male voice. You are reliable and clear.',
+  'PzuBz8h2SxBvQ7lnUC44': 'You speak in an expressive, dynamic female voice. You are creative and inspiring.',
+  'jv41DhCf464zw0TI7I1w': 'You speak in a confident, strong male voice. You are bold and motivating.',
+  'kJKMPwrIKzwVkMKOfRtr': 'You speak in a natural, conversational female voice. You are relatable and friendly.',
+  'flHkNRp1BlvT73UL6gyz': 'You speak in a dynamic, energetic male voice. You are enthusiastic and uplifting.',
+  'mRdG9GYEjJmIzqbYTidv': 'You speak in a smooth, melodic female voice. You are calm and soothing.',
+};
+
+function getVoicePersona(voiceId: string): string {
+  return VOICE_PERSONAS[voiceId] || 'You speak in a warm, professional voice. You are helpful and friendly.';
+}
+
 // ─── Voice system prompt ─────────────────────────────────────────────────────
-const VOICE_SYSTEM_PROMPT = `You are Dawinix, a warm and respectful AI voice assistant created by the Haitian Community.
+const BASE_VOICE_PROMPT = `You are Dawinix, a warm and respectful AI voice assistant created by the Haitian Community.
 
 CORE RULES (MANDATORY):
 - ALWAYS treat every person with deep respect, kindness, and dignity — no exceptions
@@ -74,6 +96,10 @@ CORE RULES (MANDATORY):
 - No code blocks — describe code verbally if needed
 - Real-time voice conversation — be concise, natural, and human-sounding
 - Use a warm, friendly tone as if speaking to a trusted friend`;
+
+function buildSystemPrompt(voiceId: string, langHint = ''): string {
+  return `${BASE_VOICE_PROMPT}\n\nYOUR VOICE PERSONA: ${getVoicePersona(voiceId)}${langHint}`;
+}
 
 // ─── Language display names ──────────────────────────────────────────────────
 const LANG_DISPLAY: Record<string, string> = {
@@ -361,6 +387,7 @@ export default function VoiceControlScreen() {
   const [showKeyboard, setShowKeyboard] = useState(false);
   const [userInput, setUserInput] = useState('');
   const [messages, setMessages] = useState<ConvMessage[]>([]);
+  const messagesRef = useRef<ConvMessage[]>([]);
   const [currentAIText, setCurrentAIText] = useState('');
   const [statusLabel, setStatusLabel] = useState('');
   const [callDuration, setCallDuration] = useState(0);
@@ -649,36 +676,53 @@ export default function VoiceControlScreen() {
       }
 
       const userMsg: ConvMessage = { role: 'user', content: userText, timestamp: Date.now() };
-      setMessages(prev => [...prev, userMsg]);
+      const updatedMsgsVoice = [...messagesRef.current, userMsg];
+      messagesRef.current = updatedMsgsVoice;
+      setMessages(updatedMsgsVoice);
       setStatusLabel('');
       setIsAITyping(true);
 
       const convId = callConversationId || currentConversation?.id;
 
-      // Language-aware system prompt
+      // Language-aware system prompt with per-voice persona
       const langName = detectedLangRef.current ? getLangDisplay(detectedLangRef.current) : null;
       const langHint = langName
         ? `\n\nCRITICAL: The user is speaking ${langName}. You MUST respond ONLY in ${langName}. Do not switch languages under any circumstance.`
         : '';
 
-      const contextMsgs = messages.slice(-8).map(m => ({ role: m.role, content: m.content }));
-      const { data: aiData } = await supabase.functions.invoke('chat', {
-        body: {
-          messages: [
-            { role: 'system', content: VOICE_SYSTEM_PROMPT + langHint },
-            ...contextMsgs,
-            { role: 'user', content: userText },
-          ],
-          conversationId: convId || `voice-${Date.now()}`,
-          model: 'gemini',
-        },
-      });
+      const contextMsgs = updatedMsgsVoice.slice(-8).map(m => ({ role: m.role, content: m.content }));
+      let rawReply = '';
+      try {
+        const { data: aiData, error: aiErr } = await supabase.functions.invoke('chat', {
+          body: {
+            messages: [
+              { role: 'system', content: buildSystemPrompt(selectedVoice, langHint) },
+              ...contextMsgs,
+            ],
+            conversationId: convId || `voice-${Date.now()}`,
+            model: 'gemini',
+            userId: user?.id,
+          },
+        });
+        if (aiErr) throw new Error(aiErr.message);
+        rawReply = aiData?.message || aiData?.content || aiData?.response || aiData?.text || '';
+        if (!rawReply) throw new Error('empty');
+      } catch (_chatErr) {
+        // Retry with minimal body
+        try {
+          const { data: retryData } = await supabase.functions.invoke('chat', {
+            body: { messages: [{ role: 'user', content: userText }], conversationId: `voice-${Date.now()}`, model: 'gemini' },
+          });
+          rawReply = retryData?.message || retryData?.content || retryData?.response || '';
+        } catch (_e2) {}
+      }
+      if (!rawReply) rawReply = 'I heard you. Could you tell me a little more so I can help you better?';
 
       setIsAITyping(false);
-      const rawReply = aiData?.message || aiData?.content || 'How can I help you?';
       const spokenText = stripMarkdownForVoice(rawReply);
 
       const aiMsg: ConvMessage = { role: 'assistant', content: rawReply, timestamp: Date.now() };
+      messagesRef.current = [...messagesRef.current, aiMsg];
       setMessages(prev => [...prev, aiMsg]);
 
       if (convId) {
@@ -763,46 +807,53 @@ export default function VoiceControlScreen() {
     }
 
     const msg: ConvMessage = { role: 'user', content: text, timestamp: Date.now() };
-    setMessages(prev => [...prev, msg]);
+    const updatedMsgsText = [...messagesRef.current, msg];
+    messagesRef.current = updatedMsgsText;
+    setMessages(updatedMsgsText);
     setIsAITyping(true);
     setStatusLabel('Thinking...');
 
-    const contextMsgs = messages.slice(-8).map(m => ({ role: m.role, content: m.content }));
     const langName = detectedLangRef.current ? getLangDisplay(detectedLangRef.current) : null;
     const langHint = langName
       ? `\n\nCRITICAL: The user is speaking ${langName}. You MUST respond ONLY in ${langName}.`
       : '';
+    const contextMsgs = updatedMsgsText.slice(-8).map(m => ({ role: m.role, content: m.content }));
 
+    let rawReply = '';
     try {
-      const { data: aiData } = await supabase.functions.invoke('chat', {
+      const { data: aiData, error: aiErr } = await supabase.functions.invoke('chat', {
         body: {
           messages: [
-            { role: 'system', content: VOICE_SYSTEM_PROMPT + langHint },
+            { role: 'system', content: buildSystemPrompt(selectedVoice, langHint) },
             ...contextMsgs,
-            { role: 'user', content: text },
           ],
           conversationId: callConversationId || `voice-${Date.now()}`,
           model: 'gemini',
+          userId: user?.id,
         },
       });
-
-      setIsAITyping(false);
-      setStatusLabel('');
-
-      const rawReply = aiData?.message || aiData?.content || 'Sorry, I could not process that. Please try again.';
-      const spokenText = stripMarkdownForVoice(rawReply);
-
-      const aiMsg: ConvMessage = { role: 'assistant', content: rawReply, timestamp: Date.now() };
-      setMessages(prev => [...prev, aiMsg]);
-      await speakText(spokenText);
-    } catch (_err) {
-      setIsAITyping(false);
-      setStatusLabel('');
-      const fallback = 'Sorry, I could not process that. Please try again.';
-      setMessages(prev => [...prev, { role: 'assistant', content: fallback, timestamp: Date.now() }]);
-      await speakText(fallback);
+      if (aiErr) throw new Error(aiErr.message);
+      rawReply = aiData?.message || aiData?.content || aiData?.response || aiData?.text || '';
+      if (!rawReply) throw new Error('empty');
+    } catch (_e1) {
+      try {
+        const { data: retryData } = await supabase.functions.invoke('chat', {
+          body: { messages: [{ role: 'user', content: text }], conversationId: `voice-${Date.now()}`, model: 'gemini' },
+        });
+        rawReply = retryData?.message || retryData?.content || retryData?.response || '';
+      } catch (_e2) {}
     }
-  }, [userInput, messages, callConversationId, supabase, speakText]);
+
+    if (!rawReply) rawReply = 'I heard you! Could you rephrase that so I can help you better?';
+
+    setIsAITyping(false);
+    setStatusLabel('');
+    const spokenText = stripMarkdownForVoice(rawReply);
+    const aiMsg: ConvMessage = { role: 'assistant', content: rawReply, timestamp: Date.now() };
+    messagesRef.current = [...messagesRef.current, aiMsg];
+    setMessages(prev => [...prev, aiMsg]);
+    await speakText(spokenText);
+  }, [userInput, callConversationId, supabase, user, selectedVoice, speakText]);
 
   useEffect(() => {
     if (messages.length > 0 || isAITyping) {
@@ -1024,4 +1075,3 @@ const styles = StyleSheet.create({
   textInput: { flex: 1, backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 28, paddingHorizontal: 18, paddingVertical: 13, fontSize: 16, color: '#FFF', maxHeight: 100 },
   sendBtn: { width: 46, height: 46, borderRadius: 23, backgroundColor: '#007AFF', alignItems: 'center', justifyContent: 'center' },
 });
-when i select a voice in settings voice and when i tex a message and the ai read it mus read in voice that i selecct in voice settings and fix message when i tex the ai says sorry i could not process with that,please try again. so fix this the ai must answer in real time edg function and all voice seleccted must have their own promp and do what the promp says fix speed rate real.
