@@ -1148,6 +1148,13 @@ export default function HomeScreen() {
 
     if ((!currentText && currentMedia.length === 0) || sending) return;
 
+    // Guest: block photo/file uploads
+    if (isGuest && currentMedia.length > 0) {
+      setGuestLockFeature('file upload');
+      setGuestLockModal(true);
+      return;
+    }
+
     if (isGuest) {
       if (guestMessageCount >= GUEST_MESSAGE_LIMIT) {
         setGuestLoginModal(true);
@@ -1649,14 +1656,19 @@ export default function HomeScreen() {
                       <Text style={styles.upgradeBtnText}>Upgrade</Text>
                     </TouchableOpacity>
                   )}
-                  <View style={styles.headerEmptyRight}>
-                    <TouchableOpacity style={styles.headerIconBtn} onPress={() => setGroupStartModalVisible(true)}>
-                      <Ionicons name="person-add-outline" size={22} color={colors.text} />
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.headerIconBtn} onPress={() => { setTemporaryChatMode(true); setGroupChatMode(false); }}>
-                      <Ionicons name="timer-outline" size={22} color={colors.text} />
-                    </TouchableOpacity>
-                  </View>
+                  {/* Group & Temporary chat buttons — logged-in users only */}
+                  {!isGuest ? (
+                    <View style={styles.headerEmptyRight}>
+                      <TouchableOpacity style={styles.headerIconBtn} onPress={() => setGroupStartModalVisible(true)}>
+                        <Ionicons name="person-add-outline" size={22} color={colors.text} />
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.headerIconBtn} onPress={() => { setTemporaryChatMode(true); setGroupChatMode(false); }}>
+                        <Ionicons name="timer-outline" size={22} color={colors.text} />
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <View style={styles.headerEmptyRight} />
+                  )}
                 </View>
               ) : (
                 <View style={styles.headerChat}>
@@ -1973,21 +1985,30 @@ export default function HomeScreen() {
               visible={toolsVisible}
               onClose={() => setToolsVisible(false)}
               onSelectTool={(tool) => {
-                if (isGuest) { setGuestLockFeature(tool); setGuestLockModal(true); return; }
+                if (isGuest) { setToolsVisible(false); setGuestLockFeature(tool); setGuestLockModal(true); return; }
                 setInputText(prev => `${prev}[${tool}] `);
               }}
               onPickMedia={(media) => {
-                if (isGuest) { setGuestLockFeature('file upload'); setGuestLockModal(true); return; }
+                if (isGuest) { setToolsVisible(false); setGuestLockFeature('file upload'); setGuestLockModal(true); return; }
                 handleMediaPicked(media);
               }}
-              onSelectAIModel={(model) => handleAIModelSelect(model as AIModelKey)}
+              onSelectAIModel={(model) => {
+                if (isGuest) { setToolsVisible(false); setGuestLockFeature('AI model selection'); setGuestLockModal(true); return; }
+                handleAIModelSelect(model as AIModelKey);
+              }}
               onOpenCamera={() => {
-                if (isGuest) { setGuestLockFeature('camera'); setGuestLockModal(true); return; }
+                if (isGuest) { setToolsVisible(false); setGuestLockFeature('camera'); setGuestLockModal(true); return; }
                 router.push('/camera');
               }}
               currentModel={currentAIModel}
-              onOpenQuiz={() => { setQuizMode(true); setQuizConnectVisible(true); }}
-              onOpenPresets={() => setPresetsModalVisible(true)}
+              onOpenQuiz={() => {
+                if (isGuest) { setToolsVisible(false); setGuestLockFeature('quiz'); setGuestLockModal(true); return; }
+                setQuizMode(true); setQuizConnectVisible(true);
+              }}
+              onOpenPresets={() => {
+                if (isGuest) { setToolsVisible(false); setGuestLockFeature('presets'); setGuestLockModal(true); return; }
+                setPresetsModalVisible(true);
+              }}
             />
 
             <ConversationMenuModal visible={conversationMenuVisible} onClose={() => setConversationMenuVisible(false)} onShare={handleShareConversation} onRename={() => { setConversationMenuVisible(false); setRenameModalVisible(true); }} onReport={() => router.push('/bugreport')} onArchive={() => { setConversationMenuVisible(false); setArchiveConfirmVisible(true); }} onDelete={() => { setConversationMenuVisible(false); handleDeleteConversation(); }} onAddPeople={handleAddPeople} conversationTitle={currentConversation?.title} />
@@ -2333,4 +2354,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-if see this make change in guest mode remove the icon person for the group and the temporary to they not in guest mode only signup button pran plas yo and fix you can send message 35 like i said and no photo upload all toolmodal require login to use themand when not in guest mode temporary function are not work so fix it.
+
