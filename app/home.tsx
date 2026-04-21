@@ -2333,3 +2333,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
+fix error Cannot access 'accentColor' before initialization Cannot access 'accentColor'.
