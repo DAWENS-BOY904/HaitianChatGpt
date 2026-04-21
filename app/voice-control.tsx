@@ -384,7 +384,9 @@ export default function VoiceControlScreen() {
   const isPausedRef = useRef(false);
   const isConnectingRef = useRef(true);
 
-  const selectedVoice = (settings as any).voice_selection || 'alloy';
+  // voice_selection stores a raw ElevenLabs voice ID (e.g. 'pNInz6obpgDQGcFmaJgB')
+  // Fall back to Adam (warm neutral) if nothing saved yet
+  const selectedVoice = (settings as any).voice_selection || 'pNInz6obpgDQGcFmaJgB';
   const speechRate = parseFloat((settings as any).speech_rate?.toString() || '1.0');
   const allowInterrupt = (settings as any).voice_interruption ?? false;
   const autoGreeting = (settings as any).auto_greeting ?? true;
@@ -486,54 +488,67 @@ export default function VoiceControlScreen() {
     await speakText(greetings[Math.floor(Math.random() * greetings.length)]);
   }, []);
 
-  // ─── SPEAK TEXT — passes detected language to TTS ─────────────────────────
+  // ─── SPEAK TEXT — always uses ElevenLabs via edge function ─────────────────
   const speakText = useCallback(async (text: string) => {
     if (isPausedRef.current) return;
+
+    // Stop anything currently playing
+    if (soundRef.current) {
+      try { await soundRef.current.stopAsync(); await soundRef.current.unloadAsync(); } catch {}
+      soundRef.current = null;
+    }
+    try { Speech.stop(); } catch {}
+
+    setIsAISpeaking(true);
+    setCurrentAIText(text);
+    setIsAITyping(false);
+
+    const onDone = () => {
+      setIsAISpeaking(false);
+      setCurrentAIText('');
+      if (!isPausedRef.current) setTimeout(() => startListening(), 400);
+    };
+
     try {
-      if (soundRef.current) {
-        try { await soundRef.current.stopAsync(); await soundRef.current.unloadAsync(); } catch {}
-        soundRef.current = null;
-      }
-      try { Speech.stop(); } catch {}
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+      });
 
-      setIsAISpeaking(true);
-      setCurrentAIText(text);
-      setIsAITyping(false);
-
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true, staysActiveInBackground: false });
-
+      // selectedVoice is already a raw ElevenLabs voice ID saved from voice-settings
       const { data, error } = await supabase.functions.invoke('generate-tts', {
         body: {
           text: text.slice(0, 500),
-          voice: selectedVoice,
+          voice: selectedVoice,          // raw ElevenLabs voice ID
           speed: speechRate,
-          detectedLanguage: detectedLangRef.current, // pass for multilingual TTS model selection
+          detectedLanguage: detectedLangRef.current, // multilingual model selection
         },
       });
 
-      const onDone = () => {
-        setIsAISpeaking(false);
-        setCurrentAIText('');
-        if (!isPausedRef.current) setTimeout(() => startListening(), 400);
-      };
-
+      // Edge function signals device TTS fallback
       if (data?.fallback === true || data?.code === 'USE_DEVICE_TTS') {
+        console.log('[Voice] ElevenLabs unavailable — using device TTS');
         speakWithDevice(text, selectedVoice, speechRate, detectedLangRef.current, onDone);
         return;
       }
 
       const audioUrl = data?.audioUrl || data?.audio_url;
+
       if (error || !audioUrl) {
+        console.log('[Voice] No audio URL from TTS edge function — using device TTS');
         speakWithDevice(text, selectedVoice, speechRate, detectedLangRef.current, onDone);
         return;
       }
 
-      const { sound } = await Audio.Sound.createAsync({ uri: audioUrl }, { shouldPlay: true, volume: 1.0 });
+      // Play ElevenLabs audio
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: audioUrl },
+        { shouldPlay: true, volume: 1.0 }
+      );
       soundRef.current = sound;
       sound.setOnPlaybackStatusUpdate((s) => {
         if (s.isLoaded && s.didJustFinish) {
-          setIsAISpeaking(false);
-          setCurrentAIText('');
           sound.unloadAsync().catch(() => {});
           soundRef.current = null;
           onDone();
@@ -543,6 +558,7 @@ export default function VoiceControlScreen() {
       console.log('[Voice] speakText error:', e?.message);
       setIsAISpeaking(false);
       setCurrentAIText('');
+      // Always fall back to device TTS so user still hears response
       speakWithDevice(text, selectedVoice, speechRate, detectedLangRef.current, () => {
         if (!isPausedRef.current) setTimeout(() => startListening(), 600);
       });
