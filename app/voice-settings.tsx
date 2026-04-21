@@ -31,14 +31,15 @@ const VOICE_IMAGES: Record<string, any> = {
   coral:   require('../assets/images/voice-coral.jpg'),
 };
 
+// Each voice has a UNIQUE ElevenLabs voice — no two share the same voice actor
 const AI_VOICES = [
-  { id: 'alloy',   name: 'Alloy',   description: 'Warm, friendly male voice',      gender: 'male'   as const, previewText: 'Hello! I am Alloy. How can I assist you today?',        accent: 'American', color: '#007AFF' },
-  { id: 'echo',    name: 'Echo',    description: 'Calm, clear male voice',           gender: 'male'   as const, previewText: 'Hello! I am Echo, ready to help you.',                  accent: 'British',  color: '#5856D6' },
-  { id: 'fable',   name: 'Fable',   description: 'Expressive, energetic male voice', gender: 'male'   as const, previewText: 'Hello! Fable here, excited to work with you!',          accent: 'British',  color: '#FF9F0A' },
-  { id: 'onyx',    name: 'Onyx',    description: 'Deep, authoritative male voice',   gender: 'male'   as const, previewText: 'Hello. I am Onyx. How may I help you?',                 accent: 'American', color: '#636366' },
-  { id: 'nova',    name: 'Nova',    description: 'Warm, friendly female voice',      gender: 'female' as const, previewText: 'Hello! I am Nova, here to assist you.',                  accent: 'American', color: '#FF2D55' },
-  { id: 'shimmer', name: 'Shimmer', description: 'Bright, upbeat female voice',      gender: 'female' as const, previewText: 'Hello! Shimmer here. What can I do for you?',            accent: 'American', color: '#FFD60A' },
-  { id: 'coral',   name: 'Coral',   description: 'Soft, gentle female voice',        gender: 'female' as const, previewText: 'Hello, I am Coral. I am here for you.',                  accent: 'American', color: '#FF6B6B' },
+  { id: 'alloy',   name: 'Alloy',   description: 'Adam — Warm & neutral male (ElevenLabs)',        gender: 'male'   as const, previewText: 'Hello! I am Alloy. How can I help you today?',         accent: 'American', color: '#007AFF', elevenLabsId: 'pNInz6obpgDQGcFmaJgB' },
+  { id: 'echo',    name: 'Echo',    description: 'Arnold — Calm & clear British male (ElevenLabs)',  gender: 'male'   as const, previewText: 'Hello, I am Echo. Ready to assist whenever you need.',  accent: 'British',  color: '#5856D6', elevenLabsId: 'VR6AewLTigWG4xSOukaG' },
+  { id: 'fable',   name: 'Fable',   description: 'Sam — Expressive & energetic (ElevenLabs)',        gender: 'male'   as const, previewText: 'Hey there! Fable here, excited to work with you!',      accent: 'British',  color: '#FF9F0A', elevenLabsId: 'yoZ06aMxZJJ28mfd3POQ' },
+  { id: 'onyx',    name: 'Onyx',    description: 'Thomas — Deep & authoritative (ElevenLabs)',        gender: 'male'   as const, previewText: 'Good day. I am Onyx. How may I be of service?',         accent: 'American', color: '#636366', elevenLabsId: 'GBv7mTt0atIp3Br8iCZE' },
+  { id: 'nova',    name: 'Nova',    description: 'Rachel — Warm & friendly female (ElevenLabs)',      gender: 'female' as const, previewText: 'Hi! I am Nova, happy to help you with anything.',        accent: 'American', color: '#FF2D55', elevenLabsId: '21m00Tcm4TlvDq8ikWAM' },
+  { id: 'shimmer', name: 'Shimmer', description: 'Domi — Bright & upbeat female (ElevenLabs)',        gender: 'female' as const, previewText: 'Hello! Shimmer here. What can I do for you today?',     accent: 'American', color: '#FFD60A', elevenLabsId: 'AZnzlk1XvdvUeBnXmlld' },
+  { id: 'coral',   name: 'Coral',   description: 'Bella — Soft & gentle female (ElevenLabs)',         gender: 'female' as const, previewText: 'Hello, I am Coral. I am right here for you.',            accent: 'American', color: '#FF6B6B', elevenLabsId: 'EXAVITQu4vr4xnSDxMaL' },
 ];
 
 const SPEECH_RATES = [
