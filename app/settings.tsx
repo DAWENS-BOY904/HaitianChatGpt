@@ -28,6 +28,158 @@ import * as ImagePicker from 'expo-image-picker';
 import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+// ── Guest-mode limited settings view ──────────────────────────────────────
+function GuestSettings() {
+  const { isDark } = useTheme();
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+
+  const bg = isDark ? '#000000' : '#F2F2F7';
+  const cardBg = isDark ? '#1C1C1E' : '#FFFFFF';
+  const dividerColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
+  const primaryText = isDark ? '#FFFFFF' : '#000000';
+  const secondaryText = '#8E8E93';
+
+  return (
+    <View style={{ flex: 1, backgroundColor: bg }}>
+      {/* Header */}
+      <View style={{
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+        paddingTop: insets.top + 14, paddingBottom: 14, paddingHorizontal: 20,
+        backgroundColor: bg,
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        borderBottomColor: dividerColor,
+      }}>
+        <Text style={{ fontSize: 17, fontWeight: '600', color: primaryText }}>Settings</Text>
+        <TouchableOpacity
+          style={{
+            position: 'absolute', right: 16, top: insets.top + 8,
+            width: 32, height: 32, borderRadius: 16,
+            backgroundColor: isDark ? '#2C2C2E' : 'rgba(0,0,0,0.08)',
+            alignItems: 'center', justifyContent: 'center',
+          }}
+          onPress={() => router.back()}
+        >
+          <Ionicons name="close" size={18} color={primaryText} />
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView showsVerticalScrollIndicator={false}>
+        {/* Account — limited */}
+        <View style={{ marginTop: 24, paddingHorizontal: 16 }}>
+          <Text style={{ fontSize: 13, fontWeight: '500', color: secondaryText, marginBottom: 8, marginLeft: 4 }}>Account</Text>
+          <View style={{ backgroundColor: cardBg, borderRadius: 14, overflow: 'hidden' }}>
+            {[
+              { icon: 'megaphone-outline', label: 'Ads controls', route: '/ads-controls' },
+              { icon: 'document-lock-outline', label: 'Data controls', route: '/data-controls' },
+            ].map((item, i, arr) => (
+              <TouchableOpacity
+                key={item.label}
+                style={{
+                  flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+                  paddingVertical: 13, paddingHorizontal: 16,
+                  borderBottomWidth: i < arr.length - 1 ? StyleSheet.hairlineWidth : 0,
+                  borderBottomColor: dividerColor,
+                }}
+                onPress={() => router.push(item.route as any)}
+                activeOpacity={0.6}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                  <Ionicons name={item.icon as any} size={20} color={secondaryText} />
+                  <Text style={{ fontSize: 16, color: primaryText }}>{item.label}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={17} color={secondaryText} />
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        {/* App Settings — language only */}
+        <View style={{ marginTop: 24, paddingHorizontal: 16 }}>
+          <Text style={{ fontSize: 13, fontWeight: '500', color: secondaryText, marginBottom: 8, marginLeft: 4 }}>App Settings</Text>
+          <View style={{ backgroundColor: cardBg, borderRadius: 14, overflow: 'hidden' }}>
+            <TouchableOpacity
+              style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 13, paddingHorizontal: 16 }}
+              onPress={() => router.push('/languages')}
+              activeOpacity={0.6}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                <Ionicons name="globe-outline" size={20} color={secondaryText} />
+                <Text style={{ fontSize: 16, color: primaryText }}>App language</Text>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Text style={{ fontSize: 15, color: secondaryText }}>English</Text>
+                <Ionicons name="chevron-forward" size={17} color={secondaryText} />
+              </View>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* About */}
+        <View style={{ marginTop: 24, paddingHorizontal: 16 }}>
+          <Text style={{ fontSize: 13, fontWeight: '500', color: secondaryText, marginBottom: 8, marginLeft: 4 }}>About</Text>
+          <View style={{ backgroundColor: cardBg, borderRadius: 14, overflow: 'hidden' }}>
+            {[
+              { icon: 'document-text-outline', label: 'Terms of Use', route: '/terms-of-use' },
+              { icon: 'shield-checkmark-outline', label: 'Privacy Policy', route: '/privacy-policy' },
+            ].map((item, i, arr) => (
+              <TouchableOpacity
+                key={item.label}
+                style={{
+                  flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+                  paddingVertical: 13, paddingHorizontal: 16,
+                  borderBottomWidth: i < arr.length - 1 ? StyleSheet.hairlineWidth : 0,
+                  borderBottomColor: dividerColor,
+                }}
+                onPress={() => router.push(item.route as any)}
+                activeOpacity={0.6}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                  <Ionicons name={item.icon as any} size={20} color={secondaryText} />
+                  <Text style={{ fontSize: 16, color: primaryText }}>{item.label}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={17} color={secondaryText} />
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        {/* Sign up CTA */}
+        <View style={{ marginHorizontal: 16, marginTop: 36, marginBottom: 8 }}>
+          <View style={{
+            backgroundColor: cardBg, borderRadius: 18, padding: 24, alignItems: 'center',
+            borderWidth: StyleSheet.hairlineWidth, borderColor: dividerColor,
+          }}>
+            <View style={{
+              width: 60, height: 60, borderRadius: 30,
+              backgroundColor: '#10A37F22', alignItems: 'center', justifyContent: 'center', marginBottom: 14,
+            }}>
+              <Ionicons name="lock-open-outline" size={28} color="#10A37F" />
+            </View>
+            <Text style={{ color: primaryText, fontSize: 18, fontWeight: '700', textAlign: 'center', marginBottom: 8 }}>
+              Unlock all settings
+            </Text>
+            <Text style={{ color: secondaryText, fontSize: 14, textAlign: 'center', lineHeight: 20, marginBottom: 20 }}>
+              Create an account to access personalization, notifications, parental controls, and more.
+            </Text>
+            <TouchableOpacity
+              style={{ backgroundColor: '#10A37F', borderRadius: 50, paddingVertical: 14, paddingHorizontal: 32, width: '100%', alignItems: 'center' }}
+              onPress={() => router.push('/login')}
+            >
+              <Text style={{ color: '#FFF', fontSize: 16, fontWeight: '700' }}>Sign up for free</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={{ marginTop: 12, paddingVertical: 8 }} onPress={() => router.push('/login')}>
+              <Text style={{ color: secondaryText, fontSize: 15 }}>Already have an account? Log in</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <View style={{ height: insets.bottom + 40 }} />
+      </ScrollView>
+    </View>
+  );
+}
+
 export default function SettingsScreen() {
   const { colors, isDark } = useTheme();
   const { settings, updateSetting } = useSettings();
@@ -187,7 +339,6 @@ export default function SettingsScreen() {
         text: 'Log Out',
         style: 'destructive',
         onPress: async () => {
-          // Clear passkey session flag so biometric prompt does not fire on next fresh login
           try {
             await AsyncStorage.removeItem('passkey_session_active');
             await AsyncStorage.removeItem('passkey_user_id');
@@ -204,6 +355,9 @@ export default function SettingsScreen() {
     if (tier === 'premium_monthly' || tier === 'premium_yearly') return 'Plus';
     return 'Free Plan';
   };
+
+  // Guest mode: show limited settings
+  if (!user) return <GuestSettings />;
 
   const displayName = fullName || username || user?.email?.split('@')[0] || 'User';
   const displayUsername = username || '';
@@ -325,7 +479,6 @@ export default function SettingsScreen() {
       marginBottom: 40,
       marginTop: 8,
     },
-    // Edit Modal
     modalOverlay: {
       flex: 1,
       backgroundColor: 'rgba(0,0,0,0.6)',
@@ -448,7 +601,6 @@ export default function SettingsScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Settings</Text>
         <TouchableOpacity style={styles.closeButton} onPress={() => router.back()}>
@@ -557,7 +709,6 @@ export default function SettingsScreen() {
           </View>
         </View>
 
-        {/* Logout */}
         <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
           <Text style={styles.logoutText}>Log Out</Text>
         </TouchableOpacity>
@@ -569,7 +720,6 @@ export default function SettingsScreen() {
       <Modal visible={editModalVisible} transparent animationType="slide" onRequestClose={() => setEditModalVisible(false)}>
         <Pressable style={styles.modalOverlay} onPress={() => setEditModalVisible(false)}>
           <Pressable style={styles.editModal} onPress={e => e.stopPropagation()}>
-            {/* Avatar */}
             <TouchableOpacity style={styles.editAvatarWrap} onPress={pickEditPhoto}>
               {editPhoto ? (
                 <Image source={{ uri: editPhoto }} style={styles.editAvatarImg} contentFit="cover" />

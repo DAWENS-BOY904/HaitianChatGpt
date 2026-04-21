@@ -1773,6 +1773,7 @@ export default function HomeScreen() {
                               userMessage={(messages || []).length > 0 ? (messages || [])[(messages || []).length - 1].content : inputText}
                               completed={showCompletionStatus}
                               mode={thinkingMode}
+                              onCancel={handleStopGeneration}
                             />
                           ) : null}
                         </>
