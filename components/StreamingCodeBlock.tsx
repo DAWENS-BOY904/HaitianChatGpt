@@ -166,11 +166,11 @@ function tokenize(line: string, lang: string): Token[] {
       if (m.index > last) tokens.push({ text: line.slice(last, m.index), color: C.plain });
       if (m[1]) { tokens.push({ text: m[1], color: C.comment }); }
       else {
-        tokens.push({ text: m[2], color: C.tag });       // < or </
-        tokens.push({ text: m[3], color: C.tag });       // tag name
+        tokens.push({ text: m[2], color: C.tag });
+        tokens.push({ text: m[3], color: C.tag });
         if (m[4]) {
-          // parse attrs
-          const attrRe = /([\w:-]+)(\s*=\s*)("([^"]*)")|(['([^']*)'])/g;
+          // Fixed attr regex: match name=("val" | 'val')
+          const attrRe = /([\w:-]+)(\s*=\s*)("[^"]*"|'[^']*')/g;
           let lastA = 0, ma: RegExpExecArray | null;
           const attrStr = m[4];
           while ((ma = attrRe.exec(attrStr)) !== null) {
@@ -182,7 +182,7 @@ function tokenize(line: string, lang: string): Token[] {
           }
           if (lastA < attrStr.length) tokens.push({ text: attrStr.slice(lastA), color: C.attr });
         }
-        tokens.push({ text: m[5], color: C.tag });       // > or />
+        tokens.push({ text: m[5], color: C.tag });
       }
       last = re.lastIndex;
     }
@@ -469,8 +469,6 @@ export const CodeBlock = memo(function CodeBlock({
   const lineCount = rawLines.length;
   const isLong = lineCount > COLLAPSE_LINES;
   const displayLines = !expanded && isLong ? rawLines.slice(0, COLLAPSE_LINES) : rawLines;
-  const lineH = 19; // px per line in scroll area
-  const contentH = displayLines.length * lineH + 20; // approx
 
   const hasPlaceholders = hasApiKeyPlaceholders(code);
 
@@ -625,7 +623,6 @@ const cardStyles = StyleSheet.create({
     marginVertical: 6,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: C.border,
-    // Glass-style shadow
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.35,
