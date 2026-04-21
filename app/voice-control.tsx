@@ -1075,3 +1075,30 @@ const styles = StyleSheet.create({
   textInput: { flex: 1, backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 28, paddingHorizontal: 18, paddingVertical: 13, fontSize: 16, color: '#FFF', maxHeight: 100 },
   sendBtn: { width: 46, height: 46, borderRadius: 23, backgroundColor: '#007AFF', alignItems: 'center', justifyContent: 'center' },
 });
+Hello AI, if you see this, do not skip anything—please apply all changes properly and in real time.
+
+Voice System Fix (Important)
+When I select a voice in Settings → Voice, the AI must immediately use that selected voice for all responses.
+When I type a message, the AI must read the reply using the exact voice I selected in settings.
+Each voice option must be properly connected to its own configuration (voice ID / settings / prompt rules).
+Text-to-Speech & Prompt Behavior
+Every voice must have its own defined behavior and prompt instructions.
+The AI should follow those voice instructions strictly when responding to questions.
+Fix and control speech rate, tone, and clarity based on the selected voice configuration.
+Real-Time AI Response Fix
+The AI must respond in real time (no delay or broken processing).
+Implement proper edge-function handling so responses are fast and stable.
+Error Fix
+
+Fix this error message:
+
+“Sorry, I could not process that. Please try again.”
+
+The AI should NOT fail or show this message during normal chat usage.
+Ensure proper fallback handling so the conversation always continues smoothly.
+Core Requirement
+The AI must always answer normally, in real time, with the selected voice.
+Each voice must behave independently according to its own configuration and prompt rules.
+The system must feel stable, responsive, and fully functional for real AI interaction.
+
+Make all of this clean, stable, and production-ready.
