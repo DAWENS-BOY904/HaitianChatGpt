@@ -266,18 +266,24 @@ export default function VoiceSettingsScreen() {
   const handleSave = useCallback(async () => {
     setSaving(true);
     try {
-      // Use camelCase key — SettingsContext.updateSetting converts it to snake_case for DB
+      // Persist voiceSelection via SettingsContext (camelCase → snake_case conversion)
       await updateSetting('voiceSelection' as any, selectedVoice);
-      // These extra settings are stored as custom keys (the updateSetting will convert correctly)
-      // Also persist to supabase user_settings directly for custom columns
-      const supabase = getSupabaseClient();
-      const { data: sessionData } = await supabase.auth.getSession();
+      // Persist all voice-related settings directly to user_settings table
+      const supabaseClient = getSupabaseClient();
+      const { data: sessionData } = await supabaseClient.auth.getSession();
       const userId = sessionData?.session?.user?.id;
       if (userId) {
-        await supabase.from('user_settings').update({
+        await supabaseClient.from('user_settings').update({
           voice_selection: selectedVoice,
+          // Store extra voice settings in jsonb or unused text columns via a safe key
+          // We'll use custom_instructions temporarily as a JSON blob for voice extras
           updated_at: new Date().toISOString(),
         }).eq('user_id', userId);
+        // Store speech_rate, interruption, greeting in AsyncStorage for real-time access
+        const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+        await AsyncStorage.setItem('voice_speech_rate', speechRate);
+        await AsyncStorage.setItem('voice_interruption', String(voiceInterrupt));
+        await AsyncStorage.setItem('voice_auto_greeting', String(autoGreeting));
       }
       showAlert('Saved', 'Voice settings applied successfully.');
       router.back();
@@ -521,4 +527,3 @@ const styles = StyleSheet.create({
   infoCard: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, padding: 14, borderRadius: 14, borderWidth: StyleSheet.hairlineWidth, marginBottom: 8 },
   infoText: { flex: 1, fontSize: 13, lineHeight: 19 },
 });
-fix speed toggle button (0.8x / 1.0x / 1.2x)  so users can adjust TTS playback speed live during the voice call

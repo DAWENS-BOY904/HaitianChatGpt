@@ -22,6 +22,7 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
+import { useFocusEffect } from '@react-navigation/native';
 import { useAuth, useAlert } from '@/template';
 import { getSupabaseClient } from '@/template';
 import { useConversation } from '../hooks/useConversation';
@@ -411,11 +412,33 @@ export default function VoiceControlScreen() {
   // ── Read voice selection from settings — supports both camelCase and snake_case keys ──
   // SettingsContext stores voiceSelection (camelCase) mapping to voice_selection DB column
   const selectedVoice = (settings as any).voiceSelection || (settings as any).voice_selection || 'pNInz6obpgDQGcFmaJgB';
-  const speechRate = parseFloat(
-    (settings as any).speech_rate?.toString() || (settings as any).speechRate?.toString() || '1.0'
+  const [speechRate, setSpeechRate] = React.useState<number>(
+    parseFloat((settings as any).speech_rate?.toString() || (settings as any).speechRate?.toString() || '1.0')
   );
-  const allowInterrupt = (settings as any).voice_interruption ?? (settings as any).voiceInterruption ?? false;
-  const autoGreeting = (settings as any).auto_greeting ?? (settings as any).autoGreeting ?? true;
+  const [allowInterrupt, setAllowInterrupt] = React.useState<boolean>(
+    (settings as any).voice_interruption ?? (settings as any).voiceInterruption ?? false
+  );
+  const [autoGreeting, setAutoGreeting] = React.useState<boolean>(
+    (settings as any).auto_greeting ?? (settings as any).autoGreeting ?? true
+  );
+
+  // Reload speech rate + toggles from AsyncStorage whenever screen focuses
+  useFocusEffect(
+    useCallback(() => {
+      const loadVoicePrefs = async () => {
+        try {
+          const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+          const rateStr = await AsyncStorage.getItem('voice_speech_rate');
+          const interruptStr = await AsyncStorage.getItem('voice_interruption');
+          const greetStr = await AsyncStorage.getItem('voice_auto_greeting');
+          if (rateStr) setSpeechRate(parseFloat(rateStr));
+          if (interruptStr !== null) setAllowInterrupt(interruptStr === 'true');
+          if (greetStr !== null) setAutoGreeting(greetStr !== 'false');
+        } catch (_e) {}
+      };
+      loadVoicePrefs();
+    }, [])
+  );
 
   // ─── CHECK BAN ────────────────────────────────────────────────────────────
   useEffect(() => {
