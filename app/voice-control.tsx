@@ -59,22 +59,6 @@ function formatTime(ts: number): string {
   return `${((h % 12) || 12)}:${m} ${h >= 12 ? 'PM' : 'AM'}`;
 }
 
-// ─── Voice system prompt (respectful, real-time, no demo) ────────────────────
-const VOICE_SYSTEM_PROMPT = `You are Dawinix, a warm and respectful AI voice assistant created by the Haitian Community.
-
-CORE RULES (MANDATORY):
-- ALWAYS treat every person with deep respect, kindness, and dignity — no exceptions
-- Be encouraging, warm, supportive, and uplifting in every response
-- Give SHORT conversational answers (2-4 sentences max) — this is real-time voice mode
-- NEVER use markdown: no **, no ##, no backticks, no bullet points — plain speech only
-- NEVER say you are a demo, test, unavailable, or limited
-- NEVER refuse to answer — always provide a complete, helpful response
-- Detect the user language and ALWAYS respond in the same language they use
-- If asked your name: say "I am Dawinix, created by the Haitian Community"
-- No code blocks — describe code verbally if needed
-- Real-time voice conversation — be concise, natural, and human-sounding
-- Use a warm, friendly tone as if speaking to a trusted friend`;
-
 // ─── Animated connecting dots ────────────────────────────────────────────────
 function ConnectingDots() {
   const anims = useRef(Array.from({ length: 7 }, () => new Animated.Value(0.3))).current;
@@ -297,23 +281,6 @@ function speakWithDevice(text: string, voice: string, rate: number, onDone: () =
   } catch { onDone(); }
 }
 
-// ─── Strip markdown for voice ─────────────────────────────────────────────────
-function stripMarkdownForVoice(text: string): string {
-  return text
-    .replace(/```[\s\S]*?```/g, 'Here is the code.')
-    .replace(/\*\*(.*?)\*\*/g, '$1')
-    .replace(/\*(.*?)\*/g, '$1')
-    .replace(/#{1,6}\s/g, '')
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-    .replace(/\[MESSAGE_CARD\][\s\S]*?\[\/MESSAGE_CARD\]/g, '')
-    .replace(/\[SOURCES\][\s\S]*?\[\/SOURCES\]/g, '')
-    .replace(/\[DOWNLOAD_CARD\][\s\S]*?\[\/DOWNLOAD_CARD\]/g, '')
-    .replace(/\[ANALYSIS\][\s\S]*?\[\/ANALYSIS\]/g, '')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim()
-    .slice(0, 500);
-}
-
 export default function VoiceControlScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -331,7 +298,7 @@ export default function VoiceControlScreen() {
   const [textModeOn, setTextModeOn] = useState(true);
   const [showTextModeToast, setShowTextModeToast] = useState(false);
   const [showKeyboard, setShowKeyboard] = useState(false);
-  const [voiceAndKeyboard, setVoiceAndKeyboard] = useState(false);
+  const [voiceAndKeyboard, setVoiceAndKeyboard] = useState(false); // voice active while keyboard open
   const [userInput, setUserInput] = useState('');
   const [messages, setMessages] = useState<ConvMessage[]>([]);
   const [currentAIText, setCurrentAIText] = useState('');
@@ -392,6 +359,7 @@ export default function VoiceControlScreen() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     try {
       if (user?.id) {
+        // Insert a new ban record (append, don't upsert — id is the PK)
         const banUntilISO = banUntil.toISOString();
         await supabase.from('voice_bans').insert({
           user_id: user.id,
@@ -419,12 +387,14 @@ export default function VoiceControlScreen() {
         playsInSilentModeIOS: true,
         staysActiveInBackground: false,
       });
+      // Use a real phone ringing sound
       const { sound } = await Audio.Sound.createAsync(
         { uri: 'https://cdn.pixabay.com/audio/2025/07/30/audio_a4cedca394.mp3?filename=dragon-studio-phone-ringing-382734.mp3' },
         { shouldPlay: true, isLooping: true, volume: 0.85 }
       );
       ringSoundRef.current = sound;
     } catch (_e) {
+      // Haptic-only fallback when audio unavailable
       const hapticRing = async () => {
         for (let i = 0; i < 4; i++) {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -452,21 +422,27 @@ export default function VoiceControlScreen() {
     if (banLoading || banInfo) return;
 
     isConnectingRef.current = true;
+
+    // Start ringtone immediately
     playRingtone();
 
     const timer = setTimeout(async () => {
+      // Stop ringtone — call connected
       await stopRingtone();
       isConnectingRef.current = false;
       setPhase('active');
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
+      // Create background chat conversation
       try {
         const convId = await createConversation();
         if (convId) setCallConversationId(convId);
       } catch (_e) {}
 
+      // Start call timer
       callTimerRef.current = setInterval(() => setCallDuration(d => d + 1), 1000);
 
+      // AI greets user
       if (autoGreeting) await greetUser();
     }, 4000);
 
@@ -488,7 +464,7 @@ export default function VoiceControlScreen() {
     await speakText(text);
   }, []);
 
-  // ─── SPEAK TEXT (always uses real ElevenLabs/OpenAI TTS) ─────────────────
+  // ─── SPEAK TEXT ───────────────────────────────────────────────────────────
   const speakText = useCallback(async (text: string) => {
     if (isPausedRef.current) return;
     try {
@@ -547,9 +523,7 @@ export default function VoiceControlScreen() {
       console.log('[Voice] speakText error:', e?.message);
       setIsAISpeaking(false);
       setCurrentAIText('');
-      speakWithDevice(text, selectedVoice, speechRate, () => {
-        if (!isPausedRef.current) setTimeout(() => startListening(), 600);
-      });
+      if (!isPausedRef.current) setTimeout(() => startListening(), 600);
     }
   }, [selectedVoice, speechRate, supabase]);
 
@@ -595,7 +569,7 @@ export default function VoiceControlScreen() {
     }
   }, []);
 
-  // ─── STOP + PROCESS (voice input → AI → TTS) ─────────────────────────────
+  // ─── STOP + PROCESS ───────────────────────────────────────────────────────
   const stopAndProcess = useCallback(async () => {
     if (!recordingRef.current || !isRecordingRef.current) return;
     isRecordingRef.current = false;
@@ -639,31 +613,35 @@ export default function VoiceControlScreen() {
       setIsAITyping(true);
 
       const convId = callConversationId || currentConversation?.id;
+      if (convId) {
+        try { await sendMessage(userText, convId as any, undefined, false, 'gemini'); } catch (_e) {}
+      }
 
-      // Use messages ref snapshot for context
       const contextMsgs = messages.slice(-8).map(m => ({ role: m.role, content: m.content }));
       const { data: aiData } = await supabase.functions.invoke('chat', {
         body: {
-          messages: [
-            { role: 'system', content: VOICE_SYSTEM_PROMPT },
-            ...contextMsgs,
-            { role: 'user', content: userText },
-          ],
+          messages: [...contextMsgs, { role: 'user', content: userText }],
           conversationId: convId || `voice-${Date.now()}`,
           model: 'gemini',
         },
       });
 
       setIsAITyping(false);
-      const rawReply = aiData?.message || aiData?.content || 'How can I help you?';
-      const spokenText = stripMarkdownForVoice(rawReply);
+      const aiReply = aiData?.message || aiData?.content || "I heard you. How can I help?";
+      const spokenText = aiReply
+        .replace(/```[\s\S]*?```/g, 'Here is the code.')
+        .replace(/\*\*(.*?)\*\*/g, '$1')
+        .replace(/\*(.*?)\*/g, '$1')
+        .replace(/#{1,6}\s/g, '')
+        .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+        .trim()
+        .slice(0, 400);
 
-      const aiMsg: ConvMessage = { role: 'assistant', content: rawReply, timestamp: Date.now() };
+      const aiMsg: ConvMessage = { role: 'assistant', content: aiReply, timestamp: Date.now() };
       setMessages(prev => [...prev, aiMsg]);
 
-      // Save to conversation
       if (convId) {
-        try { await sendMessage(userText, convId as any, undefined, false, 'gemini'); } catch (_e) {}
+        try { await sendMessage(aiReply, convId as any, undefined, false, 'gemini'); } catch (_e) {}
       }
 
       await speakText(spokenText);
@@ -714,6 +692,7 @@ export default function VoiceControlScreen() {
     isPausedRef.current = true;
     isConnectingRef.current = false;
 
+    // Stop ringtone if still playing
     await stopRingtone();
 
     if (recordingRef.current) {
@@ -739,7 +718,8 @@ export default function VoiceControlScreen() {
     setTimeout(() => setShowTextModeToast(false), 1800);
   }, [textModeOn]);
 
-  // ─── SEND TEXT MESSAGE → AI → TTS (fully working, always speaks back) ────
+  // ─── SEND TEXT MESSAGE ────────────────────────────────────────────────────
+  // NOTE: Does NOT stop voice recording — voice and keyboard work simultaneously
   const handleSendText = useCallback(async () => {
     const text = userInput.trim();
     if (!text) return;
@@ -748,52 +728,31 @@ export default function VoiceControlScreen() {
       return;
     }
     setUserInput('');
-
-    // Stop current voice recording before speaking to avoid audio collision
-    if (isRecordingRef.current && recordingRef.current) {
-      try { await recordingRef.current.stopAndUnloadAsync(); } catch {}
-      recordingRef.current = null;
-      isRecordingRef.current = false;
-      setIsUserSpeaking(false);
-    }
-
     const msg: ConvMessage = { role: 'user', content: text, timestamp: Date.now() };
     setMessages(prev => [...prev, msg]);
+    // Do NOT stop voice recording — let voice continue in parallel
     setIsAITyping(true);
-    setStatusLabel('Thinking...');
-
-    const contextMsgs = messages.slice(-8).map(m => ({ role: m.role, content: m.content }));
+    const contextMsgs = messages.slice(-6).map(m => ({ role: m.role, content: m.content }));
     try {
       const { data: aiData } = await supabase.functions.invoke('chat', {
         body: {
-          messages: [
-            { role: 'system', content: VOICE_SYSTEM_PROMPT },
-            ...contextMsgs,
-            { role: 'user', content: text },
-          ],
+          messages: [...contextMsgs, { role: 'user', content: text }],
           conversationId: callConversationId || `voice-${Date.now()}`,
           model: 'gemini',
         },
       });
-
       setIsAITyping(false);
-      setStatusLabel('');
-
-      const rawReply = aiData?.message || aiData?.content || 'Sorry, I could not process that. Please try again.';
-      const spokenText = stripMarkdownForVoice(rawReply);
-
-      const aiMsg: ConvMessage = { role: 'assistant', content: rawReply, timestamp: Date.now() };
+      const aiReply = aiData?.message || aiData?.content || "Sorry, I could not process that. Please try again.";
+      const aiMsg: ConvMessage = { role: 'assistant', content: aiReply, timestamp: Date.now() };
       setMessages(prev => [...prev, aiMsg]);
-
-      // Always speak the AI reply via real TTS (ElevenLabs/OpenAI)
-      await speakText(spokenText);
+      // Only speak if voice is not already recording to avoid audio collisions
+      if (!isRecordingRef.current) {
+        await speakText(aiReply.slice(0, 400));
+      }
     } catch (_err) {
       setIsAITyping(false);
-      setStatusLabel('');
-      const fallback = 'Sorry, I could not process that. Please try again.';
-      const errMsg: ConvMessage = { role: 'assistant', content: fallback, timestamp: Date.now() };
+      const errMsg: ConvMessage = { role: 'assistant', content: "Sorry, I could not process that. Please try again.", timestamp: Date.now() };
       setMessages(prev => [...prev, errMsg]);
-      await speakText(fallback);
     }
   }, [userInput, messages, callConversationId, supabase, speakText]);
 
@@ -963,6 +922,7 @@ export default function VoiceControlScreen() {
           onPress={() => {
             const next = !showKeyboard;
             setShowKeyboard(next);
+            // When opening keyboard, keep voice active so both work simultaneously
             if (next && !isPaused && phase === 'active') {
               setVoiceAndKeyboard(true);
             } else {
@@ -972,11 +932,11 @@ export default function VoiceControlScreen() {
         >
           <Ionicons name="keypad-outline" size={15} color="rgba(255,255,255,0.45)" />
           <Text style={styles.keyboardText}>
-            {showKeyboard ? (isUserSpeaking ? 'Listening + Keyboard active' : 'Tap to hide keyboard') : 'Tap to show keyboard'}
+            {showKeyboard ? (isUserSpeaking ? '🎤 Voice + Keyboard active' : 'Tap to hide keyboard') : 'Tap to show keyboard'}
           </Text>
         </TouchableOpacity>
 
-        {/* Keyboard input — text typing sends message to AI + gets TTS response */}
+        {/* Keyboard input — voice stays active when keyboard is open */}
         {showKeyboard ? (
           <BlurView intensity={80} tint="dark" style={[styles.inputBar, { paddingBottom: insets.bottom + 14 }]}>
             <TouchableOpacity
@@ -1000,7 +960,7 @@ export default function VoiceControlScreen() {
             </TouchableOpacity>
             <TextInput
               style={styles.textInput}
-              placeholder="Type to Haitian AI — I will speak back"
+              placeholder="Type or speak to Haitian AI"
               placeholderTextColor="rgba(255,255,255,0.35)"
               value={userInput}
               onChangeText={setUserInput}

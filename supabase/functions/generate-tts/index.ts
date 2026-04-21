@@ -35,18 +35,17 @@ const VOICE_LANG_MAP: Record<string, { lang: string; gender: string }> = {
   coral:   { lang: 'en-US', gender: 'female'  },
 };
 
-// Map voice names to UNIQUE ElevenLabs voice IDs — each voice MUST be different
-// Sources: ElevenLabs pre-made voices (verified IDs)
+// Map OpenAI voice names to ElevenLabs voice IDs
 const ELEVENLABS_VOICE_MAP: Record<string, string> = {
-  alloy:   'pNInz6obpgDQGcFmaJgB', // Adam      — warm neutral male (American)
-  echo:    'VR6AewLTigWG4xSOukaG', // Arnold    — calm British male
-  fable:   'yoZ06aMxZJJ28mfd3POQ', // Sam       — expressive energetic male
-  onyx:    'GBv7mTt0atIp3Br8iCZE', // Thomas    — deep authoritative male
-  nova:    '21m00Tcm4TlvDq8ikWAM', // Rachel    — warm friendly female (American)
-  shimmer: 'AZnzlk1XvdvUeBnXmlld', // Domi      — bright upbeat female
-  coral:   'EXAVITQu4vr4xnSDxMaL', // Bella     — soft gentle female
-  ash:     'pqHfZKP75CvOlQylNhV4', // Bill      — professional deep male
-  sage:    'ThT5KcBeYPX3keUQqHPh', // Dorothy   — wise clear female
+  alloy:   'pNInz6obpgDQGcFmaJgB', // Adam
+  echo:    'VR6AewLTigWG4xSOukaG', // Arnold
+  fable:   'yoZ06aMxZJJ28mfd3POQ', // Sam
+  onyx:    'VR6AewLTigWG4xSOukaG', // Arnold
+  nova:    '21m00Tcm4TlvDq8ikWAM', // Rachel
+  shimmer: 'AZnzlk1XvdvUeBnXmlld', // Domi
+  coral:   'EXAVITQu4vr4xnSDxMaL', // Bella
+  ash:     'pqHfZKP75CvOlQylNhV4', // Bill
+  sage:    'ThT5KcBeYPX3keUQqHPh', // Dorothy
 };
 
 // ── Provider 1: OpenAI TTS (/v1/audio/speech) ─────────────────────────────
