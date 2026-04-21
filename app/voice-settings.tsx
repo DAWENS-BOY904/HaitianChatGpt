@@ -521,3 +521,4 @@ const styles = StyleSheet.create({
   infoCard: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, padding: 14, borderRadius: 14, borderWidth: StyleSheet.hairlineWidth, marginBottom: 8 },
   infoText: { flex: 1, fontSize: 13, lineHeight: 19 },
 });
+fix speed toggle button (0.8x / 1.0x / 1.2x)  so users can adjust TTS playback speed live during the voice call
