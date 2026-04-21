@@ -29,8 +29,8 @@ import { createClient } from '@supabase/supabase-js';
 const AI_LOGO_URL = 'https://uzxmmddivzqjhcnnrkns.supabase.co/storage/v1/object/public/logo/logo.png';
 
 // ── NOUVO SUPABASE POU APPLE LOGIN SELMAN ──
-const MY_SUPABASE_URL = 'https://jknkiqeehvbfyeokburg.supabase.co'; // METE URL OU A ISIT LA
-const MY_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImprbmtpcWVlaHZiZnllb2tidXJnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxODg0MjMsImV4cCI6MjA4ODc2NDQyM30.nVm2uk5dwQDBKjtDzBoNQ7wol4b31WzZCM2kGpQa1k4'; // METE KEY OU A ISIT LA
+const MY_SUPABASE_URL = 'https://uzxmmddivzqjhcnnrkns.supabase.co'; // METE URL OU A ISIT LA
+const MY_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV6eG1tZGRpdnpxamhjbm5ya25zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY0MTY5MjEsImV4cCI6MjA5MTk5MjkyMX0.6PYtbRps9YJjvX5ibxGy346uA82RadEEpFrhSHa1UIE'; // METE KEY OU A ISIT LA
 
 // Kreye yon nouvo kliyan Supabase pou Apple login selman
 const appleSupabase = createClient(MY_SUPABASE_URL, MY_SUPABASE_ANON_KEY, {
