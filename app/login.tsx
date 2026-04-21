@@ -788,3 +788,4 @@ const guestStyles = StyleSheet.create({
   secondaryBtn: { alignItems: 'center', paddingVertical: 10 },
   secondaryBtnText: { color: 'rgba(255,255,255,0.45)', fontSize: 15 },
 });
+fix logo an poul paret komsi li pa montrew li nn kare li paret pi soti an ron.
