@@ -1024,3 +1024,4 @@ const styles = StyleSheet.create({
   textInput: { flex: 1, backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 28, paddingHorizontal: 18, paddingVertical: 13, fontSize: 16, color: '#FFF', maxHeight: 100 },
   sendBtn: { width: 46, height: 46, borderRadius: 23, backgroundColor: '#007AFF', alignItems: 'center', justifyContent: 'center' },
 });
+when i select a voice in settings voice and when i tex a message and the ai read it mus read in voice that i selecct in voice settings and fix message when i tex the ai says sorry i could not process with that,please try again. so fix this the ai must answer in real time edg function and all voice seleccted must have their own promp and do what the promp says.
