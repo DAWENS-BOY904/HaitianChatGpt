@@ -677,3 +677,16 @@ const styles = StyleSheet.create({
   webLink: { fontSize: 13, fontWeight: '500', color: 'rgba(255,255,255,0.5)', textDecorationLine: 'underline', marginBottom: 4 },
   legalText: { fontSize: 12, color: 'rgba(255,255,255,0.5)', textAlign: 'center', marginTop: 8, lineHeight: 17 },
 });
+IN CHECKOUT ADD COUPONS VIA STRIP ID 
+ivUqadLE ID
+ivUqadLE
+Name
+DAWINIX2026
+Created
+Apr 23
+Valid
+Yes
+Percentage discount
+20%
+Duration
+Once.
