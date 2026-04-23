@@ -389,3 +389,4 @@ const styles = StyleSheet.create({
     textDecorationLine: 'underline',
   },
 });
+hello ai if you see this please read error and read my message jusrt fo what you see in the message dont skip me please make all change Integrate @stripe/stripe-react-native's Apple Pay / Google Pay button on app/checkout so users can pay with Face ID directly on the in-app checkout page without leaving the app.Update app/checkout so it creates a real Stripe PaymentIntent via the create-checkout-session edge function, then processes the card directly using @stripe/stripe-react-native's payment sheet — so Plus plan card payments are completed in-app without any web redirect.After a successful in-app card payment on app/checkout, automatically call the check-subscription edge function and update user_profiles.subscription_tier to 'plus', then navigate to /subscription-success so the global SubscriptionContext is refreshed immediately.
