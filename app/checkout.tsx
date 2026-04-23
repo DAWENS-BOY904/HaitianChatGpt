@@ -1,659 +1,529 @@
 /**
- * CHECKOUT PAGE - PRODUCTION PAYMENT SYSTEM
- * Real Stripe integration with card processing, Apple Pay, and Google Pay
+ * CHECKOUT PAGE - In-app Stripe PaymentSheet
+ * Card + Apple Pay + Google Pay (Face ID) — no web redirect.
+ * After success → check-subscription → update tier → /subscription-success
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   ScrollView,
   ActivityIndicator,
-  Alert,
   Platform,
-  KeyboardAvoidingView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '../hooks/useTheme';
-import { useAuth } from '@/template';
+import { useAuth, useAlert, getSupabaseClient } from '@/template';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { Spacing, Typography, BorderRadius } from '../constants/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { getSupabaseClient } from '@/template';
+import { useSubscription } from '../hooks/useSubscription';
+import { FunctionsHttpError } from '@supabase/supabase-js';
 
-// Country phone formats
-const COUNTRY_CODES = [
-  { code: 'US', dial: '+1', format: '(XXX) XXX-XXXX', flag: '🇺🇸', name: 'United States' },
-  { code: 'HT', dial: '+509', format: 'XXXX-XXXX', flag: '🇭🇹', name: 'Haiti' },
-  { code: 'CA', dial: '+1', format: '(XXX) XXX-XXXX', flag: '🇨🇦', name: 'Canada' },
-  { code: 'GB', dial: '+44', format: 'XXXX XXXXXX', flag: '🇬🇧', name: 'United Kingdom' },
-  { code: 'FR', dial: '+33', format: 'X XX XX XX XX', flag: '🇫🇷', name: 'France' },
-];
+// ---------- stripe-react-native (native only) ----------
+let StripeProvider: React.ComponentType<any> | null = null;
+let useStripe: (() => { initPaymentSheet: any; presentPaymentSheet: any }) | null = null;
 
-type PaymentMethod = 'card' | 'apple_pay' | 'google_pay';
+if (Platform.OS !== 'web') {
+  try {
+    const stripeLib = require('@stripe/stripe-react-native');
+    StripeProvider = stripeLib.StripeProvider;
+    useStripe = stripeLib.useStripe;
+  } catch (_e) {
+    // library not installed — graceful degradation
+  }
+}
 
-export default function CheckoutScreen() {
-  const { colors } = useTheme();
+// ── Stripe publishable key ──
+const STRIPE_PUBLISHABLE_KEY =
+  process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY ||
+  'pk_live_51TPUrUE0VkO7z1VnRqkzCbmYPxjnq7sguPT50wDpUHCEBBEcaBXVy8iFxoAWcT5nxQ5kfMJjMEGVjhYaXv5OB9cT00mdXajb91';
+
+// ── Stripe price for Plus plan ──
+const PLUS_PRICE_ID = 'price_1ShK60E0VkO7z1VnHAKICksq'; // $19.99/month
+
+// ---------- Inner component (uses useStripe hook) ----------
+function CheckoutInner() {
   const { user } = useAuth();
+  const { showAlert } = useAlert();
+  const { refreshSubscription } = useSubscription();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams();
   const supabase = getSupabaseClient();
+  const params = useLocalSearchParams();
 
-  // Package info from params
-  const packageId = params.packageId as string;
-  const coins = parseInt(params.coins as string || '0');
-  const bonus = parseInt(params.bonus as string || '0');
-  const price = parseFloat(params.price as string || '0');
+  // Accept plan / priceId from params (defaults to plus)
+  const plan = (params.plan as string) || 'plus';
+  const priceId = (params.priceId as string) || PLUS_PRICE_ID;
 
-  // Form state
-  const [cardholderName, setCardholderName] = useState('');
-  const [cardNumber, setCardNumber] = useState('');
-  const [expiryDate, setExpiryDate] = useState('');
-  const [cvv, setCvv] = useState('');
-  const [selectedCountry, setSelectedCountry] = useState(COUNTRY_CODES[0]);
-  const [phoneNumber, setPhoneNumber] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('card');
-  const [saveCard, setSaveCard] = useState(false);
-  const [isSubscription, setIsSubscription] = useState(false);
-  
-  // UI state
   const [loading, setLoading] = useState(false);
-  const [showCountryPicker, setShowCountryPicker] = useState(false);
+  const [ready, setReady] = useState(false);
+  const [paymentSheetReady, setPaymentSheetReady] = useState(false);
+
+  // Safely call useStripe — only if available
+  const stripeHook = useStripe ? useStripe() : null;
+  const initPaymentSheet = stripeHook?.initPaymentSheet;
+  const presentPaymentSheet = stripeHook?.presentPaymentSheet;
+
+  const planLabel = plan === 'plus' ? 'Dawinix Plus' : 'Dawinix Go';
+  const planPrice = plan === 'plus' ? '$19.99' : '$8.00';
+  const planColor = plan === 'plus' ? '#6B5CE7' : '#34C759';
+
+  // ── Initialize Stripe PaymentSheet ──
+  const initSheet = useCallback(async () => {
+    if (!initPaymentSheet || !user) return;
+    setLoading(true);
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      const token = session?.session?.access_token;
+      if (!token) throw new Error('Not authenticated');
+
+      // Ask edge function for a PaymentIntent (subscription mode)
+      const { data, error } = await supabase.functions.invoke('create-checkout-session', {
+        body: { plan, priceId, mode: 'payment_sheet' },
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (error) {
+        let msg = error.message;
+        if (error instanceof FunctionsHttpError) {
+          try { msg = await error.context?.text() || msg; } catch (_e) {}
+        }
+        throw new Error(msg);
+      }
+
+      // Edge function returns { clientSecret, customerId, ephemeralKey }
+      // (or falls back to a hosted-checkout URL — handled below)
+      const { clientSecret, ephemeralKey, customerId, url } = data || {};
+
+      // Fallback: if edge returns a hosted URL instead of clientSecret, open browser
+      if (!clientSecret && url) {
+        const WebBrowser = require('expo-web-browser');
+        await WebBrowser.openBrowserAsync(url, {
+          presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN,
+        });
+        setTimeout(() => refreshSubscription?.(), 2000);
+        router.back();
+        return;
+      }
+
+      if (!clientSecret) throw new Error('No PaymentIntent client secret returned');
+
+      const { error: initError } = await initPaymentSheet({
+        merchantDisplayName: 'Dawinix AI',
+        customerId: customerId ?? undefined,
+        customerEphemeralKeySecret: ephemeralKey ?? undefined,
+        paymentIntentClientSecret: clientSecret,
+        allowsDelayedPaymentMethods: false,
+        defaultBillingDetails: {
+          email: user.email,
+        },
+        applePay: {
+          merchantCountryCode: 'US',
+        },
+        googlePay: {
+          merchantCountryCode: 'US',
+          testEnv: false,
+          currencyCode: 'usd',
+        },
+        style: 'alwaysDark',
+        returnURL: 'dawinixht://checkout/return',
+      });
+
+      if (initError) throw new Error(initError.message);
+      setPaymentSheetReady(true);
+    } catch (err: any) {
+      showAlert('Setup Error', err?.message || 'Could not initialize payment. Please try again.');
+    } finally {
+      setLoading(false);
+      setReady(true);
+    }
+  }, [initPaymentSheet, user, supabase, plan, priceId, showAlert, refreshSubscription, router]);
 
   useEffect(() => {
-    detectUserCountry();
+    initSheet();
   }, []);
 
-  const detectUserCountry = async () => {
-    try {
-      // Auto-detect country from IP (production implementation)
-      const response = await fetch('https://ipapi.co/json/');
-      const data = await response.json();
-      
-      const country = COUNTRY_CODES.find(c => c.code === data.country_code);
-      if (country) {
-        setSelectedCountry(country);
-      }
-    } catch (error) {
-      console.error('Country detection failed:', error);
+  // ── Present PaymentSheet and handle result ──
+  const handlePay = async () => {
+    if (!presentPaymentSheet || !paymentSheetReady) {
+      // Stripe not available (web/simulator) — fallback
+      showAlert('Not Available', 'In-app payments are not available here. Please use the "Buy on Web" option from the subscription screen.');
+      return;
     }
-  };
-
-  // Format card number: 1234 5678 9012 3456
-  const formatCardNumber = (text: string) => {
-    const cleaned = text.replace(/\s/g, '');
-    const formatted = cleaned.match(/.{1,4}/g)?.join(' ') || cleaned;
-    setCardNumber(formatted.slice(0, 19)); // Max 16 digits + 3 spaces
-  };
-
-  // Format expiry date: MM/YY
-  const formatExpiryDate = (text: string) => {
-    const cleaned = text.replace(/\D/g, '');
-    if (cleaned.length >= 2) {
-      setExpiryDate(`${cleaned.slice(0, 2)}/${cleaned.slice(2, 4)}`);
-    } else {
-      setExpiryDate(cleaned);
-    }
-  };
-
-  // Format CVV: XXX or XXXX
-  const formatCVV = (text: string) => {
-    const cleaned = text.replace(/\D/g, '');
-    setCvv(cleaned.slice(0, 4));
-  };
-
-  // Format phone number based on country
-  const formatPhoneNumber = (text: string) => {
-    const cleaned = text.replace(/\D/g, '');
-    const format = selectedCountry.format;
-    
-    let formatted = '';
-    let digitIndex = 0;
-    
-    for (let i = 0; i < format.length && digitIndex < cleaned.length; i++) {
-      if (format[i] === 'X') {
-        formatted += cleaned[digitIndex];
-        digitIndex++;
-      } else {
-        formatted += format[i];
-      }
-    }
-    
-    setPhoneNumber(formatted);
-  };
-
-  // Validate form
-  const validateForm = (): boolean => {
-    if (paymentMethod === 'card') {
-      if (!cardholderName.trim()) {
-        Alert.alert('Error', 'Please enter cardholder name');
-        return false;
-      }
-      
-      const cardDigits = cardNumber.replace(/\s/g, '');
-      if (cardDigits.length !== 16) {
-        Alert.alert('Error', 'Please enter a valid 16-digit card number');
-        return false;
-      }
-      
-      if (expiryDate.length !== 5) {
-        Alert.alert('Error', 'Please enter expiry date (MM/YY)');
-        return false;
-      }
-      
-      if (cvv.length < 3) {
-        Alert.alert('Error', 'Please enter CVV');
-        return false;
-      }
-    }
-    
-    if (!phoneNumber.trim()) {
-      Alert.alert('Error', 'Please enter phone number');
-      return false;
-    }
-    
-    return true;
-  };
-
-  // Process payment
-  const handlePayment = async () => {
-    if (!validateForm()) return;
-
     setLoading(true);
-
     try {
-      // Create payment intent
-      const { data: paymentData, error: paymentError } = await supabase.functions.invoke('create-checkout-session', {
-        body: {
-          packageId,
-          coins,
-          bonus,
-          price,
-          paymentMethod,
-          cardDetails: paymentMethod === 'card' ? {
-            number: cardNumber.replace(/\s/g, ''),
-            expiry: expiryDate,
-            cvv,
-            name: cardholderName,
-          } : undefined,
-          billingInfo: {
-            country: selectedCountry.code,
-            phone: `${selectedCountry.dial}${phoneNumber.replace(/\D/g, '')}`,
-          },
-          saveCard,
-          isSubscription,
-          userId: user?.id,
-        },
-      });
+      const { error } = await presentPaymentSheet();
 
-      if (paymentError) throw paymentError;
+      if (error) {
+        if (error.code === 'Canceled') {
+          // User dismissed — silent
+          return;
+        }
+        throw new Error(error.message);
+      }
 
-      // Add coins to user account
-      await supabase.from('user_coins').upsert({
-        user_id: user?.id,
-        total_coins: coins + bonus,
-        updated_at: new Date().toISOString(),
-      });
+      // ── Payment succeeded — sync subscription tier ──
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
 
-      // Record transaction
-      await supabase.from('coin_transactions').insert({
-        user_id: user?.id,
-        amount: coins + bonus,
-        transaction_type: 'purchase',
-        reason: `Purchased ${coins} coins package`,
-        created_at: new Date().toISOString(),
-      });
+      if (token) {
+        // Call check-subscription to sync DB
+        const { data: subData } = await supabase.functions.invoke('check-subscription', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
 
-      Alert.alert(
-        'Payment Successful!',
-        `${coins + bonus} coins have been added to your account.`,
-        [
-          {
-            text: 'OK',
-            onPress: () => router.push('/home'),
-          },
-        ]
-      );
-    } catch (error: any) {
-      console.error('Payment error:', error);
-      Alert.alert('Payment Failed', error.message || 'An error occurred during payment. Please try again.');
+        // Also direct-update user_profiles for immediate effect
+        if (user?.id) {
+          await supabase.from('user_profiles').update({
+            subscription_tier: subData?.plan || plan,
+            subscription_expires_at: subData?.subscription_end || null,
+          }).eq('id', user.id);
+        }
+      }
+
+      // Refresh global context
+      await refreshSubscription?.();
+
+      // Navigate to success screen
+      router.replace('/subscription-success');
+    } catch (err: any) {
+      showAlert('Payment Failed', err?.message || 'Something went wrong. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  const styles = StyleSheet.create({
-    container: {
-      flex: 1,
-      backgroundColor: colors.background,
-    },
-    header: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingHorizontal: Spacing.md,
-      paddingTop: insets.top + Spacing.sm,
-      paddingBottom: Spacing.sm,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border,
-      backgroundColor: colors.background,
-    },
-    backButton: {
-      padding: Spacing.sm,
-    },
-    headerTitle: {
-      ...Typography.heading,
-      fontSize: 20,
-      marginLeft: Spacing.md,
-      flex: 1,
-      color: colors.text,
-    },
-    content: {
-      flex: 1,
-    },
-    section: {
-      padding: Spacing.md,
-    },
-    sectionTitle: {
-      ...Typography.body,
-      fontWeight: '600',
-      marginBottom: Spacing.md,
-      color: colors.text,
-    },
-    orderSummary: {
-      backgroundColor: colors.surface,
-      padding: Spacing.md,
-      borderRadius: BorderRadius.md,
-      marginBottom: Spacing.md,
-    },
-    summaryRow: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      marginBottom: Spacing.sm,
-    },
-    summaryLabel: {
-      ...Typography.body,
-      color: colors.textSecondary,
-    },
-    summaryValue: {
-      ...Typography.body,
-      fontWeight: '600',
-      color: colors.text,
-    },
-    totalRow: {
-      borderTopWidth: 1,
-      borderTopColor: colors.border,
-      paddingTop: Spacing.sm,
-      marginTop: Spacing.sm,
-    },
-    totalValue: {
-      fontSize: 20,
-      fontWeight: '700',
-      color: colors.primary,
-    },
-    paymentMethods: {
-      flexDirection: 'row',
-      gap: Spacing.sm,
-      marginBottom: Spacing.md,
-    },
-    paymentMethodButton: {
-      flex: 1,
-      padding: Spacing.md,
-      borderRadius: BorderRadius.md,
-      borderWidth: 2,
-      borderColor: colors.border,
-      alignItems: 'center',
-      justifyContent: 'center',
-      minHeight: 60,
-    },
-    paymentMethodActive: {
-      borderColor: colors.primary,
-      backgroundColor: `${colors.primary}15`,
-    },
-    paymentMethodText: {
-      ...Typography.caption,
-      marginTop: Spacing.xs,
-      fontWeight: '600',
-    },
-    inputGroup: {
-      marginBottom: Spacing.md,
-    },
-    inputLabel: {
-      ...Typography.caption,
-      marginBottom: Spacing.xs,
-      fontWeight: '600',
-      color: colors.text,
-    },
-    input: {
-      backgroundColor: colors.surface,
-      padding: Spacing.md,
-      borderRadius: BorderRadius.md,
-      borderWidth: 1,
-      borderColor: colors.border,
-      ...Typography.body,
-      color: colors.text,
-    },
-    inputRow: {
-      flexDirection: 'row',
-      gap: Spacing.sm,
-    },
-    inputHalf: {
-      flex: 1,
-    },
-    countrySelector: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: colors.surface,
-      padding: Spacing.md,
-      borderRadius: BorderRadius.md,
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    countryFlag: {
-      fontSize: 24,
-      marginRight: Spacing.sm,
-    },
-    countryText: {
-      ...Typography.body,
-      flex: 1,
-    },
-    checkboxRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      marginTop: Spacing.sm,
-    },
-    checkbox: {
-      width: 24,
-      height: 24,
-      borderRadius: 4,
-      borderWidth: 2,
-      borderColor: colors.border,
-      marginRight: Spacing.sm,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    checkboxActive: {
-      backgroundColor: colors.primary,
-      borderColor: colors.primary,
-    },
-    checkboxLabel: {
-      ...Typography.body,
-      flex: 1,
-      color: colors.text,
-    },
-    submitButton: {
-      backgroundColor: colors.primary,
-      padding: Spacing.md,
-      borderRadius: BorderRadius.md,
-      alignItems: 'center',
-      marginTop: Spacing.lg,
-      marginBottom: insets.bottom + Spacing.md,
-    },
-    submitButtonText: {
-      ...Typography.body,
-      color: '#FFFFFF',
-      fontWeight: '700',
-      fontSize: 16,
-    },
-    secureText: {
-      ...Typography.caption,
-      textAlign: 'center',
-      color: colors.textSecondary,
-      marginTop: Spacing.sm,
-    },
-    paymentMethodText: {
-      ...Typography.caption,
-      marginTop: Spacing.xs,
-      fontWeight: '600',
-      color: colors.text,
-    },
-    countryText: {
-      ...Typography.body,
-      flex: 1,
-      color: colors.text,
-    },
-  });
+  // ── Plan benefit list ──
+  const benefits =
+    plan === 'plus'
+      ? [
+          'Advanced AI models',
+          'Unlimited messages',
+          '20 image & file uploads per session',
+          'Agents & deep research',
+          'Priority support',
+          'DAWINIX2026 — 20% discount',
+        ]
+      : [
+          'More daily messages',
+          '10 image & file uploads per session',
+          'Group chat creation',
+          'Longer conversation memory',
+        ];
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={24} color={colors.text} />
+        <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+          <Ionicons name="arrow-back" size={24} color="#FFF" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Checkout</Text>
+        <View style={{ width: 24 }} />
       </View>
 
-      <ScrollView style={styles.content}>
-        {/* Order Summary */}
-        <View style={styles.section}>
-          <View style={styles.orderSummary}>
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Package</Text>
-              <Text style={styles.summaryValue}>{coins.toLocaleString()} Coins</Text>
-            </View>
-            {bonus > 0 && (
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Bonus</Text>
-                <Text style={[styles.summaryValue, { color: '#4CAF50' }]}>
-                  +{bonus.toLocaleString()} Coins
-                </Text>
-              </View>
-            )}
-            <View style={[styles.summaryRow, styles.totalRow]}>
-              <Text style={styles.summaryLabel}>Total</Text>
-              <Text style={styles.totalValue}>${price.toFixed(2)}</Text>
-            </View>
+      <ScrollView
+        contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 120 }]}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Plan card */}
+        <View style={[styles.planCard, { borderColor: planColor + '55' }]}>
+          <View style={[styles.planBadge, { backgroundColor: planColor }]}>
+            <Text style={styles.planBadgeText}>
+              {plan === 'plus' ? '✨ PLUS' : '⚡ GO'}
+            </Text>
           </View>
+          <Text style={styles.planName}>{planLabel}</Text>
+          <Text style={[styles.planPrice, { color: planColor }]}>
+            {planPrice}
+            <Text style={styles.planPriceSuffix}>/month</Text>
+          </Text>
+          {plan === 'plus' ? (
+            <View style={styles.couponRow}>
+              <Ionicons name="pricetag" size={13} color="#FFD60A" />
+              <Text style={styles.couponText}> DAWINIX2026 — 20% off applied</Text>
+            </View>
+          ) : null}
         </View>
 
-        {/* Payment Methods */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Payment Method</Text>
-          <View style={styles.paymentMethods}>
-            <TouchableOpacity
-              style={[
-                styles.paymentMethodButton,
-                paymentMethod === 'card' && styles.paymentMethodActive,
-              ]}
-              onPress={() => setPaymentMethod('card')}
-            >
-              <Ionicons name="card-outline" size={28} color={colors.text} />
-              <Text style={styles.paymentMethodText}>Card</Text>
-            </TouchableOpacity>
-
-            {Platform.OS === 'ios' && (
-              <TouchableOpacity
-                style={[
-                  styles.paymentMethodButton,
-                  paymentMethod === 'apple_pay' && styles.paymentMethodActive,
-                ]}
-                onPress={() => setPaymentMethod('apple_pay')}
-              >
-                <Ionicons name="logo-apple" size={28} color={colors.text} />
-                <Text style={styles.paymentMethodText}>Apple Pay</Text>
-              </TouchableOpacity>
-            )}
-
-            {Platform.OS === 'android' && (
-              <TouchableOpacity
-                style={[
-                  styles.paymentMethodButton,
-                  paymentMethod === 'google_pay' && styles.paymentMethodActive,
-                ]}
-                onPress={() => setPaymentMethod('google_pay')}
-              >
-                <Ionicons name="logo-google" size={28} color={colors.text} />
-                <Text style={styles.paymentMethodText}>Google Pay</Text>
-              </TouchableOpacity>
-            )}
-          </View>
+        {/* Benefits */}
+        <View style={styles.benefitsCard}>
+          <Text style={[styles.benefitsTitle, { color: planColor }]}>What you get</Text>
+          {benefits.map((b) => (
+            <View key={b} style={styles.benefitRow}>
+              <Ionicons name="checkmark-circle" size={18} color={planColor} />
+              <Text style={styles.benefitText}>{b}</Text>
+            </View>
+          ))}
         </View>
 
-        {/* Card Details */}
-        {paymentMethod === 'card' && (
-          <View style={styles.section}>
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Cardholder Name</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="John Doe"
-                placeholderTextColor={colors.textSecondary}
-                value={cardholderName}
-                onChangeText={setCardholderName}
-                autoCapitalize="words"
-                editable={!loading}
-              />
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Card Number</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="1234 5678 9012 3456"
-                placeholderTextColor={colors.textSecondary}
-                value={cardNumber}
-                onChangeText={formatCardNumber}
-                keyboardType="number-pad"
-                maxLength={19}
-                editable={!loading}
-              />
-            </View>
-
-            <View style={styles.inputRow}>
-              <View style={[styles.inputGroup, styles.inputHalf]}>
-                <Text style={styles.inputLabel}>Expiry Date</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="MM/YY"
-                  placeholderTextColor={colors.textSecondary}
-                  value={expiryDate}
-                  onChangeText={formatExpiryDate}
-                  keyboardType="number-pad"
-                  maxLength={5}
-                  editable={!loading}
-                />
-              </View>
-
-              <View style={[styles.inputGroup, styles.inputHalf]}>
-                <Text style={styles.inputLabel}>CVV</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="123"
-                  placeholderTextColor={colors.textSecondary}
-                  value={cvv}
-                  onChangeText={formatCVV}
-                  keyboardType="number-pad"
-                  maxLength={4}
-                  secureTextEntry
-                  editable={!loading}
-                />
-              </View>
-            </View>
-
-            <TouchableOpacity
-              style={styles.checkboxRow}
-              onPress={() => setSaveCard(!saveCard)}
-            >
-              <View style={[styles.checkbox, saveCard && styles.checkboxActive]}>
-                {saveCard && <Ionicons name="checkmark" size={16} color="#FFFFFF" />}
-              </View>
-              <Text style={styles.checkboxLabel}>Save card for future payments</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.checkboxRow}
-              onPress={() => setIsSubscription(!isSubscription)}
-            >
-              <View style={[styles.checkbox, isSubscription && styles.checkboxActive]}>
-                {isSubscription && <Ionicons name="checkmark" size={16} color="#FFFFFF" />}
-              </View>
-              <Text style={styles.checkboxLabel}>Enable auto-renewal (subscription)</Text>
-            </TouchableOpacity>
+        {/* Payment method indicator */}
+        <View style={styles.paymentInfo}>
+          <View style={styles.paymentInfoRow}>
+            <Ionicons name="card-outline" size={18} color="rgba(255,255,255,0.7)" />
+            <Text style={styles.paymentInfoText}>Card</Text>
           </View>
+          {Platform.OS === 'ios' ? (
+            <View style={styles.paymentInfoRow}>
+              <Ionicons name="logo-apple" size={18} color="rgba(255,255,255,0.7)" />
+              <Text style={styles.paymentInfoText}>Apple Pay</Text>
+            </View>
+          ) : null}
+          {Platform.OS === 'android' ? (
+            <View style={styles.paymentInfoRow}>
+              <Ionicons name="logo-google" size={18} color="rgba(255,255,255,0.7)" />
+              <Text style={styles.paymentInfoText}>Google Pay</Text>
+            </View>
+          ) : null}
+        </View>
+
+        <Text style={styles.secureNote}>
+          <Ionicons name="lock-closed" size={12} color="rgba(255,255,255,0.4)" />
+          {'  '}Payments are processed securely by Stripe.{'\n'}
+          Cancel anytime from Settings → Subscription.
+        </Text>
+      </ScrollView>
+
+      {/* Bottom CTA */}
+      <View style={[styles.bottomCTA, { paddingBottom: insets.bottom + 20 }]}>
+        {loading ? (
+          <View style={[styles.payBtn, { backgroundColor: planColor, opacity: 0.7 }]}>
+            <ActivityIndicator color="#FFF" />
+            <Text style={styles.payBtnText}>
+              {paymentSheetReady ? 'Processing...' : 'Setting up...'}
+            </Text>
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={[styles.payBtn, { backgroundColor: planColor }, !paymentSheetReady && styles.btnDisabled]}
+            onPress={handlePay}
+            disabled={!ready}
+            activeOpacity={0.85}
+          >
+            {Platform.OS === 'ios' ? (
+              <Ionicons name="logo-apple" size={20} color="#FFF" />
+            ) : (
+              <Ionicons name="card-outline" size={20} color="#FFF" />
+            )}
+            <Text style={styles.payBtnText}>
+              {Platform.OS === 'ios'
+                ? `Pay with Apple Pay · ${planPrice}/mo`
+                : `Pay · ${planPrice}/mo`}
+            </Text>
+          </TouchableOpacity>
         )}
 
-        {/* Billing Info */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Billing Information</Text>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Country</Text>
-            <TouchableOpacity
-              style={styles.countrySelector}
-              onPress={() => setShowCountryPicker(!showCountryPicker)}
-            >
-              <Text style={styles.countryFlag}>{selectedCountry.flag}</Text>
-              <Text style={styles.countryText}>{selectedCountry.name}</Text>
-              <Ionicons name="chevron-down" size={20} color={colors.textSecondary} />
-            </TouchableOpacity>
-          </View>
-
-          {showCountryPicker && (
-            <View style={{ marginTop: Spacing.sm }}>
-              {COUNTRY_CODES.map((country) => (
-                <TouchableOpacity
-                  key={country.code}
-                  style={[styles.countrySelector, { marginBottom: Spacing.xs }]}
-                  onPress={() => {
-                    setSelectedCountry(country);
-                    setShowCountryPicker(false);
-                    setPhoneNumber('');
-                  }}
-                >
-                  <Text style={styles.countryFlag}>{country.flag}</Text>
-                  <Text style={styles.countryText}>{country.name}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Phone Number</Text>
-            <View style={{ flexDirection: 'row', gap: Spacing.sm }}>
-              <View style={[styles.input, { flex: 0, paddingHorizontal: 12 }]}>
-                <Text>{selectedCountry.dial}</Text>
-              </View>
-              <TextInput
-                style={[styles.input, { flex: 1 }]}
-                placeholder={selectedCountry.format}
-                placeholderTextColor={colors.textSecondary}
-                value={phoneNumber}
-                onChangeText={formatPhoneNumber}
-                keyboardType="phone-pad"
-                editable={!loading}
-              />
-            </View>
-          </View>
-        </View>
-
-        {/* Submit Button */}
-        <View style={styles.section}>
-          <TouchableOpacity
-            style={styles.submitButton}
-            onPress={handlePayment}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <Text style={styles.submitButtonText}>
-                Pay ${price.toFixed(2)}
-              </Text>
-            )}
-          </TouchableOpacity>
-
-          <Text style={styles.secureText}>
-            <Ionicons name="lock-closed" size={12} /> Secure payment powered by Stripe
-          </Text>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+        <TouchableOpacity style={styles.cancelBtn} onPress={() => router.back()}>
+          <Text style={styles.cancelBtnText}>Cancel</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
   );
 }
 
+// ---------- Root export: wrap with StripeProvider on native ----------
+export default function CheckoutScreen() {
+  if (Platform.OS === 'web' || !StripeProvider) {
+    // Web fallback — show unsupported message
+    return (
+      <View style={[styles.container, { alignItems: 'center', justifyContent: 'center', padding: 32 }]}>
+        <Ionicons name="card-outline" size={48} color="rgba(255,255,255,0.4)" />
+        <Text style={{ color: '#FFF', fontSize: 20, fontWeight: '700', marginTop: 16, textAlign: 'center' }}>
+          In-app payments unavailable
+        </Text>
+        <Text style={{ color: 'rgba(255,255,255,0.55)', fontSize: 15, marginTop: 10, textAlign: 'center', lineHeight: 22 }}>
+          Please use the "Buy on Web" option from the subscription screen to complete your purchase.
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <StripeProvider
+      publishableKey={STRIPE_PUBLISHABLE_KEY}
+      merchantIdentifier="merchant.com.dawinix.ht"
+      urlScheme="dawinixht"
+    >
+      <CheckoutInner />
+    </StripeProvider>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#000',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(255,255,255,0.1)',
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFF',
+  },
+  scroll: {
+    paddingHorizontal: 24,
+    paddingTop: 28,
+    alignItems: 'center',
+  },
+
+  // Plan card
+  planCard: {
+    width: '100%',
+    backgroundColor: 'rgba(17,17,17,0.95)',
+    borderRadius: 20,
+    borderWidth: 1.5,
+    padding: 24,
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  planBadge: {
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    marginBottom: 14,
+  },
+  planBadgeText: {
+    color: '#FFF',
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+  planName: {
+    fontSize: 26,
+    fontWeight: '700',
+    color: '#FFF',
+    marginBottom: 8,
+  },
+  planPrice: {
+    fontSize: 38,
+    fontWeight: '800',
+    marginBottom: 12,
+  },
+  planPriceSuffix: {
+    fontSize: 18,
+    fontWeight: '500',
+    color: 'rgba(255,255,255,0.6)',
+  },
+  couponRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,214,10,0.12)',
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(255,214,10,0.3)',
+  },
+  couponText: {
+    color: '#FFD60A',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+
+  // Benefits
+  benefitsCard: {
+    width: '100%',
+    backgroundColor: 'rgba(17,17,17,0.95)',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    padding: 16,
+    marginBottom: 20,
+  },
+  benefitsTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 14,
+  },
+  benefitRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 12,
+  },
+  benefitText: {
+    color: '#FFF',
+    fontSize: 15,
+    flex: 1,
+  },
+
+  // Payment info
+  paymentInfo: {
+    flexDirection: 'row',
+    gap: 20,
+    marginBottom: 16,
+  },
+  paymentInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  paymentInfoText: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+
+  secureNote: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.4)',
+    textAlign: 'center',
+    lineHeight: 20,
+    paddingHorizontal: 8,
+  },
+
+  // Bottom CTA
+  bottomCTA: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 24,
+    paddingTop: 16,
+    backgroundColor: 'rgba(0,0,0,0.95)',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(255,255,255,0.08)',
+    gap: 10,
+  },
+  payBtn: {
+    width: '100%',
+    borderRadius: 50,
+    paddingVertical: 17,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  payBtnText: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#FFF',
+  },
+  btnDisabled: {
+    opacity: 0.55,
+  },
+  cancelBtn: {
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  cancelBtnText: {
+    fontSize: 15,
+    color: 'rgba(255,255,255,0.45)',
+  },
+});
