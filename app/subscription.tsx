@@ -820,3 +820,5 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.4)',
   },
 });
+
+in my apple app connect my subscription go plan already set to com.dawinix.go.month now fix go plan to go use verify purchase never web purchase never only veriify apple. 
