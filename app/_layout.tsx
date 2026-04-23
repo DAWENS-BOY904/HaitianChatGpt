@@ -105,7 +105,6 @@ export default function RootLayout() {
                     <Stack.Screen name="buy-coins" />
                     <Stack.Screen name="coding" />
                     <Stack.Screen name="voice-settings" />
-                    <Stack.Screen name="check-subscription" />
                     <Stack.Screen name="revenuecat-setup" />
                     <Stack.Screen name="authenticator-app" />
                     <Stack.Screen name="mfa-totp-setup" />
