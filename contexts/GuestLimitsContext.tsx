@@ -1,6 +1,6 @@
+
 import React, { createContext, useState, useEffect, ReactNode } from 'react';
 import { getSupabaseClient, useAuth } from '@/template';
-import { isPaidTier } from '../contexts/SubscriptionContext';
 
 interface CoinSystemContextType {
   coins: number;
@@ -14,7 +14,7 @@ interface CoinSystemContextType {
   isAdmin: boolean;
   incrementMessageCount: () => Promise<void>;
   imageUploadCount: number;
-  canUploadImage: (tier: string) => boolean;
+  canUploadImage: (isPro: boolean) => boolean;
   incrementImageUploadCount: () => Promise<void>;
   resetImageUploadIfNeeded: () => Promise<void>;
 }
@@ -26,16 +26,8 @@ const DAILY_COINS = 1000;
 const MESSAGE_COST = 0;
 const PROJECT_COST = 100;
 const MESSAGE_LIMIT = 50; // Free messages per day
-
-// Upload limits per plan
-const UPLOAD_LIMITS: Record<string, number> = {
-  free: 4,       // 4 per session
-  go: 10,        // 10 per session
-  plus: 20,      // 20 per session
-  premium_monthly: 10,
-  premium_yearly: 20,
-  lifetime: 999,
-};
+const FREE_IMAGE_LIMIT = 4; // Free plan: 4 images per 24h
+const PRO_IMAGE_LIMIT = 10; // Pro plan: 10 images per session
 
 export function GuestLimitsProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
@@ -175,11 +167,11 @@ export function GuestLimitsProvider({ children }: { children: ReactNode }) {
     return messageCount < MESSAGE_LIMIT;
   };
 
-  const canUploadImage = (tier: string): boolean => {
+  const canUploadImage = (isPro: boolean): boolean => {
     if (!user) return false;
     if (isAdmin || isUnlimited) return true;
-    const limit = UPLOAD_LIMITS[tier] ?? UPLOAD_LIMITS['free'];
-    return imageUploadCount < limit;
+    if (isPro) return imageUploadCount < PRO_IMAGE_LIMIT;
+    return imageUploadCount < FREE_IMAGE_LIMIT;
   };
 
   const canCreateProject = (): boolean => {
