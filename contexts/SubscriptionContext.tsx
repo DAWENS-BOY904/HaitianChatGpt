@@ -1,10 +1,10 @@
-import React, { createContext, ReactNode, useState, useEffect, useCallback, useRef } from 'react';
-import { AppState, AppStateStatus } from 'react-native';
+import React, { createContext, ReactNode, useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../template';
 import { getSupabaseClient } from '../template';
 
 export type SubscriptionTier = 'free' | 'go' | 'plus' | 'premium_monthly' | 'premium_yearly' | 'lifetime';
 
+// Plan aliases: Stripe check-subscription returns 'go'/'plus', old DB may have 'premium_monthly' etc.
 const PAID_TIERS: SubscriptionTier[] = ['go', 'plus', 'premium_monthly', 'premium_yearly', 'lifetime'];
 
 export function isPaidTier(tier: SubscriptionTier): boolean {
@@ -23,7 +23,7 @@ interface SubscriptionLimits {
 
 interface SubscriptionContextType {
   tier: SubscriptionTier;
-  isPro: boolean;
+  isPro: boolean; // true when user has any paid plan
   messageCountToday: number;
   limits: SubscriptionLimits;
   canSendMessage: () => boolean;
@@ -39,7 +39,7 @@ export const SubscriptionContext = createContext<SubscriptionContextType | undef
 const SUBSCRIPTION_LIMITS: Record<SubscriptionTier, SubscriptionLimits> = {
   free: {
     messagesPerDay: 20,
-    canUploadMedia: true,
+    canUploadMedia: true,  // allowed but limited to 4
     canCreateGroups: false,
     maxGroupMembers: 0,
     canUseAdvancedAI: false,
@@ -99,39 +99,33 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
   const [messageCountToday, setMessageCountToday] = useState(0);
   const [loading, setLoading] = useState(true);
   const supabase = getSupabaseClient();
-  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
-  const lastRefreshRef = useRef<number>(0);
 
-  // Load from DB
+  // Load from DB then auto-check Stripe for live status
   const loadSubscriptionData = useCallback(async () => {
     if (!user) return;
 
-    try {
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .select('subscription_tier, message_count_today, subscription_expires_at')
-        .eq('id', user.id)
-        .single();
+    const { data, error } = await supabase
+      .from('user_profiles')
+      .select('subscription_tier, message_count_today, subscription_expires_at')
+      .eq('id', user.id)
+      .single();
 
-      if (!error && data) {
-        const currentTier = (data.subscription_tier || 'free') as SubscriptionTier;
+    if (!error && data) {
+      const currentTier = (data.subscription_tier || 'free') as SubscriptionTier;
 
-        if (data.subscription_expires_at && new Date(data.subscription_expires_at) < new Date()) {
-          if (currentTier !== 'lifetime') {
-            try {
-              await supabase.from('user_profiles').update({ subscription_tier: 'free' }).eq('id', user.id);
-            } catch (_e) {}
-            setTier('free');
-          } else {
-            setTier(currentTier);
-          }
+      if (data.subscription_expires_at && new Date(data.subscription_expires_at) < new Date()) {
+        if (currentTier !== 'lifetime') {
+          await supabase.from('user_profiles').update({ subscription_tier: 'free' }).eq('id', user.id);
+          setTier('free');
         } else {
           setTier(currentTier);
         }
-
-        setMessageCountToday(data.message_count_today || 0);
+      } else {
+        setTier(currentTier);
       }
-    } catch (_e) {}
+
+      setMessageCountToday(data.message_count_today || 0);
+    }
 
     setLoading(false);
   }, [user, supabase]);
@@ -139,12 +133,6 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
   // Call check-subscription edge function and sync to global state
   const refreshSubscription = useCallback(async () => {
     if (!user) return;
-
-    // Debounce: don't refresh more than once every 30 seconds
-    const now = Date.now();
-    if (now - lastRefreshRef.current < 30000) return;
-    lastRefreshRef.current = now;
-
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) return;
@@ -171,6 +159,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (user) {
       loadSubscriptionData().then(() => {
+        // Non-blocking Stripe sync after local data is loaded
         refreshSubscription();
       });
     } else {
@@ -178,24 +167,6 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
       setLoading(false);
     }
   }, [user?.id]);
-
-  // ── AppState listener: refresh subscription every time app comes to foreground ──
-  useEffect(() => {
-    const handleAppStateChange = (nextState: AppStateStatus) => {
-      if (
-        appStateRef.current.match(/inactive|background/) &&
-        nextState === 'active' &&
-        user
-      ) {
-        // App came to foreground — refresh subscription tier from Stripe
-        refreshSubscription();
-      }
-      appStateRef.current = nextState;
-    };
-
-    const subscription = AppState.addEventListener('change', handleAppStateChange);
-    return () => subscription.remove();
-  }, [user, refreshSubscription]);
 
   const isPro = isPaidTier(tier);
   const limits = SUBSCRIPTION_LIMITS[tier] || SUBSCRIPTION_LIMITS['free'];
@@ -210,105 +181,104 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     const newCount = messageCountToday + 1;
     setMessageCountToday(newCount);
 
-    try {
-      await supabase
-        .from('user_profiles')
-        .update({ message_count_today: newCount })
-        .eq('id', user.id);
-    } catch (_e) {}
+    await supabase
+      .from('user_profiles')
+      .update({ message_count_today: newCount })
+      .eq('id', user.id);
   };
 
   const upgradeSubscription = async (plan: SubscriptionTier) => {
     if (!user) return { error: 'Not authenticated' };
 
-    const prices: Record<string, number> = {
+    const prices: Record<SubscriptionTier, number> = {
       free: 0,
       premium_monthly: 10,
       premium_yearly: 20,
       lifetime: 80,
-      go: 8,
-      plus: 20,
     };
 
+    // Calculate expiration
     let expiresAt: string | null = null;
-    if (plan === 'premium_monthly' || plan === 'go') {
+    if (plan === 'premium_monthly') {
       const expiry = new Date();
       expiry.setMonth(expiry.getMonth() + 1);
       expiresAt = expiry.toISOString();
-    } else if (plan === 'premium_yearly' || plan === 'plus') {
+    } else if (plan === 'premium_yearly') {
       const expiry = new Date();
       expiry.setFullYear(expiry.getFullYear() + 1);
       expiresAt = expiry.toISOString();
     }
 
-    try {
-      await supabase
-        .from('subscription_transactions')
-        .insert({
-          user_id: user.id,
-          plan,
-          amount: prices[plan] ?? 0,
-          status: 'completed',
-          transaction_id: `sim_${Date.now()}`,
-        });
+    // Record transaction
+    await supabase
+      .from('subscription_transactions')
+      .insert({
+        user_id: user.id,
+        plan,
+        amount: prices[plan],
+        status: 'completed',
+        transaction_id: `sim_${Date.now()}`,
+      });
 
-      const { error } = await supabase
-        .from('user_profiles')
-        .update({
-          subscription_tier: plan,
-          subscription_expires_at: expiresAt,
-        })
-        .eq('id', user.id);
+    // Update user subscription
+    const { error } = await supabase
+      .from('user_profiles')
+      .update({
+        subscription_tier: plan,
+        subscription_expires_at: expiresAt,
+      })
+      .eq('id', user.id);
 
-      if (!error) setTier(plan);
-      return { error: error?.message || null };
-    } catch (e: any) {
-      return { error: e?.message || 'Upgrade failed' };
+    if (!error) {
+      setTier(plan);
     }
+
+    if (!error) setTier(plan);
+    return { error: error?.message || null };
   };
 
   const restorePurchases = async () => {
     if (!user) return { error: 'Not authenticated' };
 
-    try {
-      const { data, error } = await supabase
-        .from('subscription_transactions')
-        .select('plan, created_at')
-        .eq('user_id', user.id)
-        .eq('status', 'completed')
-        .order('created_at', { ascending: false })
-        .limit(1);
+    // Query for latest completed transaction
+    const { data, error } = await supabase
+      .from('subscription_transactions')
+      .select('plan, created_at')
+      .eq('user_id', user.id)
+      .eq('status', 'completed')
+      .order('created_at', { ascending: false })
+      .limit(1);
 
-      if (error || !data || data.length === 0) {
-        return { error: 'No purchases found' };
-      }
-
-      const lastPurchase = data[0];
-
-      let expiresAt: string | null = null;
-      if (lastPurchase.plan === 'premium_monthly' || lastPurchase.plan === 'go') {
-        const purchaseDate = new Date(lastPurchase.created_at);
-        purchaseDate.setMonth(purchaseDate.getMonth() + 1);
-        expiresAt = purchaseDate.toISOString();
-      } else if (lastPurchase.plan === 'premium_yearly' || lastPurchase.plan === 'plus') {
-        const purchaseDate = new Date(lastPurchase.created_at);
-        purchaseDate.setFullYear(purchaseDate.getFullYear() + 1);
-        expiresAt = purchaseDate.toISOString();
-      }
-
-      await supabase
-        .from('user_profiles')
-        .update({
-          subscription_tier: lastPurchase.plan,
-          subscription_expires_at: expiresAt,
-        })
-        .eq('id', user.id);
-
-      await loadSubscriptionData();
-      return { error: null };
-    } catch (e: any) {
-      return { error: e?.message || 'Restore failed' };
+    if (error || !data || data.length === 0) {
+      return { error: 'No purchases found' };
     }
+
+    const lastPurchase = data[0];
+    
+    // Restore the subscription
+    let expiresAt: string | null = null;
+    if (lastPurchase.plan === 'premium_monthly') {
+      const purchaseDate = new Date(lastPurchase.created_at);
+      const expiry = new Date(purchaseDate);
+      expiry.setMonth(expiry.getMonth() + 1);
+      expiresAt = expiry.toISOString();
+    } else if (lastPurchase.plan === 'premium_yearly') {
+      const purchaseDate = new Date(lastPurchase.created_at);
+      const expiry = new Date(purchaseDate);
+      expiry.setFullYear(expiry.getFullYear() + 1);
+      expiresAt = expiry.toISOString();
+    }
+
+    await supabase
+      .from('user_profiles')
+      .update({
+        subscription_tier: lastPurchase.plan,
+        subscription_expires_at: expiresAt,
+      })
+      .eq('id', user.id);
+
+    await loadSubscriptionData();
+    return { error: null };
   };
 
   return (
