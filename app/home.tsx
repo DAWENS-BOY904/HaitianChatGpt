@@ -34,6 +34,7 @@ import { useSettings } from '../hooks/useSettings';
 import { useGuestLimits } from '../hooks/useGuestLimits';
 import { useAlert, useAuth } from '@/template';
 import { Spacing, Typography, BorderRadius } from '../constants/theme';
+import { useSubscription } from '../hooks/useSubscription';
 import { MenuModal } from '../components/MenuModal';
 import { ToolsModal } from '../components/ToolsModal';
 import { QuizModal, QuizView, QuizQuestion, QuizHistoryEntry } from '../components/QuizModal';
@@ -554,6 +555,7 @@ export default function HomeScreen() {
   const { settings, updateSetting } = useSettings();
   const { user } = useAuth();
   const { canSendMessage, coins, isUnlimited, incrementMessageCount, isAdmin } = useGuestLimits();
+  const { isPro } = useSubscription();
   const {
     conversations, messages, currentConversation,
     sendMessage, updateMessageAndRegenerate, createConversation, deleteConversation,
@@ -1160,8 +1162,8 @@ export default function HomeScreen() {
         setGuestLoginModal(true);
         return;
       }
-    }
-    if (!currentEditingId && !canSendMessage() && sessionBonusMessages <= 0) {
+      // Guests CAN send messages (up to 35)
+    } else if (!currentEditingId && !canSendMessage() && sessionBonusMessages <= 0) {
       if (!user) {
         showAlert('Sign In Required', 'Sign in to start chatting with AI.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Sign In', onPress: () => router.push('/login') }]);
       } else {
@@ -1650,11 +1652,13 @@ export default function HomeScreen() {
                     >
                       <Text style={{ color: '#000', fontWeight: '600', fontSize: 15 }}>Sign up</Text>
                     </TouchableOpacity>
-                  ) : (
+                  ) : !isPro ? (
                     <TouchableOpacity style={styles.upgradeBtn} onPress={() => router.push('/subscription')}>
                       <Ionicons name="sparkles" size={13} color="#7C6FF7" />
                       <Text style={styles.upgradeBtnText}>Upgrade</Text>
                     </TouchableOpacity>
+                  ) : (
+                    <View style={{ width: 80 }} />
                   )}
                   {/* Group & Temporary chat buttons — logged-in users only */}
                   {!isGuest ? (
