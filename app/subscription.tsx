@@ -643,3 +643,4 @@ const styles = StyleSheet.create({
   webLink: { fontSize: 13, fontWeight: '500', color: 'rgba(255,255,255,0.5)', textDecorationLine: 'underline', marginBottom: 4 },
   legalText: { fontSize: 12, color: 'rgba(255,255,255,0.5)', textAlign: 'center', marginTop: 8, lineHeight: 17 },
 });
+create 2 logo one plus one go and fix logo an color ron and fix background add another logo to better logo color and effect neige and fix subscription error supabase admin.from up-datte eq cach is not a function and Call refreshSubscription() from SubscriptionContext every time the app comes back to foreground (useFocusEffect or AppState active), so the plan tier is always up to date without manual refresh
