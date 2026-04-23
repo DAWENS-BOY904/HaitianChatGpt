@@ -643,4 +643,3 @@ const styles = StyleSheet.create({
   webLink: { fontSize: 13, fontWeight: '500', color: 'rgba(255,255,255,0.5)', textDecorationLine: 'underline', marginBottom: 4 },
   legalText: { fontSize: 12, color: 'rgba(255,255,255,0.5)', textAlign: 'center', marginTop: 8, lineHeight: 17 },
 });
-After login, automatically call check-subscription edge function and sync the subscription tier to a global SubscriptionContext so every screen instantly knows if the user is on free/go/plus — without needing to re-fetch on each screen.
