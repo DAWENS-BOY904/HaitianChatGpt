@@ -2360,3 +2360,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
+Fix audio transcription button errors, ensure it is safe and fully tested before release, repair Edge chat function, add global user safety/help support, and automatically show emergency numbers (e.g., 911) when users are not safe anywhere in the world.
