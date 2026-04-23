@@ -4,6 +4,82 @@ import { corsHeaders } from '../_shared/cors.ts';
 import { callAI, detectContentType, generateImageSmart, isTextOnlyModel } from '../_shared/ai-providers.ts';
 
 // ==========================================
+// FULL SAFETY MODULE HELPER 
+// ==========================================
+function detectSelfHarmIntent(text: string, context_tags: string[] = []) {
+  const triggers = [
+    "suicide", "kill myself", "end my life", "i want to die",
+    "mwen vle mouri", "touye tèt mwen", "pa vle viv ankò",
+    "end it all", "no reason to live"
+  ];
+
+  const lower = text.toLowerCase();
+
+  const matched =
+    triggers.some(t => lower.includes(t)) ||
+    context_tags.includes("self-harm");
+
+  return matched;
+}
+
+function generateCrisisResponse() {
+  return `
+🛑 I’m really sorry you’re feeling this way.
+
+You are not alone, and there are people who want to help you right now.
+
+---
+
+📞 If you are in the United States:
+Call or text **988** (Suicide & Crisis Lifeline — 24/7, free)
+
+🌐 Website: https://988lifeline.org
+
+📞 If immediate danger: call 911
+
+---
+
+💙 Important things to know:
+- Your feelings are real, but they can change over time
+- You don’t have to go through this alone
+- Many people who felt this way before are still here today
+
+---
+
+🧠 Right now, try this:
+- Take slow breaths (inhale 4s, hold 4s, exhale 6s)
+- Drink water
+- Sit somewhere safe
+- Try not to isolate yourself
+
+---
+
+💬 If you want, you can talk to me about what’s happening. I’m here to listen.
+`;
+}
+
+const crisis_hotlines = {
+  US: "988",
+  Canada: "1-833-456-4566",
+  UK: "Samaritans 116 123",
+  France: "3114",
+  Haiti: "Go to nearest hospital / emergency services",
+  Global: "https://findahelpline.com"
+};
+
+function aiResponse(userInput: string, context_tags: string[] = []) {
+  const isCrisis = detectSelfHarmIntent(userInput, context_tags);
+
+  if (isCrisis) {
+    return generateCrisisResponse();
+  }
+
+  return normalAIResponse(userInput);
+}
+
+
+
+// ==========================================
 // REAL-TIME DATE/TIME HELPER
 // ==========================================
 
@@ -630,6 +706,21 @@ CONTENT SAFETY:
 - Warn users about potentially dangerous actions
 - Refuse to generate illegal, unethical, or harmful content
 - Stay professional, respectful, and helpful at all times
+
+const support_messages = [
+  "You matter, even if it doesn’t feel like it right now.",
+  "This moment is heavy, but it is not permanent.",
+  "You don’t have to face everything alone.",
+  "Help is real and available for you."
+];
+
+const safety_rules = [
+  "Never encourage self-harm",
+  "Never validate suicide as a solution",
+  "Always redirect to support/help",
+  "Stay calm and non-judgmental",
+  "Do not shame or blame the user"
+];
 
 IMPORTANT:
 - Never expose internal model names or technical details
