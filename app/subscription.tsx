@@ -44,7 +44,7 @@ const PLUS_FEATURES = [
 
 // ── Stripe price IDs (real recurring monthly) ──
 const STRIPE_PRICES = {
-  plus: 'price_1ShK60E0VkO7z1VnHAKICksq', // $19.99/month
+  plus: 'price_1TPUrzE0VkO7z1Vnlgj45978', // $19.99/month
 };
 
 // ── Apple IAP product IDs (Go plan) ──
