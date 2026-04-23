@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -20,6 +20,8 @@ import { useRouter } from 'expo-router';
 import { Spacing, Typography, BorderRadius } from '../constants/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAlert, useAuth, getSupabaseClient } from '@/template';
+import * as WebBrowser from 'expo-web-browser';
+import { useFocusEffect } from '@react-navigation/native';
 
 // ── Feature comparison rows ──
 const GO_FEATURES = [
@@ -39,6 +41,12 @@ const PLUS_FEATURES = [
   { label: 'Agents and deep research', free: false, plan: true },
   { label: 'More memory', free: false, plan: true },
 ];
+
+// ── Stripe price IDs (real, recurring monthly) ──
+const STRIPE_PRICES: Record<string, string> = {
+  go:   'price_1SjmtpE0VkO7z1Vn1lpvP0PC', // $10/month – Premium Monthly
+  plus: 'price_1ShK60E0VkO7z1VnHAKICksq', // $20/month – Premium (higher tier)
+};
 
 // Product IDs from App Store Connect / Google Play Console
 const PRODUCT_IDS = {
@@ -69,6 +77,53 @@ export default function SubscriptionScreen() {
   const [selectedPlan, setSelectedPlan] = useState<'go' | 'plus'>('go');
   const [isLoading, setIsLoading] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
+  const [subscriptionInfo, setSubscriptionInfo] = useState<{
+    subscribed: boolean;
+    plan: string | null;
+    subscription_end: string | null;
+  } | null>(null);
+  const [checkingStatus, setCheckingStatus] = useState(false);
+  const [isManaging, setIsManaging] = useState(false);
+
+  // ── Check subscription status via Stripe ──
+  const checkSubscriptionStatus = useCallback(async () => {
+    if (!user) return;
+    setCheckingStatus(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) return;
+      const { data, error } = await supabase.functions.invoke('check-subscription', {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (!error && data) {
+        setSubscriptionInfo({
+          subscribed: data.subscribed ?? false,
+          plan: data.plan ?? null,
+          subscription_end: data.subscription_end ?? null,
+        });
+      }
+    } catch (e) {
+      console.log('[subscription] check failed:', e);
+    } finally {
+      setCheckingStatus(false);
+    }
+  }, [user, supabase]);
+
+  // Check on focus and when user changes
+  useFocusEffect(
+    useCallback(() => {
+      checkSubscriptionStatus();
+      // Also listen for deep-link return from Stripe
+      const handleUrl = ({ url }: { url: string }) => {
+        if (url.includes('subscription/success')) {
+          setTimeout(() => checkSubscriptionStatus(), 2000);
+          showAlert('Payment Successful!', 'Your subscription is now active. Enjoy premium access!');
+        }
+      };
+      const sub = Linking.addEventListener('url', handleUrl);
+      return () => sub.remove();
+    }, [checkSubscriptionStatus]),
+  );
 
   const features = selectedPlan === 'go' ? GO_FEATURES : PLUS_FEATURES;
   const planColor = '#6B5CE7';
@@ -79,6 +134,74 @@ export default function SubscriptionScreen() {
     : 'Do more with advanced intelligence';
 
   const currentPalmImage = selectedPlan === 'go' ? GO_PALM_IMAGE : PLUS_PALM_IMAGE;
+
+  // ── Open Stripe checkout in browser ──
+  const purchaseWithStripe = async (plan: 'go' | 'plus') => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) throw new Error('Not authenticated');
+
+    const { data, error } = await supabase.functions.invoke('create-checkout-session', {
+      body: {
+        plan,
+        priceId: STRIPE_PRICES[plan],
+      },
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+
+    if (error) {
+      let errMsg = error.message;
+      try {
+        const { FunctionsHttpError } = await import('@supabase/supabase-js');
+        if (error instanceof FunctionsHttpError) {
+          const txt = await error.context?.text?.();
+          errMsg = txt || errMsg;
+        }
+      } catch (_e) {}
+      throw new Error(errMsg);
+    }
+
+    if (!data?.url) throw new Error('No checkout URL returned');
+
+    // Open Stripe hosted checkout — Apple Pay & Google Pay work automatically
+    try {
+      await WebBrowser.openBrowserAsync(data.url, {
+        presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN,
+        enableBarCollapsing: true,
+      });
+    } catch (_e) {
+      // Fallback to system browser
+      await Linking.openURL(data.url);
+    }
+
+    // Refresh subscription status after returning
+    setTimeout(() => checkSubscriptionStatus(), 1500);
+  };
+
+  // ── Open Stripe customer portal (manage / cancel) ──
+  const handleManageSubscription = async () => {
+    if (!user || isManaging) return;
+    setIsManaging(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error('Not authenticated');
+      const { data, error } = await supabase.functions.invoke('customer-portal', {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (error || !data?.url) throw new Error(error?.message || 'Could not open portal');
+      try {
+        await WebBrowser.openBrowserAsync(data.url, {
+          presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN,
+        });
+      } catch (_e) {
+        await Linking.openURL(data.url);
+      }
+      setTimeout(() => checkSubscriptionStatus(), 1500);
+    } catch (err: any) {
+      showAlert('Error', err?.message || 'Failed to open subscription management');
+    } finally {
+      setIsManaging(false);
+    }
+  };
 
   const purchaseWithRevenueCat = async (productId: string, planName: string, priceStr: string) => {
     try {
@@ -175,11 +298,34 @@ export default function SubscriptionScreen() {
     if (isLoading) return;
     setIsLoading(true);
     try {
-      if (selectedPlan === 'go') {
-        await purchaseWithRevenueCat(PRODUCT_IDS.go, 'go', '$8.00');
-      } else {
-        router.push({ pathname: '/checkout', params: { plan: 'plus' } });
+      // Always use Stripe for web/real payment (works on iOS + Android via hosted page)
+      // RevenueCat handles native in-app purchases if configured
+      if (Platform.OS !== 'web') {
+        try {
+          const Purchases = require('react-native-purchases').default;
+          const apiKey = RC_API_KEY ||
+            (Platform.OS === 'ios'
+              ? (process.env.EXPO_PUBLIC_RC_IOS_KEY || '')
+              : (process.env.EXPO_PUBLIC_RC_ANDROID_KEY || ''));
+          if (apiKey) {
+            const productId = selectedPlan === 'go' ? PRODUCT_IDS.go : PRODUCT_IDS.plus;
+            const priceStr = selectedPlan === 'go' ? '$8.00' : '$19.99';
+            await purchaseWithRevenueCat(productId, selectedPlan, priceStr);
+            setIsLoading(false);
+            return;
+          }
+        } catch (rcErr: any) {
+          // RC not available or failed — fall through to Stripe
+          if (!rcErr?.userCancelled) {
+            console.log('[subscription] RC failed, using Stripe:', rcErr?.message);
+          } else {
+            setIsLoading(false);
+            return;
+          }
+        }
       }
+      // Stripe hosted checkout (with Apple Pay / Google Pay automatically)
+      await purchaseWithStripe(selectedPlan);
     } catch (error: any) {
       showAlert('Purchase Failed', error?.message || 'Something went wrong. Please try again.');
     } finally {
@@ -303,27 +449,66 @@ export default function SubscriptionScreen() {
       </ScrollView>
 
       <View style={[styles.bottomCTA, { paddingBottom: insets.bottom + 20 }]}>
-        <TouchableOpacity
-          style={[styles.upgradeBtn, isLoading && styles.upgradeBtnDisabled]}
-          onPress={handleUpgrade}
-          disabled={isLoading}
-        >
-          {isLoading ? (
-            <ActivityIndicator color="#000" />
-          ) : (
-            <Text style={styles.upgradeBtnText}>Upgrade for {planPrice}/month</Text>
-          )}
-        </TouchableOpacity>
+        {/* Subscription status badge */}
+        {user && subscriptionInfo?.subscribed && (
+          <View style={styles.activeBadge}>
+            <Ionicons name="checkmark-circle" size={16} color="#34C759" />
+            <Text style={styles.activeBadgeText}>
+              {subscriptionInfo.plan?.toUpperCase()} active
+              {subscriptionInfo.subscription_end
+                ? ` · renews ${new Date(subscriptionInfo.subscription_end).toLocaleDateString()}`
+                : ''}
+            </Text>
+          </View>
+        )}
 
-        {selectedPlan === 'plus' && (
-          <TouchableOpacity onPress={() => Linking.openURL('https://dawinix.com/subscription')} style={{ marginTop: 12 }}>
-            <Text style={styles.webLink}>Purchase on web ↗</Text>
+        {user && subscriptionInfo?.subscribed ? (
+          // Already subscribed — show manage button
+          <TouchableOpacity
+            style={[styles.upgradeBtn, { backgroundColor: '#2C2C2E', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' }, isManaging && styles.upgradeBtnDisabled]}
+            onPress={handleManageSubscription}
+            disabled={isManaging}
+          >
+            {isManaging ? (
+              <ActivityIndicator color="#FFF" />
+            ) : (
+              <Text style={[styles.upgradeBtnText, { color: '#FFF' }]}>Manage Subscription</Text>
+            )}
+          </TouchableOpacity>
+        ) : (
+          // Not subscribed — show upgrade button
+          <TouchableOpacity
+            style={[styles.upgradeBtn, isLoading && styles.upgradeBtnDisabled]}
+            onPress={handleUpgrade}
+            disabled={isLoading}
+          >
+            {isLoading ? (
+              <ActivityIndicator color="#000" />
+            ) : (
+              <Text style={styles.upgradeBtnText}>Upgrade for {planPrice}/month</Text>
+            )}
+          </TouchableOpacity>
+        )}
+
+        {/* Refresh status */}
+        {user && (
+          <TouchableOpacity
+            onPress={checkSubscriptionStatus}
+            style={{ marginTop: 8, flexDirection: 'row', alignItems: 'center', gap: 4 }}
+            disabled={checkingStatus}
+          >
+            {checkingStatus ? (
+              <ActivityIndicator size="small" color="rgba(255,255,255,0.5)" />
+            ) : (
+              <Ionicons name="refresh" size={14} color="rgba(255,255,255,0.5)" />
+            )}
+            <Text style={styles.webLink}>Refresh Status</Text>
           </TouchableOpacity>
         )}
 
         <Text style={styles.legalText}>
-          Auto-renews monthly. Cancel anytime in Settings.{'\n'}
-          {selectedPlan === 'go' ? 'This plan may include ads. ' : ''}
+          Auto-renews monthly. Cancel anytime via Manage Subscription.{'\n'}
+          Apple Pay &amp; Google Pay available at checkout.{'\n'}
           <Text style={[styles.legalText, { textDecorationLine: 'underline' }]}>Learn more</Text>
         </Text>
       </View>
@@ -453,6 +638,8 @@ const styles = StyleSheet.create({
   },
   upgradeBtnDisabled: { opacity: 0.6 },
   upgradeBtnText: { fontSize: 17, fontWeight: '700', color: '#000' },
-  webLink: { fontSize: 14, fontWeight: '600', color: '#FFF', textDecorationLine: 'underline', marginBottom: 10 },
+  activeBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(52,199,89,0.12)', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6, marginBottom: 12, borderWidth: 1, borderColor: 'rgba(52,199,89,0.25)' },
+  activeBadgeText: { color: '#34C759', fontSize: 13, fontWeight: '600' },
+  webLink: { fontSize: 13, fontWeight: '500', color: 'rgba(255,255,255,0.5)', textDecorationLine: 'underline', marginBottom: 4 },
   legalText: { fontSize: 12, color: 'rgba(255,255,255,0.5)', textAlign: 'center', marginTop: 8, lineHeight: 17 },
 });
