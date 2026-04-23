@@ -656,4 +656,4 @@ export default function CheckoutScreen() {
     </KeyboardAvoidingView>
   );
 }
-mKE THIS REAL CONNECT REAL THIS WITH SUBSCRIPTION REAL MONEY AND REAL APPLE PAY PAYMENT VIA STRIPE REAL ENABLE AND STRIP GIVE ME THIS ERROR "Invalid payment_method_types[0]: must be one of card, acss_debit, affirm, afterpay_clearpay, alipay, au_becs_debit, bacs_debit, bancontact, blik, boleto, cashapp, crypto, customer_balance, eps, fpx, giropay, grabpay, ideal, klarna, konbini, link, mb_way, multibanco, oxxo, p24, pay_by_bank, paynow, paypal, payto, pix, promptpay, sepa_debit, sofort, swish, upi, us_bank_account, wechat_pay, revolut_pay, mobilepay, zip, amazon_pay, alma, twint, kr_card, naver_pay, kakao_pay, payco, nz_bank_account, samsung_pay, billie, paypay, or satispay.
+
