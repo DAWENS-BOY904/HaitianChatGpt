@@ -4,7 +4,7 @@ import { corsHeaders } from '../_shared/cors.ts';
 // Map Stripe product IDs → plan names used in the app
 const PRODUCT_PLAN_MAP: Record<string, string> = {
   'prod_ThBGbK8D1tAh0w': 'plus',  // Premium Yearly product
-  'prod_ThBG3rvKvdGaIU': 'plus',  // Premium Monthly product
+  'prod_UOHQvMBEjUgzfG': 'plus',  // Premium Monthly product
   'prod_ThBG24kiMMlK4f': 'plus',  // Lifetime Access
   'prod_TedMqtvOncuFAL': 'go',    // Pro / Go plan
 };
