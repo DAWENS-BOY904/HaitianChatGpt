@@ -677,3 +677,4 @@ const styles = StyleSheet.create({
   webLink: { fontSize: 13, fontWeight: '500', color: 'rgba(255,255,255,0.5)', textDecorationLine: 'underline', marginBottom: 4 },
   legalText: { fontSize: 12, color: 'rgba(255,255,255,0.5)', textAlign: 'center', marginTop: 8, lineHeight: 17 },
 });
+plus plan allow purchase via checkout page and select payment method card or apple pay in real time and for iphone ios the subscription 8 plan its must expo subscription apple via apple pay verify purchase and in plus add purchase in web when click its auto send you to the web to buy the payment via expo web strip.
