@@ -138,8 +138,7 @@ export default function SubscriptionScreen() {
           : (process.env.EXPO_PUBLIC_RC_ANDROID_KEY || ''));
 
       if (!apiKey) {
-        // No RevenueCat key — fall back to Stripe for Go
-        await purchasePlusWithStripe('go');
+        showAlert('Configuration Error', 'Apple In-App Purchase is not configured. Please contact support.');
         return;
       }
 
@@ -222,14 +221,13 @@ export default function SubscriptionScreen() {
         return;
       }
 
-      // RevenueCat module not available — fall back to Stripe Go
+      // RevenueCat module not available
       if (
         err?.message?.includes('Cannot find module') ||
         err?.message?.includes('NativeModule') ||
         err?.message?.includes('not available')
       ) {
-        console.log('[subscription] RC not available, falling back to Stripe Go');
-        await purchasePlusWithStripe('go');
+        showAlert('Not Available', 'Apple In-App Purchase is only available on a real iPhone device. Please install the app from the App Store.');
         return;
       }
 
@@ -821,4 +819,4 @@ const styles = StyleSheet.create({
   },
 });
 
-in my apple app connect my subscription go plan already set to com.dawinix.go.month now fix go plan to go use verify purchase never web purchase never only veriify apple. 
+
