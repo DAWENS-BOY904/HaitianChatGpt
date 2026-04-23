@@ -134,7 +134,8 @@ Deno.serve(async (req) => {
       'client_reference_id': user.id,
       'metadata[user_id]': user.id,
       'metadata[plan]': plan || resolvedPriceId,
-      allow_promotion_codes: 'true',
+      // Auto-apply DAWINIX2026 coupon (20% off, once) — ivUqadLE
+      'discounts[0][coupon]': 'ivUqadLE',
       billing_address_collection: 'auto',
     });
 
