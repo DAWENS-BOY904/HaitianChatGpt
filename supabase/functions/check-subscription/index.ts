@@ -6,7 +6,7 @@ const PRODUCT_PLAN_MAP: Record<string, string> = {
   'prod_ThBGbK8D1tAh0w': 'plus',  // Premium Yearly product
   'prod_ThBG3rvKvdGaIU': 'plus',  // Premium Monthly product
   'prod_ThBG24kiMMlK4f': 'plus',  // Lifetime Access
-  'prod_TedMqtvOncuFAL': 'go',    // Pro
+  'prod_TedMqtvOncuFAL': 'go',    // Pro / Go plan
 };
 
 const logStep = (step: string, details?: any) => {
@@ -49,6 +49,13 @@ Deno.serve(async (req) => {
 
     if (!searchData?.data?.length) {
       logStep('No Stripe customer found');
+      // Sync user_profiles back to free
+      try {
+        await supabaseAdmin.from('user_profiles').update({
+          subscription_tier: 'free',
+          subscription_expires_at: null,
+        }).eq('id', user.id);
+      } catch (_e) {}
       return new Response(
         JSON.stringify({ subscribed: false, plan: null, subscription_end: null }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
@@ -83,38 +90,45 @@ Deno.serve(async (req) => {
       plan = PRODUCT_PLAN_MAP[productId] || 'plus';
       logStep('Active subscription', { subId: sub.id, productId, plan, subscriptionEnd });
 
-      // ── Update subscription_purchases table ──
-      await supabaseAdmin.from('subscription_purchases').upsert({
-        user_id: user.id,
-        plan_id: plan,
-        platform: 'stripe',
-        transaction_id: sub.id,
-        original_transaction_id: sub.id,
-        purchase_date: new Date(sub.created * 1000).toISOString(),
-        expiry_date: subscriptionEnd,
-        status: 'active',
-        auto_renewing: !sub.cancel_at_period_end,
-        gross_amount: (sub.items?.data?.[0]?.price?.unit_amount ?? 0) / 100,
-        platform_fee: 0,
-        net_amount: (sub.items?.data?.[0]?.price?.unit_amount ?? 0) / 100,
-        currency: sub.currency?.toUpperCase() ?? 'USD',
-        stripe_customer_id: customerId,
-        stripe_subscription_id: stripeSubscriptionId,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'transaction_id' }).catch(() => {});
+      // ── Update subscription_purchases table (use try-catch, not .catch()) ──
+      try {
+        await supabaseAdmin.from('subscription_purchases').upsert({
+          user_id: user.id,
+          plan_id: plan,
+          platform: 'stripe',
+          transaction_id: sub.id,
+          original_transaction_id: sub.id,
+          purchase_date: new Date(sub.created * 1000).toISOString(),
+          expiry_date: subscriptionEnd,
+          status: 'active',
+          auto_renewing: !sub.cancel_at_period_end,
+          gross_amount: (sub.items?.data?.[0]?.price?.unit_amount ?? 0) / 100,
+          platform_fee: 0,
+          net_amount: (sub.items?.data?.[0]?.price?.unit_amount ?? 0) / 100,
+          currency: sub.currency?.toUpperCase() ?? 'USD',
+          stripe_customer_id: customerId,
+          stripe_subscription_id: stripeSubscriptionId,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'transaction_id' });
+      } catch (_e) {}
 
       // ── Sync user_profiles.subscription_tier ──
-      await supabaseAdmin.from('user_profiles').update({
-        subscription_tier: plan,
-        subscription_expires_at: subscriptionEnd,
-      }).eq('id', user.id).catch(() => {});
+      try {
+        await supabaseAdmin.from('user_profiles').update({
+          subscription_tier: plan,
+          subscription_expires_at: subscriptionEnd,
+        }).eq('id', user.id);
+      } catch (_e) {}
+
     } else {
       logStep('No active subscription');
       // Sync user_profiles back to free if expired
-      await supabaseAdmin.from('user_profiles').update({
-        subscription_tier: 'free',
-        subscription_expires_at: null,
-      }).eq('id', user.id).catch(() => {});
+      try {
+        await supabaseAdmin.from('user_profiles').update({
+          subscription_tier: 'free',
+          subscription_expires_at: null,
+        }).eq('id', user.id);
+      } catch (_e) {}
     }
 
     return new Response(

@@ -10,9 +10,9 @@ import {
   Linking,
   Alert,
   ActivityIndicator,
-  Image,
   ImageBackground,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
 import { useSubscription } from '../hooks/useSubscription';
@@ -61,9 +61,10 @@ const RC_API_KEY = Platform.select({
   default: '',
 });
 
-const GO_PALM_IMAGE = 'https://files.catbox.moe/d3i5u4.png';
-const PLUS_PALM_IMAGE = 'https://images.unsplash.com/photo-1546484396-fb3fc6f95f98?w=400&h=300&fit=crop';
-const MAP_BACKGROUND = 'https://images.unsplash.com/photo-1524661135-423995f22d0b?w=600&h=800&fit=crop';
+// Local generated plan logos
+const GO_LOGO = require('../assets/images/plan-go.png');
+const PLUS_LOGO = require('../assets/images/plan-plus.png');
+const MAP_BACKGROUND = 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=800&h=1200&fit=crop'; // dark space/neige bg
 
 export default function SubscriptionScreen() {
   const { colors, isDark } = useTheme();
@@ -133,7 +134,7 @@ export default function SubscriptionScreen() {
     ? 'Keep chatting with expanded access'
     : 'Do more with advanced intelligence';
 
-  const currentPalmImage = selectedPlan === 'go' ? GO_PALM_IMAGE : PLUS_PALM_IMAGE;
+  const currentLogo = selectedPlan === 'go' ? GO_LOGO : PLUS_LOGO;
 
   // ── Open Stripe checkout in browser ──
   const purchaseWithStripe = async (plan: 'go' | 'plus') => {
@@ -383,16 +384,29 @@ export default function SubscriptionScreen() {
         contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 56, paddingBottom: insets.bottom + 100 }]}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.imageContainer}>
-          <Image
-            source={{ uri: currentPalmImage }}
-            style={styles.palmImage}
-            resizeMode="cover"
-          />
-          <View style={[styles.planBadge, { backgroundColor: planColor }]}>
-            <Text style={styles.planBadgeText}>
-              {selectedPlan === 'go' ? 'GO' : 'PLUS'}
-            </Text>
+        {/* Plan logo card with neige/glass effect */}
+        <View style={styles.logoCard}>
+          {/* Outer glow ring */}
+          <View style={[styles.logoGlowRing, {
+            borderColor: selectedPlan === 'go' ? 'rgba(52,199,89,0.6)' : 'rgba(107,92,231,0.7)',
+            shadowColor: selectedPlan === 'go' ? '#34C759' : '#6B5CE7',
+          }]}>
+            <Image
+              source={currentLogo}
+              style={styles.logoImage}
+              contentFit="cover"
+              transition={300}
+            />
+            {/* Neige/frost overlay */}
+            <View style={styles.frostOverlay} />
+            {/* Plan label pill */}
+            <View style={[styles.planPill, {
+              backgroundColor: selectedPlan === 'go' ? '#34C759' : '#6B5CE7'
+            }]}>
+              <Text style={styles.planPillText}>
+                {selectedPlan === 'go' ? '⚡ GO' : '✨ PLUS'}
+              </Text>
+            </View>
           </View>
         </View>
 
@@ -539,31 +553,51 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     zIndex: 1,
   },
-  imageContainer: {
-    width: 200,
-    height: 140,
-    borderRadius: 20,
-    overflow: 'hidden',
-    marginBottom: 20,
-    position: 'relative',
-    borderWidth: 3,
-    borderColor: '#6B5CE7',
-    shadowColor: '#6B5CE7',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.5,
-    shadowRadius: 16,
-    elevation: 10,
+  logoCard: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 24,
+    marginTop: 8,
   },
-  palmImage: { width: '100%', height: '100%' },
-  planBadge: {
+  logoGlowRing: {
+    width: 160,
+    height: 160,
+    borderRadius: 40,
+    borderWidth: 2.5,
+    overflow: 'hidden',
+    position: 'relative',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.7,
+    shadowRadius: 24,
+    elevation: 16,
+  },
+  logoImage: {
+    width: '100%',
+    height: '100%',
+  },
+  frostOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    // Neige/ice texture illusion via layered transparency
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.3)',
+    borderLeftWidth: 1,
+    borderLeftColor: 'rgba(255,255,255,0.15)',
+  },
+  planPill: {
     position: 'absolute',
-    top: 10,
-    right: 10,
-    paddingHorizontal: 12,
+    bottom: 12,
+    alignSelf: 'center',
+    paddingHorizontal: 16,
     paddingVertical: 6,
     borderRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
+    elevation: 6,
   },
-  planBadgeText: { color: '#FFF', fontSize: 12, fontWeight: '800', letterSpacing: 1 },
+  planPillText: { color: '#FFF', fontSize: 13, fontWeight: '800', letterSpacing: 1 },
   title: {
     fontSize: 28,
     fontWeight: '700',

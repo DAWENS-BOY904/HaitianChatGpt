@@ -3,8 +3,8 @@ import { corsHeaders } from '../_shared/cors.ts';
 
 // ── Real Stripe price IDs (monthly recurring subscriptions) ──
 const PRICE_MAP: Record<string, string> = {
-  go:   'price_1SjmtpE0VkO7z1Vn1lpvP0PC', // $10/month – Premium Monthly
-  plus: 'price_1ShK60E0VkO7z1VnHAKICksq', // $20/month – Premium Yearly monthly price
+  go:   'price_1SjmtpE0VkO7z1Vn1lpvP0PC', // $8/month – Go plan
+  plus: 'price_1ShK60E0VkO7z1VnHAKICksq', // $19.99/month – Plus plan
 };
 
 const logStep = (step: string, details?: any) => {
@@ -66,9 +66,6 @@ Deno.serve(async (req) => {
     }
 
     // ── Resolve price ID ──
-    // 1. Use directly-provided priceId if it looks like a real Stripe price
-    // 2. Otherwise map from plan name
-    // 3. Fall back to PRICE_MAP['go']
     let resolvedPriceId: string = '';
     if (rawPriceId && String(rawPriceId).startsWith('price_')) {
       resolvedPriceId = rawPriceId;
@@ -80,51 +77,56 @@ Deno.serve(async (req) => {
     logStep('Resolved price', { resolvedPriceId });
 
     // ── User email ──
-    const { data: profile } = await supabaseClient
-      .from('user_profiles')
-      .select('email')
-      .eq('id', user.id)
-      .single();
-    const userEmail = profile?.email || user.email || '';
+    let userEmail = user.email || '';
+    try {
+      const { data: profile } = await supabaseClient
+        .from('user_profiles')
+        .select('email')
+        .eq('id', user.id)
+        .single();
+      if (profile?.email) userEmail = profile.email;
+    } catch (_e) {}
 
     // ── Find or create Stripe customer ──
-    // Search by email first so we reuse the same customer object
     let customerId: string | undefined;
-    const customerSearchRes = await fetch(
-      `https://api.stripe.com/v1/customers?email=${encodeURIComponent(userEmail)}&limit=1`,
-      { headers: { Authorization: `Bearer ${stripeKey}`, 'Stripe-Version': '2025-03-31.basil' } },
-    );
-    const customerSearchData = await customerSearchRes.json();
-    if (customerSearchData?.data?.length > 0) {
-      customerId = customerSearchData.data[0].id;
-      logStep('Existing Stripe customer found', { customerId });
-    } else {
-      // Create new customer
-      const createCustomerRes = await fetch('https://api.stripe.com/v1/customers', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${stripeKey}`,
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'Stripe-Version': '2025-03-31.basil',
-        },
-        body: new URLSearchParams({
-          email: userEmail,
-          'metadata[user_id]': user.id,
-          'metadata[plan]': plan || resolvedPriceId,
-        }).toString(),
-      });
-      const newCustomer = await createCustomerRes.json();
-      customerId = newCustomer?.id;
-      logStep('New Stripe customer created', { customerId });
+    try {
+      const customerSearchRes = await fetch(
+        `https://api.stripe.com/v1/customers?email=${encodeURIComponent(userEmail)}&limit=1`,
+        { headers: { Authorization: `Bearer ${stripeKey}`, 'Stripe-Version': '2025-03-31.basil' } },
+      );
+      const customerSearchData = await customerSearchRes.json();
+      if (customerSearchData?.data?.length > 0) {
+        customerId = customerSearchData.data[0].id;
+        logStep('Existing Stripe customer found', { customerId });
+      } else {
+        const createCustomerRes = await fetch('https://api.stripe.com/v1/customers', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${stripeKey}`,
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Stripe-Version': '2025-03-31.basil',
+          },
+          body: new URLSearchParams({
+            email: userEmail,
+            'metadata[user_id]': user.id,
+            'metadata[plan]': plan || resolvedPriceId,
+          }).toString(),
+        });
+        const newCustomer = await createCustomerRes.json();
+        customerId = newCustomer?.id;
+        logStep('New Stripe customer created', { customerId });
+      }
+    } catch (customerErr: any) {
+      logStep('Customer lookup error (non-fatal)', { msg: customerErr?.message });
     }
 
     // ── Build Stripe Checkout Session (subscription mode) ──
-    // NOTE: payment_method_types: ['card'] is the ONLY valid value via API.
-    // Apple Pay & Google Pay work automatically on Stripe's hosted checkout page
-    // when enabled in the Stripe Dashboard (no extra code needed).
+    // NOTE: payment_method_types: ['card'] is the ONLY valid value via the API.
+    // Apple Pay & Google Pay activate automatically on Stripe's hosted checkout
+    // when enabled in the Stripe Dashboard — no extra params required.
     const params = new URLSearchParams({
       mode: 'subscription',
-      'payment_method_types[0]': 'card',   // Apple Pay/Google Pay handled automatically by Stripe
+      'payment_method_types[0]': 'card',
       'line_items[0][price]': resolvedPriceId,
       'line_items[0][quantity]': '1',
       success_url: 'dawinixht://subscription/success?session_id={CHECKOUT_SESSION_ID}',
@@ -133,8 +135,7 @@ Deno.serve(async (req) => {
       'metadata[user_id]': user.id,
       'metadata[plan]': plan || resolvedPriceId,
       allow_promotion_codes: 'true',
-      // Ask for billing address (required for some card types)
-      'billing_address_collection': 'auto',
+      billing_address_collection: 'auto',
     });
 
     if (customerId) {
@@ -167,26 +168,29 @@ Deno.serve(async (req) => {
 
     logStep('Checkout session created', { sessionId: stripeData.id, customerId });
 
-    // ── Pre-record pending subscription in DB (will be confirmed by check-subscription) ──
+    // ── Post-session DB updates (non-blocking, using try-catch instead of .catch()) ──
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
     );
 
     // Store stripe_customer_id on user profile for quick lookup later
-    await supabaseAdmin
-      .from('user_profiles')
-      .update({ billing_info: { stripe_customer_id: customerId } } as any)
-      .eq('id', user.id)
-      .catch(() => {});
+    try {
+      await supabaseAdmin
+        .from('user_profiles')
+        .update({ billing_info: { stripe_customer_id: customerId } } as any)
+        .eq('id', user.id);
+    } catch (_e) {}
 
     // Log activity (non-blocking)
-    await supabaseAdmin.from('activity_logs').insert({
-      user_id: user.id,
-      action: 'checkout_session_created',
-      action_type: 'payment',
-      details: { sessionId: stripeData.id, plan: plan || resolvedPriceId, customerId },
-    }).catch(() => {});
+    try {
+      await supabaseAdmin.from('activity_logs').insert({
+        user_id: user.id,
+        action: 'checkout_session_created',
+        action_type: 'payment',
+        details: { sessionId: stripeData.id, plan: plan || resolvedPriceId, customerId },
+      });
+    } catch (_e) {}
 
     return new Response(
       JSON.stringify({ url: stripeData.url, sessionId: stripeData.id }),
