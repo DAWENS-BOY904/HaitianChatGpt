@@ -497,4 +497,4 @@ export default function AuthenticatorAppScreen() {
     </View>
   );
 }
-please connect this with a real authenticator expo or other please no demo connect all real; with real qr code for my app real authenticator please blur mode effect only real.
+
