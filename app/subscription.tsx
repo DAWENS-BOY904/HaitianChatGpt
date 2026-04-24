@@ -49,8 +49,8 @@ const STRIPE_PRICES = {
 
 // ── Apple IAP product IDs (Go plan) ──
 const APPLE_PRODUCT_ID = Platform.select({
-  ios: 'com.dawinix.go.month',
-  default: 'com.dawinix.go.month',
+  ios: 'com.dawinix.go.monthly2',
+  default: 'com.dawinix.go.monthly2',
 });
 
 // ── RevenueCat API key ──
