@@ -758,3 +758,4 @@ const styles = StyleSheet.create({
   chatFabText: { color: '#FFFFFF', fontSize: 17, fontWeight: '600' },
   profilePhoto: { width: 30, height: 30, borderRadius: 15 },
 });
+hello ai if you see this error m,ake the change without leaving please dont skip please in top right the icon search and the logo profile user icon to go to settings the ackround yo 2 dwe blur effect and pa separe yo seul background yo 2 souli  and make blur better lel nn dark mode and new chat that connect with accent color must be in blur with the accent color to blur  and in home page upgrade button background in blur and the 3ba search icon background in blur  nmake all blur better when you have have pro plan remove upgrade button in side menu and set in settings to not free plan  in images page when you send ai photoor ai send you photo save n my photo that in images page.
