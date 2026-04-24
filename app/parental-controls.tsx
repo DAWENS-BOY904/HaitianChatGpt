@@ -9,6 +9,7 @@ import {
   Platform,
   Modal,
   ActivityIndicator,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
@@ -321,77 +322,82 @@ export default function ParentalControlsScreen() {
         transparent
         onRequestClose={() => setShowAddMember(false)}
       >
-        <View style={{ flex: 1, justifyContent: 'flex-end' }}>
-          {/* Backdrop blur */}
-          {Platform.OS === 'ios' ? (
-            <BlurView
-              intensity={isDark ? 40 : 30}
-              tint={isDark ? 'dark' : 'light'}
-              style={StyleSheet.absoluteFill}
-            />
-          ) : (
-            <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.5)' }]} />
-          )}
-          <View style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.15)' }]} />
-
-          <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setShowAddMember(false)} />
-
-          {/* Sheet with blur on iOS */}
-          <View style={{
-            borderTopLeftRadius: 28, borderTopRightRadius: 28,
-            overflow: 'hidden',
-            shadowColor: '#000', shadowOffset: { width: 0, height: -8 },
-            shadowOpacity: 0.35, shadowRadius: 24, elevation: 24,
-          }}>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <View style={{ flex: 1, justifyContent: 'flex-end' }}>
+            {/* Backdrop */}
             {Platform.OS === 'ios' ? (
               <BlurView
-                intensity={isDark ? 90 : 75}
+                intensity={isDark ? 40 : 30}
                 tint={isDark ? 'dark' : 'light'}
-                style={{ borderTopLeftRadius: 28, borderTopRightRadius: 28, overflow: 'hidden' }}
-              >
-                <InviteModalBody
-                  isDark={isDark}
-                  primaryText={primaryText}
-                  secondaryText={secondaryText}
-                  inputBg={inputBg}
-                  inputBorder={inputBorder}
-                  surfaceBg={surfaceBg}
-                  divider={divider}
-                  insets={insets}
-                  email={email}
-                  setEmail={setEmail}
-                  selectedRole={selectedRole}
-                  setSelectedRole={setSelectedRole}
-                  canSend={canSend}
-                  loading={loading}
-                  onSend={handleSendInvitation}
-                  onCancel={() => setShowAddMember(false)}
-                />
-              </BlurView>
+                style={StyleSheet.absoluteFill}
+              />
             ) : (
-              <View style={{ backgroundColor: isDark ? '#1C1C1E' : '#F2F2F7', borderTopLeftRadius: 28, borderTopRightRadius: 28, overflow: 'hidden' }}>
-                <InviteModalBody
-                  isDark={isDark}
-                  primaryText={primaryText}
-                  secondaryText={secondaryText}
-                  inputBg={inputBg}
-                  inputBorder={inputBorder}
-                  surfaceBg={surfaceBg}
-                  divider={divider}
-                  insets={insets}
-                  email={email}
-                  setEmail={setEmail}
-                  selectedRole={selectedRole}
-                  setSelectedRole={setSelectedRole}
-                  canSend={canSend}
-                  loading={loading}
-                  onSend={handleSendInvitation}
-                  onCancel={() => setShowAddMember(false)}
-                />
-              </View>
+              <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.5)' }]} />
             )}
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.15)' }]} />
+
+            <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setShowAddMember(false)} />
+
+            {/* Sheet */}
+            <View style={{
+              borderTopLeftRadius: 28, borderTopRightRadius: 28,
+              overflow: 'hidden',
+              shadowColor: '#000', shadowOffset: { width: 0, height: -8 },
+              shadowOpacity: 0.35, shadowRadius: 24, elevation: 24,
+            }}>
+              {Platform.OS === 'ios' ? (
+                <BlurView
+                  intensity={isDark ? 90 : 75}
+                  tint={isDark ? 'dark' : 'light'}
+                  style={{ borderTopLeftRadius: 28, borderTopRightRadius: 28, overflow: 'hidden' }}
+                >
+                  <InviteModalBody
+                    isDark={isDark}
+                    primaryText={primaryText}
+                    secondaryText={secondaryText}
+                    inputBg={inputBg}
+                    inputBorder={inputBorder}
+                    surfaceBg={surfaceBg}
+                    divider={divider}
+                    insets={insets}
+                    email={email}
+                    setEmail={setEmail}
+                    selectedRole={selectedRole}
+                    setSelectedRole={setSelectedRole}
+                    canSend={canSend}
+                    loading={loading}
+                    onSend={handleSendInvitation}
+                    onCancel={() => setShowAddMember(false)}
+                  />
+                </BlurView>
+              ) : (
+                <View style={{ backgroundColor: isDark ? '#1C1C1E' : '#F2F2F7', borderTopLeftRadius: 28, borderTopRightRadius: 28, overflow: 'hidden' }}>
+                  <InviteModalBody
+                    isDark={isDark}
+                    primaryText={primaryText}
+                    secondaryText={secondaryText}
+                    inputBg={inputBg}
+                    inputBorder={inputBorder}
+                    surfaceBg={surfaceBg}
+                    divider={divider}
+                    insets={insets}
+                    email={email}
+                    setEmail={setEmail}
+                    selectedRole={selectedRole}
+                    setSelectedRole={setSelectedRole}
+                    canSend={canSend}
+                    loading={loading}
+                    onSend={handleSendInvitation}
+                    onCancel={() => setShowAddMember(false)}
+                  />
+                </View>
+              )}
+            </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -403,83 +409,100 @@ function InviteModalBody({
   email, setEmail, selectedRole, setSelectedRole, canSend, loading, onSend, onCancel,
 }: any) {
   return (
-    <View style={{ paddingBottom: insets.bottom + 24 }}>
-      {/* Drag handle */}
-      <View style={{ alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.12)', marginTop: 12, marginBottom: 16 }} />
+    <ScrollView
+      keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator={false}
+      bounces={false}
+    >
+      <View style={{ paddingBottom: insets.bottom + 24 }}>
+        {/* Drag handle */}
+        <View style={{
+          alignSelf: 'center', width: 36, height: 4, borderRadius: 2,
+          backgroundColor: isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.12)',
+          marginTop: 12, marginBottom: 16,
+        }} />
 
-      {/* Header row */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, marginBottom: 20 }}>
-        <TouchableOpacity onPress={onCancel} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <Text style={{ fontSize: 17, color: secondaryText }}>Cancel</Text>
-        </TouchableOpacity>
-        <Text style={{ fontSize: 17, fontWeight: '700', color: primaryText }}>Invite family member</Text>
-        <TouchableOpacity onPress={onSend} disabled={!canSend || loading} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          {loading ? (
-            <ActivityIndicator size="small" color="#10A37F" />
-          ) : (
-            <Text style={{ fontSize: 17, fontWeight: '700', color: canSend ? '#10A37F' : secondaryText }}>Send</Text>
-          )}
-        </TouchableOpacity>
-      </View>
+        {/* Header row */}
+        <View style={{
+          flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+          paddingHorizontal: 20, marginBottom: 20,
+        }}>
+          <TouchableOpacity onPress={onCancel} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Text style={{ fontSize: 17, color: secondaryText }}>Cancel</Text>
+          </TouchableOpacity>
+          <Text style={{ fontSize: 17, fontWeight: '700', color: primaryText }}>Invite family member</Text>
+          <TouchableOpacity onPress={onSend} disabled={!canSend || loading} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            {loading ? (
+              <ActivityIndicator size="small" color="#10A37F" />
+            ) : (
+              <Text style={{ fontSize: 17, fontWeight: '700', color: canSend ? '#10A37F' : secondaryText }}>Send</Text>
+            )}
+          </TouchableOpacity>
+        </View>
 
-      <View style={{ paddingHorizontal: 20 }}>
-        {/* Email */}
-        <Text style={{ fontSize: 13, color: secondaryText, fontWeight: '500', marginBottom: 6, marginLeft: 2 }}>Email address</Text>
-        <TextInput
-          style={{
-            backgroundColor: inputBg, borderRadius: 12,
-            paddingHorizontal: 16, paddingVertical: 14,
-            fontSize: 16, color: primaryText, marginBottom: 16,
-            borderWidth: StyleSheet.hairlineWidth, borderColor: inputBorder,
-          }}
-          placeholder="name@email.com"
-          placeholderTextColor={secondaryText}
-          value={email}
-          onChangeText={setEmail}
-          keyboardType="email-address"
-          autoCapitalize="none"
-          autoCorrect={false}
-          autoFocus
-        />
+        <View style={{ paddingHorizontal: 20 }}>
+          {/* Email */}
+          <Text style={{ fontSize: 13, color: secondaryText, fontWeight: '500', marginBottom: 6, marginLeft: 2 }}>
+            Email address
+          </Text>
+          <TextInput
+            style={{
+              backgroundColor: inputBg, borderRadius: 12,
+              paddingHorizontal: 16, paddingVertical: 14,
+              fontSize: 16, color: primaryText, marginBottom: 16,
+              borderWidth: StyleSheet.hairlineWidth, borderColor: inputBorder,
+            }}
+            placeholder="name@email.com"
+            placeholderTextColor={secondaryText}
+            value={email}
+            onChangeText={setEmail}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
 
-        <Text style={{ fontSize: 13, color: secondaryText, lineHeight: 18, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', borderRadius: 10, padding: 12, marginBottom: 20 }}>
-          If your family member is new to Dawinix, they will be asked to create an account.
-        </Text>
+          <Text style={{
+            fontSize: 13, color: secondaryText, lineHeight: 18,
+            backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
+            borderRadius: 10, padding: 12, marginBottom: 20,
+          }}>
+            If your family member is new to Dawinix, they will be asked to create an account.
+          </Text>
 
-        {/* Role selector */}
-        <Text style={{ fontSize: 16, color: primaryText, fontWeight: '500', marginBottom: 10 }}>This person is</Text>
-        <View style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)', borderRadius: 14, overflow: 'hidden' }}>
-          {[
-            { role: 'parent' as FamilyRole, label: 'My parent or guardian' },
-            { role: 'child' as FamilyRole, label: 'My child' },
-          ].map((item, idx, arr) => (
-            <TouchableOpacity
-              key={item.role}
-              style={{
-                flexDirection: 'row', alignItems: 'center',
-                padding: 16,
-                borderBottomWidth: idx < arr.length - 1 ? StyleSheet.hairlineWidth : 0,
-                borderBottomColor: divider,
-              }}
-              onPress={() => setSelectedRole(item.role)}
-              activeOpacity={0.6}
-            >
-              <View style={{
-                width: 22, height: 22, borderRadius: 11,
-                borderWidth: 2,
-                borderColor: selectedRole === item.role ? '#10A37F' : secondaryText,
-                alignItems: 'center', justifyContent: 'center', marginRight: 14,
-              }}>
-                {selectedRole === item.role && (
-                  <View style={{ width: 11, height: 11, borderRadius: 6, backgroundColor: '#10A37F' }} />
-                )}
-              </View>
-              <Text style={{ fontSize: 16, color: primaryText }}>{item.label}</Text>
-            </TouchableOpacity>
-          ))}
+          {/* Role selector */}
+          <Text style={{ fontSize: 16, color: primaryText, fontWeight: '500', marginBottom: 10 }}>This person is</Text>
+          <View style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)', borderRadius: 14, overflow: 'hidden' }}>
+            {([
+              { role: 'parent' as FamilyRole, label: 'My parent or guardian' },
+              { role: 'child' as FamilyRole, label: 'My child' },
+            ] as { role: FamilyRole; label: string }[]).map((item, idx, arr) => (
+              <TouchableOpacity
+                key={item.role}
+                style={{
+                  flexDirection: 'row', alignItems: 'center',
+                  padding: 16,
+                  borderBottomWidth: idx < arr.length - 1 ? StyleSheet.hairlineWidth : 0,
+                  borderBottomColor: divider,
+                }}
+                onPress={() => setSelectedRole(item.role)}
+                activeOpacity={0.6}
+              >
+                <View style={{
+                  width: 22, height: 22, borderRadius: 11,
+                  borderWidth: 2,
+                  borderColor: selectedRole === item.role ? '#10A37F' : secondaryText,
+                  alignItems: 'center', justifyContent: 'center', marginRight: 14,
+                }}>
+                  {selectedRole === item.role && (
+                    <View style={{ width: 11, height: 11, borderRadius: 6, backgroundColor: '#10A37F' }} />
+                  )}
+                </View>
+                <Text style={{ fontSize: 16, color: primaryText }}>{item.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
       </View>
-    </View>
+    </ScrollView>
   );
 }
-fix the modal mwen paka wel and keyboard dwe paret only le pral ekri.
