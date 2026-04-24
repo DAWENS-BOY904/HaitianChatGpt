@@ -101,3 +101,4 @@ export default function NotificationsScreen() {
     </View>
   );
 }
+remove all icon only tex like this:https://files.catbox.moe/96r4h7.png remove all icon make better and real blur mode efect.
