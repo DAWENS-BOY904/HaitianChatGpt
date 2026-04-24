@@ -958,5 +958,3 @@ const styles = StyleSheet.create({
   chatFabText: { color: '#FFFFFF', fontSize: 17, fontWeight: '600' },
   profilePhoto: { width: 30, height: 30, borderRadius: 15 },
 });
-
-I DONT SEE NAME AND THE ICON FIX THE OLD OLD WITH BLUR
