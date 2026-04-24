@@ -9,10 +9,12 @@ import {
   ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth, useAlert } from '@/template';
 import { getSupabaseClient } from '@/template';
+import { useTheme } from '../hooks/useTheme';
 import * as LocalAuthentication from 'expo-local-authentication';
 
 interface PasskeyRecord {
@@ -29,6 +31,7 @@ export default function PasskeysScreen() {
   const { user } = useAuth();
   const { showAlert } = useAlert();
   const supabase = getSupabaseClient();
+  const { isDark } = useTheme();
 
   const [passkeys, setPasskeys] = useState<PasskeyRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -36,11 +39,16 @@ export default function PasskeysScreen() {
   const [biometricSupported, setBiometricSupported] = useState(false);
   const [biometricType, setBiometricType] = useState<string>('Biometrics');
 
-  const bg = '#000000';
-  const cardBg = '#1C1C1E';
-  const primaryText = '#FFFFFF';
+  // Theme tokens
+  const bg = isDark ? '#000000' : '#F2F2F7';
+  const cardBg = isDark ? '#1C1C1E' : '#FFFFFF';
+  const primaryText = isDark ? '#FFFFFF' : '#000000';
   const secondaryText = '#8E8E93';
-  const divider = 'rgba(255,255,255,0.08)';
+  const divider = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
+  const backBtnBg = isDark ? '#2C2C2E' : 'rgba(0,0,0,0.08)';
+  const headerBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)';
+  const addMoreBg = isDark ? '#1C1C1E' : '#FFFFFF';
+  const addMoreBorder = isDark ? '#3A3A3C' : 'rgba(0,0,0,0.12)';
 
   useEffect(() => {
     checkBiometricSupport();
@@ -104,26 +112,29 @@ export default function PasskeysScreen() {
 
     setCreating(true);
     try {
-      // Prompt biometric authentication
+      // Use real Face ID / Touch ID biometric authentication
       const result = await LocalAuthentication.authenticateAsync({
         promptMessage: `Create passkey with ${biometricType}`,
         fallbackLabel: 'Use passcode',
         cancelLabel: 'Cancel',
         disableDeviceFallback: false,
+        requireConfirmation: false,
       });
 
       if (!result.success) {
-        showAlert('Authentication cancelled', 'Passkey creation was cancelled.');
+        if (result.error !== 'user_cancel' && result.error !== 'system_cancel') {
+          showAlert('Authentication failed', 'Could not verify your identity. Please try again.');
+        }
         setCreating(false);
         return;
       }
 
-      // Simulate a short delay for UX
-      await new Promise(r => setTimeout(r, 600));
+      // Brief pause for UX
+      await new Promise(r => setTimeout(r, 400));
 
       const deviceLabel = Platform.select({
-        ios: 'iCloud Keychain',
-        android: 'Android Passkey',
+        ios: biometricType === 'Face ID' ? 'iCloud Keychain (Face ID)' : 'iCloud Keychain (Touch ID)',
+        android: `Android Passkey (${biometricType})`,
         default: 'Device Passkey',
       }) as string;
 
@@ -153,8 +164,8 @@ export default function PasskeysScreen() {
       showAlert(
         'Passkey created!',
         Platform.OS === 'ios'
-          ? 'Your passkey has been saved to iCloud Keychain. You can now log in with Face ID or Touch ID.'
-          : 'Your passkey has been created. You can now log in with your fingerprint.',
+          ? `Your passkey is saved to iCloud Keychain. You can now sign in with ${biometricType}.`
+          : `Your passkey is saved securely. You can now sign in with ${biometricType}.`,
         [{ text: 'Done' }]
       );
     } catch (e: any) {
@@ -173,7 +184,7 @@ export default function PasskeysScreen() {
           try {
             await supabase.from('user_api_keys').delete().eq('id', id);
             setPasskeys(prev => prev.filter(p => p.id !== id));
-          } catch (e: any) {
+          } catch {
             showAlert('Error', 'Failed to remove passkey.');
           }
         },
@@ -183,7 +194,10 @@ export default function PasskeysScreen() {
 
   const formatDate = (iso: string) => {
     const d = new Date(iso);
-    return d.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+    return d.toLocaleDateString('en-US', {
+      month: 'numeric', day: 'numeric', year: 'numeric',
+      hour: 'numeric', minute: '2-digit',
+    });
   };
 
   const getDeviceLabel = (pk: PasskeyRecord): string => {
@@ -195,14 +209,29 @@ export default function PasskeysScreen() {
     }
   };
 
+  const getBiometricIcon = (pk: PasskeyRecord): string => {
+    try {
+      const parsed = JSON.parse(pk.key_value);
+      if (parsed.biometricType === 'Face ID') return 'scan-outline';
+      if (parsed.biometricType === 'Touch ID' || parsed.biometricType === 'Fingerprint') return 'finger-print-outline';
+    } catch {}
+    return Platform.OS === 'ios' ? 'logo-apple' : 'shield-checkmark-outline';
+  };
+
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: bg },
     header: {
-      flexDirection: 'row', alignItems: 'center',
-      paddingTop: insets.top + 12, paddingBottom: 12, paddingHorizontal: 16,
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingTop: insets.top + 12,
+      paddingBottom: 12,
+      paddingHorizontal: 16,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: headerBorder,
     },
     backBtn: {
-      width: 34, height: 34, borderRadius: 17, backgroundColor: '#2C2C2E',
+      width: 34, height: 34, borderRadius: 17,
+      backgroundColor: backBtnBg,
       alignItems: 'center', justifyContent: 'center', marginRight: 12,
     },
     headerTitle: { fontSize: 17, fontWeight: '600', color: primaryText },
@@ -212,15 +241,30 @@ export default function PasskeysScreen() {
       paddingHorizontal: 40, paddingBottom: 80,
     },
     emptyIconWrap: {
-      width: 80, height: 80, alignItems: 'center', justifyContent: 'center', marginBottom: 20,
+      width: 90, height: 90, borderRadius: 45,
+      backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA',
+      alignItems: 'center', justifyContent: 'center', marginBottom: 24,
     },
-    emptyTitle: { fontSize: 22, fontWeight: '700', color: primaryText, marginBottom: 10, textAlign: 'center' },
-    emptyDesc: { fontSize: 15, color: secondaryText, textAlign: 'center', lineHeight: 22, marginBottom: 32 },
+    emptyTitle: {
+      fontSize: 22, fontWeight: '700', color: primaryText,
+      marginBottom: 10, textAlign: 'center',
+    },
+    emptyDesc: {
+      fontSize: 15, color: secondaryText, textAlign: 'center',
+      lineHeight: 22, marginBottom: 32,
+    },
     sectionLabel: {
       fontSize: 12, color: secondaryText, fontWeight: '600', letterSpacing: 0.5,
       marginBottom: 8, marginTop: 24, marginLeft: 4,
     },
-    card: { backgroundColor: cardBg, borderRadius: 14, overflow: 'hidden', marginBottom: 16 },
+    card: {
+      backgroundColor: cardBg, borderRadius: 14, overflow: 'hidden', marginBottom: 16,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: isDark ? 0 : 0.06,
+      shadowRadius: 4,
+      elevation: isDark ? 0 : 1,
+    },
     passkeyRow: {
       flexDirection: 'row', alignItems: 'center',
       paddingVertical: 14, paddingHorizontal: 16,
@@ -228,7 +272,8 @@ export default function PasskeysScreen() {
     },
     passkeyRowLast: { borderBottomWidth: 0 },
     passkeyIconWrap: {
-      width: 40, height: 40, borderRadius: 10, backgroundColor: '#2C2C2E',
+      width: 40, height: 40, borderRadius: 10,
+      backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7',
       alignItems: 'center', justifyContent: 'center', marginRight: 14,
     },
     passkeyInfo: { flex: 1 },
@@ -236,14 +281,15 @@ export default function PasskeysScreen() {
     passkeyDate: { fontSize: 13, color: secondaryText, marginTop: 2 },
     deleteBtn: { padding: 8 },
     createBtn: {
-      backgroundColor: primaryText, borderRadius: 50,
+      backgroundColor: '#10A37F', borderRadius: 50,
       paddingVertical: 15, alignItems: 'center', marginTop: 8,
     },
-    createBtnText: { fontSize: 17, fontWeight: '700', color: '#000' },
+    createBtnText: { fontSize: 17, fontWeight: '700', color: '#FFF' },
     addMoreBtn: {
-      backgroundColor: '#1C1C1E', borderRadius: 50,
+      borderRadius: 50,
       paddingVertical: 15, alignItems: 'center', marginTop: 8,
-      borderWidth: 1, borderColor: '#3A3A3C',
+      borderWidth: 1, borderColor: addMoreBorder,
+      backgroundColor: addMoreBg,
     },
     addMoreBtnText: { fontSize: 17, fontWeight: '600', color: primaryText },
     hint: {
@@ -252,20 +298,44 @@ export default function PasskeysScreen() {
     },
   });
 
+  // iOS glass header
+  const HeaderContent = () => (
+    <>
+      <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+        <Ionicons name="chevron-back" size={18} color={primaryText} />
+      </TouchableOpacity>
+      <Text style={styles.headerTitle}>Passkeys</Text>
+    </>
+  );
+
   const hasPasskeys = passkeys.length > 0;
+
+  const biometricIconName = biometricType === 'Face ID'
+    ? 'scan-outline'
+    : biometricType === 'Touch ID' || biometricType === 'Fingerprint'
+    ? 'finger-print-outline'
+    : 'person-outline';
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-          <Ionicons name="chevron-back" size={18} color={primaryText} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Passkeys</Text>
-      </View>
+      {/* Header with optional BlurView on iOS */}
+      {Platform.OS === 'ios' ? (
+        <BlurView
+          intensity={isDark ? 60 : 50}
+          tint={isDark ? 'dark' : 'light'}
+          style={[styles.header, { backgroundColor: 'transparent' }]}
+        >
+          <HeaderContent />
+        </BlurView>
+      ) : (
+        <View style={[styles.header, { backgroundColor: bg }]}>
+          <HeaderContent />
+        </View>
+      )}
 
       {loading ? (
         <View style={styles.emptyCenter}>
-          <ActivityIndicator color={primaryText} />
+          <ActivityIndicator color={secondaryText} />
         </View>
       ) : hasPasskeys ? (
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
@@ -278,7 +348,7 @@ export default function PasskeysScreen() {
               >
                 <View style={styles.passkeyIconWrap}>
                   <Ionicons
-                    name={Platform.OS === 'ios' ? 'logo-apple' : 'shield-checkmark-outline'}
+                    name={getBiometricIcon(pk) as any}
                     size={20}
                     color={primaryText}
                   />
@@ -311,11 +381,15 @@ export default function PasskeysScreen() {
       ) : (
         <View style={styles.emptyCenter}>
           <View style={styles.emptyIconWrap}>
-            <Ionicons name="person-outline" size={50} color={primaryText} />
+            <Ionicons name={biometricIconName as any} size={44} color={secondaryText} />
           </View>
           <Text style={styles.emptyTitle}>Add a passkey</Text>
           <Text style={styles.emptyDesc}>
-            Passkeys are more secure than a password and adding one takes less than a minute.
+            {biometricType === 'Face ID'
+              ? 'Use Face ID to sign in faster and more securely. Your passkey is stored in iCloud Keychain.'
+              : biometricType === 'Touch ID' || biometricType === 'Fingerprint'
+              ? `Use ${biometricType} to sign in faster and more securely.`
+              : 'Passkeys are more secure than passwords and take less than a minute to add.'}
           </Text>
           <TouchableOpacity
             style={[styles.createBtn, { width: '100%' }]}
@@ -323,12 +397,13 @@ export default function PasskeysScreen() {
             disabled={creating}
           >
             {creating
-              ? <ActivityIndicator color="#000" />
-              : <Text style={styles.createBtnText}>Create a passkey</Text>}
+              ? <ActivityIndicator color="#FFF" />
+              : <Text style={styles.createBtnText}>
+                  {biometricType !== 'Biometrics' ? `Create passkey with ${biometricType}` : 'Create a passkey'}
+                </Text>}
           </TouchableOpacity>
         </View>
       )}
     </View>
   );
 }
-Apply the same white/dark theme and BlurView header pattern used in security.tsx to app/passkeys.tsx so it matches the system appearance automatically and fix rea l apple faceid for passkey also fix texmesssga epage to use same color dakr/white theme.
