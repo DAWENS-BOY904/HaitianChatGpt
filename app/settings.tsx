@@ -50,7 +50,7 @@ function EditModalContent({
   return (
     <ScrollView
       style={{ flex: 1 }}
-      contentContainerStyle={{ padding: 24, paddingBottom: insets.bottom + 32 }}
+      contentContainerStyle={{ padding: 20, paddingBottom: insets.bottom + 16 }}
       keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
     >
@@ -58,10 +58,10 @@ function EditModalContent({
       <View style={{ alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)', marginBottom: 20 }} />
 
       <Text style={{ fontSize: 20, fontWeight: '700', color: primaryText, textAlign: 'center', marginBottom: 6 }}>Edit Profile</Text>
-      <Text style={{ fontSize: 13, color: secondaryText, textAlign: 'center', marginBottom: 24 }}>Your profile helps people recognize you.</Text>
+      <Text style={{ fontSize: 13, color: secondaryText, textAlign: 'center', marginBottom: 16 }}>Your profile helps people recognize you.</Text>
 
       {/* Avatar */}
-      <TouchableOpacity onPress={onPickPhoto} style={{ alignSelf: 'center', marginBottom: 28 }} activeOpacity={0.8}>
+      <TouchableOpacity onPress={onPickPhoto} style={{ alignSelf: 'center', marginBottom: 18 }} activeOpacity={0.8}>
         <View style={{ width: 90, height: 90, borderRadius: 45, overflow: 'hidden', backgroundColor: isDark ? '#3A3A3C' : '#E5E5EA', alignItems: 'center', justifyContent: 'center' }}>
           {uploadingPhoto ? (
             <ActivityIndicator color={primaryText} />
@@ -86,7 +86,7 @@ function EditModalContent({
       <TextInput
         style={{
           backgroundColor: inputBg, borderRadius: 12, paddingHorizontal: 16,
-          paddingVertical: 14, fontSize: 16, color: primaryText, marginBottom: 16,
+          paddingVertical: 12, fontSize: 16, color: primaryText, marginBottom: 12,
           borderWidth: 1, borderColor,
         }}
         value={editName}
@@ -103,7 +103,7 @@ function EditModalContent({
           backgroundColor: canChange ? inputBg : (isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)'),
           borderRadius: 12, paddingHorizontal: 16,
           paddingVertical: 14, fontSize: 16,
-          color: canChange ? primaryText : secondaryText, marginBottom: 8,
+          color: canChange ? primaryText : secondaryText, marginBottom: 6,
           borderWidth: 1, borderColor,
         }}
         value={editUsername}
@@ -115,17 +115,17 @@ function EditModalContent({
         returnKeyType="done"
       />
       {!canChange && (
-        <Text style={{ fontSize: 12, color: secondaryText, marginBottom: 16, marginLeft: 2 }}>
+        <Text style={{ fontSize: 12, color: secondaryText, marginBottom: 12, marginLeft: 2 }}>
           Username can be changed in {daysLeft} day{daysLeft !== 1 ? 's' : ''}
         </Text>
       )}
-      {canChange && <View style={{ marginBottom: 16 }} />}
+      {canChange && <View style={{ marginBottom: 12 }} />}
 
       {/* Save */}
       <TouchableOpacity
         style={{
-          backgroundColor: '#10A37F', borderRadius: 50, paddingVertical: 16,
-          alignItems: 'center', marginBottom: 12,
+          backgroundColor: '#10A37F', borderRadius: 50, paddingVertical: 14,
+          alignItems: 'center', marginBottom: 10,
           opacity: savingProfile ? 0.7 : 1,
         }}
         onPress={onSave}
@@ -140,7 +140,7 @@ function EditModalContent({
       </TouchableOpacity>
 
       {/* Cancel */}
-      <TouchableOpacity style={{ alignItems: 'center', paddingVertical: 12 }} onPress={onClose}>
+      <TouchableOpacity style={{ alignItems: 'center', paddingVertical: 10 }} onPress={onClose}>
         <Text style={{ fontSize: 17, color: secondaryText }}>Cancel</Text>
       </TouchableOpacity>
     </ScrollView>
@@ -825,7 +825,69 @@ export default function SettingsScreen() {
         <Text style={styles.versionText}>Dawinix v{currentVersion}</Text>
       </ScrollView>
 
-      {/* Photo Picker Action Sheet */}
+      {/* Edit Profile Modal */}
+      <Modal visible={editModalVisible} transparent animationType="slide" onRequestClose={() => setEditModalVisible(false)}>
+        <View style={{ flex: 1 }}>
+          <BlurView intensity={isDark ? 55 : 40} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.18)' }]} />
+          <TouchableOpacity style={{ flex: 0.25 }} activeOpacity={1} onPress={() => setEditModalVisible(false)} />
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 0.75, maxHeight: 560 }}>
+            <View style={{
+              flex: 1, borderTopLeftRadius: 28, borderTopRightRadius: 28,
+              overflow: 'hidden',
+              shadowColor: '#000', shadowOffset: { width: 0, height: -8 }, shadowOpacity: 0.35, shadowRadius: 24, elevation: 24,
+            }}>
+              {Platform.OS === 'ios' ? (
+                <BlurView intensity={isDark ? 90 : 75} tint={isDark ? 'dark' : 'light'} style={{ flex: 1, borderTopLeftRadius: 28, borderTopRightRadius: 28, overflow: 'hidden' }}>
+                  <EditModalContent
+                    isDark={isDark}
+                    editPhoto={editPhoto}
+                    initials={initials}
+                    uploadingPhoto={uploadingPhoto}
+                    editName={editName}
+                    editUsername={editUsername}
+                    canChangeUsername={canChangeUsername}
+                    daysUntilUsernameChange={daysUntilUsernameChange}
+                    savingProfile={savingProfile}
+                    primaryText={primaryText}
+                    secondaryText={secondaryText}
+                    insets={insets}
+                    onPickPhoto={pickEditPhoto}
+                    onChangeName={setEditName}
+                    onChangeUsername={setEditUsername}
+                    onSave={saveProfile}
+                    onClose={() => setEditModalVisible(false)}
+                  />
+                </BlurView>
+              ) : (
+                <View style={{ flex: 1, borderTopLeftRadius: 28, borderTopRightRadius: 28, overflow: 'hidden', backgroundColor: isDark ? '#1C1C1E' : '#F2F2F7' }}>
+                  <EditModalContent
+                    isDark={isDark}
+                    editPhoto={editPhoto}
+                    initials={initials}
+                    uploadingPhoto={uploadingPhoto}
+                    editName={editName}
+                    editUsername={editUsername}
+                    canChangeUsername={canChangeUsername}
+                    daysUntilUsernameChange={daysUntilUsernameChange}
+                    savingProfile={savingProfile}
+                    primaryText={primaryText}
+                    secondaryText={secondaryText}
+                    insets={insets}
+                    onPickPhoto={pickEditPhoto}
+                    onChangeName={setEditName}
+                    onChangeUsername={setEditUsername}
+                    onSave={saveProfile}
+                    onClose={() => setEditModalVisible(false)}
+                  />
+                </View>
+              )}
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
+
+      {/* Photo Picker — rendered AFTER edit modal so it appears on top */}
       <Modal visible={photoPickerVisible} transparent animationType="fade" onRequestClose={() => setPhotoPickerVisible(false)}>
         <View style={{ flex: 1, justifyContent: 'flex-end' }}>
           <BlurView intensity={isDark ? 55 : 40} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
@@ -904,70 +966,8 @@ export default function SettingsScreen() {
           </View>
         </View>
       </Modal>
-
-      {/* Edit Profile Modal — glassmorphism */}
-      <Modal visible={editModalVisible} transparent animationType="slide" onRequestClose={() => setEditModalVisible(false)}>
-        <View style={{ flex: 1 }}>
-          <BlurView intensity={isDark ? 55 : 40} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
-          <View style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.18)' }]} />
-          <TouchableOpacity style={{ flex: 0.3 }} activeOpacity={1} onPress={() => setEditModalVisible(false)} />
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 0.7 }}>
-            <View style={{
-              flex: 1, borderTopLeftRadius: 28, borderTopRightRadius: 28,
-              overflow: 'hidden',
-              shadowColor: '#000', shadowOffset: { width: 0, height: -8 }, shadowOpacity: 0.35, shadowRadius: 24, elevation: 24,
-            }}>
-              {Platform.OS === 'ios' ? (
-                <BlurView intensity={isDark ? 90 : 75} tint={isDark ? 'dark' : 'light'} style={{ flex: 1, borderTopLeftRadius: 28, borderTopRightRadius: 28, overflow: 'hidden' }}>
-                  <EditModalContent
-                    isDark={isDark}
-                    editPhoto={editPhoto}
-                    initials={initials}
-                    uploadingPhoto={uploadingPhoto}
-                    editName={editName}
-                    editUsername={editUsername}
-                    canChangeUsername={canChangeUsername}
-                    daysUntilUsernameChange={daysUntilUsernameChange}
-                    savingProfile={savingProfile}
-                    primaryText={primaryText}
-                    secondaryText={secondaryText}
-                    insets={insets}
-                    onPickPhoto={pickEditPhoto}
-                    onChangeName={setEditName}
-                    onChangeUsername={setEditUsername}
-                    onSave={saveProfile}
-                    onClose={() => setEditModalVisible(false)}
-                  />
-                </BlurView>
-              ) : (
-                <View style={{ flex: 1, borderTopLeftRadius: 28, borderTopRightRadius: 28, overflow: 'hidden', backgroundColor: isDark ? '#1C1C1E' : '#F2F2F7' }}>
-                  <EditModalContent
-                    isDark={isDark}
-                    editPhoto={editPhoto}
-                    initials={initials}
-                    uploadingPhoto={uploadingPhoto}
-                    editName={editName}
-                    editUsername={editUsername}
-                    canChangeUsername={canChangeUsername}
-                    daysUntilUsernameChange={daysUntilUsernameChange}
-                    savingProfile={savingProfile}
-                    primaryText={primaryText}
-                    secondaryText={secondaryText}
-                    insets={insets}
-                    onPickPhoto={pickEditPhoto}
-                    onChangeName={setEditName}
-                    onChangeUsername={setEditUsername}
-                    onSave={saveProfile}
-                    onClose={() => setEditModalVisible(false)}
-                  />
-                </View>
-              )}
-            </View>
-          </KeyboardAvoidingView>
-        </View>
-      </Modal>
     </View>
   );
 }
 
-fix photo upload its not click and fix modal its to longue
+
