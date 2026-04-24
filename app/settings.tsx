@@ -57,7 +57,8 @@ function EditModalContent({
       {/* Drag handle */}
       <View style={{ alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)', marginBottom: 20 }} />
 
-      <Text style={{ fontSize: 20, fontWeight: '700', color: primaryText, textAlign: 'center', marginBottom: 24 }}>Edit Profile</Text>
+      <Text style={{ fontSize: 20, fontWeight: '700', color: primaryText, textAlign: 'center', marginBottom: 6 }}>Edit Profile</Text>
+      <Text style={{ fontSize: 13, color: secondaryText, textAlign: 'center', marginBottom: 24 }}>Your profile helps people recognize you.</Text>
 
       {/* Avatar */}
       <TouchableOpacity onPress={onPickPhoto} style={{ alignSelf: 'center', marginBottom: 28 }} activeOpacity={0.8}>
@@ -863,4 +864,4 @@ export default function SettingsScreen() {
     </View>
   );
 }
-modal edit profile lan tro wo fel pa tro wo and fel pi blur and white/dark them mache avel and add tex anba ki di you profile help epople recognixe you..... and username update after 14days lan.
+
