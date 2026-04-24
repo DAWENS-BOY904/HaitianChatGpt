@@ -1678,10 +1678,37 @@ export default function HomeScreen() {
                       <Text style={{ color: '#000', fontWeight: '600', fontSize: 15 }}>Sign up</Text>
                     </TouchableOpacity>
                   ) : !isPro ? (
-                    <TouchableOpacity style={styles.upgradeBtn} onPress={() => router.push('/subscription')}>
-                      <Ionicons name="sparkles" size={13} color="#7C6FF7" />
-                      <Text style={styles.upgradeBtnText}>Upgrade</Text>
-                    </TouchableOpacity>
+                    Platform.OS === 'ios' ? (
+                      <BlurView
+                        intensity={isDark ? 60 : 50}
+                        tint={isDark ? 'dark' : 'light'}
+                        style={[styles.upgradeBtn, {
+                          overflow: 'hidden',
+                          borderWidth: 1,
+                          borderColor: accentColor + '55',
+                        }]}
+                      >
+                        <TouchableOpacity
+                          style={{ flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 7 }}
+                          onPress={() => router.push('/subscription')}
+                        >
+                          <Ionicons name="sparkles" size={13} color={accentColor} />
+                          <Text style={[styles.upgradeBtnText, { color: accentColor }]}>Upgrade</Text>
+                        </TouchableOpacity>
+                      </BlurView>
+                    ) : (
+                      <TouchableOpacity
+                        style={[styles.upgradeBtn, {
+                          backgroundColor: isDark ? accentColor + '22' : accentColor + '18',
+                          borderWidth: 1,
+                          borderColor: accentColor + '55',
+                        }]}
+                        onPress={() => router.push('/subscription')}
+                      >
+                        <Ionicons name="sparkles" size={13} color={accentColor} />
+                        <Text style={[styles.upgradeBtnText, { color: accentColor }]}>Upgrade</Text>
+                      </TouchableOpacity>
+                    )
                   ) : (
                     <View style={{ width: 80 }} />
                   )}

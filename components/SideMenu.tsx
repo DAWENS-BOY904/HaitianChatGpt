@@ -603,22 +603,51 @@ export function SideMenu({
 
           {/* SEARCH BAR */}
           {searchActive && (
-            <View style={[styles.searchBar, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Ionicons name="search" size={18} color={colors.textSecondary} />
-              <TextInput
-                style={[styles.searchInput, { color: colors.text }]}
-                placeholder="Search conversations..."
-                placeholderTextColor={colors.textSecondary}
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                autoFocus
-              />
-              {searchQuery.length > 0 && (
-                <TouchableOpacity onPress={() => setSearchQuery('')}>
-                  <Ionicons name="close-circle" size={18} color={colors.textSecondary} />
-                </TouchableOpacity>
-              )}
-            </View>
+            Platform.OS === 'ios' ? (
+              <BlurView
+                intensity={isDark ? 55 : 45}
+                tint={isDark ? 'dark' : 'light'}
+                style={[styles.searchBar, {
+                  borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)',
+                  overflow: 'hidden',
+                }]}
+              >
+                <Ionicons name="search" size={18} color={colors.textSecondary} />
+                <TextInput
+                  style={[styles.searchInput, { color: colors.text }]}
+                  placeholder="Search conversations..."
+                  placeholderTextColor={colors.textSecondary}
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  autoFocus
+                />
+                {searchQuery.length > 0 && (
+                  <TouchableOpacity onPress={() => setSearchQuery('')}>
+                    <Ionicons name="close-circle" size={18} color={colors.textSecondary} />
+                  </TouchableOpacity>
+                )}
+              </BlurView>
+            ) : (
+              <View style={[styles.searchBar, {
+                backgroundColor: isDark ? 'rgba(44,44,46,0.9)' : 'rgba(242,242,247,0.9)',
+                borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)',
+              }]}>
+                <Ionicons name="search" size={18} color={colors.textSecondary} />
+                <TextInput
+                  style={[styles.searchInput, { color: colors.text }]}
+                  placeholder="Search conversations..."
+                  placeholderTextColor={colors.textSecondary}
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  autoFocus
+                />
+                {searchQuery.length > 0 && (
+                  <TouchableOpacity onPress={() => setSearchQuery('')}>
+                    <Ionicons name="close-circle" size={18} color={colors.textSecondary} />
+                  </TouchableOpacity>
+                )}
+              </View>
+            )
           )}
 
           {/* QUICK ACTIONS */}
@@ -632,21 +661,44 @@ export function SideMenu({
                   key={qa.id}
                   style={[
                     styles.quickActionBtn,
-                    { backgroundColor: isDark ? '#1C1C1E' : '#F2F2F7' },
                     qa.isUpgrade && { borderColor: qa.color, borderWidth: 1 },
                     QUICK_ACTIONS.length < 4 && { marginRight: 10 },
+                    { overflow: 'hidden' },
                   ]}
                   activeOpacity={0.7}
                   onPress={() => handleQuickAction(qa)}
                 >
-                  <Ionicons
-                    name={qa.icon as any}
-                    size={26}
-                    color={qa.isUpgrade ? qa.color : colors.text}
-                  />
-                  <Text style={[styles.quickActionLabel, { color: qa.isUpgrade ? qa.color : colors.text }]}>
-                    {qa.label}
-                  </Text>
+                  {Platform.OS === 'ios' ? (
+                    <BlurView
+                      intensity={isDark ? 55 : 45}
+                      tint={isDark ? 'dark' : 'light'}
+                      style={styles.quickActionBlur}
+                    >
+                      <Ionicons
+                        name={qa.icon as any}
+                        size={26}
+                        color={qa.isUpgrade ? qa.color : colors.text}
+                      />
+                      <Text style={[styles.quickActionLabel, { color: qa.isUpgrade ? qa.color : colors.text }]}>
+                        {qa.label}
+                      </Text>
+                    </BlurView>
+                  ) : (
+                    <View style={[styles.quickActionBlur, {
+                      backgroundColor: qa.isUpgrade
+                        ? (isDark ? qa.color + '22' : qa.color + '15')
+                        : (isDark ? '#1C1C1E' : '#F2F2F7'),
+                    }]}>
+                      <Ionicons
+                        name={qa.icon as any}
+                        size={26}
+                        color={qa.isUpgrade ? qa.color : colors.text}
+                      />
+                      <Text style={[styles.quickActionLabel, { color: qa.isUpgrade ? qa.color : colors.text }]}>
+                        {qa.label}
+                      </Text>
+                    </View>
+                  )}
                 </TouchableOpacity>
               ))}
             </View>
@@ -833,12 +885,17 @@ const styles = StyleSheet.create({
   },
   quickActionBtn: {
     flex: 1,
+    borderRadius: 16,
+    marginHorizontal: 5,
+    overflow: 'hidden',
+  },
+  quickActionBlur: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 16,
-    borderRadius: 16,
     gap: 8,
-    marginHorizontal: 5,
+    borderRadius: 16,
   },
   quickActionLabel: { fontSize: 12, fontWeight: '600', textAlign: 'center' },
   divider: { height: 0.5, marginHorizontal: 16, marginVertical: 16 },
@@ -902,4 +959,3 @@ const styles = StyleSheet.create({
   chatFabText: { color: '#FFFFFF', fontSize: 17, fontWeight: '600' },
   profilePhoto: { width: 30, height: 30, borderRadius: 15 },
 });
-in home, wrap the 'Upgrade' button in the empty-state header with a BlurView pill (similar to the timer/person-add group) so it has a glassmorphism background matching the dark/light theme, with a subtle accent-colored border and in side menu the projecticon and mages and app and upgrade add it in blur and in texinput add li in blur mode effetc
