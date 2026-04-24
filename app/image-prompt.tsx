@@ -148,6 +148,26 @@ export default function ImagePromptScreen() {
             : m
         )
       );
+
+      // ── Auto-save AI-generated image to media_files (My Images) ──
+      if (aiImageUrl && user?.id) {
+        try {
+          const { data: existing } = await supabase
+            .from('media_files')
+            .select('id')
+            .eq('user_id', user.id)
+            .eq('file_url', aiImageUrl)
+            .maybeSingle();
+          if (!existing) {
+            await supabase.from('media_files').insert({
+              user_id: user.id,
+              file_type: 'image',
+              file_url: aiImageUrl,
+              file_name: `ai_image_${Date.now()}.jpg`,
+            });
+          }
+        } catch (_e) {}
+      }
     } catch (err: any) {
       setMessages(prev =>
         prev.map(m =>

@@ -242,7 +242,8 @@ const rnStyles = StyleSheet.create({
   divider: { width: 1, backgroundColor: 'rgba(255,255,255,0.12)' },
 });
 
-const QUICK_ACTIONS = [
+// Quick actions — upgrade excluded, handled dynamically below
+const BASE_QUICK_ACTIONS = [
   { id: 'projects', icon: 'folder-outline', label: 'Projects', color: '#8B5CF6', route: '/new-project' },
   { id: 'images', icon: 'images-outline', label: 'Images', color: '#EC4899', route: '/images' },
   { id: 'apps', icon: 'grid-outline', label: 'Apps', color: '#6366F1', route: '/gpts' },
@@ -279,9 +280,17 @@ export function SideMenu({
   const insets = useSafeAreaInsets();
   const supabase = getSupabaseClient();
 
-  const handleQuickAction = (action: { id: string; route?: string; }) => {
-    if (action.id === 'upgrade') { onClose(); router.push('/subscription'); return; }
-    if (action.route) { onClose(); router.push(action.route); }
+  // Determine if user has a paid plan (pro) — hide Upgrade button
+  const isPro = isAdmin || isUnlimited;
+
+  // Filter quick actions: remove Upgrade for pro users
+  const QUICK_ACTIONS = isPro
+    ? BASE_QUICK_ACTIONS.filter(qa => !qa.isUpgrade)
+    : BASE_QUICK_ACTIONS;
+
+  const handleQuickAction = (action: { id: string; route?: string; isUpgrade?: boolean }) => {
+    if (action.isUpgrade) { onClose(); router.push('/subscription'); return; }
+    if (action.route) { onClose(); router.push(action.route as any); }
   };
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -424,7 +433,10 @@ export function SideMenu({
     setActionMenuConv(prev => prev ? { ...prev, title } : null);
   };
 
-  // ── GUEST MODE: simplified side menu (Photo 5 style) ──
+  // ── Accent blur color for FAB ──
+  const accentWithAlpha = accentColor + 'E6'; // ~90% opacity
+
+  // ── GUEST MODE ──
   if (isGuest) {
     return (
       <>
@@ -446,7 +458,6 @@ export function SideMenu({
               containerStyle,
             ]}
           >
-            {/* Guest header */}
             <View style={styles.topHeader}>
               <TouchableOpacity
                 style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}
@@ -459,7 +470,6 @@ export function SideMenu({
 
             <View style={[styles.divider, { backgroundColor: 'rgba(255,255,255,0.1)' }]} />
 
-            {/* Guest menu items */}
             <View style={{ flex: 1, paddingHorizontal: 20, paddingTop: 8 }}>
               {[
                 { label: 'Terms of Use', route: '/terms-of-use' },
@@ -476,7 +486,6 @@ export function SideMenu({
               ))}
             </View>
 
-            {/* Bottom sign-up CTA */}
             <View style={{ paddingHorizontal: 16, paddingBottom: insets.bottom + 24 }}>
               <Text style={{ color: 'rgba(255,255,255,0.45)', fontSize: 14, textAlign: 'center', marginBottom: 14 }}>
                 Save your chat history, share chats, and personalize your experience.
@@ -519,27 +528,76 @@ export function SideMenu({
             <Text style={[styles.appTitle, { color: colors.text }]}>
               {currentProject?.name || 'Haitian AI Chat'}
             </Text>
-            <View style={styles.headerActions}>
-              <TouchableOpacity
-                style={styles.iconBtn}
-                onPress={() => setSearchActive(!searchActive)}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <Ionicons name="search" size={22} color={colors.text} />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.profileBtn}
-                onPress={() => { onClose(); router.push('/settings'); }}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                {profilePhotoUrl ? (
-                  <Image source={{ uri: profilePhotoUrl }} style={styles.profilePhoto} contentFit="cover" />
-                ) : (
-                  <View style={[styles.avatarBtn, { backgroundColor: accentColor }]}>
-                    <Text style={styles.avatarText}>{getUserInitials()}</Text>
-                  </View>
-                )}
-              </TouchableOpacity>
+
+            {/* Search + Profile icons — shared glassmorphism background */}
+            <View style={styles.headerIconGroup}>
+              {Platform.OS === 'ios' ? (
+                <BlurView
+                  intensity={isDark ? 60 : 50}
+                  tint={isDark ? 'dark' : 'light'}
+                  style={[styles.headerIconGroupBlur, {
+                    borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.1)',
+                  }]}
+                >
+                  {/* Search icon */}
+                  <TouchableOpacity
+                    style={styles.iconPillBtn}
+                    onPress={() => setSearchActive(!searchActive)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Ionicons name="search" size={19} color={colors.text} />
+                  </TouchableOpacity>
+
+                  {/* Divider */}
+                  <View style={[styles.iconPillDivider, {
+                    backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)',
+                  }]} />
+
+                  {/* Profile / avatar → Settings */}
+                  <TouchableOpacity
+                    style={styles.iconPillBtn}
+                    onPress={() => { onClose(); router.push('/settings'); }}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    {profilePhotoUrl ? (
+                      <Image source={{ uri: profilePhotoUrl }} style={styles.profilePhotoSmall} contentFit="cover" />
+                    ) : (
+                      <View style={[styles.avatarMini, { backgroundColor: accentColor }]}>
+                        <Text style={styles.avatarMiniText}>{getUserInitials()}</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                </BlurView>
+              ) : (
+                <View style={[styles.headerIconGroupBlur, {
+                  backgroundColor: isDark ? 'rgba(44,44,46,0.88)' : 'rgba(242,242,247,0.88)',
+                  borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)',
+                }]}>
+                  <TouchableOpacity
+                    style={styles.iconPillBtn}
+                    onPress={() => setSearchActive(!searchActive)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Ionicons name="search" size={19} color={colors.text} />
+                  </TouchableOpacity>
+                  <View style={[styles.iconPillDivider, {
+                    backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)',
+                  }]} />
+                  <TouchableOpacity
+                    style={styles.iconPillBtn}
+                    onPress={() => { onClose(); router.push('/settings'); }}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    {profilePhotoUrl ? (
+                      <Image source={{ uri: profilePhotoUrl }} style={styles.profilePhotoSmall} contentFit="cover" />
+                    ) : (
+                      <View style={[styles.avatarMini, { backgroundColor: accentColor }]}>
+                        <Text style={styles.avatarMiniText}>{getUserInitials()}</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              )}
             </View>
           </View>
 
@@ -565,7 +623,10 @@ export function SideMenu({
 
           {/* QUICK ACTIONS */}
           {!searchActive && (
-            <View style={styles.quickActionsGrid}>
+            <View style={[
+              styles.quickActionsGrid,
+              { justifyContent: QUICK_ACTIONS.length < 4 ? 'flex-start' : 'space-between' },
+            ]}>
               {QUICK_ACTIONS.map((qa) => (
                 <TouchableOpacity
                   key={qa.id}
@@ -573,6 +634,7 @@ export function SideMenu({
                     styles.quickActionBtn,
                     { backgroundColor: isDark ? '#1C1C1E' : '#F2F2F7' },
                     qa.isUpgrade && { borderColor: qa.color, borderWidth: 1 },
+                    QUICK_ACTIONS.length < 4 && { marginRight: 10 },
                   ]}
                   activeOpacity={0.7}
                   onPress={() => handleQuickAction(qa)}
@@ -633,15 +695,40 @@ export function SideMenu({
             <View style={{ height: insets.bottom + 100 }} />
           </ScrollView>
 
-          {/* FLOATING CHAT BUTTON */}
-          <TouchableOpacity
-            style={[styles.chatFab, { backgroundColor: accentColor }]}
-            activeOpacity={0.85}
-            onPress={() => { onNewChat(); onClose(); }}
-          >
-            <Ionicons name="create-outline" size={20} color="#FFFFFF" />
-            <Text style={styles.chatFabText}>New Chat</Text>
-          </TouchableOpacity>
+          {/* FLOATING NEW CHAT BUTTON — accent color + blur */}
+          {Platform.OS === 'ios' ? (
+            <View style={[styles.chatFabWrap, { bottom: insets.bottom + 20 }]}>
+              <BlurView
+                intensity={70}
+                tint="dark"
+                style={[styles.chatFabBlur, {
+                  shadowColor: accentColor,
+                  backgroundColor: accentColor + 'BF',
+                }]}
+              >
+                <TouchableOpacity
+                  style={styles.chatFabInner}
+                  activeOpacity={0.85}
+                  onPress={() => { onNewChat(); onClose(); }}
+                >
+                  <Ionicons name="create-outline" size={20} color="#FFFFFF" />
+                  <Text style={styles.chatFabText}>New Chat</Text>
+                </TouchableOpacity>
+              </BlurView>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={[
+                styles.chatFab,
+                { backgroundColor: accentColor, bottom: insets.bottom + 20 },
+              ]}
+              activeOpacity={0.85}
+              onPress={() => { onNewChat(); onClose(); }}
+            >
+              <Ionicons name="create-outline" size={20} color="#FFFFFF" />
+              <Text style={styles.chatFabText}>New Chat</Text>
+            </TouchableOpacity>
+          )}
         </Animated.View>
       </GestureDetector>
 
@@ -686,12 +773,47 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 16,
   },
-  appTitle: { fontSize: 22, fontWeight: '700', letterSpacing: -0.3 },
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  iconBtn: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center' },
-  avatarBtn: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
-  avatarText: { color: '#FFFFFF', fontWeight: '700', fontSize: 14 },
-  profileBtn: { width: 36, height: 36, borderRadius: 18, overflow: 'hidden', justifyContent: 'center', alignItems: 'center' },
+  appTitle: { fontSize: 22, fontWeight: '700', letterSpacing: -0.3, flex: 1 },
+
+  // Header icon group (shared blurred pill for search + profile)
+  headerIconGroup: {
+    flexShrink: 0,
+  },
+  headerIconGroupBlur: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 22,
+    overflow: 'hidden',
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  iconPillBtn: {
+    width: 40,
+    height: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconPillDivider: {
+    width: StyleSheet.hairlineWidth,
+    height: 18,
+  },
+  profilePhotoSmall: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+  },
+  avatarMini: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarMiniText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 11,
+  },
+
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -706,10 +828,8 @@ const styles = StyleSheet.create({
   searchInput: { flex: 1, fontSize: 16, paddingVertical: 0 },
   quickActionsGrid: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     paddingHorizontal: 16,
     marginBottom: 4,
-    gap: 10,
   },
   quickActionBtn: {
     flex: 1,
@@ -718,6 +838,7 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 16,
     gap: 8,
+    marginHorizontal: 5,
   },
   quickActionLabel: { fontSize: 12, fontWeight: '600', textAlign: 'center' },
   divider: { height: 0.5, marginHorizontal: 16, marginVertical: 16 },
@@ -739,9 +860,32 @@ const styles = StyleSheet.create({
   },
   convTitle: { fontSize: 16, fontWeight: '400', flex: 1 },
   emptyText: { textAlign: 'center', marginTop: 32, fontSize: 15 },
+
+  // New Chat FAB
+  chatFabWrap: {
+    position: 'absolute',
+    right: 20,
+    borderRadius: 30,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    elevation: 10,
+  },
+  chatFabBlur: {
+    borderRadius: 30,
+    overflow: 'hidden',
+  },
+  chatFabInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 22,
+    paddingVertical: 14,
+    gap: 8,
+  },
   chatFab: {
     position: 'absolute',
-    bottom: 36,
     right: 20,
     flexDirection: 'row',
     alignItems: 'center',
@@ -758,4 +902,3 @@ const styles = StyleSheet.create({
   chatFabText: { color: '#FFFFFF', fontSize: 17, fontWeight: '600' },
   profilePhoto: { width: 30, height: 30, borderRadius: 15 },
 });
-hello ai if you see this error m,ake the change without leaving please dont skip please in top right the icon search and the logo profile user icon to go to settings the ackround yo 2 dwe blur effect and pa separe yo seul background yo 2 souli  and make blur better lel nn dark mode and new chat that connect with accent color must be in blur with the accent color to blur  and in home page upgrade button background in blur and the 3ba search icon background in blur  nmake all blur better when you have have pro plan remove upgrade button in side menu and set in settings to not free plan  in images page when you send ai photoor ai send you photo save n my photo that in images page.

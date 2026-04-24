@@ -350,9 +350,15 @@ export default function SettingsScreen() {
     ]);
   };
 
+  const ADMIN_EMAILS_SETTINGS = ['berryxoe@gmail.com', 'newdawens@gmail.com', 'kontgithub@gmail.com'];
+  const isAdminUser = ADMIN_EMAILS_SETTINGS.includes(user?.email?.toLowerCase() || '');
+  const isPaidPlan = isAdminUser || ['go', 'plus', 'premium_monthly', 'premium_yearly', 'lifetime'].includes(tier);
+
   const tierLabel = () => {
+    if (isAdminUser) return 'Admin — Pro';
     if (tier === 'lifetime') return 'Lifetime Pro';
-    if (tier === 'premium_monthly' || tier === 'premium_yearly') return 'Plus';
+    if (tier === 'plus' || tier === 'premium_yearly') return 'Plus';
+    if (tier === 'go' || tier === 'premium_monthly') return 'Go';
     return 'Free Plan';
   };
 
@@ -630,8 +636,10 @@ export default function SettingsScreen() {
           <Text style={styles.sectionLabel}>Account</Text>
           <View style={styles.card}>
             <Row icon="mail-outline" label="Email" value={user?.email?.length ?? 0 > 22 ? user?.email?.slice(0,20) + '...' : user?.email || ''} />
-            <Row icon="add-circle-outline" label="Subscription" value={tierLabel()} />
-            <Row icon="arrow-up-circle-outline" label="Upgrade to Dawinix Plus" onPress={() => router.push('/subscription')} />
+            <Row icon="add-circle-outline" label="Subscription" value={tierLabel()} onPress={() => router.push('/subscription')} />
+            {!isPaidPlan && (
+              <Row icon="arrow-up-circle-outline" label="Upgrade to Dawinix Plus" onPress={() => router.push('/subscription')} />
+            )}
             <Row icon="refresh-outline" label="Restore purchases" onPress={() => router.push('/subscription')} />
             <Row icon="receipt-outline" label="Orders" onPress={() => router.push('/orders')} />
             <Row icon="person-circle-outline" label="Personalization" onPress={() => router.push('/personalization')} />

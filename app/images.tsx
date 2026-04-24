@@ -106,6 +106,29 @@ export default function ImagesScreen() {
     finally { setLoading(false); }
   };
 
+  // ── Save an AI-generated or user-sent image URL to My Images ──
+  const saveImageToMyPhotos = async (imageUrl: string, fileName?: string) => {
+    if (!user || !imageUrl) return;
+    try {
+      // Check for duplicate
+      const { data: existing } = await supabase
+        .from('media_files')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('file_url', imageUrl)
+        .maybeSingle();
+      if (existing) return; // already saved
+      await supabase.from('media_files').insert({
+        user_id: user.id,
+        file_type: 'image',
+        file_url: imageUrl,
+        file_name: fileName || `image_${Date.now()}.jpg`,
+      });
+      // Refresh gallery
+      loadMyImages();
+    } catch (_e) {}
+  };
+
   // ── Navigate to image-prompt page with selected photo + style ──
   const goToImagePromptPage = (imageUri: string, base64: string, stylePrompt: string) => {
     router.push({
