@@ -959,3 +959,4 @@ const styles = StyleSheet.create({
   chatFabText: { color: '#FFFFFF', fontSize: 17, fontWeight: '600' },
   profilePhoto: { width: 30, height: 30, borderRadius: 15 },
 });
+fix the icon yo mwen seulman we blur an pa we icon yo fix pou yo paret old with blur.
