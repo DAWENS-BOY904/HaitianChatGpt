@@ -595,4 +595,4 @@ function ProfileHero({ profile, initial, isPlus, textColor, subColor, editBtnBg,
     </>
   );
 }
-refix it the dark and white theme pa work and blur mode pa mache.
+
