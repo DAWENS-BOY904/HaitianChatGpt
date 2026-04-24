@@ -235,3 +235,4 @@ export default function AdsControlsScreen() {
     </View>
   );
 }
+add white/dark theme function and in history fix it real when the ai search something for you its apear all search and date lan anle li fix all in blur even the modal blur mode.
