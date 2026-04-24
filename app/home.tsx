@@ -191,6 +191,27 @@ function MentionPopup({ members, onSelect, onClose }: {
   );
 }
 
+const headerIconGroupStyles = StyleSheet.create({
+  glassWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 22,
+    overflow: 'hidden',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
+  iconBtn: {
+    width: 38,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  divider: {
+    width: StyleSheet.hairlineWidth,
+    height: 18,
+  },
+});
+
 const mentionStyles = StyleSheet.create({
   container: { position: 'absolute', bottom: 70, left: 60, right: 12, borderRadius: 14, borderWidth: 1, overflow: 'hidden', zIndex: 100, shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.18, shadowRadius: 12, elevation: 12 },
   row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 12, gap: 10 },
@@ -554,7 +575,11 @@ export default function HomeScreen() {
   const { colors, isDark } = useTheme();
   const { settings, updateSetting } = useSettings();
   const { user } = useAuth();
-  const { canSendMessage, coins, isUnlimited, incrementMessageCount, isAdmin } = useGuestLimits();
+  const { canSendMessage, coins, isUnlimited, incrementMessageCount, isAdmin: rawIsAdmin } = useGuestLimits();
+  // Admin emails always get both pro & plus plan access
+  const ADMIN_EMAILS = ['berryxoe@gmail.com', 'newdawens@gmail.com', 'kontgithub@gmail.com'];
+  const isAdminEmail = user?.email ? ADMIN_EMAILS.includes(user.email.toLowerCase()) : false;
+  const isAdmin = rawIsAdmin || isAdminEmail;
   const { isPro } = useSubscription();
   const {
     conversations, messages, currentConversation,
@@ -1663,12 +1688,27 @@ export default function HomeScreen() {
                   {/* Group & Temporary chat buttons — logged-in users only */}
                   {!isGuest ? (
                     <View style={styles.headerEmptyRight}>
-                      <TouchableOpacity style={styles.headerIconBtn} onPress={() => setGroupStartModalVisible(true)}>
-                        <Ionicons name="person-add-outline" size={22} color={colors.text} />
-                      </TouchableOpacity>
-                      <TouchableOpacity style={styles.headerIconBtn} onPress={() => { setTemporaryChatMode(true); setGroupChatMode(false); }}>
-                        <Ionicons name="timer-outline" size={22} color={colors.text} />
-                      </TouchableOpacity>
+                      {Platform.OS === 'ios' ? (
+                        <BlurView intensity={55} tint={isDark ? 'dark' : 'light'} style={headerIconGroupStyles.glassWrap}>
+                          <TouchableOpacity style={headerIconGroupStyles.iconBtn} onPress={() => setGroupStartModalVisible(true)}>
+                            <Ionicons name="person-add-outline" size={18} color={colors.text} />
+                          </TouchableOpacity>
+                          <View style={[headerIconGroupStyles.divider, { backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)' }]} />
+                          <TouchableOpacity style={headerIconGroupStyles.iconBtn} onPress={() => { setTemporaryChatMode(true); setGroupChatMode(false); }}>
+                            <Ionicons name="timer-outline" size={18} color={colors.text} />
+                          </TouchableOpacity>
+                        </BlurView>
+                      ) : (
+                        <View style={[headerIconGroupStyles.glassWrap, { backgroundColor: isDark ? 'rgba(44,44,46,0.85)' : 'rgba(242,242,247,0.85)', borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)' }]}>
+                          <TouchableOpacity style={headerIconGroupStyles.iconBtn} onPress={() => setGroupStartModalVisible(true)}>
+                            <Ionicons name="person-add-outline" size={18} color={colors.text} />
+                          </TouchableOpacity>
+                          <View style={[headerIconGroupStyles.divider, { backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)' }]} />
+                          <TouchableOpacity style={headerIconGroupStyles.iconBtn} onPress={() => { setTemporaryChatMode(true); setGroupChatMode(false); }}>
+                            <Ionicons name="timer-outline" size={18} color={colors.text} />
+                          </TouchableOpacity>
+                        </View>
+                      )}
                     </View>
                   ) : (
                     <View style={styles.headerEmptyRight} />
@@ -2360,4 +2400,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-hello ai please if you raed this erro dont skip make the change without reject message dont skip MAKE ALL CHANGE REAL BETTER SMOOTH BLUR fix in home page top left icon person and the icon temporary add yon background glassmorphism blur (BlurView ki anba yo tou 2 and f yon seul yo sou menm background and make icon yo pi piti and for all admins email add they have pro and plus plan so both tout mache pou yo dont skip make all real and suggestion yo anle mete yo anba pito fixupload image lew send nn home chat with no background and you cannot presss lopng to edit a photo upload and copy you cannot do that only in tex
+

@@ -656,7 +656,12 @@ export const MessageItem = memo(function MessageItem({
     finally { setDownloadingImage(false); }
   }, [showAlert]);
 
-  const handleLongPress = useCallback(() => setShowContextMenu(true), []);
+  // Only allow long-press on text messages — not on image-only uploads
+  const hasOnlyImage = message.role === 'user' && !!message.image_url && !message.content.trim();
+  const handleLongPress = useCallback(() => {
+    if (hasOnlyImage) return; // no context menu for image-only uploads
+    setShowContextMenu(true);
+  }, [hasOnlyImage]);
 
   const handleCopy = useCallback(async () => {
     await Clipboard.setStringAsync(message.content);
@@ -781,6 +786,7 @@ export const MessageItem = memo(function MessageItem({
   const styles = useMemo(() => StyleSheet.create({
     container: { paddingHorizontal: Spacing.md, paddingVertical: 10, marginVertical: 2, maxWidth: '78%' },
     userMessage: { alignSelf: 'flex-end', backgroundColor: colors.primary, borderRadius: 18, borderBottomRightRadius: 4, marginRight: Spacing.sm },
+    userMessageImageOnly: { alignSelf: 'flex-end', backgroundColor: 'transparent', borderRadius: 0, marginRight: Spacing.sm },
     assistantMessage: { alignSelf: 'flex-start', backgroundColor: 'transparent', borderRadius: 0, marginLeft: Spacing.sm, maxWidth: '92%' },
     messageImage: { width: '100%', height: 220, borderRadius: BorderRadius.md, marginBottom: Spacing.sm },
     downloadOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: BorderRadius.md, justifyContent: 'center', alignItems: 'center' },
@@ -810,11 +816,11 @@ export const MessageItem = memo(function MessageItem({
         <Pressable
           onLongPress={handleLongPress}
           delayLongPress={350}
-          style={[styles.container, message.role === 'user' ? styles.userMessage : styles.assistantMessage]}
+          style={[styles.container, message.role === 'user' ? (hasOnlyImage ? styles.userMessageImageOnly : styles.userMessage) : styles.assistantMessage]}
         >
-          {/* User uploaded image */}
+          {/* User uploaded image — no background, no long-press context menu */}
           {message.role === 'user' && message.image_url && (
-            <TouchableOpacity onPress={() => handleImagePress(message.image_url!)} style={{ borderRadius: BorderRadius.md, overflow: 'hidden', marginBottom: Spacing.sm }} activeOpacity={0.9}>
+            <TouchableOpacity onPress={() => handleImagePress(message.image_url!)} style={{ borderRadius: 18, overflow: 'hidden', marginBottom: message.content.trim() ? Spacing.sm : 0 }} activeOpacity={0.9}>
               <Image source={{ uri: message.image_url }} style={styles.userImagePreview} contentFit="cover" transition={200} />
             </TouchableOpacity>
           )}
