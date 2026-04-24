@@ -865,3 +865,4 @@ export default function SettingsScreen() {
   );
 }
 
+in the Edit Profile modal in settings, replace the direct photo library picker with an action sheet that lets the user choose between Camera (launchCameraAsync) or Photo Library (launchImageLibraryAsync) when tapping the avatar circle in blur choose mode effect.
