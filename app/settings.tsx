@@ -970,4 +970,4 @@ export default function SettingsScreen() {
   );
 }
 
-
+fix modal edit profile longe make it more kout li tro longue anpil  on simple modal fix and fix photo upload lan li pa mache.
