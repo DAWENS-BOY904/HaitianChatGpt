@@ -863,3 +863,4 @@ export default function SettingsScreen() {
     </View>
   );
 }
+modal edit profile lan tro wo fel pa tro wo and fel pi blur and white/dark them mache avel and add tex anba ki di you profile help epople recognixe you..... and username update after 14days lan.
