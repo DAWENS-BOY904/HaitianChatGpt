@@ -959,4 +959,3 @@ const styles = StyleSheet.create({
   chatFabText: { color: '#FFFFFF', fontSize: 17, fontWeight: '600' },
   profilePhoto: { width: 30, height: 30, borderRadius: 15 },
 });
-fucking fix them i dont see the button in dark and white mode fix it better and in home, wrap the entire bottom input container (inputContainer View) with a BlurView on iOS so the input pill area has a frosted glass background instead of a plain solid color, improving the visual depth on light and dark mode in home, wrap the chat-mode header (menu icon + title + new-chat/ellipsis buttons) in a BlurView background on iOS so it has the same glassmorphism treatment as the empty-state header buttons, matching dark/light theme.
