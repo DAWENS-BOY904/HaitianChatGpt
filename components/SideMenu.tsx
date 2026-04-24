@@ -958,3 +958,4 @@ const styles = StyleSheet.create({
   chatFabText: { color: '#FFFFFF', fontSize: 17, fontWeight: '600' },
   profilePhoto: { width: 30, height: 30, borderRadius: 15 },
 });
+please dont skip make all change better read message please fix this i dont see qick action icon and name re fix it to apear better in SideMenu, replace the full-button blur on quick actions (Projects, Images, Apps, Upgrade) with a small colored circle icon background (like ChatGPT's side menu), showing a colored icon + label below each button for a cleaner look.
