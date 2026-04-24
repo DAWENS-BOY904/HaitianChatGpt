@@ -226,3 +226,4 @@ export default function DataControlsScreen() {
     </View>
   );
 }
+when you click archive all chats in side menu all chat must archive if clicl delete all chat in side menu all chat must delete if click export data request a data download and admin must can download it for you and redesign data control like this photo:https://files.catbox.moe/x3z6hu.png and  sak make allow location lew click li call phone system ios call  and show like photo 2system;https://files.catbox.moe/enzhe3.png and after li normal again like photo 3 li allow:https://files.catbox.moe/q9ot0y.png please make all in blur mode effetc glass.
