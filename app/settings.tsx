@@ -970,4 +970,4 @@ export default function SettingsScreen() {
   );
 }
 
-dmn fucking fix it i dont see it in mobile 
+
