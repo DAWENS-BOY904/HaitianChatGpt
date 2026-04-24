@@ -168,3 +168,4 @@ export default function SecurityScreen() {
     </View>
   );
 }
+mske white/dark them and blurrr effect mode.
