@@ -276,6 +276,8 @@ export function SideMenu({
     selectConversation,
     deleteConversation,
     archiveConversation,
+    archiveAllConversations,
+    deleteAllConversations,
     updateConversationTitle,
   } = useConversation();
   const insets = useSafeAreaInsets();
@@ -431,6 +433,20 @@ export function SideMenu({
         { text: 'Delete', style: 'destructive', onPress: async () => { await deleteConversation(conv.id); } },
       ]);
     }
+  };
+
+  const handleArchiveAll = () => {
+    Alert.alert('Archive all chats?', 'All conversations will be archived and hidden from the list.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Archive All', style: 'destructive', onPress: async () => { await archiveAllConversations(); } },
+    ]);
+  };
+
+  const handleDeleteAll = () => {
+    Alert.alert('Delete all chats?', 'This will permanently delete all your conversations. This cannot be undone.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete All', style: 'destructive', onPress: async () => { await deleteAllConversations(); } },
+    ]);
   };
 
   const handleRenameConfirm = async (title: string) => {
@@ -724,6 +740,21 @@ export function SideMenu({
             <View style={{ height: insets.bottom + 100 }} />
           </ScrollView>
 
+          {/* BULK CHAT ACTIONS — Archive All / Delete All */}
+          {conversations.length > 0 && !searchActive && (
+            <View style={[styles.bulkActionsRow, { borderTopColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }]}>
+              <TouchableOpacity style={styles.bulkActionBtn} onPress={handleArchiveAll} activeOpacity={0.7}>
+                <Ionicons name="archive-outline" size={15} color={colors.textSecondary} />
+                <Text style={[styles.bulkActionText, { color: colors.textSecondary }]}>Archive All</Text>
+              </TouchableOpacity>
+              <View style={[styles.bulkActionDivider, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }]} />
+              <TouchableOpacity style={styles.bulkActionBtn} onPress={handleDeleteAll} activeOpacity={0.7}>
+                <Ionicons name="trash-outline" size={15} color="#FF453A" />
+                <Text style={[styles.bulkActionText, { color: '#FF453A' }]}>Delete All</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
           {/* FLOATING NEW CHAT BUTTON — accent color + blur */}
           {Platform.OS === 'ios' ? (
             <View style={[styles.chatFabWrap, { bottom: insets.bottom + 20 }]}>
@@ -936,4 +967,17 @@ const styles = StyleSheet.create({
   },
   chatFabText: { color: '#FFFFFF', fontSize: 17, fontWeight: '600' },
   profilePhoto: { width: 30, height: 30, borderRadius: 15 },
+  bulkActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  bulkActionBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 6, paddingVertical: 8,
+  },
+  bulkActionText: { fontSize: 13, fontWeight: '500' },
+  bulkActionDivider: { width: 1, height: 20 },
 });

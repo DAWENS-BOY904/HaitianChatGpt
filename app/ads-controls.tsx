@@ -11,26 +11,32 @@ import {
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAlert } from '@/template';
+import { useTheme } from '../hooks/useTheme';
 
 export default function AdsControlsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { showAlert } = useAlert();
+  const { isDark } = useTheme();
 
   const [personalizeAds, setPersonalizeAds] = useState(true);
   const [pastChatsMemory, setPastChatsMemory] = useState(true);
   const [showAdFreeModal, setShowAdFreeModal] = useState(false);
 
-  const bg = '#000000';
-  const cardBg = '#1C1C1E';
-  const primaryText = '#FFFFFF';
+  // ── Theme tokens ──────────────────────────────────────────────────────────
+  const bg = isDark ? '#000000' : '#F2F2F7';
+  const cardBg = isDark ? '#1C1C1E' : '#FFFFFF';
+  const primaryText = isDark ? '#FFFFFF' : '#000000';
   const secondaryText = '#8E8E93';
-  const divider = 'rgba(255,255,255,0.08)';
+  const divider = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
+  const backBtnBg = isDark ? '#2C2C2E' : 'rgba(0,0,0,0.08)';
+  const headerBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)';
   const dangerRed = '#FF453A';
-  const accentBlue = '#4A90D9';
+  const accentBlue = '#0A84FF';
   const green = '#34C759';
 
   const handleDeleteAdData = () => {
@@ -55,15 +61,23 @@ export default function AdsControlsScreen() {
     header: {
       flexDirection: 'row', alignItems: 'center',
       paddingTop: insets.top + 12, paddingBottom: 12, paddingHorizontal: 16,
+      borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: headerBorder,
     },
     backBtn: {
-      width: 34, height: 34, borderRadius: 17, backgroundColor: '#2C2C2E',
+      width: 34, height: 34, borderRadius: 17, backgroundColor: backBtnBg,
       alignItems: 'center', justifyContent: 'center', marginRight: 12,
     },
     headerTitle: { fontSize: 17, fontWeight: '600', color: primaryText },
     content: { paddingHorizontal: 16, paddingTop: 20 },
-    sectionLabel: { fontSize: 13, color: secondaryText, marginBottom: 8, marginLeft: 4 },
-    card: { backgroundColor: cardBg, borderRadius: 14, overflow: 'hidden', marginBottom: 8 },
+    sectionLabel: {
+      fontSize: 13, color: secondaryText, fontWeight: '500',
+      marginBottom: 8, marginLeft: 4, letterSpacing: 0.1,
+    },
+    card: {
+      backgroundColor: cardBg, borderRadius: 14, overflow: 'hidden', marginBottom: 8,
+      shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: isDark ? 0 : 0.06, shadowRadius: 4, elevation: isDark ? 0 : 1,
+    },
     row: {
       flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
       paddingVertical: 16, paddingHorizontal: 16,
@@ -72,62 +86,108 @@ export default function AdsControlsScreen() {
     rowLast: { borderBottomWidth: 0 },
     rowLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
     rowLabel: { fontSize: 17, color: primaryText },
-    rowChevron: { flexDirection: 'row', alignItems: 'center' },
     deleteCard: {
       backgroundColor: cardBg, borderRadius: 14, overflow: 'hidden',
       marginBottom: 8, paddingVertical: 16, paddingHorizontal: 16,
+      shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: isDark ? 0 : 0.06, shadowRadius: 4, elevation: isDark ? 0 : 1,
     },
     deleteText: { fontSize: 17, color: dangerRed, fontWeight: '500' },
-    deleteHint: { fontSize: 13, color: secondaryText, marginTop: 8, marginHorizontal: 4, lineHeight: 18, marginBottom: 16 },
+    deleteHint: {
+      fontSize: 13, color: secondaryText, marginTop: 2,
+      marginHorizontal: 4, lineHeight: 18, marginBottom: 16,
+    },
     switchCard: {
       backgroundColor: cardBg, borderRadius: 14, overflow: 'hidden', marginBottom: 8,
+      shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: isDark ? 0 : 0.06, shadowRadius: 4, elevation: isDark ? 0 : 1,
     },
     switchRow: {
       flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
       paddingVertical: 16, paddingHorizontal: 16,
     },
-    switchHint: { fontSize: 13, color: secondaryText, paddingHorizontal: 16, paddingBottom: 14, lineHeight: 18 },
+    switchHint: {
+      fontSize: 13, color: secondaryText,
+      paddingHorizontal: 16, paddingBottom: 14, lineHeight: 18,
+    },
     linkText: { color: accentBlue },
     changePlanCard: {
       backgroundColor: cardBg, borderRadius: 14, overflow: 'hidden',
       paddingVertical: 16, paddingHorizontal: 16, marginBottom: 20,
+      shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: isDark ? 0 : 0.06, shadowRadius: 4, elevation: isDark ? 0 : 1,
     },
     changePlanText: { fontSize: 17, color: primaryText },
-    // Ad-free modal
-    modalOverlay: {
-      flex: 1, backgroundColor: 'rgba(0,0,0,0.7)',
-      justifyContent: 'flex-end',
-    },
-    modalSheet: {
-      backgroundColor: '#1C1C1E', borderTopLeftRadius: 20, borderTopRightRadius: 20,
-      paddingHorizontal: 20, paddingTop: 20, paddingBottom: insets.bottom + 20,
-    },
-    modalHandle: {
-      width: 40, height: 4, backgroundColor: '#3A3A3C',
-      borderRadius: 2, alignSelf: 'center', marginBottom: 20,
-    },
-    modalTitle: { fontSize: 20, fontWeight: '700', color: primaryText, marginBottom: 8 },
-    modalSubtitle: { fontSize: 15, color: secondaryText, marginBottom: 24, lineHeight: 22 },
-    modalBtn: {
-      borderRadius: 50, paddingVertical: 15,
-      alignItems: 'center', marginBottom: 12,
-    },
-    modalBtnBlue: { backgroundColor: accentBlue },
-    modalBtnGray: { backgroundColor: '#3A3A3C' },
-    modalBtnText: { fontSize: 17, fontWeight: '600', color: '#000' },
-    modalBtnTextWhite: { fontSize: 17, fontWeight: '600', color: primaryText },
-    modalBtnDanger: { backgroundColor: 'transparent', paddingVertical: 15, alignItems: 'center' },
-    modalBtnDangerText: { fontSize: 17, color: dangerRed },
   });
+
+  const HeaderContent = () => (
+    <>
+      <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+        <Ionicons name="chevron-back" size={18} color={primaryText} />
+      </TouchableOpacity>
+      <Text style={styles.headerTitle}>Ads controls</Text>
+    </>
+  );
+
+  // ── Ad-free modal content ─────────────────────────────────────────────────
+  const AdFreeModalContent = () => (
+    <View style={{ paddingHorizontal: 20, paddingBottom: insets.bottom + 20 }}>
+      <View style={{
+        width: 40, height: 4,
+        backgroundColor: isDark ? '#3A3A3C' : 'rgba(0,0,0,0.15)',
+        borderRadius: 2, alignSelf: 'center', marginTop: 12, marginBottom: 20,
+      }} />
+      <Text style={{ fontSize: 20, fontWeight: '700', color: primaryText, marginBottom: 8 }}>
+        Go ad-free
+      </Text>
+      <Text style={{ fontSize: 15, color: secondaryText, marginBottom: 24, lineHeight: 22 }}>
+        Upgrade your plan to enjoy an ad-free experience with more features and expanded access.
+      </Text>
+      <TouchableOpacity
+        style={{
+          borderRadius: 50, paddingVertical: 15,
+          alignItems: 'center', marginBottom: 12,
+          backgroundColor: accentBlue,
+        }}
+        onPress={() => { setShowAdFreeModal(false); router.push('/subscription'); }}
+      >
+        <Text style={{ fontSize: 17, fontWeight: '700', color: '#FFF' }}>Upgrade to Plus</Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={{
+          borderRadius: 50, paddingVertical: 15,
+          alignItems: 'center', marginBottom: 12,
+          backgroundColor: isDark ? '#3A3A3C' : '#E5E5EA',
+        }}
+        onPress={() => setShowAdFreeModal(false)}
+      >
+        <Text style={{ fontSize: 17, fontWeight: '600', color: primaryText }}>Never mind</Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={{ paddingVertical: 15, alignItems: 'center' }}
+        onPress={() => { setShowAdFreeModal(false); router.push('/ads-off'); }}
+      >
+        <Text style={{ fontSize: 17, color: dangerRed }}>Reduce message limit</Text>
+      </TouchableOpacity>
+    </View>
+  );
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-          <Ionicons name="chevron-back" size={18} color={primaryText} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Ads controls</Text>
-      </View>
+      {/* ── Header ── */}
+      {Platform.OS === 'ios' ? (
+        <BlurView
+          intensity={isDark ? 60 : 50}
+          tint={isDark ? 'dark' : 'light'}
+          style={[styles.header, { backgroundColor: 'transparent' }]}
+        >
+          <HeaderContent />
+        </BlurView>
+      ) : (
+        <View style={[styles.header, { backgroundColor: bg }]}>
+          <HeaderContent />
+        </View>
+      )}
 
       <ScrollView showsVerticalScrollIndicator={false}>
         <View style={styles.content}>
@@ -166,7 +226,7 @@ export default function AdsControlsScreen() {
               <Switch
                 value={personalizeAds}
                 onValueChange={setPersonalizeAds}
-                trackColor={{ true: green, false: '#3A3A3C' }}
+                trackColor={{ true: green, false: isDark ? '#3A3A3C' : '#E5E5EA' }}
                 thumbColor={Platform.OS === 'ios' ? undefined : '#FFFFFF'}
               />
             </View>
@@ -182,7 +242,7 @@ export default function AdsControlsScreen() {
               <Switch
                 value={pastChatsMemory}
                 onValueChange={setPastChatsMemory}
-                trackColor={{ true: green, false: '#3A3A3C' }}
+                trackColor={{ true: green, false: isDark ? '#3A3A3C' : '#E5E5EA' }}
                 thumbColor={Platform.OS === 'ios' ? undefined : '#FFFFFF'}
               />
             </View>
@@ -198,41 +258,55 @@ export default function AdsControlsScreen() {
         </View>
       </ScrollView>
 
-      {/* Ad-free modal */}
-      <Modal visible={showAdFreeModal} transparent animationType="slide" onRequestClose={() => setShowAdFreeModal(false)}>
-        <Pressable style={styles.modalOverlay} onPress={() => setShowAdFreeModal(false)}>
-          <Pressable style={styles.modalSheet} onPress={e => e.stopPropagation()}>
-            <View style={styles.modalHandle} />
-            <Text style={styles.modalTitle}>Go ad-free</Text>
-            <Text style={styles.modalSubtitle}>
-              Upgrade your plan to enjoy an ad-free experience with more features and expanded access.
-            </Text>
-            <TouchableOpacity
-              style={[styles.modalBtn, styles.modalBtnBlue]}
-              onPress={() => { setShowAdFreeModal(false); router.push('/subscription'); }}
-            >
-              <Text style={styles.modalBtnText}>Upgrade to Plus</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.modalBtn, styles.modalBtnGray]}
-              onPress={() => setShowAdFreeModal(false)}
-            >
-              <Text style={styles.modalBtnTextWhite}>Never mind</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.modalBtnDanger}
-              onPress={() => {
-                setShowAdFreeModal(false);
-                // Reduce message limit - show ads-off screen
-                router.push('/ads-off');
-              }}
-            >
-              <Text style={styles.modalBtnDangerText}>Reduce message limit</Text>
-            </TouchableOpacity>
+      {/* ── Ad-free modal with blur ── */}
+      <Modal
+        visible={showAdFreeModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowAdFreeModal(false)}
+      >
+        <Pressable
+          style={{ flex: 1, justifyContent: 'flex-end' }}
+          onPress={() => setShowAdFreeModal(false)}
+        >
+          {/* Backdrop blur */}
+          {Platform.OS === 'ios' ? (
+            <BlurView
+              intensity={isDark ? 40 : 30}
+              tint={isDark ? 'dark' : 'light'}
+              style={StyleSheet.absoluteFill}
+            />
+          ) : (
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.55)' }]} />
+          )}
+          <View style={[StyleSheet.absoluteFill, {
+            backgroundColor: isDark ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.15)',
+          }]} />
+
+          {/* Sheet */}
+          <Pressable
+            style={{ overflow: 'hidden', borderTopLeftRadius: 24, borderTopRightRadius: 24 }}
+            onPress={e => e.stopPropagation()}
+          >
+            {Platform.OS === 'ios' ? (
+              <BlurView
+                intensity={isDark ? 90 : 80}
+                tint={isDark ? 'dark' : 'light'}
+                style={{ borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: 'hidden' }}
+              >
+                <AdFreeModalContent />
+              </BlurView>
+            ) : (
+              <View style={{
+                backgroundColor: isDark ? '#1C1C1E' : '#F2F2F7',
+                borderTopLeftRadius: 24, borderTopRightRadius: 24,
+              }}>
+                <AdFreeModalContent />
+              </View>
+            )}
           </Pressable>
         </Pressable>
       </Modal>
     </View>
   );
 }
-add white/dark theme function and in history fix it real when the ai search something for you its apear all search and date lan anle li fix all in blur even the modal blur mode.

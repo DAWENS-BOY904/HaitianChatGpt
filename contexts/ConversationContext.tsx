@@ -83,6 +83,8 @@ interface ConversationContextType {
   exportConversation: (id: string, format: 'json' | 'txt' | 'md') => Promise<string>;
   duplicateConversation: (id: string) => Promise<string | null>;
   archiveConversation: (id: string) => Promise<void>;
+  archiveAllConversations: () => Promise<void>;
+  deleteAllConversations: () => Promise<void>;
 }
 
 export const ConversationContext = createContext<ConversationContextType | undefined>(undefined);
@@ -761,6 +763,28 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const archiveAllConversations = async (): Promise<void> => {
+    if (!user) return;
+    try {
+      await supabase.from('conversations').update({ is_archived: true } as any).eq('user_id', user.id).eq('is_archived', false);
+      setConversations([]);
+      clearCurrentConversation();
+    } catch (err) {
+      console.error('Error archiving all conversations:', err);
+    }
+  };
+
+  const deleteAllConversations = async (): Promise<void> => {
+    if (!user) return;
+    try {
+      await supabase.from('conversations').delete().eq('user_id', user.id);
+      setConversations([]);
+      clearCurrentConversation();
+    } catch (err) {
+      console.error('Error deleting all conversations:', err);
+    }
+  };
+
   return (
     <ConversationContext.Provider value={{
       conversations,
@@ -793,6 +817,8 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
       exportConversation,
       duplicateConversation,
       archiveConversation,
+      archiveAllConversations,
+      deleteAllConversations,
     }}>
       {children}
     </ConversationContext.Provider>
