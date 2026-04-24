@@ -792,3 +792,4 @@ const guestStyles = StyleSheet.create({
   secondaryBtn: { alignItems: 'center', paddingVertical: 10 },
   secondaryBtnText: { color: 'rgba(255,255,255,0.45)', fontSize: 15 },
 });
+fix edg function send login email by onspace cloud supabase function instead of resend api key please make it safe rea.
