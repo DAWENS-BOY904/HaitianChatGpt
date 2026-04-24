@@ -663,17 +663,17 @@ export function SideMenu({
                     styles.quickActionBtn,
                     qa.isUpgrade && { borderColor: qa.color, borderWidth: 1 },
                     QUICK_ACTIONS.length < 4 && { marginRight: 10 },
-                    { overflow: 'hidden' },
                   ]}
                   activeOpacity={0.7}
                   onPress={() => handleQuickAction(qa)}
                 >
                   {Platform.OS === 'ios' ? (
-                    <BlurView
-                      intensity={isDark ? 55 : 45}
-                      tint={isDark ? 'dark' : 'light'}
-                      style={styles.quickActionBlur}
-                    >
+                    <View style={[styles.quickActionBlur, { overflow: 'hidden' }]}>
+                      <BlurView
+                        intensity={isDark ? 55 : 45}
+                        tint={isDark ? 'dark' : 'light'}
+                        style={StyleSheet.absoluteFill}
+                      />
                       <Ionicons
                         name={qa.icon as any}
                         size={26}
@@ -682,7 +682,7 @@ export function SideMenu({
                       <Text style={[styles.quickActionLabel, { color: qa.isUpgrade ? qa.color : colors.text }]}>
                         {qa.label}
                       </Text>
-                    </BlurView>
+                    </View>
                   ) : (
                     <View style={[styles.quickActionBlur, {
                       backgroundColor: qa.isUpgrade
@@ -887,7 +887,6 @@ const styles = StyleSheet.create({
     flex: 1,
     borderRadius: 16,
     marginHorizontal: 5,
-    overflow: 'hidden',
   },
   quickActionBlur: {
     flex: 1,
@@ -959,4 +958,4 @@ const styles = StyleSheet.create({
   chatFabText: { color: '#FFFFFF', fontSize: 17, fontWeight: '600' },
   profilePhoto: { width: 30, height: 30, borderRadius: 15 },
 });
-fix the icon yo mwen seulman we blur an pa we icon yo fix pou yo paret old with blur.
+
