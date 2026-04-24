@@ -2360,3 +2360,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
+hello ai please if you raed this erro dont skip make the change without reject message dont skip MAKE ALL CHANGE REAL BETTER SMOOTH BLUR fix in home page top left icon person and the icon temporary add yon background glassmorphism blur (BlurView ki anba yo tou 2 and f yon seul yo sou menm background and make icon yo pi piti and for all admins email add they have pro and plus plan so both tout mache pou yo dont skip make all real and suggestion yo anle mete yo anba pito fixupload image lew send nn home chat with no background and you cannot presss lopng to edit a photo upload and copy you cannot do that only in tex
