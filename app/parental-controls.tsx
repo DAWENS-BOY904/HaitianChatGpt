@@ -482,3 +482,4 @@ function InviteModalBody({
     </View>
   );
 }
+fix the modal mwen paka wel and keyboard dwe paret only le pral ekri.
