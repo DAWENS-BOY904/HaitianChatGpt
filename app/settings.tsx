@@ -970,4 +970,4 @@ export default function SettingsScreen() {
   );
 }
 
-
+fix photo upload its not click and fix modal its to longue
