@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -10,10 +10,6 @@ import {
   Modal,
   TextInput,
   ActivityIndicator,
-  Animated,
-  Pressable,
-  Linking,
-  Alert,
   KeyboardAvoidingView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -29,6 +25,126 @@ import { getSupabaseClient } from '@/template';
 import * as ImagePicker from 'expo-image-picker';
 import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useProfile } from '../contexts/ProfileContext';
+
+// ── Edit Profile Modal Content ─────────────────────────────────────────────
+function EditModalContent({
+  isDark, editPhoto, initials, uploadingPhoto, editName, editUsername,
+  canChangeUsername, daysUntilUsernameChange, savingProfile,
+  primaryText, secondaryText, insets,
+  onPickPhoto, onChangeName, onChangeUsername, onSave, onClose,
+}: {
+  isDark: boolean; editPhoto: string; initials: string; uploadingPhoto: boolean;
+  editName: string; editUsername: string;
+  canChangeUsername: () => boolean; daysUntilUsernameChange: () => number;
+  savingProfile: boolean; primaryText: string; secondaryText: string;
+  insets: { bottom: number };
+  onPickPhoto: () => void; onChangeName: (v: string) => void;
+  onChangeUsername: (v: string) => void; onSave: () => void; onClose: () => void;
+}) {
+  const inputBg = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
+  const borderColor = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)';
+  const canChange = canChangeUsername();
+  const daysLeft = daysUntilUsernameChange();
+
+  return (
+    <ScrollView
+      style={{ flex: 1 }}
+      contentContainerStyle={{ padding: 24, paddingBottom: insets.bottom + 32 }}
+      keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator={false}
+    >
+      {/* Drag handle */}
+      <View style={{ alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)', marginBottom: 20 }} />
+
+      <Text style={{ fontSize: 20, fontWeight: '700', color: primaryText, textAlign: 'center', marginBottom: 24 }}>Edit Profile</Text>
+
+      {/* Avatar */}
+      <TouchableOpacity onPress={onPickPhoto} style={{ alignSelf: 'center', marginBottom: 28 }} activeOpacity={0.8}>
+        <View style={{ width: 90, height: 90, borderRadius: 45, overflow: 'hidden', backgroundColor: isDark ? '#3A3A3C' : '#E5E5EA', alignItems: 'center', justifyContent: 'center' }}>
+          {uploadingPhoto ? (
+            <ActivityIndicator color={primaryText} />
+          ) : editPhoto ? (
+            <Image source={{ uri: editPhoto }} style={{ width: 90, height: 90 }} contentFit="cover" />
+          ) : (
+            <Text style={{ fontSize: 36, fontWeight: '700', color: primaryText }}>{initials}</Text>
+          )}
+        </View>
+        <View style={{
+          position: 'absolute', bottom: 0, right: 0,
+          width: 28, height: 28, borderRadius: 14,
+          backgroundColor: '#10A37F', alignItems: 'center', justifyContent: 'center',
+          borderWidth: 2, borderColor: isDark ? '#1C1C1E' : '#F2F2F7',
+        }}>
+          <Ionicons name="camera" size={14} color="#FFF" />
+        </View>
+      </TouchableOpacity>
+
+      {/* Name */}
+      <Text style={{ fontSize: 13, fontWeight: '500', color: secondaryText, marginBottom: 6, marginLeft: 2 }}>Display Name</Text>
+      <TextInput
+        style={{
+          backgroundColor: inputBg, borderRadius: 12, paddingHorizontal: 16,
+          paddingVertical: 14, fontSize: 16, color: primaryText, marginBottom: 16,
+          borderWidth: 1, borderColor,
+        }}
+        value={editName}
+        onChangeText={onChangeName}
+        placeholder="Your name"
+        placeholderTextColor={secondaryText}
+        returnKeyType="next"
+      />
+
+      {/* Username */}
+      <Text style={{ fontSize: 13, fontWeight: '500', color: secondaryText, marginBottom: 6, marginLeft: 2 }}>Username</Text>
+      <TextInput
+        style={{
+          backgroundColor: canChange ? inputBg : (isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)'),
+          borderRadius: 12, paddingHorizontal: 16,
+          paddingVertical: 14, fontSize: 16,
+          color: canChange ? primaryText : secondaryText, marginBottom: 8,
+          borderWidth: 1, borderColor,
+        }}
+        value={editUsername}
+        onChangeText={onChangeUsername}
+        placeholder="username"
+        placeholderTextColor={secondaryText}
+        editable={canChange}
+        autoCapitalize="none"
+        returnKeyType="done"
+      />
+      {!canChange && (
+        <Text style={{ fontSize: 12, color: secondaryText, marginBottom: 16, marginLeft: 2 }}>
+          Username can be changed in {daysLeft} day{daysLeft !== 1 ? 's' : ''}
+        </Text>
+      )}
+      {canChange && <View style={{ marginBottom: 16 }} />}
+
+      {/* Save */}
+      <TouchableOpacity
+        style={{
+          backgroundColor: '#10A37F', borderRadius: 50, paddingVertical: 16,
+          alignItems: 'center', marginBottom: 12,
+          opacity: savingProfile ? 0.7 : 1,
+        }}
+        onPress={onSave}
+        disabled={savingProfile}
+        activeOpacity={0.8}
+      >
+        {savingProfile ? (
+          <ActivityIndicator color="#FFF" />
+        ) : (
+          <Text style={{ fontSize: 17, fontWeight: '700', color: '#FFF' }}>Save Changes</Text>
+        )}
+      </TouchableOpacity>
+
+      {/* Cancel */}
+      <TouchableOpacity style={{ alignItems: 'center', paddingVertical: 12 }} onPress={onClose}>
+        <Text style={{ fontSize: 17, color: secondaryText }}>Cancel</Text>
+      </TouchableOpacity>
+    </ScrollView>
+  );
+}
 
 // ── Guest-mode limited settings view ──────────────────────────────────────
 function GuestSettings() {
@@ -192,6 +308,7 @@ export default function SettingsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const supabase = getSupabaseClient();
+  const { setProfilePhotoUrl: setGlobalPhoto, setDisplayName: setGlobalName, setUsername: setGlobalUsername } = useProfile();
 
   const [isAdmin, setIsAdmin] = useState(false);
   const [profilePhoto, setProfilePhoto] = useState('');
@@ -238,6 +355,10 @@ export default function SettingsScreen() {
       setFullName(data.full_name || '');
       setProfilePhoto(data.profile_photo_url || '');
       setUsernameLastChanged(data.username_last_changed || null);
+      // Sync initial values to global context
+      setGlobalPhoto(data.profile_photo_url || '');
+      setGlobalName(data.full_name || data.username || '');
+      setGlobalUsername(data.username || '');
     }
   };
 
@@ -323,10 +444,18 @@ export default function SettingsScreen() {
       }
       const { error } = await supabase.from('user_profiles').update(updates).eq('id', user.id);
       if (error) throw error;
+
+      // Update local state
       setFullName(editName);
       setUsername(editUsername);
       setProfilePhoto(editPhoto);
       if (usernameChanged) setUsernameLastChanged(new Date().toISOString());
+
+      // ── Instantly sync to global ProfileContext → SideMenu updates immediately ──
+      setGlobalPhoto(editPhoto);
+      setGlobalName(editName);
+      setGlobalUsername(editUsername);
+
       setEditModalVisible(false);
     } catch (e: any) {
       showAlert('Error', e.message || 'Failed to save profile');
@@ -468,7 +597,6 @@ export default function SettingsScreen() {
     },
     rowLabel: { fontSize: 16, color: primaryText, fontWeight: '400', flex: 1 },
     rowValue: { fontSize: 15, color: secondaryText, marginRight: 4 },
-    rowChevron: {},
     logoutBtn: {
       marginHorizontal: 16,
       marginTop: 32,
@@ -488,67 +616,11 @@ export default function SettingsScreen() {
       marginBottom: 40,
       marginTop: 8,
     },
-    modalOverlay: {
-      flex: 1,
-      backgroundColor: 'rgba(0,0,0,0.6)',
-      justifyContent: 'flex-end',
-    },
-    editModal: {
-      backgroundColor: '#1C1C1E',
-      borderTopLeftRadius: 20,
-      borderTopRightRadius: 20,
-      paddingHorizontal: 20,
-      paddingTop: 20,
-      paddingBottom: insets.bottom + 20,
-    },
-    editAvatarWrap: {
-      alignSelf: 'center',
-      width: 90,
-      height: 90,
-      borderRadius: 45,
-      backgroundColor: '#2C2C2E',
-      overflow: 'hidden',
-      marginBottom: 24,
-    },
-    editAvatarImg: { width: 90, height: 90 },
-    cameraIcon: {
-      position: 'absolute',
-      bottom: 0,
-      right: 0,
-      width: 28,
-      height: 28,
-      borderRadius: 14,
-      backgroundColor: '#3A3A3C',
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    editLabel: { fontSize: 13, color: secondaryText, marginBottom: 6, marginLeft: 2 },
-    editInput: {
-      backgroundColor: '#2C2C2E',
-      borderRadius: 12,
-      paddingHorizontal: 16,
-      paddingVertical: 14,
-      fontSize: 16,
-      color: primaryText,
-      marginBottom: 16,
-    },
-    editHint: { fontSize: 12, color: secondaryText, textAlign: 'center', marginBottom: 20, lineHeight: 18 },
-    saveBtn: {
-      backgroundColor: '#FFFFFF',
-      borderRadius: 50,
-      paddingVertical: 15,
-      alignItems: 'center',
-      marginBottom: 10,
-    },
-    saveBtnText: { fontSize: 17, fontWeight: '700', color: '#000' },
-    cancelBtn: { alignItems: 'center', paddingVertical: 12 },
-    cancelBtnText: { fontSize: 17, color: secondaryText },
-    inlineChildren: { flex: 1 },
     colorRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
     colorDot: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: 'transparent' },
-    colorDotSelected: { borderColor: '#FFFFFF' },
+    colorDotSelected: { borderColor: isDark ? '#FFFFFF' : '#000000' },
     appearRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
-    appearChip: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 8, backgroundColor: '#3A3A3C' },
+    appearChip: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 8, backgroundColor: isDark ? '#3A3A3C' : '#E5E5EA' },
     appearChipActive: { backgroundColor: '#0A84FF' },
     appearChipText: { fontSize: 13, color: primaryText },
     appearChipTextActive: { fontSize: 13, color: '#FFFFFF' },
@@ -638,7 +710,7 @@ export default function SettingsScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>Account</Text>
           <View style={styles.card}>
-            <Row icon="mail-outline" label="Email" value={user?.email?.length ?? 0 > 22 ? user?.email?.slice(0,20) + '...' : user?.email || ''} />
+            <Row icon="mail-outline" label="Email" value={(user?.email?.length ?? 0) > 22 ? (user?.email?.slice(0, 20) + '...') : (user?.email || '')} />
             <Row icon="add-circle-outline" label="Subscription" value={tierLabel()} onPress={() => router.push('/subscription')} />
             {!isPaidPlan && (
               <Row icon="arrow-up-circle-outline" label="Upgrade to Dawinix Plus" onPress={() => router.push('/subscription')} />
@@ -704,7 +776,7 @@ export default function SettingsScreen() {
             <Text style={styles.sectionLabel}>Admin</Text>
             <View style={styles.card}>
               <Row icon="shield-outline" label="Admin Dashboard" onPress={() => router.push('/admin')} />
-              <Row icon="key-outline" label="Apple JWT Key Generator" onPress={() => router.push('/AppleGenerateJWTkey')} isLast />
+              <Row icon="key-outline" label="Apple JWT Key Generator" onPress={() => router.push('/AppleGenerateJWTkey')} />
               <Row icon="mail-outline" label="Send Email to Users" onPress={() => router.push('/admin-email')} isLast />
             </View>
           </View>
@@ -730,11 +802,10 @@ export default function SettingsScreen() {
       {/* Edit Profile Modal — glassmorphism */}
       <Modal visible={editModalVisible} transparent animationType="slide" onRequestClose={() => setEditModalVisible(false)}>
         <View style={{ flex: 1 }}>
-          {/* Full blur backdrop */}
           <BlurView intensity={isDark ? 55 : 40} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
           <View style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.18)' }]} />
-          <TouchableOpacity style={{ flex: 0.28 }} activeOpacity={1} onPress={() => setEditModalVisible(false)} />
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 0.72 }}>
+          <TouchableOpacity style={{ flex: 0.3 }} activeOpacity={1} onPress={() => setEditModalVisible(false)} />
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 0.7 }}>
             <View style={{
               flex: 1, borderTopLeftRadius: 28, borderTopRightRadius: 28,
               overflow: 'hidden',
@@ -792,6 +863,3 @@ export default function SettingsScreen() {
     </View>
   );
 }
-fix error white screen make sure it working goods and after saving a new profile photo in settings, emit a auto refresh event or use a shared context so the avatar displayed in the SideMenu drawer header updates immediately without requiring an app restart In the Edit Profile modal in app/settings.tsx, replace the direct photo library picker with an action sheet that lets the user choose between Camera (launchCameraAsync) or Photo Library (launchImageLibraryAsync) when tapping the avatar circle in blurr.
-
-

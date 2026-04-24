@@ -7,6 +7,7 @@ import { SettingsProvider } from '../contexts/SettingsContext';
 import { SocialProvider } from '../contexts/SocialContext';
 import { SubscriptionProvider } from '../contexts/SubscriptionContext';
 import { GuestLimitsProvider } from '../contexts/GuestLimitsContext';
+import { ProfileProvider } from '../contexts/ProfileContext';
 import { useEffect } from 'react';
 import { Platform } from 'react-native';
 
@@ -39,6 +40,7 @@ export default function RootLayout() {
           <ThemeProvider>
             <SubscriptionProvider>
               <GuestLimitsProvider>
+                <ProfileProvider>
                 <SocialProvider>
                   <ConversationProvider>
                     <RevenueCatInit />
@@ -120,6 +122,7 @@ export default function RootLayout() {
                     </Stack>
                   </ConversationProvider>
                 </SocialProvider>
+                </ProfileProvider>
               </GuestLimitsProvider>
             </SubscriptionProvider>
           </ThemeProvider>

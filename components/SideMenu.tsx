@@ -35,6 +35,7 @@ import { useAuth } from '@/template';
 import { useConversation } from '../hooks/useConversation';
 import { BorderRadius } from '../constants/theme';
 import { useRouter } from 'expo-router';
+import { useProfile } from '../contexts/ProfileContext';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -296,11 +297,17 @@ export function SideMenu({
   const [searchQuery, setSearchQuery] = useState('');
   const [searchActive, setSearchActive] = useState(false);
   const [profilePhotoUrl, setProfilePhotoUrl] = useState<string | null>(null);
+  const { profilePhotoUrl: globalPhotoUrl, displayName: globalDisplayName, refreshKey } = useProfile();
 
   const [actionMenuConv, setActionMenuConv] = useState<{ id: string; title: string; isPinned?: boolean } | null>(null);
   const [actionMenuVisible, setActionMenuVisible] = useState(false);
   const [renameVisible, setRenameVisible] = useState(false);
   const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set());
+
+  // Sync from global ProfileContext (instant update after settings save)
+  useEffect(() => {
+    if (globalPhotoUrl) setProfilePhotoUrl(globalPhotoUrl);
+  }, [globalPhotoUrl, refreshKey]);
 
   useEffect(() => {
     if (!user?.id) return;
