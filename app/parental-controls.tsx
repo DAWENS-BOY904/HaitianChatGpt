@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -10,14 +10,18 @@ import {
   Modal,
   ActivityIndicator,
   KeyboardAvoidingView,
+  Animated,
+  Easing,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
+import { Image } from 'expo-image';
 import { useAuth, useAlert } from '@/template';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getSupabaseClient } from '@/template';
 import { useTheme } from '../hooks/useTheme';
+import { useSubscription } from '../hooks/useSubscription';
 
 type FamilyRole = 'parent' | 'child';
 
@@ -28,6 +32,7 @@ export default function ParentalControlsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const supabase = getSupabaseClient();
+  const { tier } = useSubscription();
 
   const [familyMembers, setFamilyMembers] = useState<any[]>([]);
   const [invitations, setInvitations] = useState<any[]>([]);
@@ -36,6 +41,7 @@ export default function ParentalControlsScreen() {
   const [email, setEmail] = useState('');
   const [selectedRole, setSelectedRole] = useState<FamilyRole | null>(null);
   const [loading, setLoading] = useState(false);
+  const [resendingId, setResendingId] = useState<string | null>(null);
 
   // ── Theme tokens ──────────────────────────────────────────────────────────
   const bg = isDark ? '#000000' : '#F2F2F7';
@@ -49,6 +55,12 @@ export default function ParentalControlsScreen() {
   const inputBorder = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)';
   const surfaceBg = isDark ? '#2C2C2E' : '#F2F2F7';
   const accentGreen = '#10A37F';
+
+  // Determine limit based on subscription
+  const ADMIN_EMAILS = ['berryxoe@gmail.com', 'newdawens@gmail.com'];
+  const isAdminUser = ADMIN_EMAILS.includes(user?.email?.toLowerCase() || '');
+  const isPro = isAdminUser || ['go', 'plus', 'premium_monthly', 'premium_yearly', 'lifetime'].includes(tier);
+  const memberLimit = isPro ? 20 : 3;
 
   useEffect(() => {
     loadData();
@@ -64,7 +76,7 @@ export default function ParentalControlsScreen() {
         child_id,
         daily_message_limit,
         content_filter_enabled,
-        user_profiles!family_members_child_id_fkey(username, email)
+        user_profiles!family_members_child_id_fkey(id, username, email, full_name, profile_photo_url)
       `)
       .eq('parent_id', user.id);
 
@@ -88,29 +100,74 @@ export default function ParentalControlsScreen() {
     if (receivedInvites) setPendingInvites(receivedInvites);
   };
 
+  const totalAdded = familyMembers.length + invitations.filter(i => i.status === 'pending' || i.status === 'accepted').length;
+
   const handleSendInvitation = async () => {
     if (!email.trim()) { showAlert('Error', 'Please enter an email address'); return; }
     if (!selectedRole) { showAlert('Error', 'Please select a relationship'); return; }
     if (email === user?.email) { showAlert('Error', 'You cannot add yourself'); return; }
 
+    if (totalAdded >= memberLimit) {
+      showAlert(
+        isPro ? 'Limit reached' : 'Upgrade required',
+        isPro
+          ? `You can have up to ${memberLimit} family members.`
+          : `Free accounts can have up to ${memberLimit} family members. Upgrade to Plus for up to 20.`
+      );
+      return;
+    }
+
     setLoading(true);
     const invitationCode = Math.random().toString(36).substring(2, 15);
-    const { error } = await supabase.from('parental_invitations').insert({
+    const { data: insertData, error } = await supabase.from('parental_invitations').insert({
       parent_id: user?.id,
       child_email: email.trim().toLowerCase(),
       invitation_code: invitationCode,
       status: 'pending',
-    });
+    }).select().single();
     setLoading(false);
 
     if (error) {
       showAlert('Error', 'Failed to send invitation');
-    } else {
-      showAlert('Success', `Invitation sent to ${email}.`);
-      setEmail('');
-      setSelectedRole(null);
-      setShowAddMember(false);
-      await loadData();
+      return;
+    }
+
+    // Send invitation email via edge function
+    sendInvitationEmail(email.trim().toLowerCase(), invitationCode, user?.email || '');
+
+    showAlert('Invitation sent', `An invitation has been sent to ${email}.`);
+    setEmail('');
+    setSelectedRole(null);
+    setShowAddMember(false);
+    await loadData();
+  };
+
+  const sendInvitationEmail = async (toEmail: string, code: string, fromEmail: string) => {
+    try {
+      await supabase.functions.invoke('send-parental-invitation', {
+        body: { toEmail, invitationCode: code, fromEmail },
+      });
+    } catch (e) {
+      console.log('Email send failed silently:', e);
+    }
+  };
+
+  const handleResendInvitation = async (invite: any) => {
+    setResendingId(invite.id);
+    try {
+      // Generate new code and update expiry
+      const newCode = Math.random().toString(36).substring(2, 15);
+      await supabase.from('parental_invitations').update({
+        invitation_code: newCode,
+        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      }).eq('id', invite.id);
+
+      sendInvitationEmail(invite.child_email, newCode, user?.email || '');
+      showAlert('Resent', `Invitation email resent to ${invite.child_email}`);
+    } catch (e) {
+      showAlert('Error', 'Failed to resend invitation');
+    } finally {
+      setResendingId(null);
     }
   };
 
@@ -175,7 +232,7 @@ export default function ParentalControlsScreen() {
       paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8,
     },
     statusText: { fontSize: 12, fontWeight: '700' },
-    inviteActions: { flexDirection: 'row', gap: 8 },
+    inviteActions: { flexDirection: 'row', gap: 8, alignItems: 'center' },
     emptyState: { padding: 32, alignItems: 'center' },
     emptyText: { fontSize: 14, color: secondaryText, textAlign: 'center', lineHeight: 20 },
     addBtn: {
@@ -184,6 +241,18 @@ export default function ParentalControlsScreen() {
       flexDirection: 'row', justifyContent: 'center', gap: 8,
     },
     addBtnText: { fontSize: 17, fontWeight: '700', color: '#FFF' },
+    limitBadge: {
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+      paddingVertical: 8, gap: 6, marginTop: 10,
+    },
+    limitText: { fontSize: 13, color: secondaryText },
+    avatarCircle: {
+      width: 40, height: 40, borderRadius: 20,
+      backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA',
+      alignItems: 'center', justifyContent: 'center',
+      marginRight: 12, overflow: 'hidden',
+    },
+    avatarInitial: { fontSize: 16, fontWeight: '700', color: primaryText },
   });
 
   const HeaderContent = () => (
@@ -195,15 +264,25 @@ export default function ParentalControlsScreen() {
     </>
   );
 
+  const MemberAvatar = ({ profile }: { profile: any }) => {
+    const name = profile?.full_name || profile?.username || 'U';
+    const initial = name[0].toUpperCase();
+    return (
+      <View style={styles.avatarCircle}>
+        {profile?.profile_photo_url ? (
+          <Image source={{ uri: profile.profile_photo_url }} style={{ width: 40, height: 40 }} contentFit="cover" />
+        ) : (
+          <Text style={styles.avatarInitial}>{initial}</Text>
+        )}
+      </View>
+    );
+  };
+
   return (
     <View style={styles.container}>
-      {/* BlurView header on iOS */}
       {Platform.OS === 'ios' ? (
-        <BlurView
-          intensity={isDark ? 60 : 50}
-          tint={isDark ? 'dark' : 'light'}
-          style={[styles.header, { backgroundColor: 'transparent' }]}
-        >
+        <BlurView intensity={isDark ? 60 : 50} tint={isDark ? 'dark' : 'light'}
+          style={[styles.header, { backgroundColor: 'transparent' }]}>
           <HeaderContent />
         </BlurView>
       ) : (
@@ -212,21 +291,25 @@ export default function ParentalControlsScreen() {
         </View>
       )}
 
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <View style={styles.content}>
+
           {/* Pending received invitations */}
           {pendingInvites.length > 0 && (
             <>
-              <Text style={styles.sectionLabel}>PENDING INVITATIONS</Text>
+              <Text style={styles.sectionLabel}>PENDING INVITATIONS FOR YOU</Text>
               <View style={styles.card}>
                 {pendingInvites.map((invite, idx) => (
                   <View
                     key={invite.id}
                     style={[styles.memberRow, idx === pendingInvites.length - 1 && styles.memberRowLast]}
                   >
+                    <View style={[styles.avatarCircle, { backgroundColor: '#10A37F22' }]}>
+                      <Ionicons name="people" size={18} color={accentGreen} />
+                    </View>
                     <View style={styles.memberInfo}>
                       <Text style={styles.memberName}>Parent Invitation</Text>
-                      <Text style={styles.memberEmail}>You have been invited to link accounts</Text>
+                      <Text style={styles.memberEmail}>Someone invited you to link accounts</Text>
                     </View>
                     <View style={styles.inviteActions}>
                       <TouchableOpacity onPress={() => handleAcceptInvitation(invite.invitation_code)}>
@@ -243,36 +326,58 @@ export default function ParentalControlsScreen() {
           )}
 
           {/* Add button */}
-          <TouchableOpacity style={styles.addBtn} onPress={() => setShowAddMember(true)}>
+          <TouchableOpacity
+            style={[styles.addBtn, totalAdded >= memberLimit && { opacity: 0.6 }]}
+            onPress={() => {
+              if (totalAdded >= memberLimit && !isPro) {
+                showAlert('Upgrade to Plus', `Free accounts support up to ${memberLimit} family members. Upgrade for up to 20.`, [
+                  { text: 'Upgrade', onPress: () => router.push('/subscription') },
+                  { text: 'Cancel', style: 'cancel' },
+                ]);
+              } else {
+                setShowAddMember(true);
+              }
+            }}
+          >
             <Ionicons name="person-add" size={20} color="#FFF" />
             <Text style={styles.addBtnText}>Add Family Member</Text>
           </TouchableOpacity>
 
-          {/* Family Members */}
+          <View style={styles.limitBadge}>
+            <Ionicons name={isPro ? 'star' : 'people-outline'} size={14} color={secondaryText} />
+            <Text style={styles.limitText}>
+              {totalAdded}/{memberLimit} family members {isPro ? '(Plus)' : '(Free)'}
+            </Text>
+          </View>
+
+          {/* Active Family Members */}
           <Text style={styles.sectionLabel}>FAMILY MEMBERS</Text>
           <View style={styles.card}>
             {familyMembers.length === 0 ? (
               <View style={styles.emptyState}>
                 <Ionicons name="people-outline" size={36} color={secondaryText} style={{ marginBottom: 10 }} />
-                <Text style={styles.emptyText}>
-                  No family members yet. Add one to manage their settings.
-                </Text>
+                <Text style={styles.emptyText}>No family members yet. Add one to manage their settings.</Text>
               </View>
             ) : (
-              familyMembers.map((member, idx) => (
-                <TouchableOpacity
-                  key={member.id}
-                  style={[styles.memberRow, idx === familyMembers.length - 1 && styles.memberRowLast]}
-                  onPress={() => router.push(`/family-member?id=${member.id}`)}
-                  activeOpacity={0.6}
-                >
-                  <View style={styles.memberInfo}>
-                    <Text style={styles.memberName}>{member.user_profiles?.username || 'User'}</Text>
-                    <Text style={styles.memberEmail}>{member.user_profiles?.email}</Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={17} color={secondaryText} />
-                </TouchableOpacity>
-              ))
+              familyMembers.map((member, idx) => {
+                const profile = member.user_profiles;
+                const name = profile?.full_name || profile?.username || 'User';
+                return (
+                  <TouchableOpacity
+                    key={member.id}
+                    style={[styles.memberRow, idx === familyMembers.length - 1 && styles.memberRowLast]}
+                    onPress={() => router.push(`/family-member?id=${member.id}`)}
+                    activeOpacity={0.6}
+                  >
+                    <MemberAvatar profile={profile} />
+                    <View style={styles.memberInfo}>
+                      <Text style={styles.memberName}>{name}</Text>
+                      <Text style={styles.memberEmail}>{profile?.email}</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={17} color={secondaryText} />
+                  </TouchableOpacity>
+                );
+              })
             )}
           </View>
 
@@ -289,22 +394,49 @@ export default function ParentalControlsScreen() {
                   key={invite.id}
                   style={[styles.memberRow, idx === invitations.length - 1 && styles.memberRowLast]}
                 >
+                  <View style={[styles.avatarCircle, {
+                    backgroundColor: invite.status === 'pending' ? '#FF950022' : invite.status === 'accepted' ? '#34C75922' : '#FF453A22',
+                  }]}>
+                    <Ionicons
+                      name={invite.status === 'accepted' ? 'checkmark' : invite.status === 'rejected' ? 'close' : 'time'}
+                      size={18}
+                      color={invite.status === 'accepted' ? '#34C759' : invite.status === 'rejected' ? '#FF453A' : '#FF9500'}
+                    />
+                  </View>
                   <View style={styles.memberInfo}>
                     <Text style={styles.memberName}>{invite.child_email}</Text>
                     <Text style={styles.memberEmail}>
                       {new Date(invite.created_at).toLocaleDateString()}
                     </Text>
                   </View>
-                  <View style={[styles.statusBadge, {
-                    backgroundColor: invite.status === 'accepted' ? '#10A37F22'
-                      : invite.status === 'rejected' ? '#FF453A22' : '#FF950022',
-                  }]}>
-                    <Text style={[styles.statusText, {
-                      color: invite.status === 'accepted' ? '#34C759'
-                        : invite.status === 'rejected' ? '#FF453A' : '#FF9500',
+                  <View style={{ alignItems: 'flex-end', gap: 6 }}>
+                    <View style={[styles.statusBadge, {
+                      backgroundColor: invite.status === 'accepted' ? '#10A37F22'
+                        : invite.status === 'rejected' ? '#FF453A22' : '#FF950022',
                     }]}>
-                      {invite.status.toUpperCase()}
-                    </Text>
+                      <Text style={[styles.statusText, {
+                        color: invite.status === 'accepted' ? '#34C759'
+                          : invite.status === 'rejected' ? '#FF453A' : '#FF9500',
+                      }]}>
+                        {invite.status.toUpperCase()}
+                      </Text>
+                    </View>
+                    {invite.status === 'pending' && (
+                      <TouchableOpacity
+                        onPress={() => handleResendInvitation(invite)}
+                        disabled={resendingId === invite.id}
+                        style={{
+                          paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8,
+                          backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7',
+                          flexDirection: 'row', alignItems: 'center', gap: 4,
+                        }}
+                      >
+                        {resendingId === invite.id
+                          ? <ActivityIndicator size="small" color={accentGreen} />
+                          : <Ionicons name="send" size={12} color={accentGreen} />}
+                        <Text style={{ fontSize: 12, color: accentGreen, fontWeight: '600' }}>Resend</Text>
+                      </TouchableOpacity>
+                    )}
                   </View>
                 </View>
               ))
@@ -315,7 +447,7 @@ export default function ParentalControlsScreen() {
         </View>
       </ScrollView>
 
-      {/* ── Add Member Modal with BlurView ──────────────────────────────── */}
+      {/* ── Add Member Modal ──────────────────────────────────────────────── */}
       <Modal
         visible={showAddMember}
         animationType="slide"
@@ -329,13 +461,9 @@ export default function ParentalControlsScreen() {
           <View style={{ flex: 1, justifyContent: 'flex-end' }}>
             {/* Backdrop */}
             {Platform.OS === 'ios' ? (
-              <BlurView
-                intensity={isDark ? 40 : 30}
-                tint={isDark ? 'dark' : 'light'}
-                style={StyleSheet.absoluteFill}
-              />
+              <BlurView intensity={isDark ? 40 : 30} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
             ) : (
-              <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.5)' }]} />
+              <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.55)' }]} />
             )}
             <View style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.15)' }]} />
 
@@ -349,49 +477,30 @@ export default function ParentalControlsScreen() {
               shadowOpacity: 0.35, shadowRadius: 24, elevation: 24,
             }}>
               {Platform.OS === 'ios' ? (
-                <BlurView
-                  intensity={isDark ? 90 : 75}
-                  tint={isDark ? 'dark' : 'light'}
-                  style={{ borderTopLeftRadius: 28, borderTopRightRadius: 28, overflow: 'hidden' }}
-                >
+                <BlurView intensity={isDark ? 90 : 80} tint={isDark ? 'dark' : 'light'}
+                  style={{ borderTopLeftRadius: 28, borderTopRightRadius: 28, overflow: 'hidden' }}>
                   <InviteModalBody
-                    isDark={isDark}
-                    primaryText={primaryText}
-                    secondaryText={secondaryText}
-                    inputBg={inputBg}
-                    inputBorder={inputBorder}
-                    surfaceBg={surfaceBg}
-                    divider={divider}
-                    insets={insets}
-                    email={email}
-                    setEmail={setEmail}
-                    selectedRole={selectedRole}
-                    setSelectedRole={setSelectedRole}
-                    canSend={canSend}
-                    loading={loading}
+                    isDark={isDark} primaryText={primaryText} secondaryText={secondaryText}
+                    inputBg={inputBg} inputBorder={inputBorder} surfaceBg={surfaceBg}
+                    divider={divider} insets={insets} email={email} setEmail={setEmail}
+                    selectedRole={selectedRole} setSelectedRole={setSelectedRole}
+                    canSend={canSend} loading={loading}
                     onSend={handleSendInvitation}
                     onCancel={() => setShowAddMember(false)}
+                    accentGreen={accentGreen}
                   />
                 </BlurView>
               ) : (
-                <View style={{ backgroundColor: isDark ? '#1C1C1E' : '#F2F2F7', borderTopLeftRadius: 28, borderTopRightRadius: 28, overflow: 'hidden' }}>
+                <View style={{ backgroundColor: isDark ? '#1C1C1E' : '#F2F2F7', borderTopLeftRadius: 28, borderTopRightRadius: 28 }}>
                   <InviteModalBody
-                    isDark={isDark}
-                    primaryText={primaryText}
-                    secondaryText={secondaryText}
-                    inputBg={inputBg}
-                    inputBorder={inputBorder}
-                    surfaceBg={surfaceBg}
-                    divider={divider}
-                    insets={insets}
-                    email={email}
-                    setEmail={setEmail}
-                    selectedRole={selectedRole}
-                    setSelectedRole={setSelectedRole}
-                    canSend={canSend}
-                    loading={loading}
+                    isDark={isDark} primaryText={primaryText} secondaryText={secondaryText}
+                    inputBg={inputBg} inputBorder={inputBorder} surfaceBg={surfaceBg}
+                    divider={divider} insets={insets} email={email} setEmail={setEmail}
+                    selectedRole={selectedRole} setSelectedRole={setSelectedRole}
+                    canSend={canSend} loading={loading}
                     onSend={handleSendInvitation}
                     onCancel={() => setShowAddMember(false)}
+                    accentGreen={accentGreen}
                   />
                 </View>
               )}
@@ -405,105 +514,162 @@ export default function ParentalControlsScreen() {
 
 // ── Invite Modal Body ─────────────────────────────────────────────────────
 function InviteModalBody({
-  isDark, primaryText, secondaryText, inputBg, inputBorder, surfaceBg, divider, insets,
-  email, setEmail, selectedRole, setSelectedRole, canSend, loading, onSend, onCancel,
+  isDark, primaryText, secondaryText, inputBg, inputBorder, divider, insets,
+  email, setEmail, selectedRole, setSelectedRole, canSend, loading, onSend, onCancel, accentGreen,
 }: any) {
   return (
     <ScrollView
       keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
       bounces={false}
+      contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
     >
-      <View style={{ paddingBottom: insets.bottom + 24 }}>
-        {/* Drag handle */}
-        <View style={{
-          alignSelf: 'center', width: 36, height: 4, borderRadius: 2,
-          backgroundColor: isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.12)',
-          marginTop: 12, marginBottom: 16,
-        }} />
+      {/* Drag handle */}
+      <View style={{
+        alignSelf: 'center', width: 36, height: 4, borderRadius: 2,
+        backgroundColor: isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.12)',
+        marginTop: 12, marginBottom: 16,
+      }} />
 
-        {/* Header row */}
+      {/* Header row */}
+      <View style={{
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+        paddingHorizontal: 20, marginBottom: 20,
+      }}>
+        <TouchableOpacity onPress={onCancel} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <Text style={{ fontSize: 17, color: secondaryText }}>Cancel</Text>
+        </TouchableOpacity>
+        <Text style={{ fontSize: 17, fontWeight: '700', color: primaryText }}>Add Family Member</Text>
+        <TouchableOpacity onPress={onSend} disabled={!canSend || loading} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          {loading ? (
+            <ActivityIndicator size="small" color={accentGreen} />
+          ) : (
+            <Text style={{ fontSize: 17, fontWeight: '700', color: canSend ? accentGreen : secondaryText }}>Send</Text>
+          )}
+        </TouchableOpacity>
+      </View>
+
+      <View style={{ paddingHorizontal: 20 }}>
+        {/* Role selector first */}
+        <Text style={{ fontSize: 16, color: primaryText, fontWeight: '600', marginBottom: 12 }}>
+          This person is…
+        </Text>
+
         <View style={{
-          flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-          paddingHorizontal: 20, marginBottom: 20,
+          backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)',
+          borderRadius: 16, overflow: 'hidden', marginBottom: 20,
         }}>
-          <TouchableOpacity onPress={onCancel} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Text style={{ fontSize: 17, color: secondaryText }}>Cancel</Text>
-          </TouchableOpacity>
-          <Text style={{ fontSize: 17, fontWeight: '700', color: primaryText }}>Invite family member</Text>
-          <TouchableOpacity onPress={onSend} disabled={!canSend || loading} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            {loading ? (
-              <ActivityIndicator size="small" color="#10A37F" />
-            ) : (
-              <Text style={{ fontSize: 17, fontWeight: '700', color: canSend ? '#10A37F' : secondaryText }}>Send</Text>
-            )}
-          </TouchableOpacity>
+          {([
+            { role: 'child' as FamilyRole, label: 'My child', sub: 'You manage their account and limits', icon: 'happy-outline', color: '#FF9500' },
+            { role: 'parent' as FamilyRole, label: 'My parent or guardian', sub: 'They can manage your account', icon: 'shield-outline', color: '#0A84FF' },
+          ] as { role: FamilyRole; label: string; sub: string; icon: string; color: string }[]).map((item, idx, arr) => (
+            <TouchableOpacity
+              key={item.role}
+              style={{
+                flexDirection: 'row', alignItems: 'center',
+                padding: 16,
+                borderBottomWidth: idx < arr.length - 1 ? StyleSheet.hairlineWidth : 0,
+                borderBottomColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+                backgroundColor: selectedRole === item.role
+                  ? (isDark ? 'rgba(10,163,127,0.1)' : 'rgba(10,163,127,0.06)')
+                  : 'transparent',
+              }}
+              onPress={() => setSelectedRole(item.role)}
+              activeOpacity={0.6}
+            >
+              <View style={{
+                width: 40, height: 40, borderRadius: 20,
+                backgroundColor: `${item.color}22`,
+                alignItems: 'center', justifyContent: 'center', marginRight: 14,
+              }}>
+                <Ionicons name={item.icon as any} size={20} color={item.color} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 16, color: primaryText, fontWeight: '500' }}>{item.label}</Text>
+                <Text style={{ fontSize: 13, color: secondaryText, marginTop: 2 }}>{item.sub}</Text>
+              </View>
+              <View style={{
+                width: 22, height: 22, borderRadius: 11,
+                borderWidth: 2,
+                borderColor: selectedRole === item.role ? accentGreen : secondaryText,
+                alignItems: 'center', justifyContent: 'center',
+              }}>
+                {selectedRole === item.role && (
+                  <View style={{ width: 11, height: 11, borderRadius: 6, backgroundColor: accentGreen }} />
+                )}
+              </View>
+            </TouchableOpacity>
+          ))}
         </View>
 
-        <View style={{ paddingHorizontal: 20 }}>
-          {/* Email */}
-          <Text style={{ fontSize: 13, color: secondaryText, fontWeight: '500', marginBottom: 6, marginLeft: 2 }}>
-            Email address
-          </Text>
-          <TextInput
-            style={{
-              backgroundColor: inputBg, borderRadius: 12,
-              paddingHorizontal: 16, paddingVertical: 14,
-              fontSize: 16, color: primaryText, marginBottom: 16,
-              borderWidth: StyleSheet.hairlineWidth, borderColor: inputBorder,
-            }}
-            placeholder="name@email.com"
-            placeholderTextColor={secondaryText}
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-
-          <Text style={{
-            fontSize: 13, color: secondaryText, lineHeight: 18,
-            backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
-            borderRadius: 10, padding: 12, marginBottom: 20,
+        {/* Contextual message after role selection */}
+        {selectedRole === 'child' && (
+          <View style={{
+            backgroundColor: isDark ? 'rgba(255,149,0,0.1)' : 'rgba(255,149,0,0.08)',
+            borderRadius: 14, padding: 14, marginBottom: 16,
+            borderWidth: 1, borderColor: isDark ? 'rgba(255,149,0,0.2)' : 'rgba(255,149,0,0.15)',
+            flexDirection: 'row', gap: 12, alignItems: 'flex-start',
           }}>
-            If your family member is new to Dawinix, they will be asked to create an account.
-          </Text>
-
-          {/* Role selector */}
-          <Text style={{ fontSize: 16, color: primaryText, fontWeight: '500', marginBottom: 10 }}>This person is</Text>
-          <View style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)', borderRadius: 14, overflow: 'hidden' }}>
-            {([
-              { role: 'parent' as FamilyRole, label: 'My parent or guardian' },
-              { role: 'child' as FamilyRole, label: 'My child' },
-            ] as { role: FamilyRole; label: string }[]).map((item, idx, arr) => (
-              <TouchableOpacity
-                key={item.role}
-                style={{
-                  flexDirection: 'row', alignItems: 'center',
-                  padding: 16,
-                  borderBottomWidth: idx < arr.length - 1 ? StyleSheet.hairlineWidth : 0,
-                  borderBottomColor: divider,
-                }}
-                onPress={() => setSelectedRole(item.role)}
-                activeOpacity={0.6}
-              >
-                <View style={{
-                  width: 22, height: 22, borderRadius: 11,
-                  borderWidth: 2,
-                  borderColor: selectedRole === item.role ? '#10A37F' : secondaryText,
-                  alignItems: 'center', justifyContent: 'center', marginRight: 14,
-                }}>
-                  {selectedRole === item.role && (
-                    <View style={{ width: 11, height: 11, borderRadius: 6, backgroundColor: '#10A37F' }} />
-                  )}
-                </View>
-                <Text style={{ fontSize: 16, color: primaryText }}>{item.label}</Text>
-              </TouchableOpacity>
-            ))}
+            <Text style={{ fontSize: 24 }}>👶</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 14, fontWeight: '600', color: '#FF9500', marginBottom: 4 }}>
+                Adding a child account
+              </Text>
+              <Text style={{ fontSize: 13, color: secondaryText, lineHeight: 18 }}>
+                You will be able to set daily message limits, enable content filters, and monitor their activity. The child will receive an email invitation to link their account.
+              </Text>
+            </View>
           </View>
-        </View>
+        )}
+
+        {selectedRole === 'parent' && (
+          <View style={{
+            backgroundColor: isDark ? 'rgba(10,132,255,0.1)' : 'rgba(10,132,255,0.08)',
+            borderRadius: 14, padding: 14, marginBottom: 16,
+            borderWidth: 1, borderColor: isDark ? 'rgba(10,132,255,0.2)' : 'rgba(10,132,255,0.15)',
+            flexDirection: 'row', gap: 12, alignItems: 'flex-start',
+          }}>
+            <Text style={{ fontSize: 24 }}>🛡️</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 14, fontWeight: '600', color: '#0A84FF', marginBottom: 4 }}>
+                Adding a parent or guardian
+              </Text>
+              <Text style={{ fontSize: 13, color: secondaryText, lineHeight: 18 }}>
+                Your parent or guardian will be able to monitor and manage your account settings. They will receive an email invitation to link.
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {/* Email */}
+        <Text style={{ fontSize: 13, color: secondaryText, fontWeight: '500', marginBottom: 6, marginLeft: 2 }}>
+          Their email address
+        </Text>
+        <TextInput
+          style={{
+            backgroundColor: inputBg, borderRadius: 12,
+            paddingHorizontal: 16, paddingVertical: 14,
+            fontSize: 16, color: primaryText, marginBottom: 12,
+            borderWidth: StyleSheet.hairlineWidth, borderColor: inputBorder,
+          }}
+          placeholder="name@email.com"
+          placeholderTextColor={secondaryText}
+          value={email}
+          onChangeText={setEmail}
+          keyboardType="email-address"
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+
+        <Text style={{
+          fontSize: 13, color: secondaryText, lineHeight: 18,
+          backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
+          borderRadius: 10, padding: 12,
+        }}>
+          If your family member is new to Dawinix, they will be asked to create an account before linking.
+        </Text>
       </View>
     </ScrollView>
   );
 }
-hello ai if you see this please read error and read message make all change both please don’t skip make all change for me read add photo url to understand it please make change blur mode effect please When select my child add a message anbal like photo sa:https://files.catbox.moe/gv1y31.png when its parent like this:https://files.catbox.moe/rvjx2o.png after you can add 3parent or child in free account and in pro or plus 20 and when you add someone like this:https://files.catbox.moe/g74u45.jpeg if not pending and you click its first the name people you add must display and if they have perfile photo add it nn place icon tex  name yo an and name correct and when click its open page like photo sa:https://files.catbox.moe/1jeve3.png to unlink take a 6s and unlink succes if user still pending anle unlink add resend to resend a message and the message must send to user email like this:https://files.catbox.moe/ufdtey.png real edg function sending email by supabase cloud and resend api or sendgrid both fallback please make all in blur mode and modal yo dwe full modal pou gen plasman.
+
