@@ -48,45 +48,43 @@ function EditModalContent({
   const daysLeft = daysUntilUsernameChange();
 
   return (
-    <ScrollView
-      style={{ flex: 1 }}
-      contentContainerStyle={{ padding: 24, paddingBottom: insets.bottom + 32 }}
-      keyboardShouldPersistTaps="handled"
-      showsVerticalScrollIndicator={false}
-    >
+    <View style={{ flex: 1, paddingHorizontal: 20, paddingTop: 16, paddingBottom: insets.bottom + 16 }}>
       {/* Drag handle */}
-      <View style={{ alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)', marginBottom: 20 }} />
+      <View style={{ alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)', marginBottom: 14 }} />
 
-      <Text style={{ fontSize: 20, fontWeight: '700', color: primaryText, textAlign: 'center', marginBottom: 6 }}>Edit Profile</Text>
-      <Text style={{ fontSize: 13, color: secondaryText, textAlign: 'center', marginBottom: 24 }}>Your profile helps people recognize you.</Text>
-
-      {/* Avatar */}
-      <TouchableOpacity onPress={onPickPhoto} style={{ alignSelf: 'center', marginBottom: 28 }} activeOpacity={0.8}>
-        <View style={{ width: 90, height: 90, borderRadius: 45, overflow: 'hidden', backgroundColor: isDark ? '#3A3A3C' : '#E5E5EA', alignItems: 'center', justifyContent: 'center' }}>
-          {uploadingPhoto ? (
-            <ActivityIndicator color={primaryText} />
-          ) : editPhoto ? (
-            <Image source={{ uri: editPhoto }} style={{ width: 90, height: 90 }} contentFit="cover" />
-          ) : (
-            <Text style={{ fontSize: 36, fontWeight: '700', color: primaryText }}>{initials}</Text>
-          )}
+      {/* Header + Avatar row */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 18, gap: 14 }}>
+        <TouchableOpacity onPress={onPickPhoto} activeOpacity={0.8}>
+          <View style={{ width: 62, height: 62, borderRadius: 31, overflow: 'hidden', backgroundColor: isDark ? '#3A3A3C' : '#E5E5EA', alignItems: 'center', justifyContent: 'center' }}>
+            {uploadingPhoto ? (
+              <ActivityIndicator color={primaryText} size="small" />
+            ) : editPhoto ? (
+              <Image source={{ uri: editPhoto }} style={{ width: 62, height: 62 }} contentFit="cover" />
+            ) : (
+              <Text style={{ fontSize: 24, fontWeight: '700', color: primaryText }}>{initials}</Text>
+            )}
+          </View>
+          <View style={{
+            position: 'absolute', bottom: 0, right: 0,
+            width: 22, height: 22, borderRadius: 11,
+            backgroundColor: '#10A37F', alignItems: 'center', justifyContent: 'center',
+            borderWidth: 2, borderColor: isDark ? '#1C1C1E' : '#F2F2F7',
+          }}>
+            <Ionicons name="camera" size={11} color="#FFF" />
+          </View>
+        </TouchableOpacity>
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontSize: 18, fontWeight: '700', color: primaryText, marginBottom: 2 }}>Edit Profile</Text>
+          <Text style={{ fontSize: 12, color: secondaryText }}>Tap the photo to change it</Text>
         </View>
-        <View style={{
-          position: 'absolute', bottom: 0, right: 0,
-          width: 28, height: 28, borderRadius: 14,
-          backgroundColor: '#10A37F', alignItems: 'center', justifyContent: 'center',
-          borderWidth: 2, borderColor: isDark ? '#1C1C1E' : '#F2F2F7',
-        }}>
-          <Ionicons name="camera" size={14} color="#FFF" />
-        </View>
-      </TouchableOpacity>
+      </View>
 
       {/* Name */}
-      <Text style={{ fontSize: 13, fontWeight: '500', color: secondaryText, marginBottom: 6, marginLeft: 2 }}>Display Name</Text>
+      <Text style={{ fontSize: 12, fontWeight: '500', color: secondaryText, marginBottom: 4, marginLeft: 2 }}>Display Name</Text>
       <TextInput
         style={{
-          backgroundColor: inputBg, borderRadius: 12, paddingHorizontal: 16,
-          paddingVertical: 14, fontSize: 16, color: primaryText, marginBottom: 16,
+          backgroundColor: inputBg, borderRadius: 12, paddingHorizontal: 14,
+          paddingVertical: 11, fontSize: 15, color: primaryText, marginBottom: 12,
           borderWidth: 1, borderColor,
         }}
         value={editName}
@@ -97,13 +95,13 @@ function EditModalContent({
       />
 
       {/* Username */}
-      <Text style={{ fontSize: 13, fontWeight: '500', color: secondaryText, marginBottom: 6, marginLeft: 2 }}>Username</Text>
+      <Text style={{ fontSize: 12, fontWeight: '500', color: secondaryText, marginBottom: 4, marginLeft: 2 }}>Username</Text>
       <TextInput
         style={{
           backgroundColor: canChange ? inputBg : (isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)'),
-          borderRadius: 12, paddingHorizontal: 16,
-          paddingVertical: 14, fontSize: 16,
-          color: canChange ? primaryText : secondaryText, marginBottom: 8,
+          borderRadius: 12, paddingHorizontal: 14,
+          paddingVertical: 11, fontSize: 15,
+          color: canChange ? primaryText : secondaryText, marginBottom: 4,
           borderWidth: 1, borderColor,
         }}
         value={editUsername}
@@ -115,8 +113,8 @@ function EditModalContent({
         returnKeyType="done"
       />
       {!canChange && (
-        <Text style={{ fontSize: 12, color: secondaryText, marginBottom: 16, marginLeft: 2 }}>
-          Username can be changed in {daysLeft} day{daysLeft !== 1 ? 's' : ''}
+        <Text style={{ fontSize: 11, color: secondaryText, marginBottom: 16, marginLeft: 2 }}>
+          Can change in {daysLeft} day{daysLeft !== 1 ? 's' : ''}
         </Text>
       )}
       {canChange && <View style={{ marginBottom: 16 }} />}
@@ -124,8 +122,8 @@ function EditModalContent({
       {/* Save */}
       <TouchableOpacity
         style={{
-          backgroundColor: '#10A37F', borderRadius: 50, paddingVertical: 16,
-          alignItems: 'center', marginBottom: 12,
+          backgroundColor: '#10A37F', borderRadius: 50, paddingVertical: 14,
+          alignItems: 'center', marginBottom: 10,
           opacity: savingProfile ? 0.7 : 1,
         }}
         onPress={onSave}
@@ -135,15 +133,15 @@ function EditModalContent({
         {savingProfile ? (
           <ActivityIndicator color="#FFF" />
         ) : (
-          <Text style={{ fontSize: 17, fontWeight: '700', color: '#FFF' }}>Save Changes</Text>
+          <Text style={{ fontSize: 16, fontWeight: '700', color: '#FFF' }}>Save Changes</Text>
         )}
       </TouchableOpacity>
 
       {/* Cancel */}
-      <TouchableOpacity style={{ alignItems: 'center', paddingVertical: 12 }} onPress={onClose}>
-        <Text style={{ fontSize: 17, color: secondaryText }}>Cancel</Text>
+      <TouchableOpacity style={{ alignItems: 'center', paddingVertical: 10 }} onPress={onClose}>
+        <Text style={{ fontSize: 16, color: secondaryText }}>Cancel</Text>
       </TouchableOpacity>
-    </ScrollView>
+    </View>
   );
 }
 
@@ -394,22 +392,26 @@ export default function SettingsScreen() {
   const uploadAsset = async (asset: ImagePicker.ImagePickerAsset) => {
     setUploadingPhoto(true);
     try {
-      const base64 = asset.base64;
-      if (!base64) throw new Error('No base64');
-      const arrayBuffer = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
-      const ext = asset.uri.split('.').pop()?.toLowerCase() || 'jpg';
+      const ext = (asset.uri.split('.').pop()?.toLowerCase() || 'jpg').replace(/\?.*/,'');
       const mimeType = ext === 'png' ? 'image/png' : 'image/jpeg';
       const filePath = `${user!.id}/avatar_${Date.now()}.${ext}`;
+
+      // Use fetch → blob approach (works on both iOS and Android)
+      const response = await fetch(asset.uri);
+      if (!response.ok) throw new Error('Failed to read image');
+      const blob = await response.blob();
+
       const { error: uploadError } = await supabase.storage
         .from('profile-images')
-        .upload(filePath, arrayBuffer, { contentType: mimeType, upsert: true });
+        .upload(filePath, blob, { contentType: mimeType, upsert: true });
       if (uploadError) throw uploadError;
+
       const { data: urlData } = supabase.storage
         .from('profile-images')
         .getPublicUrl(filePath);
       setEditPhoto(urlData.publicUrl);
-    } catch (e) {
-      showAlert('Upload failed', 'Could not upload photo. Try again.');
+    } catch (e: any) {
+      showAlert('Upload failed', e?.message || 'Could not upload photo. Try again.');
     } finally {
       setUploadingPhoto(false);
     }
@@ -428,7 +430,6 @@ export default function SettingsScreen() {
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.8,
-      base64: true,
     });
     if (!result.canceled && result.assets[0]) await uploadAsset(result.assets[0]);
   };
@@ -445,7 +446,6 @@ export default function SettingsScreen() {
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.8,
-      base64: true,
     });
     if (!result.canceled && result.assets[0]) await uploadAsset(result.assets[0]);
   };
@@ -907,18 +907,18 @@ export default function SettingsScreen() {
 
       {/* Edit Profile Modal — glassmorphism */}
       <Modal visible={editModalVisible} transparent animationType="slide" onRequestClose={() => setEditModalVisible(false)}>
-        <View style={{ flex: 1 }}>
-          <BlurView intensity={isDark ? 55 : 40} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
-          <View style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.18)' }]} />
-          <TouchableOpacity style={{ flex: 0.3 }} activeOpacity={1} onPress={() => setEditModalVisible(false)} />
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 0.7 }}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+          <View style={{ flex: 1 }}>
+            <BlurView intensity={isDark ? 55 : 40} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.18)' }]} />
+            <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setEditModalVisible(false)} />
             <View style={{
-              flex: 1, borderTopLeftRadius: 28, borderTopRightRadius: 28,
+              borderTopLeftRadius: 28, borderTopRightRadius: 28,
               overflow: 'hidden',
               shadowColor: '#000', shadowOffset: { width: 0, height: -8 }, shadowOpacity: 0.35, shadowRadius: 24, elevation: 24,
             }}>
               {Platform.OS === 'ios' ? (
-                <BlurView intensity={isDark ? 90 : 75} tint={isDark ? 'dark' : 'light'} style={{ flex: 1, borderTopLeftRadius: 28, borderTopRightRadius: 28, overflow: 'hidden' }}>
+                <BlurView intensity={isDark ? 90 : 75} tint={isDark ? 'dark' : 'light'} style={{ borderTopLeftRadius: 28, borderTopRightRadius: 28, overflow: 'hidden' }}>
                   <EditModalContent
                     isDark={isDark}
                     editPhoto={editPhoto}
@@ -940,7 +940,7 @@ export default function SettingsScreen() {
                   />
                 </BlurView>
               ) : (
-                <View style={{ flex: 1, borderTopLeftRadius: 28, borderTopRightRadius: 28, overflow: 'hidden', backgroundColor: isDark ? '#1C1C1E' : '#F2F2F7' }}>
+                <View style={{ borderTopLeftRadius: 28, borderTopRightRadius: 28, overflow: 'hidden', backgroundColor: isDark ? '#1C1C1E' : '#F2F2F7' }}>
                   <EditModalContent
                     isDark={isDark}
                     editPhoto={editPhoto}
@@ -963,11 +963,11 @@ export default function SettingsScreen() {
                 </View>
               )}
             </View>
-          </KeyboardAvoidingView>
-        </View>
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
 }
 
-fix modal edit profile longe make it more kout li tro longue anpil  on simple modal fix and fix photo upload lan li pa mache.
+
