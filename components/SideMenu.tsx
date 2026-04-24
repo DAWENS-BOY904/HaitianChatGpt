@@ -902,3 +902,4 @@ const styles = StyleSheet.create({
   chatFabText: { color: '#FFFFFF', fontSize: 17, fontWeight: '600' },
   profilePhoto: { width: 30, height: 30, borderRadius: 15 },
 });
+in home, wrap the 'Upgrade' button in the empty-state header with a BlurView pill (similar to the timer/person-add group) so it has a glassmorphism background matching the dark/light theme, with a subtle accent-colored border and in side menu the projecticon and mages and app and upgrade add it in blur and in texinput add li in blur mode effetc
