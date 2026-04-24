@@ -322,6 +322,7 @@ export default function SettingsScreen() {
   const [savingProfile, setSavingProfile] = useState(false);
   const [usernameLastChanged, setUsernameLastChanged] = useState<string | null>(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [photoPickerVisible, setPhotoPickerVisible] = useState(false);
 
   const currentVersion = Constants.expoConfig?.version || '1.0.0';
 
@@ -386,7 +387,37 @@ export default function SettingsScreen() {
     setEditModalVisible(true);
   };
 
-  const pickEditPhoto = async () => {
+  const pickEditPhoto = () => {
+    setPhotoPickerVisible(true);
+  };
+
+  const uploadAsset = async (asset: ImagePicker.ImagePickerAsset) => {
+    setUploadingPhoto(true);
+    try {
+      const base64 = asset.base64;
+      if (!base64) throw new Error('No base64');
+      const arrayBuffer = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+      const ext = asset.uri.split('.').pop()?.toLowerCase() || 'jpg';
+      const mimeType = ext === 'png' ? 'image/png' : 'image/jpeg';
+      const filePath = `${user!.id}/avatar_${Date.now()}.${ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from('profile-images')
+        .upload(filePath, arrayBuffer, { contentType: mimeType, upsert: true });
+      if (uploadError) throw uploadError;
+      const { data: urlData } = supabase.storage
+        .from('profile-images')
+        .getPublicUrl(filePath);
+      setEditPhoto(urlData.publicUrl);
+    } catch (e) {
+      showAlert('Upload failed', 'Could not upload photo. Try again.');
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
+
+  const pickFromLibrary = async () => {
+    setPhotoPickerVisible(false);
+    await new Promise(r => setTimeout(r, 300));
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
       showAlert('Permission needed', 'Please allow photo access to change your profile picture.');
@@ -399,30 +430,24 @@ export default function SettingsScreen() {
       quality: 0.8,
       base64: true,
     });
-    if (!result.canceled && result.assets[0]) {
-      setUploadingPhoto(true);
-      try {
-        const asset = result.assets[0];
-        const base64 = asset.base64;
-        if (!base64) throw new Error('No base64');
-        const arrayBuffer = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
-        const ext = asset.uri.split('.').pop()?.toLowerCase() || 'jpg';
-        const mimeType = ext === 'png' ? 'image/png' : 'image/jpeg';
-        const filePath = `${user!.id}/avatar_${Date.now()}.${ext}`;
-        const { error: uploadError } = await supabase.storage
-          .from('profile-images')
-          .upload(filePath, arrayBuffer, { contentType: mimeType, upsert: true });
-        if (uploadError) throw uploadError;
-        const { data: urlData } = supabase.storage
-          .from('profile-images')
-          .getPublicUrl(filePath);
-        setEditPhoto(urlData.publicUrl);
-      } catch (e) {
-        showAlert('Upload failed', 'Could not upload photo. Try again.');
-      } finally {
-        setUploadingPhoto(false);
-      }
+    if (!result.canceled && result.assets[0]) await uploadAsset(result.assets[0]);
+  };
+
+  const pickFromCamera = async () => {
+    setPhotoPickerVisible(false);
+    await new Promise(r => setTimeout(r, 300));
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      showAlert('Permission needed', 'Please allow camera access to take a profile photo.');
+      return;
     }
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+      base64: true,
+    });
+    if (!result.canceled && result.assets[0]) await uploadAsset(result.assets[0]);
   };
 
   const saveProfile = async () => {
@@ -800,6 +825,86 @@ export default function SettingsScreen() {
         <Text style={styles.versionText}>Dawinix v{currentVersion}</Text>
       </ScrollView>
 
+      {/* Photo Picker Action Sheet */}
+      <Modal visible={photoPickerVisible} transparent animationType="fade" onRequestClose={() => setPhotoPickerVisible(false)}>
+        <View style={{ flex: 1, justifyContent: 'flex-end' }}>
+          <BlurView intensity={isDark ? 55 : 40} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? 'rgba(0,0,0,0.4)' : 'rgba(0,0,0,0.22)' }]} />
+          <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setPhotoPickerVisible(false)} />
+          <View style={{ paddingHorizontal: 12, paddingBottom: insets.bottom + 8 }}>
+            {/* Options card */}
+            <View style={{
+              borderRadius: 18, overflow: 'hidden', marginBottom: 10,
+              shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 20, elevation: 20,
+            }}>
+              {Platform.OS === 'ios' ? (
+                <BlurView intensity={isDark ? 90 : 75} tint={isDark ? 'dark' : 'light'} style={{ borderRadius: 18, overflow: 'hidden' }}>
+                  {/* Camera */}
+                  <TouchableOpacity
+                    style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 18, gap: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)' }}
+                    onPress={pickFromCamera} activeOpacity={0.7}
+                  >
+                    <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#10A37F22', alignItems: 'center', justifyContent: 'center' }}>
+                      <Ionicons name="camera" size={20} color="#10A37F" />
+                    </View>
+                    <Text style={{ fontSize: 17, color: primaryText, fontWeight: '500' }}>Take Photo</Text>
+                  </TouchableOpacity>
+                  {/* Library */}
+                  <TouchableOpacity
+                    style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 18, gap: 14 }}
+                    onPress={pickFromLibrary} activeOpacity={0.7}
+                  >
+                    <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#0A84FF22', alignItems: 'center', justifyContent: 'center' }}>
+                      <Ionicons name="images" size={20} color="#0A84FF" />
+                    </View>
+                    <Text style={{ fontSize: 17, color: primaryText, fontWeight: '500' }}>Choose from Library</Text>
+                  </TouchableOpacity>
+                </BlurView>
+              ) : (
+                <View style={{ backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF', borderRadius: 18, overflow: 'hidden' }}>
+                  <TouchableOpacity
+                    style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 18, gap: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }}
+                    onPress={pickFromCamera} activeOpacity={0.7}
+                  >
+                    <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#10A37F22', alignItems: 'center', justifyContent: 'center' }}>
+                      <Ionicons name="camera" size={20} color="#10A37F" />
+                    </View>
+                    <Text style={{ fontSize: 17, color: primaryText, fontWeight: '500' }}>Take Photo</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 18, gap: 14 }}
+                    onPress={pickFromLibrary} activeOpacity={0.7}
+                  >
+                    <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#0A84FF22', alignItems: 'center', justifyContent: 'center' }}>
+                      <Ionicons name="images" size={20} color="#0A84FF" />
+                    </View>
+                    <Text style={{ fontSize: 17, color: primaryText, fontWeight: '500' }}>Choose from Library</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+            {/* Cancel */}
+            <TouchableOpacity
+              style={{
+                borderRadius: 16, overflow: 'hidden',
+                shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 10, elevation: 10,
+              }}
+              onPress={() => setPhotoPickerVisible(false)} activeOpacity={0.8}
+            >
+              {Platform.OS === 'ios' ? (
+                <BlurView intensity={isDark ? 90 : 75} tint={isDark ? 'dark' : 'light'} style={{ borderRadius: 16, overflow: 'hidden', paddingVertical: 18, alignItems: 'center' }}>
+                  <Text style={{ fontSize: 17, fontWeight: '600', color: primaryText }}>Cancel</Text>
+                </BlurView>
+              ) : (
+                <View style={{ backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF', borderRadius: 16, paddingVertical: 18, alignItems: 'center' }}>
+                  <Text style={{ fontSize: 17, fontWeight: '600', color: primaryText }}>Cancel</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       {/* Edit Profile Modal — glassmorphism */}
       <Modal visible={editModalVisible} transparent animationType="slide" onRequestClose={() => setEditModalVisible(false)}>
         <View style={{ flex: 1 }}>
@@ -864,4 +969,5 @@ export default function SettingsScreen() {
     </View>
   );
 }
+
 
