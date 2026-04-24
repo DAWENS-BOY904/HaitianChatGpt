@@ -783,3 +783,4 @@ export default function SettingsScreen() {
     </View>
   );
 }
+fix the modal edit profile with blur mode effrect glass and put white/dark theme system to.
