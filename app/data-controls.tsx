@@ -25,7 +25,7 @@ import { useSettings } from '../hooks/useSettings';
 let Location: any = null;
 try { Location = require('expo-location'); } catch {}
 
-type LocationStatus = 'unknown' | 'granted' | 'denied' | 'asking';
+type LocationStatus = 'unknown' | 'granted' | 'denied';
 
 export default function DataControlsScreen() {
   const router = useRouter();
@@ -52,10 +52,10 @@ export default function DataControlsScreen() {
   const divider = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
   const backBtnBg = isDark ? '#2C2C2E' : 'rgba(0,0,0,0.08)';
   const headerBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)';
-  const dangerRed = '#FF453A';
   const green = '#34C759';
+  const dangerRed = '#FF453A';
+  const accentBlue = '#0A84FF';
 
-  // Check location permission on mount
   useEffect(() => {
     checkLocationPermission();
   }, []);
@@ -65,12 +65,13 @@ export default function DataControlsScreen() {
     try {
       const { status } = await Location.getForegroundPermissionsAsync();
       setLocationStatus(status === 'granted' ? 'granted' : status === 'denied' ? 'denied' : 'unknown');
-    } catch { }
+    } catch {}
   };
 
+  // When toggle is ON → request permission (system dialog appears)
+  // When toggle is OFF → guide user to Settings
   const handleLocationToggle = async (val: boolean) => {
     if (!val) {
-      // Direct user to system settings to revoke
       showAlert(
         'Disable Location',
         'To disable location access, go to your device Settings and revoke permission for this app.',
@@ -92,14 +93,16 @@ export default function DataControlsScreen() {
         setLocationStatus('granted');
       } else {
         setLocationStatus('denied');
-        showAlert(
-          'Permission denied',
-          'Location access was denied. You can enable it in your device Settings.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Open Settings', onPress: () => Linking.openSettings() },
-          ]
-        );
+        if (status === 'denied') {
+          showAlert(
+            'Permission denied',
+            'Location access was denied. You can enable it in your device Settings.',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Open Settings', onPress: () => Linking.openSettings() },
+            ]
+          );
+        }
       }
     } catch (e: any) {
       showAlert('Error', e?.message || 'Failed to request location permission');
@@ -108,36 +111,40 @@ export default function DataControlsScreen() {
     }
   };
 
-  const handleArchiveAll = async () => {
-    showAlert('Archive all chats?', 'All your conversations will be archived. You can find them in Archived Chats.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Archive All',
-        style: 'destructive',
-        onPress: async () => {
-          if (!user) return;
-          setArchiving(true);
-          try {
-            await supabase
-              .from('conversations')
-              .update({ is_archived: true })
-              .eq('user_id', user.id)
-              .eq('is_archived', false);
-            showAlert('Done', 'All chats have been archived.');
-          } catch {
-            showAlert('Error', 'Failed to archive chats. Please try again.');
-          } finally {
-            setArchiving(false);
-          }
+  const handleArchiveAll = () => {
+    showAlert(
+      'Archive all chats?',
+      'All your conversations will be moved to Archived Chats.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Archive All',
+          style: 'destructive',
+          onPress: async () => {
+            if (!user) return;
+            setArchiving(true);
+            try {
+              await supabase
+                .from('conversations')
+                .update({ is_archived: true })
+                .eq('user_id', user.id)
+                .eq('is_archived', false);
+              showAlert('Done', 'All chats archived.');
+            } catch {
+              showAlert('Error', 'Failed to archive chats.');
+            } finally {
+              setArchiving(false);
+            }
+          },
         },
-      },
-    ]);
+      ]
+    );
   };
 
-  const handleDeleteAll = async () => {
+  const handleDeleteAll = () => {
     showAlert(
       'Delete all chats?',
-      'This will permanently delete all your conversations and messages. This cannot be undone.',
+      'This permanently deletes all your conversations and messages. This cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -147,11 +154,10 @@ export default function DataControlsScreen() {
             if (!user) return;
             setDeleting(true);
             try {
-              // Delete all conversations (messages cascade via FK)
               await supabase.from('conversations').delete().eq('user_id', user.id);
-              showAlert('Done', 'All chats have been permanently deleted.');
+              showAlert('Done', 'All chats deleted.');
             } catch {
-              showAlert('Error', 'Failed to delete chats. Please try again.');
+              showAlert('Error', 'Failed to delete chats.');
             } finally {
               setDeleting(false);
             }
@@ -161,34 +167,30 @@ export default function DataControlsScreen() {
     );
   };
 
-  const handleExportData = () => {
-    setShowExportModal(true);
-  };
-
   const confirmExport = async () => {
     setExportRequested(true);
-    // In a real app, trigger an admin-side export job
     try {
-      // Log export request
       await supabase.from('activity_logs').insert({
         user_id: user?.id,
         action: 'data_export_requested',
         action_type: 'data',
         details: { email: user?.email, requested_at: new Date().toISOString() },
       });
-    } catch { }
-
+    } catch {}
     setTimeout(() => {
       setShowExportModal(false);
       setExportRequested(false);
-      showAlert('Export requested', 'Your data export has been requested. An admin will prepare and deliver your data to your email within 24 hours.');
-    }, 1500);
+      showAlert(
+        'Export requested',
+        'Your data will be sent to your email address within 24 hours.'
+      );
+    }, 1400);
   };
 
   const handleDeleteAccount = () => {
     showAlert(
       'Delete Account',
-      'This will permanently delete your account and ALL associated data. This action cannot be undone.',
+      'This permanently deletes your account and ALL associated data. This cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -208,15 +210,6 @@ export default function DataControlsScreen() {
   const locationGranted = locationStatus === 'granted';
 
   // ─────────────────────────────────────────────────────────────────────────
-  const HeaderContent = () => (
-    <>
-      <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-        <Ionicons name="chevron-back" size={18} color={primaryText} />
-      </TouchableOpacity>
-      <Text style={styles.headerTitle}>Data Controls</Text>
-    </>
-  );
-
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: bg },
     header: {
@@ -229,38 +222,40 @@ export default function DataControlsScreen() {
       alignItems: 'center', justifyContent: 'center', marginRight: 12,
     },
     headerTitle: { fontSize: 17, fontWeight: '600', color: primaryText },
-    content: { paddingHorizontal: 16, paddingTop: 20 },
+    content: { paddingHorizontal: 16, paddingTop: 24 },
     sectionLabel: {
-      fontSize: 12, color: secondaryText, fontWeight: '600',
-      letterSpacing: 0.5, marginBottom: 8, marginLeft: 4,
+      fontSize: 13, color: secondaryText, fontWeight: '500',
+      marginBottom: 8, marginLeft: 4,
+    },
+    hint: {
+      fontSize: 13, color: secondaryText, lineHeight: 18,
+      marginBottom: 20, marginTop: 6, marginLeft: 4, marginRight: 4,
     },
     card: {
-      backgroundColor: cardBg, borderRadius: 14, overflow: 'hidden', marginBottom: 8,
+      backgroundColor: cardBg, borderRadius: 14, overflow: 'hidden', marginBottom: 4,
       shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
       shadowOpacity: isDark ? 0 : 0.06, shadowRadius: 4, elevation: isDark ? 0 : 1,
     },
-    row: {
+    // Toggle rows (text + switch, no icons)
+    toggleRow: {
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+      paddingVertical: 14, paddingHorizontal: 16,
+      borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: divider,
+    },
+    toggleRowLast: { borderBottomWidth: 0 },
+    toggleLabel: { fontSize: 17, color: primaryText, flex: 1, marginRight: 12 },
+    toggleSub: { fontSize: 13, color: secondaryText, marginTop: 2 },
+    // Tappable rows (text + chevron, no icons)
+    tappableRow: {
       flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
       paddingVertical: 15, paddingHorizontal: 16,
       borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: divider,
     },
-    rowLast: { borderBottomWidth: 0 },
-    rowLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
-    iconCircle: {
-      width: 32, height: 32, borderRadius: 8,
-      alignItems: 'center', justifyContent: 'center',
-    },
-    rowLabel: { fontSize: 16, color: primaryText, fontWeight: '500' },
-    rowSub: { fontSize: 13, color: secondaryText, marginTop: 2, lineHeight: 17 },
-    hint: {
-      fontSize: 13, color: secondaryText, lineHeight: 18,
-      marginBottom: 20, marginLeft: 4,
-    },
-    dangerRow: {
-      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-      paddingVertical: 15, paddingHorizontal: 16,
-    },
-    dangerLabel: { fontSize: 16, color: dangerRed, fontWeight: '500' },
+    tappableRowLast: { borderBottomWidth: 0 },
+    tappableLabel: { fontSize: 17, color: primaryText, flex: 1 },
+    tappableSub: { fontSize: 13, color: secondaryText, marginTop: 2 },
+    // Danger rows
+    dangerLabel: { fontSize: 17, color: dangerRed, flex: 1 },
     dangerSub: { fontSize: 13, color: secondaryText, marginTop: 2 },
     // Export modal
     modalOverlay: { flex: 1, justifyContent: 'flex-end' },
@@ -270,21 +265,34 @@ export default function DataControlsScreen() {
       backgroundColor: isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.12)',
       alignSelf: 'center', marginTop: 12, marginBottom: 20,
     },
-    modalTitle: { fontSize: 20, fontWeight: '700', color: primaryText, marginBottom: 8, paddingHorizontal: 20 },
-    modalSub: { fontSize: 15, color: secondaryText, lineHeight: 22, marginBottom: 24, paddingHorizontal: 20 },
+    modalTitle: {
+      fontSize: 20, fontWeight: '700', color: primaryText,
+      marginBottom: 8, paddingHorizontal: 20,
+    },
+    modalSub: {
+      fontSize: 15, color: secondaryText, lineHeight: 22,
+      marginBottom: 24, paddingHorizontal: 20,
+    },
     exportBtn: {
       marginHorizontal: 20, marginBottom: 12, borderRadius: 50,
-      paddingVertical: 15, alignItems: 'center',
-      backgroundColor: '#0A84FF',
+      paddingVertical: 15, alignItems: 'center', backgroundColor: accentBlue,
     },
     exportBtnText: { fontSize: 17, fontWeight: '700', color: '#FFF' },
     cancelBtn: { marginHorizontal: 20, borderRadius: 50, paddingVertical: 15, alignItems: 'center' },
     cancelBtnText: { fontSize: 17, color: secondaryText },
   });
 
+  const HeaderContent = () => (
+    <>
+      <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+        <Ionicons name="chevron-back" size={18} color={primaryText} />
+      </TouchableOpacity>
+      <Text style={styles.headerTitle}>Data Controls</Text>
+    </>
+  );
+
   return (
     <View style={styles.container}>
-      {/* ── Header ── */}
       {Platform.OS === 'ios' ? (
         <BlurView
           intensity={isDark ? 60 : 50}
@@ -303,17 +311,12 @@ export default function DataControlsScreen() {
         <View style={styles.content}>
 
           {/* ── Model Improvements ── */}
-          <Text style={[styles.sectionLabel, { marginTop: 4 }]}>MODEL IMPROVEMENTS</Text>
+          <Text style={styles.sectionLabel}>Improve the model for everyone</Text>
           <View style={styles.card}>
-            <View style={[styles.row, styles.rowLast]}>
-              <View style={styles.rowLeft}>
-                <View style={[styles.iconCircle, { backgroundColor: '#34C75922' }]}>
-                  <Ionicons name="sparkles" size={16} color={green} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.rowLabel}>Improve the model</Text>
-                  <Text style={styles.rowSub}>Allow us to use your data to improve AI responses</Text>
-                </View>
+            <View style={[styles.toggleRow, styles.toggleRowLast]}>
+              <View style={{ flex: 1, marginRight: 12 }}>
+                <Text style={styles.toggleLabel}>Improve the model for everyone</Text>
+                <Text style={styles.toggleSub}>Allow your chats to train our AI models</Text>
               </View>
               <Switch
                 value={improveModel}
@@ -324,19 +327,14 @@ export default function DataControlsScreen() {
             </View>
           </View>
           <Text style={styles.hint}>
-            Conversations may be reviewed by our team to improve safety and model quality.
+            Conversations may be reviewed by our team to improve safety and model quality. Sensitive information is removed before training.
           </Text>
 
           {/* ── Recording Settings ── */}
-          <Text style={styles.sectionLabel}>RECORDING SETTINGS</Text>
+          <Text style={styles.sectionLabel}>Recording settings</Text>
           <View style={styles.card}>
-            <View style={styles.row}>
-              <View style={styles.rowLeft}>
-                <View style={[styles.iconCircle, { backgroundColor: '#FF950022' }]}>
-                  <Ionicons name="mic" size={16} color="#FF9500" />
-                </View>
-                <Text style={styles.rowLabel}>Audio recordings</Text>
-              </View>
+            <View style={styles.toggleRow}>
+              <Text style={styles.toggleLabel}>Audio recordings</Text>
               <Switch
                 value={settings.audioRecordingsEnabled}
                 onValueChange={(v) => updateSetting('audioRecordingsEnabled', v)}
@@ -344,13 +342,8 @@ export default function DataControlsScreen() {
                 thumbColor={Platform.OS === 'ios' ? undefined : '#FFFFFF'}
               />
             </View>
-            <View style={[styles.row, styles.rowLast]}>
-              <View style={styles.rowLeft}>
-                <View style={[styles.iconCircle, { backgroundColor: '#AF52DE22' }]}>
-                  <Ionicons name="videocam" size={16} color="#AF52DE" />
-                </View>
-                <Text style={styles.rowLabel}>Video recordings</Text>
-              </View>
+            <View style={[styles.toggleRow, styles.toggleRowLast]}>
+              <Text style={styles.toggleLabel}>Video recordings</Text>
               <Switch
                 value={settings.videoRecordingsEnabled}
                 onValueChange={(v) => updateSetting('videoRecordingsEnabled', v)}
@@ -359,24 +352,22 @@ export default function DataControlsScreen() {
               />
             </View>
           </View>
+          <Text style={styles.hint}>
+            Control whether audio and video recordings may be used to improve our services.
+          </Text>
 
-          {/* ── Location ── */}
-          <Text style={styles.sectionLabel}>LOCATION</Text>
+          {/* ── Location Services ── */}
+          <Text style={styles.sectionLabel}>Location services</Text>
           <View style={styles.card}>
-            <View style={[styles.row, styles.rowLast]}>
-              <View style={styles.rowLeft}>
-                <View style={[styles.iconCircle, { backgroundColor: '#0A84FF22' }]}>
-                  <Ionicons name="location" size={16} color="#0A84FF" />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.rowLabel}>Allow location access</Text>
-                  <Text style={styles.rowSub}>
-                    {locationGranted ? 'Location access is enabled' : 'Enable for location-aware AI responses'}
-                  </Text>
-                </View>
+            <View style={[styles.toggleRow, styles.toggleRowLast]}>
+              <View style={{ flex: 1, marginRight: 12 }}>
+                <Text style={styles.toggleLabel}>Location Services</Text>
+                <Text style={styles.toggleSub}>
+                  {locationGranted ? 'Enabled — location-aware responses active' : 'Enable for location-aware AI responses'}
+                </Text>
               </View>
               {locationLoading ? (
-                <ActivityIndicator size="small" color="#0A84FF" />
+                <ActivityIndicator size="small" color={green} />
               ) : (
                 <Switch
                   value={locationGranted}
@@ -389,68 +380,91 @@ export default function DataControlsScreen() {
           </View>
           <Text style={styles.hint}>
             {locationGranted
-              ? 'Your location is accessible when you ask location-based questions.'
-              : 'Tap to allow location access. Your device will show a system permission dialog.'}
+              ? 'Your location is shared when you ask location-based questions.'
+              : 'Tap to enable. Your device will prompt you to allow location access.'}
           </Text>
 
-          {/* ── Chat Management ── */}
-          <Text style={styles.sectionLabel}>CHAT MANAGEMENT</Text>
+          {/* ── Archive Chats ── */}
+          <Text style={styles.sectionLabel}>Archive chats</Text>
           <View style={styles.card}>
-            <TouchableOpacity style={styles.row} onPress={handleArchiveAll} disabled={archiving}>
-              <View style={styles.rowLeft}>
-                <View style={[styles.iconCircle, { backgroundColor: '#FF950022' }]}>
-                  {archiving
-                    ? <ActivityIndicator size="small" color="#FF9500" />
-                    : <Ionicons name="archive-outline" size={16} color="#FF9500" />}
-                </View>
-                <Text style={styles.rowLabel}>Archive all chats</Text>
+            <TouchableOpacity
+              style={[styles.tappableRow, styles.tappableRowLast]}
+              onPress={handleArchiveAll}
+              disabled={archiving}
+              activeOpacity={0.6}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={styles.tappableLabel}>Archive all chats</Text>
+                <Text style={styles.tappableSub}>Move all conversations to Archived Chats</Text>
               </View>
-              <Ionicons name="chevron-forward" size={16} color={secondaryText} />
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.row, styles.rowLast]} onPress={handleDeleteAll} disabled={deleting}>
-              <View style={styles.rowLeft}>
-                <View style={[styles.iconCircle, { backgroundColor: '#FF453A22' }]}>
-                  {deleting
-                    ? <ActivityIndicator size="small" color={dangerRed} />
-                    : <Ionicons name="trash-outline" size={16} color={dangerRed} />}
-                </View>
-                <Text style={[styles.rowLabel, { color: dangerRed }]}>Delete all chats</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={16} color={dangerRed} />
-            </TouchableOpacity>
-          </View>
-
-          {/* ── Data Export ── */}
-          <Text style={styles.sectionLabel}>DATA EXPORT</Text>
-          <View style={styles.card}>
-            <TouchableOpacity style={[styles.row, styles.rowLast]} onPress={handleExportData}>
-              <View style={styles.rowLeft}>
-                <View style={[styles.iconCircle, { backgroundColor: '#0A84FF22' }]}>
-                  <Ionicons name="download-outline" size={16} color="#0A84FF" />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.rowLabel}>Export data</Text>
-                  <Text style={styles.rowSub}>Request a download of all your data</Text>
-                </View>
-              </View>
-              <Ionicons name="chevron-forward" size={16} color={secondaryText} />
+              {archiving
+                ? <ActivityIndicator size="small" color={secondaryText} />
+                : <Ionicons name="chevron-forward" size={17} color={secondaryText} />}
             </TouchableOpacity>
           </View>
           <Text style={styles.hint}>
-            Your exported data will be prepared by our team and sent to your email address within 24 hours.
+            Archived chats are hidden from your history but can be accessed from your profile settings.
           </Text>
 
-          {/* ── Account ── */}
-          <Text style={styles.sectionLabel}>ACCOUNT</Text>
+          {/* ── Delete Chats ── */}
+          <Text style={styles.sectionLabel}>Delete chats</Text>
           <View style={styles.card}>
-            <TouchableOpacity style={[styles.dangerRow]} onPress={handleDeleteAccount}>
+            <TouchableOpacity
+              style={[styles.tappableRow, styles.tappableRowLast]}
+              onPress={handleDeleteAll}
+              disabled={deleting}
+              activeOpacity={0.6}
+            >
               <View style={{ flex: 1 }}>
-                <Text style={styles.dangerLabel}>Delete account</Text>
-                <Text style={styles.rowSub}>Permanently delete your account and all data</Text>
+                <Text style={[styles.tappableLabel, { color: dangerRed }]}>Delete all chats</Text>
+                <Text style={styles.tappableSub}>Permanently delete all conversations</Text>
               </View>
-              <Ionicons name="chevron-forward" size={16} color={dangerRed} />
+              {deleting
+                ? <ActivityIndicator size="small" color={dangerRed} />
+                : <Ionicons name="chevron-forward" size={17} color={dangerRed} />}
             </TouchableOpacity>
           </View>
+          <Text style={styles.hint}>
+            This action cannot be undone. All messages will be permanently removed.
+          </Text>
+
+          {/* ── Export Data ── */}
+          <Text style={styles.sectionLabel}>Export data</Text>
+          <View style={styles.card}>
+            <TouchableOpacity
+              style={[styles.tappableRow, styles.tappableRowLast]}
+              onPress={() => setShowExportModal(true)}
+              activeOpacity={0.6}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={styles.tappableLabel}>Export data</Text>
+                <Text style={styles.tappableSub}>Request a download of all your data</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={17} color={secondaryText} />
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.hint}>
+            Your exported data will be prepared and sent to your email within 24 hours.
+          </Text>
+
+          {/* ── Delete Account ── */}
+          <Text style={styles.sectionLabel}>Delete account</Text>
+          <View style={styles.card}>
+            <TouchableOpacity
+              style={[styles.tappableRow, styles.tappableRowLast]}
+              onPress={handleDeleteAccount}
+              activeOpacity={0.6}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={styles.dangerLabel}>Delete account</Text>
+                <Text style={styles.dangerSub}>Permanently delete your account and all data</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={17} color={dangerRed} />
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.hint}>
+            Deleting your account is permanent and cannot be reversed. All your data will be erased.
+          </Text>
 
           <View style={{ height: insets.bottom + 40 }} />
         </View>
@@ -461,9 +475,12 @@ export default function DataControlsScreen() {
         visible={showExportModal}
         transparent
         animationType="slide"
-        onRequestClose={() => setShowExportModal(false)}
+        onRequestClose={() => !exportRequested && setShowExportModal(false)}
       >
-        <Pressable style={styles.modalOverlay} onPress={() => !exportRequested && setShowExportModal(false)}>
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => !exportRequested && setShowExportModal(false)}
+        >
           {Platform.OS === 'ios' ? (
             <BlurView
               intensity={isDark ? 40 : 30}
@@ -488,7 +505,8 @@ export default function DataControlsScreen() {
                 style={[styles.modalSheet, { paddingBottom: insets.bottom + 20 }]}
               >
                 <ExportModalBody
-                  primaryText={primaryText} secondaryText={secondaryText}
+                  primaryText={primaryText}
+                  secondaryText={secondaryText}
                   exportRequested={exportRequested}
                   onExport={confirmExport}
                   onCancel={() => setShowExportModal(false)}
@@ -501,7 +519,8 @@ export default function DataControlsScreen() {
                 paddingBottom: insets.bottom + 20,
               }]}>
                 <ExportModalBody
-                  primaryText={primaryText} secondaryText={secondaryText}
+                  primaryText={primaryText}
+                  secondaryText={secondaryText}
                   exportRequested={exportRequested}
                   onExport={confirmExport}
                   onCancel={() => setShowExportModal(false)}
@@ -520,26 +539,14 @@ function ExportModalBody({ primaryText, secondaryText, exportRequested, onExport
   return (
     <>
       <View style={styles.modalHandle} />
-      <View style={{ alignItems: 'center', paddingHorizontal: 20, marginBottom: 16 }}>
-        <View style={{
-          width: 64, height: 64, borderRadius: 20,
-          backgroundColor: 'rgba(10,132,255,0.15)',
-          alignItems: 'center', justifyContent: 'center', marginBottom: 16,
-        }}>
-          <Ionicons name="cloud-download-outline" size={32} color="#0A84FF" />
-        </View>
-      </View>
       <Text style={styles.modalTitle}>Export your data</Text>
       <Text style={styles.modalSub}>
-        We will prepare a complete export of your account data including conversations, settings, and profile information. It will be delivered to your email address within 24 hours.
+        We will prepare a complete export of your account data including conversations, settings, and profile information. It will be delivered to your email within 24 hours.
       </Text>
-
       <TouchableOpacity style={styles.exportBtn} onPress={onExport} disabled={exportRequested}>
-        {exportRequested ? (
-          <ActivityIndicator color="#FFF" />
-        ) : (
-          <Text style={styles.exportBtnText}>Request Export</Text>
-        )}
+        {exportRequested
+          ? <ActivityIndicator color="#FFF" />
+          : <Text style={styles.exportBtnText}>Request Export</Text>}
       </TouchableOpacity>
       <TouchableOpacity style={styles.cancelBtn} onPress={onCancel} disabled={exportRequested}>
         <Text style={styles.cancelBtnText}>Cancel</Text>
@@ -547,4 +554,3 @@ function ExportModalBody({ primaryText, secondaryText, exportRequested, onExport
     </>
   );
 }
-stop fucking add icon on tex you see in photo re design page make its like this :https://files.catbox.moe/x3z6hu.png,https://files.catbox.moe/enzhe3.png,https://files.catbox.moe/q9ot0y.png location service you see it off anbal sak make allow se lew click li pral ask for allow and off lan ap on like 3em photo i dont need any icon only tex and bien ranje export data avek delete account and archiveall vs delete chat  separe yo like photo an in blur p[lease dont skip.
