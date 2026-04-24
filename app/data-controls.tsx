@@ -547,3 +547,4 @@ function ExportModalBody({ primaryText, secondaryText, exportRequested, onExport
     </>
   );
 }
+stop fucking add icon on tex you see in photo re design page make its like this :https://files.catbox.moe/x3z6hu.png,https://files.catbox.moe/enzhe3.png,https://files.catbox.moe/q9ot0y.png location service you see it off anbal sak make allow se lew click li pral ask for allow and off lan ap on like 3em photo i dont need any icon only tex and bien ranje export data avek delete account and archiveall vs delete chat  separe yo like photo an in blur p[lease dont skip.
