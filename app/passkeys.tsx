@@ -331,3 +331,4 @@ export default function PasskeysScreen() {
     </View>
   );
 }
+Apply the same white/dark theme and BlurView header pattern used in security.tsx to app/passkeys.tsx so it matches the system appearance automatically and fix rea l apple faceid for passkey also fix texmesssga epage to use same color dakr/white theme.
