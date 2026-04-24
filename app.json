@@ -8,12 +8,14 @@
     "scheme": "dawinixht",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.onspace.dawinix-ht",
       "buildNumber": "1.0.0",
       "usesAppleSignIn": true
     },
+
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/logo.png",
@@ -23,14 +25,24 @@
       "versionCode": 1,
       "edgeToEdgeEnabled": true
     },
+
     "web": {
       "bundler": "metro",
       "output": "static",
       "favicon": "./assets/images/logo.png"
     },
+
     "plugins": [
       "expo-router",
       "expo-apple-authentication",
+
+      [
+        "expo-secure-store",
+        {
+          "configureAndroidBackup": true
+        }
+      ],
+
       [
         "expo-splash-screen",
         {
@@ -40,8 +52,10 @@
           "backgroundColor": "#ffffff"
         }
       ],
+
       "expo-web-browser"
     ],
+
     "experiments": {
       "typedRoutes": true
     }
