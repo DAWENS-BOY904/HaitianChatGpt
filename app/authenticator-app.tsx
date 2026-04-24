@@ -497,4 +497,5 @@ export default function AuthenticatorAppScreen() {
     </View>
   );
 }
-hello ai dont skip make change please MFA enrollment is currently disabled for TOTP. Please enable and implement a proper function to support TOTP-based multi-factor authentication. Ensure users can successfully enroll, verify, and use TOTP without errors.
+
+
