@@ -14,9 +14,11 @@ import {
   Pressable,
   Linking,
   Alert,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
+import { BlurView } from 'expo-blur';
 import { useTheme } from '../hooks/useTheme';
 import { useSettings } from '../hooks/useSettings';
 import { useSubscription } from '../hooks/useSubscription';
@@ -177,6 +179,141 @@ function GuestSettings() {
         <View style={{ height: insets.bottom + 40 }} />
       </ScrollView>
     </View>
+  );
+}
+
+// ── Edit Profile Modal Content (glassmorphism sheet) ──────────────────────
+function EditModalContent({
+  isDark, editPhoto, initials, uploadingPhoto, editName, editUsername,
+  canChangeUsername, daysUntilUsernameChange, savingProfile,
+  primaryText, secondaryText, insets,
+  onPickPhoto, onChangeName, onChangeUsername, onSave, onClose,
+}: any) {
+  const textColor = isDark ? '#FFFFFF' : '#000000';
+  const labelColor = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.45)';
+  const inputBg = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)';
+  const inputBorder = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)';
+  const placeholderColor = isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.3)';
+  const noteColor = isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)';
+  const saveBg = isDark ? '#FFFFFF' : '#000000';
+  const saveText = isDark ? '#000000' : '#FFFFFF';
+  const handleColor = isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.18)';
+
+  return (
+    <ScrollView
+      keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: (insets?.bottom || 0) + 32 }}
+    >
+      {/* Drag handle */}
+      <View style={{ width: 36, height: 5, borderRadius: 3, backgroundColor: handleColor, alignSelf: 'center', marginTop: 10, marginBottom: 20 }} />
+
+      {/* Title */}
+      <Text style={{ color: textColor, fontSize: 20, fontWeight: '700', textAlign: 'center', marginBottom: 24 }}>Edit Profile</Text>
+
+      {/* Avatar */}
+      <View style={{ alignItems: 'center', marginBottom: 28 }}>
+        <TouchableOpacity
+          style={{ width: 96, height: 96, borderRadius: 48, position: 'relative' }}
+          onPress={onPickPhoto}
+          disabled={uploadingPhoto}
+          activeOpacity={0.8}
+        >
+          {editPhoto ? (
+            <Image source={{ uri: editPhoto }} style={{ width: 96, height: 96, borderRadius: 48 }} contentFit="cover" />
+          ) : (
+            <View style={{
+              width: 96, height: 96, borderRadius: 48,
+              backgroundColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)',
+              alignItems: 'center', justifyContent: 'center',
+            }}>
+              <Text style={{ color: textColor, fontSize: 38, fontWeight: '700' }}>{initials}</Text>
+            </View>
+          )}
+          {uploadingPhoto ? (
+            <View style={{ ...StyleSheet.absoluteFillObject, borderRadius: 48, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' }}>
+              <ActivityIndicator color="#FFF" />
+            </View>
+          ) : (
+            <View style={{
+              position: 'absolute', bottom: 2, right: 2,
+              width: 28, height: 28, borderRadius: 14,
+              backgroundColor: '#10A37F',
+              alignItems: 'center', justifyContent: 'center',
+              borderWidth: 2, borderColor: 'rgba(255,255,255,0.8)',
+            }}>
+              <Ionicons name="camera" size={14} color="#FFF" />
+            </View>
+          )}
+        </TouchableOpacity>
+        <Text style={{ color: isDark ? '#10A37F' : '#007AFF', fontSize: 14, fontWeight: '600', marginTop: 10 }}>Change photo</Text>
+      </View>
+
+      {/* Name */}
+      <View style={{ marginBottom: 16 }}>
+        <Text style={{ color: labelColor, fontSize: 11, fontWeight: '700', letterSpacing: 0.8, marginBottom: 8, marginLeft: 4 }}>NAME</Text>
+        <View style={{
+          flexDirection: 'row', alignItems: 'center',
+          backgroundColor: inputBg, borderRadius: 16, borderWidth: 1, borderColor: inputBorder,
+          paddingHorizontal: 16, minHeight: 52,
+        }}>
+          <TextInput
+            style={{ flex: 1, fontSize: 16, color: textColor, paddingVertical: 14 }}
+            value={editName}
+            onChangeText={onChangeName}
+            placeholder="Your name"
+            placeholderTextColor={placeholderColor}
+            autoCapitalize="words"
+          />
+        </View>
+      </View>
+
+      {/* Username */}
+      <View style={{ marginBottom: 8 }}>
+        <Text style={{ color: labelColor, fontSize: 11, fontWeight: '700', letterSpacing: 0.8, marginBottom: 8, marginLeft: 4 }}>USERNAME</Text>
+        <View style={[{
+          flexDirection: 'row', alignItems: 'center',
+          backgroundColor: inputBg, borderRadius: 16, borderWidth: 1, borderColor: inputBorder,
+          paddingHorizontal: 16, minHeight: 52,
+        }, !canChangeUsername() && { opacity: 0.5 }]}>
+          <Text style={{ color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.35)', fontSize: 16, fontWeight: '500', marginRight: 4 }}>@</Text>
+          <TextInput
+            style={{ flex: 1, fontSize: 16, color: textColor, paddingVertical: 14 }}
+            value={editUsername}
+            onChangeText={onChangeUsername}
+            placeholder="username"
+            placeholderTextColor={placeholderColor}
+            autoCapitalize="none"
+            editable={canChangeUsername()}
+          />
+        </View>
+      </View>
+
+      <Text style={{ color: noteColor, fontSize: 12, textAlign: 'center', lineHeight: 18, marginBottom: 24, marginTop: 8, paddingHorizontal: 8 }}>
+        {!canChangeUsername()
+          ? `Username can be changed in ${daysUntilUsernameChange()} days.`
+          : 'Your profile helps people recognize you across the app.'}
+      </Text>
+
+      {/* Save */}
+      <TouchableOpacity
+        style={{ backgroundColor: saveBg, borderRadius: 16, paddingVertical: 16, alignItems: 'center', marginBottom: 12 }}
+        onPress={onSave}
+        disabled={savingProfile || uploadingPhoto}
+        activeOpacity={0.85}
+      >
+        {savingProfile ? (
+          <ActivityIndicator color={saveText} />
+        ) : (
+          <Text style={{ color: saveText, fontSize: 17, fontWeight: '700' }}>Save Changes</Text>
+        )}
+      </TouchableOpacity>
+
+      {/* Cancel */}
+      <TouchableOpacity style={{ alignItems: 'center', paddingVertical: 12 }} onPress={onClose} activeOpacity={0.7}>
+        <Text style={{ color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.45)', fontSize: 16, fontWeight: '500' }}>Cancel</Text>
+      </TouchableOpacity>
+    </ScrollView>
   );
 }
 
@@ -724,63 +861,204 @@ export default function SettingsScreen() {
         <Text style={styles.versionText}>Dawinix v{currentVersion}</Text>
       </ScrollView>
 
-      {/* Edit Profile Modal */}
+      {/* Edit Profile Modal — glassmorphism */}
       <Modal visible={editModalVisible} transparent animationType="slide" onRequestClose={() => setEditModalVisible(false)}>
-        <Pressable style={styles.modalOverlay} onPress={() => setEditModalVisible(false)}>
-          <Pressable style={styles.editModal} onPress={e => e.stopPropagation()}>
-            <TouchableOpacity style={styles.editAvatarWrap} onPress={pickEditPhoto}>
-              {editPhoto ? (
-                <Image source={{ uri: editPhoto }} style={styles.editAvatarImg} contentFit="cover" />
+        <View style={{ flex: 1 }}>
+          {/* Full blur backdrop */}
+          <BlurView intensity={isDark ? 55 : 40} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.18)' }]} />
+          <TouchableOpacity style={{ flex: 0.28 }} activeOpacity={1} onPress={() => setEditModalVisible(false)} />
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 0.72 }}>
+            <View style={{
+              flex: 1, borderTopLeftRadius: 28, borderTopRightRadius: 28,
+              overflow: 'hidden',
+              shadowColor: '#000', shadowOffset: { width: 0, height: -8 }, shadowOpacity: 0.35, shadowRadius: 24, elevation: 24,
+            }}>
+              {Platform.OS === 'ios' ? (
+                <BlurView intensity={isDark ? 90 : 75} tint={isDark ? 'dark' : 'light'} style={{ flex: 1, borderTopLeftRadius: 28, borderTopRightRadius: 28, overflow: 'hidden' }}>
+                  <EditModalContent
+                    isDark={isDark}
+                    editPhoto={editPhoto}
+                    initials={initials}
+                    uploadingPhoto={uploadingPhoto}
+                    editName={editName}
+                    editUsername={editUsername}
+                    canChangeUsername={canChangeUsername}
+                    daysUntilUsernameChange={daysUntilUsernameChange}
+                    savingProfile={savingProfile}
+                    primaryText={primaryText}
+                    secondaryText={secondaryText}
+                    insets={insets}
+                    onPickPhoto={pickEditPhoto}
+                    onChangeName={setEditName}
+                    onChangeUsername={setEditUsername}
+                    onSave={saveProfile}
+                    onClose={() => setEditModalVisible(false)}
+                  />
+                </BlurView>
               ) : (
-                <View style={[styles.editAvatarWrap, { alignItems: 'center', justifyContent: 'center' }]}>
-                  <Text style={{ fontSize: 36, color: primaryText }}>{initials}</Text>
+                <View style={{ flex: 1, borderTopLeftRadius: 28, borderTopRightRadius: 28, overflow: 'hidden', backgroundColor: isDark ? '#1C1C1E' : '#F2F2F7' }}>
+                  <EditModalContent
+                    isDark={isDark}
+                    editPhoto={editPhoto}
+                    initials={initials}
+                    uploadingPhoto={uploadingPhoto}
+                    editName={editName}
+                    editUsername={editUsername}
+                    canChangeUsername={canChangeUsername}
+                    daysUntilUsernameChange={daysUntilUsernameChange}
+                    savingProfile={savingProfile}
+                    primaryText={primaryText}
+                    secondaryText={secondaryText}
+                    insets={insets}
+                    onPickPhoto={pickEditPhoto}
+                    onChangeName={setEditName}
+                    onChangeUsername={setEditUsername}
+                    onSave={saveProfile}
+                    onClose={() => setEditModalVisible(false)}
+                  />
                 </View>
               )}
-              <View style={styles.cameraIcon}>
-                {uploadingPhoto
-                  ? <ActivityIndicator size="small" color="#FFF" />
-                  : <Ionicons name="camera" size={14} color="#FFF" />}
-              </View>
-            </TouchableOpacity>
-
-            <Text style={styles.editLabel}>Name</Text>
-            <TextInput
-              style={styles.editInput}
-              value={editName}
-              onChangeText={setEditName}
-              placeholder="Your name"
-              placeholderTextColor="#555"
-            />
-
-            <Text style={styles.editLabel}>Username</Text>
-            <TextInput
-              style={[styles.editInput, !canChangeUsername() && { opacity: 0.5 }]}
-              value={editUsername}
-              onChangeText={setEditUsername}
-              placeholder="username"
-              placeholderTextColor="#555"
-              editable={canChangeUsername()}
-              autoCapitalize="none"
-            />
-
-            <Text style={styles.editHint}>
-              {!canChangeUsername()
-                ? `Username can be changed in ${daysUntilUsernameChange()} days.`
-                : "Your profile helps people recognize you. Your name and username are also used in the Dawinix app."}
-            </Text>
-
-            <TouchableOpacity style={styles.saveBtn} onPress={saveProfile} disabled={savingProfile}>
-              {savingProfile
-                ? <ActivityIndicator color="#000" />
-                : <Text style={styles.saveBtnText}>Save profile</Text>}
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.cancelBtn} onPress={() => setEditModalVisible(false)}>
-              <Text style={styles.cancelBtnText}>Cancel</Text>
-            </TouchableOpacity>
-          </Pressable>
-        </Pressable>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
       </Modal>
     </View>
   );
 }
-fix the modal edit profile with blur mode effrect glass and put white/dark theme system to.
+
+// ── Edit Profile Modal Content (glassmorphism sheet) ──────────────────────
+function EditModalContent({
+  isDark, editPhoto, initials, uploadingPhoto, editName, editUsername,
+  canChangeUsername, daysUntilUsernameChange, savingProfile,
+  primaryText, secondaryText, insets,
+  onPickPhoto, onChangeName, onChangeUsername, onSave, onClose,
+}: any) {
+  const textColor = isDark ? '#FFFFFF' : '#000000';
+  const labelColor = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.45)';
+  const inputBg = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)';
+  const inputBorder = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)';
+  const placeholderColor = isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.3)';
+  const noteColor = isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)';
+  const saveBg = isDark ? '#FFFFFF' : '#000000';
+  const saveText = isDark ? '#000000' : '#FFFFFF';
+  const handleColor = isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.18)';
+
+  return (
+    <ScrollView
+      keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: (insets?.bottom || 0) + 32 }}
+    >
+      {/* Drag handle */}
+      <View style={{ width: 36, height: 5, borderRadius: 3, backgroundColor: handleColor, alignSelf: 'center', marginTop: 10, marginBottom: 20 }} />
+
+      {/* Title */}
+      <Text style={{ color: textColor, fontSize: 20, fontWeight: '700', textAlign: 'center', marginBottom: 24 }}>Edit Profile</Text>
+
+      {/* Avatar */}
+      <View style={{ alignItems: 'center', marginBottom: 28 }}>
+        <TouchableOpacity
+          style={{ width: 96, height: 96, borderRadius: 48, position: 'relative' }}
+          onPress={onPickPhoto}
+          disabled={uploadingPhoto}
+          activeOpacity={0.8}
+        >
+          {editPhoto ? (
+            <Image source={{ uri: editPhoto }} style={{ width: 96, height: 96, borderRadius: 48 }} contentFit="cover" />
+          ) : (
+            <View style={{
+              width: 96, height: 96, borderRadius: 48,
+              backgroundColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)',
+              alignItems: 'center', justifyContent: 'center',
+            }}>
+              <Text style={{ color: textColor, fontSize: 38, fontWeight: '700' }}>{initials}</Text>
+            </View>
+          )}
+          {uploadingPhoto ? (
+            <View style={{ ...StyleSheet.absoluteFillObject, borderRadius: 48, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' }}>
+              <ActivityIndicator color="#FFF" />
+            </View>
+          ) : (
+            <View style={{
+              position: 'absolute', bottom: 2, right: 2,
+              width: 28, height: 28, borderRadius: 14,
+              backgroundColor: '#10A37F',
+              alignItems: 'center', justifyContent: 'center',
+              borderWidth: 2, borderColor: 'rgba(255,255,255,0.8)',
+            }}>
+              <Ionicons name="camera" size={14} color="#FFF" />
+            </View>
+          )}
+        </TouchableOpacity>
+        <Text style={{ color: isDark ? '#10A37F' : '#007AFF', fontSize: 14, fontWeight: '600', marginTop: 10 }}>Change photo</Text>
+      </View>
+
+      {/* Name */}
+      <View style={{ marginBottom: 16 }}>
+        <Text style={{ color: labelColor, fontSize: 11, fontWeight: '700', letterSpacing: 0.8, marginBottom: 8, marginLeft: 4 }}>NAME</Text>
+        <View style={{
+          flexDirection: 'row', alignItems: 'center',
+          backgroundColor: inputBg, borderRadius: 16, borderWidth: 1, borderColor: inputBorder,
+          paddingHorizontal: 16, minHeight: 52,
+        }}>
+          <TextInput
+            style={{ flex: 1, fontSize: 16, color: textColor, paddingVertical: 14 }}
+            value={editName}
+            onChangeText={onChangeName}
+            placeholder="Your name"
+            placeholderTextColor={placeholderColor}
+            autoCapitalize="words"
+          />
+        </View>
+      </View>
+
+      {/* Username */}
+      <View style={{ marginBottom: 8 }}>
+        <Text style={{ color: labelColor, fontSize: 11, fontWeight: '700', letterSpacing: 0.8, marginBottom: 8, marginLeft: 4 }}>USERNAME</Text>
+        <View style={[{
+          flexDirection: 'row', alignItems: 'center',
+          backgroundColor: inputBg, borderRadius: 16, borderWidth: 1, borderColor: inputBorder,
+          paddingHorizontal: 16, minHeight: 52,
+        }, !canChangeUsername() && { opacity: 0.5 }]}>
+          <Text style={{ color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.35)', fontSize: 16, fontWeight: '500', marginRight: 4 }}>@</Text>
+          <TextInput
+            style={{ flex: 1, fontSize: 16, color: textColor, paddingVertical: 14 }}
+            value={editUsername}
+            onChangeText={onChangeUsername}
+            placeholder="username"
+            placeholderTextColor={placeholderColor}
+            autoCapitalize="none"
+            editable={canChangeUsername()}
+          />
+        </View>
+      </View>
+
+      <Text style={{ color: noteColor, fontSize: 12, textAlign: 'center', lineHeight: 18, marginBottom: 24, marginTop: 8, paddingHorizontal: 8 }}>
+        {!canChangeUsername()
+          ? `Username can be changed in ${daysUntilUsernameChange()} days.`
+          : 'Your profile helps people recognize you across the app.'}
+      </Text>
+
+      {/* Save */}
+      <TouchableOpacity
+        style={{ backgroundColor: saveBg, borderRadius: 16, paddingVertical: 16, alignItems: 'center', marginBottom: 12 }}
+        onPress={onSave}
+        disabled={savingProfile || uploadingPhoto}
+        activeOpacity={0.85}
+      >
+        {savingProfile ? (
+          <ActivityIndicator color={saveText} />
+        ) : (
+          <Text style={{ color: saveText, fontSize: 17, fontWeight: '700' }}>Save Changes</Text>
+        )}
+      </TouchableOpacity>
+
+      {/* Cancel */}
+      <TouchableOpacity style={{ alignItems: 'center', paddingVertical: 12 }} onPress={onClose} activeOpacity={0.7}>
+        <Text style={{ color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.45)', fontSize: 16, fontWeight: '500' }}>Cancel</Text>
+      </TouchableOpacity>
+    </ScrollView>
+  );
+}
+
