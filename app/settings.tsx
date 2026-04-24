@@ -792,6 +792,6 @@ export default function SettingsScreen() {
     </View>
   );
 }
-
+fix error white screen make sure it working goods and after saving a new profile photo in settings, emit a auto refresh event or use a shared context so the avatar displayed in the SideMenu drawer header updates immediately without requiring an app restart.
 
 
