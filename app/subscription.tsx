@@ -819,4 +819,4 @@ const styles = StyleSheet.create({
   },
 });
 
-
+please ai if you see this error dont read message without make the change you see in error please read my message and make all change better smooth  real blur effect mode please dont skip please enable white and dark mode systme them in this page and make it more better in blur mode effect in all theme only fix better and when Please wire the 'Pay with Card' button on the Plus plan in app/subscription to navigate to router.push('/checkout') instead of calling purchasePlusWithStripe directly, so users get the native in-app card/Apple Pay sheet
