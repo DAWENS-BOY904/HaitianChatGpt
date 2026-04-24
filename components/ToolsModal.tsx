@@ -46,7 +46,6 @@ interface ToolsModalProps {
   onOpenPresets?: () => void;
 }
 
-// Light theme matching reference screenshots — will be overridden by theme-aware styles at render
 const THEME = {
   bg: '#F2F2F7',
   surface: '#FFFFFF',
@@ -199,14 +198,23 @@ export function ToolsModal({
         const asset = result.assets[0];
         const ext = (asset.name || '').split('.').pop()?.toLowerCase() || '';
         const mime = (asset.mimeType || '').toLowerCase();
-        // Block: video, zip, rar, audio, folder
-        const isBlocked = mime.startsWith('video/') || mime.includes('zip') || mime.includes('x-rar')
-          || mime.includes('7z') || ext === 'zip' || ext === 'rar' || ext === '7z'
-          || ext === 'tar' || ext === 'gz' || mime.startsWith('audio/');
+        
+        // Block: video, audio, zip, rar, 7z, tar, gz, folders
+        const blockedMimePrefixes = ['video/', 'audio/'];
+        const blockedMimeIncludes = ['zip', 'x-rar', '7z', 'tar', 'gzip', 'bzip', 'x-7z'];
+        const blockedExts = ['zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'xz', 'tgz'];
+        
+        const isBlocked = 
+          blockedMimePrefixes.some(prefix => mime.startsWith(prefix)) ||
+          blockedMimeIncludes.some(keyword => mime.includes(keyword)) ||
+          blockedExts.includes(ext) ||
+          mime === ''; // empty mime = likely a folder
+        
         if (isBlocked) {
           alert('File type not supported. Please upload documents, images, or code files.');
           return;
         }
+        
         const isImage = mime.startsWith('image/');
         setSelectedFilePreview({ name: asset.name || 'file', size: asset.size || 0, mimeType: mime, uri: asset.uri, isImage });
       }
@@ -221,7 +229,7 @@ export function ToolsModal({
     onClose();
   };
 
-  // ── Tools grid (matches reference: Camera | Photos | Files / Quizzes | Call | Presets) ──
+  // ── Tools grid ──
   const tools = [
     { id: 'camera',  label: 'Camera',  icon: 'camera-outline',          action: handleCamera },
     { id: 'photos',  label: 'Photos',  icon: 'image-outline',           action: handlePhotos },
@@ -239,8 +247,10 @@ export function ToolsModal({
   return (
     <Modal visible={visible} transparent animationType="none" statusBarTranslucent onRequestClose={onClose}>
       <View style={{ flex: 1, justifyContent: 'flex-end' }}>
+        {/* Stronger blur backdrop */}
         <Animated.View style={[StyleSheet.absoluteFill, backdropStyle]}>
-          <BlurView intensity={12} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
+          <BlurView intensity={60} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.15)' }]} />
           <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onClose} />
         </Animated.View>
 
@@ -322,33 +332,8 @@ export function ToolsModal({
                 </Animated.View>
               )}
 
-              {/* Supported types hint */}
-              {!selectedFilePreview && (
-                <Animated.View entering={FadeInUp.delay(280).duration(280)} style={fpStyles.chipsSection}>
-                  <Text style={fpStyles.chipsTitle}>Supported file types</Text>
-                  <View style={fpStyles.typeRows}>
-                    {[
-                      { icon: 'image-outline', color: '#FF2D55', label: 'Images', ext: 'PNG, JPG, WEBP, GIF' },
-                      { icon: 'document-text-outline', color: '#FF9500', label: 'Documents', ext: 'PDF, DOCX, XLSX' },
-                      { icon: 'code-slash-outline', color: '#007AFF', label: 'Code', ext: 'JS, TS, PY, HTML...' },
-                      { icon: 'text-outline', color: '#30D158', label: 'Text', ext: 'TXT, MD, CSV, JSON' },
-                    ].map(item => (
-                      <View key={item.label} style={fpStyles.typeRow}>
-                        <Ionicons name={item.icon as any} size={16} color={item.color} />
-                        <Text style={fpStyles.typeLabel}>{item.label}</Text>
-                        <Text style={fpStyles.typeExt}>{item.ext}</Text>
-                      </View>
-                    ))}
-                  </View>
-                  <View style={fpStyles.limitRow}>
-                    <Ionicons name="information-circle-outline" size={13} color={THEME.sub} />
-                    <Text style={fpStyles.limitText}>Max 25 MB · No ZIP, video, or audio files</Text>
-                  </View>
-                </Animated.View>
-              )}
-
               {/* Rows container (Web search + Professional data) */}
-              <Animated.View entering={FadeInUp.delay(310).duration(300)} style={[
+              <Animated.View entering={FadeInUp.delay(200).duration(300)} style={[
                 styles.rowsContainer,
                 { backgroundColor: isDark ? '#2C2C2E' : THEME.surface },
               ]}>
@@ -422,7 +407,6 @@ const styles = StyleSheet.create({
   handleWrap: { alignItems: 'center', paddingTop: 10, paddingBottom: 6 },
   handle: { width: 36, height: 5, borderRadius: 3, backgroundColor: '#C7C7CC' },
   scrollContent: { paddingHorizontal: 14, paddingTop: 6, paddingBottom: 32 },
-  // Grid
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 10, marginBottom: 14 },
   cellWrap: { width: (SCREEN_WIDTH - 48) / 3 },
   cell: {
@@ -436,7 +420,6 @@ const styles = StyleSheet.create({
   },
   iconWrap: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', marginBottom: 6 },
   cellLabel: { fontSize: 13, fontWeight: '500', color: THEME.text, textAlign: 'center' },
-  // Rows container (Web search + Professional data)
   rowsContainer: {
     backgroundColor: THEME.surface,
     borderRadius: 14,
@@ -455,7 +438,6 @@ const styles = StyleSheet.create({
   rowItemLabel: { fontSize: 16, fontWeight: '400', color: THEME.text },
   rowItemRight: { fontSize: 15, color: THEME.sub },
   rowDivider: { height: StyleSheet.hairlineWidth, backgroundColor: THEME.border, marginLeft: 60 },
-  // Web options dropdown
   webOptions: {
     backgroundColor: 'rgba(0,0,0,0.04)',
     marginHorizontal: 8,
@@ -482,12 +464,4 @@ const fpStyles = StyleSheet.create({
   previewMime: { fontSize: 11, color: THEME.sub, fontWeight: '500' },
   sendBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: THEME.accent, borderRadius: 10, paddingVertical: 10 },
   sendBtnText: { fontSize: 14, fontWeight: '700', color: '#FFF' },
-  chipsSection: { marginBottom: 12 },
-  chipsTitle: { fontSize: 12, fontWeight: '600', color: THEME.sub, marginBottom: 8, marginLeft: 2 },
-  typeRows: { gap: 6, marginBottom: 8 },
-  typeRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 1 },
-  typeLabel: { fontSize: 13, fontWeight: '600', color: THEME.text, width: 80 },
-  typeExt: { fontSize: 12, color: THEME.sub, flex: 1 },
-  limitRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2, marginLeft: 2 },
-  limitText: { fontSize: 12, color: THEME.sub },
 });
