@@ -547,3 +547,4 @@ export default function ParentalControlsScreen() {
     </View>
   );
 }
+make this in blur and the invite family modal in blur effect mode and Apply the same white/dark theme and BlurView header pattern (matching security) to app/authenticator-app so it adapts automatically to the system appearance in blur.
