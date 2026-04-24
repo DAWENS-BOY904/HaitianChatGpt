@@ -659,46 +659,16 @@ export function SideMenu({
               {QUICK_ACTIONS.map((qa) => (
                 <TouchableOpacity
                   key={qa.id}
-                  style={[
-                    styles.quickActionBtn,
-                    qa.isUpgrade && { borderColor: qa.color, borderWidth: 1 },
-                    QUICK_ACTIONS.length < 4 && { marginRight: 10 },
-                  ]}
+                  style={styles.quickActionBtn}
                   activeOpacity={0.7}
                   onPress={() => handleQuickAction(qa)}
                 >
-                  {Platform.OS === 'ios' ? (
-                    <View style={[styles.quickActionBlur, { overflow: 'hidden' }]}>
-                      <BlurView
-                        intensity={isDark ? 55 : 45}
-                        tint={isDark ? 'dark' : 'light'}
-                        style={StyleSheet.absoluteFill}
-                      />
-                      <Ionicons
-                        name={qa.icon as any}
-                        size={26}
-                        color={qa.isUpgrade ? qa.color : colors.text}
-                      />
-                      <Text style={[styles.quickActionLabel, { color: qa.isUpgrade ? qa.color : colors.text }]}>
-                        {qa.label}
-                      </Text>
-                    </View>
-                  ) : (
-                    <View style={[styles.quickActionBlur, {
-                      backgroundColor: qa.isUpgrade
-                        ? (isDark ? qa.color + '22' : qa.color + '15')
-                        : (isDark ? '#1C1C1E' : '#F2F2F7'),
-                    }]}>
-                      <Ionicons
-                        name={qa.icon as any}
-                        size={26}
-                        color={qa.isUpgrade ? qa.color : colors.text}
-                      />
-                      <Text style={[styles.quickActionLabel, { color: qa.isUpgrade ? qa.color : colors.text }]}>
-                        {qa.label}
-                      </Text>
-                    </View>
-                  )}
+                  <View style={[styles.quickActionCircle, { backgroundColor: qa.color + '28' }]}>
+                    <Ionicons name={qa.icon as any} size={22} color={qa.color} />
+                  </View>
+                  <Text style={[styles.quickActionLabel, { color: colors.text }]} numberOfLines={1}>
+                    {qa.label}
+                  </Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -880,23 +850,25 @@ const styles = StyleSheet.create({
   searchInput: { flex: 1, fontSize: 16, paddingVertical: 0 },
   quickActionsGrid: {
     flexDirection: 'row',
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     marginBottom: 4,
+    justifyContent: 'space-between',
   },
   quickActionBtn: {
     flex: 1,
-    borderRadius: 16,
-    marginHorizontal: 5,
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    gap: 6,
   },
-  quickActionBlur: {
-    flex: 1,
+  quickActionCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 16,
-    gap: 8,
-    borderRadius: 16,
   },
-  quickActionLabel: { fontSize: 12, fontWeight: '600', textAlign: 'center' },
+  quickActionLabel: { fontSize: 11, fontWeight: '500', textAlign: 'center' },
   divider: { height: 0.5, marginHorizontal: 16, marginVertical: 16 },
   sectionLabel: {
     fontSize: 14,
@@ -958,4 +930,3 @@ const styles = StyleSheet.create({
   chatFabText: { color: '#FFFFFF', fontSize: 17, fontWeight: '600' },
   profilePhoto: { width: 30, height: 30, borderRadius: 15 },
 });
-please dont skip make all change better read message please fix this i dont see qick action icon and name re fix it to apear better in SideMenu, replace the full-button blur on quick actions (Projects, Images, Apps, Upgrade) with a small colored circle icon background (like ChatGPT's side menu), showing a colored icon + label below each button for a cleaner look.
