@@ -400,3 +400,4 @@ export default function ProfileScreen() {
     </View>
   );
 }
+add edit profioe i blur mode effetc glass and fix to apear white/dark color better blurrrr.
