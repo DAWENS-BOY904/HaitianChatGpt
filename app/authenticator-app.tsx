@@ -497,4 +497,5 @@ export default function AuthenticatorAppScreen() {
     </View>
   );
 }
+fucking read my message make all change dont skip if you read this eror dont leave without make a real change blur mode please MFA enrollment is currently disabled for TOTP. Please enable and implement a proper function to support TOTP-based multi-factor authentication. Ensure users can successfully enroll, verify, and use TOTP without errors.
 
