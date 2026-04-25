@@ -1569,4 +1569,3 @@ const s = StyleSheet.create({
   payBtnText: { fontSize: 15, fontWeight: '700', color: '#FFFFFF' },
   payBtnDisabled: { opacity: 0.5 },
 });
-you fortget the username set and number input 
