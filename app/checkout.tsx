@@ -1,3 +1,4 @@
+
 /**
  * CHECKOUT — Full in-app payment (redesigned with BlurView)
  * • Contact: email (editable) + phone with country-code picker
@@ -675,6 +676,7 @@ function CheckoutInner() {
       case 'apple': return `Pay with Apple Pay · ${displayPrice}/mo`;
       case 'google': return `Pay with Google Pay · ${displayPrice}/mo`;
       case 'moncash': return `Pay with MonCash · ${planPriceHTG} HTG/mo`;
+      default: return ''; // Added default case to satisfy TypeScript
     }
   };
 
@@ -1331,19 +1333,3 @@ const s = StyleSheet.create({
   webFallbackTitle: { fontSize: 20, fontWeight: '700', textAlign: 'center' },
   webFallbackSub: { fontSize: 15, textAlign: 'center', lineHeight: 22 },
 });
-fix error strip Received unknown parameter: coupon. Did you mean to use `discounts` instead??Status
-400 ERR
-Request ID
-req_1MZDQB85hV5w9v
-Time
-Apr 25, 2026, 1:11:01 AM EDT
-IP address
-43.130.147.74
-API version
-2025-03-31.basil
-Idempotency key
-Key — 07d7f20c-7e42-4264-bbee-87d68b872fd5
-User agent
-Deno/1.45.2 (variant; SupabaseEdgeRuntime/0.1.0)
-API key
-sk_live_...JeV4L8.

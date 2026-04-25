@@ -287,8 +287,8 @@ Deno.serve(async (req) => {
         'metadata[user_id]': user.id,
         'metadata[plan]': plan || 'plus',
       });
-      // Apply DAWINIX2026 coupon
-      subParams.set('coupon', 'ivUqadLE');
+      // Apply DAWINIX2026 discount (Stripe API 2025: use discounts[], not coupon)
+      subParams.set('discounts[0][coupon]', 'ivUqadLE');
 
       const subRes = await fetch('https://api.stripe.com/v1/subscriptions', {
         method: 'POST',
