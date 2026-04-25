@@ -883,4 +883,3 @@ const styles = StyleSheet.create({
   },
   refreshText: { fontSize: 11 },
 });
-langyet mmw only if you click buy on web to go to web never go to web if you not click buy web and fix  pay with card nn checkout never go web in checkout stay in checkout add dark/white mode to dont skip make change.

@@ -14,14 +14,44 @@ import {
   ScrollView,
   ActivityIndicator,
   Platform,
+  useColorScheme,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
 import { useAuth, useAlert, getSupabaseClient } from '@/template';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSubscription } from '../hooks/useSubscription';
 import { FunctionsHttpError } from '@supabase/supabase-js';
 import * as WebBrowser from 'expo-web-browser';
+
+function useCheckoutTheme() {
+  const scheme = useColorScheme();
+  const dark = scheme !== 'light';
+  return {
+    dark,
+    bg: dark ? '#000000' : '#F2F2F7',
+    card: dark ? 'rgba(17,17,17,0.97)' : 'rgba(255,255,255,0.97)',
+    cardBorder: dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
+    text: dark ? '#FFFFFF' : '#000000',
+    textSec: dark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.5)',
+    textMuted: dark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.35)',
+    surface: dark ? 'rgba(28,28,30,0.95)' : 'rgba(255,255,255,0.9)',
+    surfaceBorder: dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)',
+    bottomBg: dark ? 'rgba(0,0,0,0.97)' : 'rgba(242,242,247,0.97)',
+    bottomBorder: dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.1)',
+    headerBorder: dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.1)',
+    optionActive: dark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
+    optionInactive: dark ? 'rgba(17,17,17,0.97)' : 'rgba(255,255,255,0.97)',
+    optionBorderInactive: dark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
+    cancelText: dark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.4)',
+    blurTint: (dark ? 'dark' : 'light') as 'dark' | 'light',
+    sectionLabel: dark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.45)',
+    benefitText: dark ? '#FFFFFF' : '#000000',
+    secureNote: dark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.35)',
+    paymentSubText: dark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.4)',
+  };
+}
 
 // ---------- stripe-react-native (native only) ----------
 let StripeProvider: React.ComponentType<any> | null = null;
@@ -63,6 +93,7 @@ function CheckoutInner() {
   const insets = useSafeAreaInsets();
   const supabase = getSupabaseClient();
   const params = useLocalSearchParams();
+  const T = useCheckoutTheme();
 
   // Accept plan / priceId from params (defaults to plus)
   const plan = (params.plan as string) || 'plus';
@@ -303,13 +334,13 @@ function CheckoutInner() {
         ];
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={[styles.container, { backgroundColor: T.bg, paddingTop: insets.top }]}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { borderBottomColor: T.headerBorder }]}>
         <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-          <Ionicons name="arrow-back" size={24} color="#FFF" />
+          <Ionicons name="arrow-back" size={24} color={T.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Checkout</Text>
+        <Text style={[styles.headerTitle, { color: T.text }]}>Checkout</Text>
         <View style={{ width: 24 }} />
       </View>
 
@@ -318,16 +349,16 @@ function CheckoutInner() {
         showsVerticalScrollIndicator={false}
       >
         {/* Plan card */}
-        <View style={[styles.planCard, { borderColor: planColor + '55' }]}>
+        <View style={[styles.planCard, { backgroundColor: T.card, borderColor: planColor + '55' }]}>
           <View style={[styles.planBadge, { backgroundColor: planColor }]}>
             <Text style={styles.planBadgeText}>
               {plan === 'plus' ? '✨ PLUS' : '⚡ GO'}
             </Text>
           </View>
-          <Text style={styles.planName}>{planLabel}</Text>
+          <Text style={[styles.planName, { color: T.text }]}>{planLabel}</Text>
           <Text style={[styles.planPrice, { color: planColor }]}>
             {showMonCash && selectedMethod === 'moncash' ? planPriceHTG : planPriceUSD}
-            <Text style={styles.planPriceSuffix}>/month</Text>
+            <Text style={[styles.planPriceSuffix, { color: T.textSec }]}>/month</Text>
           </Text>
           {plan === 'plus' ? (
             <View style={styles.couponRow}>
@@ -338,40 +369,40 @@ function CheckoutInner() {
         </View>
 
         {/* Benefits */}
-        <View style={styles.benefitsCard}>
+        <View style={[styles.benefitsCard, { backgroundColor: T.card, borderColor: T.cardBorder }]}>
           <Text style={[styles.benefitsTitle, { color: planColor }]}>What you get</Text>
           {benefits.map((b) => (
             <View key={b} style={styles.benefitRow}>
               <Ionicons name="checkmark-circle" size={18} color={planColor} />
-              <Text style={styles.benefitText}>{b}</Text>
+              <Text style={[styles.benefitText, { color: T.benefitText }]}>{b}</Text>
             </View>
           ))}
         </View>
 
         {/* Payment Method Selector */}
         <View style={styles.paymentSelector}>
-          <Text style={styles.paymentSelectorTitle}>Payment Method</Text>
-          
+          <Text style={[styles.paymentSelectorTitle, { color: T.sectionLabel }]}>Payment Method</Text>
+
           {/* Stripe Option */}
           <TouchableOpacity
             style={[
               styles.paymentOption,
-              selectedMethod === 'stripe' && styles.paymentOptionActive,
-              { borderColor: selectedMethod === 'stripe' ? planColor : 'rgba(255,255,255,0.1)' }
+              { backgroundColor: selectedMethod === 'stripe' ? T.optionActive : T.optionInactive },
+              { borderColor: selectedMethod === 'stripe' ? planColor : T.optionBorderInactive },
             ]}
             onPress={() => setSelectedMethod('stripe')}
           >
             <View style={styles.paymentOptionLeft}>
-              <Ionicons 
-                name="card-outline" 
-                size={22} 
-                color={selectedMethod === 'stripe' ? planColor : 'rgba(255,255,255,0.6)'} 
+              <Ionicons
+                name="card-outline"
+                size={22}
+                color={selectedMethod === 'stripe' ? planColor : T.textSec}
               />
               <View style={styles.paymentOptionText}>
-                <Text style={[styles.paymentOptionLabel, selectedMethod === 'stripe' && { color: '#FFF' }]}>
+                <Text style={[styles.paymentOptionLabel, { color: T.text }]}>
                   Card / Apple Pay / Google Pay
                 </Text>
-                <Text style={styles.paymentOptionSub}>
+                <Text style={[styles.paymentOptionSub, { color: T.paymentSubText }]}>
                   Secure payment via Stripe
                 </Text>
               </View>
@@ -386,8 +417,8 @@ function CheckoutInner() {
             <TouchableOpacity
               style={[
                 styles.paymentOption,
-                selectedMethod === 'moncash' && styles.paymentOptionActive,
-                { borderColor: selectedMethod === 'moncash' ? '#DC143C' : 'rgba(255,255,255,0.1)' }
+                { backgroundColor: selectedMethod === 'moncash' ? T.optionActive : T.optionInactive },
+                { borderColor: selectedMethod === 'moncash' ? '#DC143C' : T.optionBorderInactive },
               ]}
               onPress={() => setSelectedMethod('moncash')}
             >
@@ -396,10 +427,10 @@ function CheckoutInner() {
                   <Text style={styles.moncashIconText}>M</Text>
                 </View>
                 <View style={styles.paymentOptionText}>
-                  <Text style={[styles.paymentOptionLabel, selectedMethod === 'moncash' && { color: '#FFF' }]}>
+                  <Text style={[styles.paymentOptionLabel, { color: T.text }]}>
                     MonCash
                   </Text>
-                  <Text style={styles.paymentOptionSub}>
+                  <Text style={[styles.paymentOptionSub, { color: T.paymentSubText }]}>
                     Pay with Digicel MonCash (Haiti)
                   </Text>
                 </View>
@@ -411,15 +442,15 @@ function CheckoutInner() {
           )}
         </View>
 
-        <Text style={styles.secureNote}>
-          <Ionicons name="lock-closed" size={12} color="rgba(255,255,255,0.4)" />
-          {'  '}Payments are processed securely by {selectedMethod === 'moncash' ? 'Digicel MonCash' : 'Stripe'}.{'\n'}
+        <Text style={[styles.secureNote, { color: T.secureNote }]}>
+          <Ionicons name="lock-closed" size={12} color={T.textMuted} />
+          {'  '}Payments processed securely by {selectedMethod === 'moncash' ? 'Digicel MonCash' : 'Stripe'}.{'\n'}
           Cancel anytime from Settings → Subscription.
         </Text>
       </ScrollView>
 
       {/* Bottom CTA */}
-      <View style={[styles.bottomCTA, { paddingBottom: insets.bottom + 20 }]}>
+      <View style={[styles.bottomCTA, { backgroundColor: T.bottomBg, borderTopColor: T.bottomBorder, paddingBottom: insets.bottom + 20 }]}>
         {loading ? (
           <View style={[styles.payBtn, { backgroundColor: selectedMethod === 'moncash' ? '#DC143C' : planColor, opacity: 0.7 }]}>
             <ActivityIndicator color="#FFF" />
@@ -430,9 +461,9 @@ function CheckoutInner() {
         ) : (
           <TouchableOpacity
             style={[
-              styles.payBtn, 
+              styles.payBtn,
               { backgroundColor: selectedMethod === 'moncash' ? '#DC143C' : planColor },
-              !paymentSheetReady && selectedMethod === 'stripe' && styles.btnDisabled
+              !paymentSheetReady && selectedMethod === 'stripe' && styles.btnDisabled,
             ]}
             onPress={handlePay}
             disabled={!ready && selectedMethod === 'stripe'}
@@ -443,9 +474,7 @@ function CheckoutInner() {
                 <View style={[styles.moncashIconSmall, { backgroundColor: '#FFF' }]}>
                   <Text style={[styles.moncashIconTextSmall, { color: '#DC143C' }]}>M</Text>
                 </View>
-                <Text style={styles.payBtnText}>
-                  Pay with MonCash · {planPriceHTG}/mo
-                </Text>
+                <Text style={styles.payBtnText}>Pay with MonCash · {planPriceHTG}/mo</Text>
               </>
             ) : (
               <>
@@ -465,7 +494,7 @@ function CheckoutInner() {
         )}
 
         <TouchableOpacity style={styles.cancelBtn} onPress={() => router.back()}>
-          <Text style={styles.cancelBtnText}>Cancel</Text>
+          <Text style={[styles.cancelBtnText, { color: T.cancelText }]}>Cancel</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -474,14 +503,15 @@ function CheckoutInner() {
 
 // ---------- Root export: wrap with StripeProvider on native ----------
 export default function CheckoutScreen() {
+  const T = useCheckoutTheme();
   if (Platform.OS === 'web' || !StripeProvider) {
     return (
-      <View style={[styles.container, { alignItems: 'center', justifyContent: 'center', padding: 32 }]}>
-        <Ionicons name="card-outline" size={48} color="rgba(255,255,255,0.4)" />
-        <Text style={{ color: '#FFF', fontSize: 20, fontWeight: '700', marginTop: 16, textAlign: 'center' }}>
+      <View style={[styles.container, { backgroundColor: T.bg, alignItems: 'center', justifyContent: 'center', padding: 32 }]}>
+        <Ionicons name="card-outline" size={48} color={T.textMuted} />
+        <Text style={{ color: T.text, fontSize: 20, fontWeight: '700', marginTop: 16, textAlign: 'center' }}>
           In-app payments unavailable
         </Text>
-        <Text style={{ color: 'rgba(255,255,255,0.55)', fontSize: 15, marginTop: 10, textAlign: 'center', lineHeight: 22 }}>
+        <Text style={{ color: T.textSec, fontSize: 15, marginTop: 10, textAlign: 'center', lineHeight: 22 }}>
           Please use the "Buy on Web" option from the subscription screen to complete your purchase.
         </Text>
       </View>
@@ -502,7 +532,6 @@ export default function CheckoutScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
   },
   header: {
     flexDirection: 'row',
@@ -511,12 +540,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(255,255,255,0.1)',
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#FFF',
   },
   scroll: {
     paddingHorizontal: 24,
@@ -527,7 +554,6 @@ const styles = StyleSheet.create({
   // Plan card
   planCard: {
     width: '100%',
-    backgroundColor: 'rgba(17,17,17,0.95)',
     borderRadius: 20,
     borderWidth: 1.5,
     padding: 24,
@@ -549,7 +575,6 @@ const styles = StyleSheet.create({
   planName: {
     fontSize: 26,
     fontWeight: '700',
-    color: '#FFF',
     marginBottom: 8,
   },
   planPrice: {
@@ -560,7 +585,6 @@ const styles = StyleSheet.create({
   planPriceSuffix: {
     fontSize: 18,
     fontWeight: '500',
-    color: 'rgba(255,255,255,0.6)',
   },
   couponRow: {
     flexDirection: 'row',
@@ -581,10 +605,8 @@ const styles = StyleSheet.create({
   // Benefits
   benefitsCard: {
     width: '100%',
-    backgroundColor: 'rgba(17,17,17,0.95)',
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
     padding: 16,
     marginBottom: 20,
   },
@@ -600,7 +622,6 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   benefitText: {
-    color: '#FFF',
     fontSize: 15,
     flex: 1,
   },
@@ -613,7 +634,6 @@ const styles = StyleSheet.create({
   paymentSelectorTitle: {
     fontSize: 14,
     fontWeight: '700',
-    color: 'rgba(255,255,255,0.6)',
     marginBottom: 12,
     textTransform: 'uppercase',
     letterSpacing: 1,
@@ -622,14 +642,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: 'rgba(17,17,17,0.95)',
     borderRadius: 16,
     borderWidth: 1.5,
     padding: 16,
     marginBottom: 10,
-  },
-  paymentOptionActive: {
-    backgroundColor: 'rgba(255,255,255,0.05)',
   },
   paymentOptionLeft: {
     flexDirection: 'row',
@@ -641,13 +657,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   paymentOptionLabel: {
-    color: '#FFF',
     fontSize: 15,
     fontWeight: '600',
     marginBottom: 2,
   },
   paymentOptionSub: {
-    color: 'rgba(255,255,255,0.45)',
     fontSize: 13,
   },
   moncashIcon: {
@@ -676,7 +690,6 @@ const styles = StyleSheet.create({
 
   secureNote: {
     fontSize: 12,
-    color: 'rgba(255,255,255,0.4)',
     textAlign: 'center',
     lineHeight: 20,
     paddingHorizontal: 8,
@@ -691,9 +704,7 @@ const styles = StyleSheet.create({
     right: 0,
     paddingHorizontal: 24,
     paddingTop: 16,
-    backgroundColor: 'rgba(0,0,0,0.95)',
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(255,255,255,0.08)',
     gap: 10,
   },
   payBtn: {
@@ -719,6 +730,5 @@ const styles = StyleSheet.create({
   },
   cancelBtnText: {
     fontSize: 15,
-    color: 'rgba(255,255,255,0.45)',
   },
 });
