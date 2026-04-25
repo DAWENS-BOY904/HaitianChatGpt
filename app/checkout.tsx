@@ -1238,4 +1238,3 @@ const s = StyleSheet.create({
   webFallbackTitle: { fontSize: 20, fontWeight: '700', textAlign: 'center' },
   webFallbackSub: { fontSize: 15, textAlign: 'center', lineHeight: 22 },
 });
-replace react-native-international-phone-number in checkout.tsx with a custom country picker built using libphonenumber-js and a FlatList modal, making it fully web-compatible without native-only library errors.
