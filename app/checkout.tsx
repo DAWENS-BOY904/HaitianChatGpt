@@ -1073,3 +1073,4 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
 });
+hello ai please please add a coupon/promo code input field to the checkout page. When the user enters a code and taps Apply, call the Stripe edge function to validate and apply a discount, then update the displayed price accordingly and in number allow listcountryn world number select code country and input number with format (305)896-2443 by code country number and redesign checkout page and all in blur add moncash for haiti-usa only.
