@@ -1022,4 +1022,4 @@ export default function ProjectGetScreen() {
     </View>
   );
 }
-hello ai if you see this please dont skip make all change in real time don t skip my mesage fix all in blur mode effect in real time Connect project-get to the real generate-code-project edge function with streaming support — wire up the fetch call to stream file creation events, log lines, and completion status in real time using the existing supabase/functions/generate-code-project/index.
+
