@@ -777,3 +777,4 @@ const s = StyleSheet.create({
     paddingHorizontal: 4,
   },
 });
+frucking read my message and make akll change in blur real time please dont skip When user sends an image from images to home page, show a full-screen loading overlay on home while AI is analyzing the photo (spinner + 'AI is analyzing your image...' text), then display the AI response with a 'Save to My Images' button that uploads the result to Supabase storage and inserts into media_files table so it appears in the gallery. After AI responds to an image message on the home page chat, show a 'Save to My Images' action button below the AI response. When tapped, save the image URL to the media_files table with file_type='image' and user_id so it appears in the images gallery grid.
