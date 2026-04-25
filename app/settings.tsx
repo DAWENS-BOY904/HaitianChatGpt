@@ -388,7 +388,9 @@ export default function SettingsScreen() {
   };
 
   const pickEditPhoto = () => {
-    setPhotoPickerVisible(true);
+    // Dismiss edit modal first so photo picker appears on top without z-index conflicts
+    setEditModalVisible(false);
+    setTimeout(() => setPhotoPickerVisible(true), 350);
   };
 
   const uploadAsset = async (asset: ImagePicker.ImagePickerAsset) => {
@@ -417,10 +419,11 @@ export default function SettingsScreen() {
 
   const pickFromLibrary = async () => {
     setPhotoPickerVisible(false);
-    await new Promise(r => setTimeout(r, 300));
+    await new Promise(r => setTimeout(r, 350));
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
       showAlert('Permission needed', 'Please allow photo access to change your profile picture.');
+      setEditModalVisible(true);
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -430,15 +433,20 @@ export default function SettingsScreen() {
       quality: 0.8,
       base64: true,
     });
-    if (!result.canceled && result.assets[0]) await uploadAsset(result.assets[0]);
+    if (!result.canceled && result.assets[0]) {
+      await uploadAsset(result.assets[0]);
+    }
+    // Reopen edit modal after picking
+    setEditModalVisible(true);
   };
 
   const pickFromCamera = async () => {
     setPhotoPickerVisible(false);
-    await new Promise(r => setTimeout(r, 300));
+    await new Promise(r => setTimeout(r, 350));
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
       showAlert('Permission needed', 'Please allow camera access to take a profile photo.');
+      setEditModalVisible(true);
       return;
     }
     const result = await ImagePicker.launchCameraAsync({
@@ -447,7 +455,11 @@ export default function SettingsScreen() {
       quality: 0.8,
       base64: true,
     });
-    if (!result.canceled && result.assets[0]) await uploadAsset(result.assets[0]);
+    if (!result.canceled && result.assets[0]) {
+      await uploadAsset(result.assets[0]);
+    }
+    // Reopen edit modal after picking
+    setEditModalVisible(true);
   };
 
   const saveProfile = async () => {
@@ -970,4 +982,4 @@ export default function SettingsScreen() {
   );
 }
 
-when i tap the perfile to add a photo perfile its never work please fix it and test before finish fixall error dont skip.
+
