@@ -7,7 +7,7 @@
     "icon": "./assets/images/logo.png",
     "scheme": "dawinixht",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "owner": "dawens-boy",
 
     "ios": {
@@ -28,8 +28,7 @@
       "edgeToEdgeEnabled": true,
       "permissions": [
         "RECORD_AUDIO",
-        "CAMERA",
-        "READ_EXTERNAL_STORAGE"
+        "CAMERA"
       ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/logo.png",
@@ -60,7 +59,6 @@
       "expo-av",
       "expo-speech",
       "expo-notifications",
-      "expo-in-app-purchases",
       [
         "expo-secure-store",
         {
@@ -94,7 +92,7 @@
     },
 
     "experiments": {
-      "typedRoutes": true
+      "typedRoutes": false
     }
   }
 }
