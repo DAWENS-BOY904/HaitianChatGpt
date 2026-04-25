@@ -16,4 +16,7 @@ config.resolver.sourceExts = [
 // Push additional asset extensions
 config.resolver.assetExts.push('png');
 
+// Force CJS interop — prevents Node ESM loader from trying to load .ts files directly
+config.resolver.unstable_enablePackageExports = false;
+
 module.exports = config;
