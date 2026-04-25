@@ -8,15 +8,13 @@
     "scheme": "dawinixht",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-
     "owner": "dawens-boy",
 
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.onspace.dawinix-ht",
+      "bundleIdentifier": "com.onspace.dawinixht",
       "buildNumber": "1.0.0",
       "usesAppleSignIn": true,
-
       "infoPlist": {
         "NSMicrophoneUsageDescription": "This app uses microphone for AI voice chat.",
         "NSCameraUsageDescription": "This app uses camera for AI features.",
@@ -25,21 +23,18 @@
     },
 
     "android": {
-      "package": "com.onspace.dawinix-ht",
+      "package": "com.onspace.dawinixht",
       "versionCode": 1,
       "edgeToEdgeEnabled": true,
-
       "permissions": [
         "RECORD_AUDIO",
         "CAMERA",
         "READ_EXTERNAL_STORAGE"
       ],
-
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/logo.png",
         "backgroundColor": "#ffffff"
       },
-
       "intentFilters": [
         {
           "action": "VIEW",
@@ -66,14 +61,12 @@
       "expo-speech",
       "expo-notifications",
       "expo-in-app-purchases",
-
       [
         "expo-secure-store",
         {
           "configureAndroidBackup": true
         }
       ],
-
       [
         "expo-splash-screen",
         {
@@ -83,14 +76,13 @@
           "backgroundColor": "#ffffff"
         }
       ],
-
       "expo-web-browser"
     ],
 
     "extra": {
-      "OPENAI_API_KEY": "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",
-      "SUPABASE_URL": "https://njpuoozygqtpvlzhnjpu.backend.onspace.ai",
-      "SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjIwODEyMTE5MjgsImlhdCI6MTc2NTg1MTkyOCwiaXNzIjoib25zcGFjZSIsInJlZiI6Im5qcHVvb3p5Z3F0cHZsemhuanB1Iiwicm9sZSI6ImFub24ifQ.m9dWtFpSOKlzaAwX1AyGE1b-HkzGs2PnIZYrfJ35HT8"
+      "SUPABASE_URL": "${SUPABASE_URL}",
+      "SUPABASE_ANON_KEY": "${SUPABASE_ANON_KEY}",
+      "OPENAI_API_KEY": "${OPENAI_API_KEY}"
     },
 
     "updates": {
@@ -106,4 +98,3 @@
     }
   }
 }
-
