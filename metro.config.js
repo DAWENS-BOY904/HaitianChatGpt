@@ -19,4 +19,7 @@ config.resolver.assetExts.push('png');
 // Force CJS interop — prevents Node ESM loader from trying to load .ts files directly
 config.resolver.unstable_enablePackageExports = false;
 
+// Explicitly disable ESM resolution for packages that expose .ts source files
+config.resolver.unstable_conditionNames = ['require', 'default'];
+
 module.exports = config;
