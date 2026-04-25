@@ -2,24 +2,33 @@ const { getDefaultConfig } = require('expo/metro-config');
 
 const config = getDefaultConfig(__dirname);
 
-// Ensure .ts/.tsx source files are resolved correctly (fixes ESM/CJS conflict)
+// Source extensions — dwe gen ts/tsx anvan js/jsx
 config.resolver.sourceExts = [
   'tsx',
   'ts',
-  'jsx',
+  'jsx', 
   'js',
   'json',
   'cjs',
   'mjs',
 ];
 
-// Push additional asset extensions
-config.resolver.assetExts.push('png');
+// Asset extensions
+config.resolver.assetExts = [
+  ...config.resolver.assetExts,
+  'png',
+  'jpg',
+  'jpeg',
+  'gif',
+  'webp',
+  'svg',
+];
 
-// Force CJS interop — prevents Node ESM loader from trying to load .ts files directly
-config.resolver.unstable_enablePackageExports = false;
-
-// Explicitly disable ESM resolution for packages that expose .ts source files
+// ESM/CJS interop — sèlman CJS pou pakè ki gen de version
+config.resolver.unstable_enablePackageExports = true;
 config.resolver.unstable_conditionNames = ['require', 'default'];
+
+// Optional: Faster resolution
+config.resolver.unstable_disableModuleWrapping = true;
 
 module.exports = config;
