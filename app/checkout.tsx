@@ -1,11 +1,13 @@
-
 /**
- * CHECKOUT PAGE - In-app Stripe PaymentSheet + MonCash (Haiti)
- * Card + Apple Pay + Google Pay + MonCash
- * After success → check-subscription → update tier → /subscription-success
+ * CHECKOUT — Full in-app payment
+ * • Contact: email (editable) + phone
+ * • Card: Stripe CardField (name, number, expiry, CVV) — native only
+ * • Apple Pay: Stripe in-app sheet (iOS)
+ * • Google Pay: Stripe in-app sheet (Android)
+ * • MonCash: edge-function → in-app WebBrowser (Haiti)
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -14,10 +16,11 @@ import {
   ScrollView,
   ActivityIndicator,
   Platform,
+  TextInput,
+  KeyboardAvoidingView,
   useColorScheme,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { BlurView } from 'expo-blur';
 import { useAuth, useAlert, getSupabaseClient } from '@/template';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -25,66 +28,90 @@ import { useSubscription } from '../hooks/useSubscription';
 import { FunctionsHttpError } from '@supabase/supabase-js';
 import * as WebBrowser from 'expo-web-browser';
 
-function useCheckoutTheme() {
-  const scheme = useColorScheme();
-  const dark = scheme !== 'light';
+// ─────────────────────────────────────────────────────────
+// Theme
+// ─────────────────────────────────────────────────────────
+function useT() {
+  const dark = useColorScheme() !== 'light';
   return {
     dark,
-    bg: dark ? '#000000' : '#F2F2F7',
-    card: dark ? 'rgba(17,17,17,0.97)' : 'rgba(255,255,255,0.97)',
-    cardBorder: dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
+    bg: dark ? '#0A0A0A' : '#F2F2F7',
+    surface: dark ? '#1C1C1E' : '#FFFFFF',
+    surfaceBorder: dark ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.08)',
     text: dark ? '#FFFFFF' : '#000000',
-    textSec: dark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.5)',
-    textMuted: dark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.35)',
-    surface: dark ? 'rgba(28,28,30,0.95)' : 'rgba(255,255,255,0.9)',
-    surfaceBorder: dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)',
-    bottomBg: dark ? 'rgba(0,0,0,0.97)' : 'rgba(242,242,247,0.97)',
-    bottomBorder: dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.1)',
-    headerBorder: dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.1)',
-    optionActive: dark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
-    optionInactive: dark ? 'rgba(17,17,17,0.97)' : 'rgba(255,255,255,0.97)',
-    optionBorderInactive: dark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
-    cancelText: dark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.4)',
+    textSec: dark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.45)',
+    textMuted: dark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)',
+    inputBg: dark ? '#2C2C2E' : '#F2F2F7',
+    inputBorder: dark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)',
+    inputFocusBorder: '#6B5CE7',
+    placeholderText: dark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)',
+    headerBorder: dark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)',
+    bottomBg: dark ? 'rgba(10,10,10,0.98)' : 'rgba(242,242,247,0.98)',
+    bottomBorder: dark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.09)',
+    tabInactive: dark ? '#2C2C2E' : '#E5E5EA',
+    tabInactiveText: dark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.45)',
+    cardFieldBg: dark ? '#2C2C2E' : '#F8F8F8',
+    divider: dark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)',
+    secureText: dark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.3)',
     blurTint: (dark ? 'dark' : 'light') as 'dark' | 'light',
-    sectionLabel: dark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.45)',
-    benefitText: dark ? '#FFFFFF' : '#000000',
-    secureNote: dark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.35)',
-    paymentSubText: dark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.4)',
   };
 }
 
-// ---------- stripe-react-native (native only) ----------
+// ─────────────────────────────────────────────────────────
+// Stripe (native only — graceful web fallback)
+// ─────────────────────────────────────────────────────────
 let StripeProvider: React.ComponentType<any> | null = null;
-let useStripe: (() => { initPaymentSheet: any; presentPaymentSheet: any }) | null = null;
+let CardField: React.ComponentType<any> | null = null;
+let useStripe: (() => {
+  confirmPayment: any;
+  initPaymentSheet: any;
+  presentPaymentSheet: any;
+  createPaymentMethod: any;
+}) | null = null;
+let useApplePay: (() => {
+  isApplePaySupported: boolean;
+  presentApplePay: any;
+  confirmApplePayPayment: any;
+}) | null = null;
+let useGooglePay: (() => {
+  isGooglePaySupported: (opts: any) => Promise<boolean>;
+  initGooglePay: any;
+  presentGooglePay: any;
+}) | null = null;
 
 if (Platform.OS !== 'web') {
   try {
-    const stripeLib = require('@stripe/stripe-react-native');
-    StripeProvider = stripeLib.StripeProvider;
-    useStripe = stripeLib.useStripe;
-  } catch (_e) {
-    // library not installed — graceful degradation
-  }
+    const lib = require('@stripe/stripe-react-native');
+    StripeProvider = lib.StripeProvider;
+    CardField = lib.CardField;
+    useStripe = lib.useStripe;
+    useApplePay = lib.useApplePay;
+    useGooglePay = lib.useGooglePay;
+  } catch (_e) {}
 }
 
-// ── Stripe publishable key ──
-const STRIPE_PUBLISHABLE_KEY =
+// ─────────────────────────────────────────────────────────
+// Config
+// ─────────────────────────────────────────────────────────
+const STRIPE_PK =
   process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY ||
   'pk_live_51TPUrUE0VkO7z1VnRqkzCbmYPxjnq7sguPT50wDpUHCEBBEcaBXVy8iFxoAWcT5nxQ5kfMJjMEGVjhYaXv5OB9cT00mdXajb91';
 
-// ── Stripe price for Plus plan ──
-const PLUS_PRICE_ID = 'price_1TPUrzE0VkO7z1Vnlgj45978'; // $19.99/month
+const PLUS_PRICE_ID = 'price_1TPUrzE0VkO7z1Vnlgj45978';
 
-// ── MonCash config ──
-const MONCASH_SANDBOX_GATEWAY = 'https://sandbox.moncashbutton.digicelgroup.com/Moncash-middleware/Payment/Redirect';
 const isHaitiUser = (user: any) => {
   if (!user) return false;
-  const country = user.user_metadata?.country || user.user_metadata?.address?.country;
+  const country = user.user_metadata?.country || '';
   const phone = user.phone || user.user_metadata?.phone || '';
-  return country === 'HT' || country === 'Haiti' || phone.startsWith('+509') || phone.startsWith('509');
+  return country === 'HT' || country === 'Haiti' || phone.startsWith('+509');
 };
 
-// ---------- Inner component (uses useStripe hook) ----------
+// Payment tabs
+type PayMethod = 'card' | 'apple' | 'google' | 'moncash';
+
+// ─────────────────────────────────────────────────────────
+// Inner checkout (has access to Stripe hooks)
+// ─────────────────────────────────────────────────────────
 function CheckoutInner() {
   const { user } = useAuth();
   const { showAlert } = useAlert();
@@ -93,104 +120,222 @@ function CheckoutInner() {
   const insets = useSafeAreaInsets();
   const supabase = getSupabaseClient();
   const params = useLocalSearchParams();
-  const T = useCheckoutTheme();
+  const T = useT();
 
-  // Accept plan / priceId from params (defaults to plus)
   const plan = (params.plan as string) || 'plus';
   const priceId = (params.priceId as string) || PLUS_PRICE_ID;
-
-  const [loading, setLoading] = useState(false);
-  const [ready, setReady] = useState(false);
-  const [paymentSheetReady, setPaymentSheetReady] = useState(false);
-  const [selectedMethod, setSelectedMethod] = useState<'stripe' | 'moncash'>('stripe');
-
-  // Safely call useStripe — only if available
-  const stripeHook = useStripe ? useStripe() : null;
-  const initPaymentSheet = stripeHook?.initPaymentSheet;
-  const presentPaymentSheet = stripeHook?.presentPaymentSheet;
-
+  const planColor = plan === 'plus' ? '#6B5CE7' : '#34C759';
   const planLabel = plan === 'plus' ? 'Dawinix Plus' : 'Dawinix Go';
   const planPriceUSD = plan === 'plus' ? '$19.99' : '$8.00';
-  const planPriceHTG = plan === 'plus' ? '2,650 HTG' : '1,060 HTG'; // Approximate conversion
-  const planColor = plan === 'plus' ? '#6B5CE7' : '#34C759';
-  const showMonCash = isHaitiUser(user);
+  const planPriceHTG = plan === 'plus' ? '2,650' : '1,060';
+  const planAmountCents = plan === 'plus' ? 1999 : 800;
+  const planAmountHTG = plan === 'plus' ? 2650 : 1060;
 
-  // ── Initialize Stripe PaymentSheet ──
-  const initSheet = useCallback(async () => {
-    if (!initPaymentSheet || !user) return;
+  // ── Contact info ──
+  const [email, setEmail] = useState(user?.email || '');
+  const [phone, setPhone] = useState('');
+  const [focusedField, setFocusedField] = useState<string | null>(null);
+
+  // ── Card holder name (CardField handles number/expiry/cvv natively) ──
+  const [cardholderName, setCardholderName] = useState('');
+  const [cardReady, setCardReady] = useState(false);
+
+  // ── Payment method tab ──
+  const showMoncash = isHaitiUser(user);
+  const defaultTab: PayMethod = Platform.OS === 'ios' ? 'apple' : Platform.OS === 'android' ? 'google' : 'card';
+  const [method, setMethod] = useState<PayMethod>(showMoncash ? 'moncash' : defaultTab);
+
+  // ── Google Pay support ──
+  const [googlePayReady, setGooglePayReady] = useState(false);
+
+  // ── Apple Pay ──
+  const applePay = useApplePay ? useApplePay() : null;
+  const isApplePaySupported = applePay?.isApplePaySupported ?? false;
+
+  // ── Google Pay ──
+  const googlePay = useGooglePay ? useGooglePay() : null;
+
+  // ── Stripe core ──
+  const stripe = useStripe ? useStripe() : null;
+
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (Platform.OS !== 'android' || !googlePay) return;
+    googlePay
+      .isGooglePaySupported({ testEnv: false })
+      .then((ok: boolean) => setGooglePayReady(ok))
+      .catch(() => setGooglePayReady(false));
+  }, []);
+
+  // ── Benefits list ──
+  const benefits =
+    plan === 'plus'
+      ? ['Advanced AI models', 'Unlimited messages', '20 uploads / session', 'Agents & deep research', 'Priority support']
+      : ['More daily messages', '10 uploads / session', 'Group chat', 'Longer memory'];
+
+  // ─────────────────────────────────────────
+  // Get PaymentIntent secret from edge fn
+  // ─────────────────────────────────────────
+  const getClientSecret = async (token: string) => {
+    const { data, error } = await supabase.functions.invoke('create-checkout-session', {
+      body: { plan, priceId, mode: 'payment_sheet' },
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (error) {
+      let msg = error.message;
+      if (error instanceof FunctionsHttpError) {
+        try { msg = await error.context?.text() || msg; } catch (_) {}
+      }
+      throw new Error(msg);
+    }
+    return data as { clientSecret?: string; ephemeralKey?: string; customerId?: string; url?: string };
+  };
+
+  // ─────────────────────────────────────────
+  // Post-payment: sync subscription tier
+  // ─────────────────────────────────────────
+  const syncSubscription = async (token: string) => {
+    const { data: subData } = await supabase.functions.invoke('check-subscription', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (user?.id) {
+      await supabase.from('user_profiles').update({
+        subscription_tier: subData?.plan || plan,
+        subscription_expires_at: subData?.subscription_end || null,
+      }).eq('id', user.id);
+    }
+    await refreshSubscription?.();
+    router.replace('/subscription-success');
+  };
+
+  // ─────────────────────────────────────────
+  // Card payment via Stripe PaymentSheet
+  // ─────────────────────────────────────────
+  const handleCardPay = async () => {
+    if (!stripe) { showAlert('Error', 'Stripe not available'); return; }
+    if (!cardReady) { showAlert('Incomplete', 'Please fill in your card details.'); return; }
+    if (!cardholderName.trim()) { showAlert('Required', 'Please enter the cardholder name.'); return; }
+
     setLoading(true);
     try {
       const { data: session } = await supabase.auth.getSession();
       const token = session?.session?.access_token;
       if (!token) throw new Error('Not authenticated');
 
-      // Ask edge function for a PaymentIntent (subscription mode)
-      const { data, error } = await supabase.functions.invoke('create-checkout-session', {
-        body: { plan, priceId, mode: 'payment_sheet' },
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const secretData = await getClientSecret(token);
+      if (!secretData.clientSecret) throw new Error('No payment secret returned');
 
-      if (error) {
-        let msg = error.message;
-        if (error instanceof FunctionsHttpError) {
-          try { msg = await error.context?.text() || msg; } catch (_e) {}
-        }
-        throw new Error(msg);
-      }
-
-      // Edge function returns { clientSecret, customerId, ephemeralKey }
-      // (or falls back to a hosted-checkout URL — handled below)
-      const { clientSecret, ephemeralKey, customerId, url } = data || {};
-
-      // Fallback: if edge returns a hosted URL instead of clientSecret, open browser
-      if (!clientSecret && url) {
-        await WebBrowser.openBrowserAsync(url, {
-          presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN,
-        });
-        setTimeout(() => refreshSubscription?.(), 2000);
-        router.back();
-        return;
-      }
-
-      if (!clientSecret) throw new Error('No PaymentIntent client secret returned');
-
-      const { error: initError } = await initPaymentSheet({
+      const { error: initErr } = await stripe.initPaymentSheet({
         merchantDisplayName: 'Dawinix AI',
-        customerId: customerId ?? undefined,
-        customerEphemeralKeySecret: ephemeralKey ?? undefined,
-        paymentIntentClientSecret: clientSecret,
+        customerId: secretData.customerId,
+        customerEphemeralKeySecret: secretData.ephemeralKey,
+        paymentIntentClientSecret: secretData.clientSecret,
+        defaultBillingDetails: { name: cardholderName, email },
         allowsDelayedPaymentMethods: false,
-        defaultBillingDetails: {
-          email: user.email,
-        },
-        applePay: {
-          merchantCountryCode: 'US',
-        },
-        googlePay: {
-          merchantCountryCode: 'US',
-          testEnv: false,
-          currencyCode: 'usd',
-        },
-        style: 'alwaysDark',
         returnURL: 'dawinixht://checkout/return',
       });
+      if (initErr) throw new Error(initErr.message);
 
-      if (initError) throw new Error(initError.message);
-      setPaymentSheetReady(true);
+      const { error: presentErr } = await stripe.presentPaymentSheet();
+      if (presentErr) {
+        if (presentErr.code === 'Canceled') return;
+        throw new Error(presentErr.message);
+      }
+      await syncSubscription(token);
     } catch (err: any) {
-      showAlert('Setup Error', err?.message || 'Could not initialize payment. Please try again.');
+      showAlert('Payment Failed', err?.message || 'Something went wrong.');
     } finally {
       setLoading(false);
-      setReady(true);
     }
-  }, [initPaymentSheet, user, supabase, plan, priceId, showAlert, refreshSubscription, router]);
+  };
 
-  useEffect(() => {
-    initSheet();
-  }, [initSheet]); // Added initSheet to dependency array
+  // ─────────────────────────────────────────
+  // Apple Pay (in-app, no browser)
+  // ─────────────────────────────────────────
+  const handleApplePay = async () => {
+    if (!applePay || !isApplePaySupported || !stripe) {
+      showAlert('Not Available', 'Apple Pay is not available on this device.');
+      return;
+    }
+    setLoading(true);
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      const token = session?.session?.access_token;
+      if (!token) throw new Error('Not authenticated');
 
-  // ── MonCash Payment Flow ──
-  const handleMonCashPay = async () => {
+      const secretData = await getClientSecret(token);
+      if (!secretData.clientSecret) throw new Error('No payment secret');
+
+      const { error: initErr } = await stripe.initPaymentSheet({
+        merchantDisplayName: 'Dawinix AI',
+        customerId: secretData.customerId,
+        customerEphemeralKeySecret: secretData.ephemeralKey,
+        paymentIntentClientSecret: secretData.clientSecret,
+        applePay: { merchantCountryCode: 'US' },
+        defaultBillingDetails: { email },
+        returnURL: 'dawinixht://checkout/return',
+      });
+      if (initErr) throw new Error(initErr.message);
+
+      const { error: presentErr } = await stripe.presentPaymentSheet();
+      if (presentErr) {
+        if (presentErr.code === 'Canceled') return;
+        throw new Error(presentErr.message);
+      }
+      await syncSubscription(token);
+    } catch (err: any) {
+      showAlert('Apple Pay Failed', err?.message || 'Something went wrong.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ─────────────────────────────────────────
+  // Google Pay (in-app, no browser)
+  // ─────────────────────────────────────────
+  const handleGooglePay = async () => {
+    if (!googlePay || !googlePayReady || !stripe) {
+      showAlert('Not Available', 'Google Pay is not available on this device.');
+      return;
+    }
+    setLoading(true);
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      const token = session?.session?.access_token;
+      if (!token) throw new Error('Not authenticated');
+
+      const secretData = await getClientSecret(token);
+      if (!secretData.clientSecret) throw new Error('No payment secret');
+
+      const { error: initErr } = await stripe.initPaymentSheet({
+        merchantDisplayName: 'Dawinix AI',
+        customerId: secretData.customerId,
+        customerEphemeralKeySecret: secretData.ephemeralKey,
+        paymentIntentClientSecret: secretData.clientSecret,
+        googlePay: { merchantCountryCode: 'US', testEnv: false, currencyCode: 'usd' },
+        defaultBillingDetails: { email },
+        returnURL: 'dawinixht://checkout/return',
+      });
+      if (initErr) throw new Error(initErr.message);
+
+      const { error: presentErr } = await stripe.presentPaymentSheet();
+      if (presentErr) {
+        if (presentErr.code === 'Canceled') return;
+        throw new Error(presentErr.message);
+      }
+      await syncSubscription(token);
+    } catch (err: any) {
+      showAlert('Google Pay Failed', err?.message || 'Something went wrong.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ─────────────────────────────────────────
+  // MonCash — edge function only, no web
+  // ─────────────────────────────────────────
+  const handleMonCash = async () => {
     if (!user) return;
     setLoading(true);
     try {
@@ -198,31 +343,30 @@ function CheckoutInner() {
       const token = session?.session?.access_token;
       if (!token) throw new Error('Not authenticated');
 
-      // 1. Call edge function to create MonCash payment token
+      const orderId = `DWNX-${user.id}-${Date.now()}`;
+
       const { data, error } = await supabase.functions.invoke('create-checkout-session', {
-        body: { 
-          plan, 
-          priceId, 
-          mode: 'moncash',
-          amount: plan === 'plus' ? 2650 : 1060, // HTG amount
-          orderId: `DWNX-${user.id}-${Date.now()}`
-        },
+        body: { plan, priceId, mode: 'moncash', amount: planAmountHTG, orderId, phone, email },
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      if (error) throw new Error(error.message);
-      if (!data?.paymentUrl) throw new Error('No MonCash payment URL returned');
+      if (error) {
+        let msg = error.message;
+        if (error instanceof FunctionsHttpError) {
+          try { msg = await error.context?.text() || msg; } catch (_) {}
+        }
+        throw new Error(msg);
+      }
+      if (!data?.paymentUrl) throw new Error('No MonCash payment URL returned from server');
 
-      // 2. Open MonCash hosted gateway
+      // Open MonCash gateway in-app (WebBrowser, not Linking)
       const result = await WebBrowser.openBrowserAsync(data.paymentUrl, {
         presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN,
-        controlsColor: '#6B5CE7',
+        controlsColor: '#DC143C',
       });
 
-      // 3. Handle return from gateway
       if (result.type === 'dismiss') {
-        // Poll for payment verification
-        await verifyMonCashPayment(data.orderId);
+        await verifyMonCash(data.orderId || orderId, token);
       }
     } catch (err: any) {
       showAlert('MonCash Error', err?.message || 'Could not process MonCash payment.');
@@ -231,112 +375,78 @@ function CheckoutInner() {
     }
   };
 
-  // ── Verify MonCash Payment ──
-  const verifyMonCashPayment = async (orderId: string) => {
-    try {
-      const { data: session } = await supabase.auth.getSession();
-      const token = session?.session?.access_token;
-      if (!token) return;
-
-      // Poll edge function for payment status
-      const { data, error } = await supabase.functions.invoke('verify-moncash-payment', {
-        body: { orderId },
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (error) throw new Error(error.message);
-
-      if (data?.status === 'success') {
-        // Payment succeeded — sync subscription tier
+  const verifyMonCash = async (orderId: string, token: string) => {
+    const { data, error } = await supabase.functions.invoke('verify-moncash-payment', {
+      body: { orderId },
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (error) { showAlert('Verification Error', error.message); return; }
+    if (data?.status === 'success') {
+      if (user?.id) {
         await supabase.from('user_profiles').update({
           subscription_tier: plan,
           subscription_expires_at: data?.subscription_end || null,
-          billing_info: { ...data?.billingInfo, provider: 'moncash' }
-        }).eq('id', user?.id);
-
-        await refreshSubscription?.();
-        router.replace('/subscription-success');
-      } else {
-        showAlert('Payment Pending', 'Your MonCash payment is being processed. We will update your account shortly.');
+          billing_info: { provider: 'moncash' },
+        }).eq('id', user.id);
       }
-    } catch (err: any) {
-      showAlert('Verification Error', err?.message || 'Could not verify payment status.');
-    }
-  };
-
-  // ── Present PaymentSheet and handle result ──
-  const handleStripePay = async () => {
-    if (!presentPaymentSheet || !paymentSheetReady) {
-      showAlert('Not Available', 'In-app payments are not available here. Please use the "Buy on Web" option from the subscription screen.');
-      return;
-    }
-    setLoading(true);
-    try {
-      const { error } = await presentPaymentSheet();
-
-      if (error) {
-        if (error.code === 'Canceled') {
-          return;
-        }
-        throw new Error(error.message);
-      }
-
-      // ── Payment succeeded — sync subscription tier ──
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData?.session?.access_token;
-
-      if (token) {
-        const { data: subData } = await supabase.functions.invoke('check-subscription', {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-
-        if (user?.id) {
-          await supabase.from('user_profiles').update({
-            subscription_tier: subData?.plan || plan,
-            subscription_expires_at: subData?.subscription_end || null,
-          }).eq('id', user.id);
-        }
-      }
-
       await refreshSubscription?.();
       router.replace('/subscription-success');
-    } catch (err: any) {
-      showAlert('Payment Failed', err?.message || 'Something went wrong. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handlePay = () => {
-    if (selectedMethod === 'moncash') {
-      handleMonCashPay();
     } else {
-      handleStripePay();
+      showAlert('Payment Pending', 'Your MonCash payment is being processed. We will update your account shortly.');
     }
   };
 
-  // ── Plan benefit list ──
-  const benefits =
-    plan === 'plus'
-      ? [
-          'Advanced AI models',
-          'Unlimited messages',
-          '20 image & file uploads per session',
-          'Agents & deep research',
-          'Priority support',
-          'DAWINIX2026 — 20% discount',
-        ]
-      : [
-          'More daily messages',
-          '10 image & file uploads per session',
-          'Group chat creation',
-          'Longer conversation memory',
-        ];
+  // ─────────────────────────────────────────
+  // Main pay handler
+  // ─────────────────────────────────────────
+  const handlePay = () => {
+    switch (method) {
+      case 'card': return handleCardPay();
+      case 'apple': return handleApplePay();
+      case 'google': return handleGooglePay();
+      case 'moncash': return handleMonCash();
+    }
+  };
 
+  // ─────────────────────────────────────────
+  // Pay button label
+  // ─────────────────────────────────────────
+  const payLabel = () => {
+    if (loading) return '';
+    switch (method) {
+      case 'card': return `Pay ${planPriceUSD}/mo with Card`;
+      case 'apple': return `Pay with Apple Pay · ${planPriceUSD}/mo`;
+      case 'google': return `Pay with Google Pay · ${planPriceUSD}/mo`;
+      case 'moncash': return `Pay with MonCash · ${planPriceHTG} HTG/mo`;
+    }
+  };
+
+  const payBtnColor = method === 'moncash' ? '#DC143C' : planColor;
+  const payBtnDisabled = method === 'card' && (!cardReady || !cardholderName.trim());
+
+  // ─────────────────────────────────────────
+  // Stripe CardField theme
+  // ─────────────────────────────────────────
+  const cardFieldStyle = {
+    backgroundColor: T.cardFieldBg,
+    textColor: T.text,
+    placeholderColor: T.placeholderText,
+    borderColor: focusedField === 'card' ? planColor : T.inputBorder,
+    borderWidth: focusedField === 'card' ? 1.5 : 1,
+    borderRadius: 12,
+    cursorColor: planColor,
+  };
+
+  // ─────────────────────────────────────────
+  // Render
+  // ─────────────────────────────────────────
   return (
-    <View style={[styles.container, { backgroundColor: T.bg, paddingTop: insets.top }]}>
+    <KeyboardAvoidingView
+      style={{ flex: 1, backgroundColor: T.bg }}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
       {/* Header */}
-      <View style={[styles.header, { borderBottomColor: T.headerBorder }]}>
+      <View style={[styles.header, { paddingTop: insets.top + 8, borderBottomColor: T.headerBorder }]}>
         <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
           <Ionicons name="arrow-back" size={24} color={T.text} />
         </TouchableOpacity>
@@ -345,174 +455,294 @@ function CheckoutInner() {
       </View>
 
       <ScrollView
-        contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 120 }]}
+        keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
+        contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 130 }]}
       >
-        {/* Plan card */}
-        <View style={[styles.planCard, { backgroundColor: T.card, borderColor: planColor + '55' }]}>
+        {/* ── Plan summary card ── */}
+        <View style={[styles.planCard, { backgroundColor: T.surface, borderColor: planColor + '44' }]}>
           <View style={[styles.planBadge, { backgroundColor: planColor }]}>
-            <Text style={styles.planBadgeText}>
-              {plan === 'plus' ? '✨ PLUS' : '⚡ GO'}
-            </Text>
+            <Text style={styles.planBadgeText}>{plan === 'plus' ? '✨ PLUS' : '⚡ GO'}</Text>
           </View>
           <Text style={[styles.planName, { color: T.text }]}>{planLabel}</Text>
           <Text style={[styles.planPrice, { color: planColor }]}>
-            {showMonCash && selectedMethod === 'moncash' ? planPriceHTG : planPriceUSD}
-            <Text style={[styles.planPriceSuffix, { color: T.textSec }]}>/month</Text>
+            {method === 'moncash' ? `${planPriceHTG} HTG` : planPriceUSD}
+            <Text style={[styles.planPricePer, { color: T.textSec }]}>/month</Text>
           </Text>
-          {plan === 'plus' ? (
-            <View style={styles.couponRow}>
-              <Ionicons name="pricetag" size={13} color="#FFD60A" />
-              <Text style={styles.couponText}> DAWINIX2026 — 20% off applied</Text>
-            </View>
-          ) : null}
+          <View style={styles.benefitsRow}>
+            {benefits.map((b) => (
+              <View key={b} style={styles.benefitChip}>
+                <Ionicons name="checkmark-circle" size={13} color={planColor} />
+                <Text style={[styles.benefitChipText, { color: T.textSec }]}>{b}</Text>
+              </View>
+            ))}
+          </View>
         </View>
 
-        {/* Benefits */}
-        <View style={[styles.benefitsCard, { backgroundColor: T.card, borderColor: T.cardBorder }]}>
-          <Text style={[styles.benefitsTitle, { color: planColor }]}>What you get</Text>
-          {benefits.map((b) => (
-            <View key={b} style={styles.benefitRow}>
-              <Ionicons name="checkmark-circle" size={18} color={planColor} />
-              <Text style={[styles.benefitText, { color: T.benefitText }]}>{b}</Text>
+        {/* ── Contact info ── */}
+        <View style={[styles.section, { backgroundColor: T.surface, borderColor: T.surfaceBorder }]}>
+          <Text style={[styles.sectionTitle, { color: T.textSec }]}>CONTACT INFORMATION</Text>
+
+          {/* Email */}
+          <View style={styles.fieldRow}>
+            <Ionicons name="mail-outline" size={18} color={T.textSec} style={styles.fieldIcon} />
+            <View style={styles.fieldContent}>
+              <Text style={[styles.fieldLabel, { color: T.textSec }]}>Email</Text>
+              <TextInput
+                style={[styles.fieldInput, { color: T.text }]}
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                placeholderTextColor={T.placeholderText}
+                placeholder="your@email.com"
+                onFocus={() => setFocusedField('email')}
+                onBlur={() => setFocusedField(null)}
+              />
             </View>
+            {focusedField === 'email' && <View style={[styles.focusIndicator, { backgroundColor: planColor }]} />}
+          </View>
+
+          <View style={[styles.divider, { backgroundColor: T.divider }]} />
+
+          {/* Phone */}
+          <View style={styles.fieldRow}>
+            <Ionicons name="call-outline" size={18} color={T.textSec} style={styles.fieldIcon} />
+            <View style={styles.fieldContent}>
+              <Text style={[styles.fieldLabel, { color: T.textSec }]}>Phone (optional)</Text>
+              <TextInput
+                style={[styles.fieldInput, { color: T.text }]}
+                value={phone}
+                onChangeText={setPhone}
+                keyboardType="phone-pad"
+                placeholderTextColor={T.placeholderText}
+                placeholder="+1 (555) 000-0000"
+                onFocus={() => setFocusedField('phone')}
+                onBlur={() => setFocusedField(null)}
+              />
+            </View>
+            {focusedField === 'phone' && <View style={[styles.focusIndicator, { backgroundColor: planColor }]} />}
+          </View>
+        </View>
+
+        {/* ── Payment method tabs ── */}
+        <Text style={[styles.sectionHeader, { color: T.textSec }]}>PAYMENT METHOD</Text>
+        <View style={styles.tabs}>
+          {(
+            [
+              { key: 'card', label: 'Card', icon: 'card-outline' },
+              ...(Platform.OS === 'ios' && isApplePaySupported ? [{ key: 'apple', label: 'Apple Pay', icon: 'logo-apple' }] : []),
+              ...(Platform.OS === 'android' && googlePayReady ? [{ key: 'google', label: 'Google Pay', icon: 'logo-google' }] : []),
+              ...(showMoncash ? [{ key: 'moncash', label: 'MonCash', icon: 'phone-portrait-outline' }] : []),
+            ] as { key: PayMethod; label: string; icon: string }[]
+          ).map((tab) => (
+            <TouchableOpacity
+              key={tab.key}
+              style={[
+                styles.tab,
+                { backgroundColor: method === tab.key ? planColor : T.tabInactive },
+              ]}
+              onPress={() => setMethod(tab.key)}
+            >
+              <Ionicons
+                name={tab.icon as any}
+                size={15}
+                color={method === tab.key ? '#FFF' : T.tabInactiveText}
+              />
+              <Text
+                style={[
+                  styles.tabText,
+                  { color: method === tab.key ? '#FFF' : T.tabInactiveText },
+                ]}
+              >
+                {tab.label}
+              </Text>
+            </TouchableOpacity>
           ))}
         </View>
 
-        {/* Payment Method Selector */}
-        <View style={styles.paymentSelector}>
-          <Text style={[styles.paymentSelectorTitle, { color: T.sectionLabel }]}>Payment Method</Text>
+        {/* ── Card entry (Stripe CardField) ── */}
+        {method === 'card' && (
+          <View style={[styles.section, { backgroundColor: T.surface, borderColor: T.surfaceBorder }]}>
+            <Text style={[styles.sectionTitle, { color: T.textSec }]}>CARD DETAILS</Text>
 
-          {/* Stripe Option */}
-          <TouchableOpacity
-            style={[
-              styles.paymentOption,
-              { backgroundColor: selectedMethod === 'stripe' ? T.optionActive : T.optionInactive },
-              { borderColor: selectedMethod === 'stripe' ? planColor : T.optionBorderInactive },
-            ]}
-            onPress={() => setSelectedMethod('stripe')}
-          >
-            <View style={styles.paymentOptionLeft}>
-              <Ionicons
-                name="card-outline"
-                size={22}
-                color={selectedMethod === 'stripe' ? planColor : T.textSec}
-              />
-              <View style={styles.paymentOptionText}>
-                <Text style={[styles.paymentOptionLabel, { color: T.text }]}>
-                  Card / Apple Pay / Google Pay
+            {/* Cardholder name */}
+            <View style={styles.fieldRow}>
+              <Ionicons name="person-outline" size={18} color={T.textSec} style={styles.fieldIcon} />
+              <View style={styles.fieldContent}>
+                <Text style={[styles.fieldLabel, { color: T.textSec }]}>Name on card</Text>
+                <TextInput
+                  style={[styles.fieldInput, { color: T.text }]}
+                  value={cardholderName}
+                  onChangeText={setCardholderName}
+                  autoCapitalize="words"
+                  autoCorrect={false}
+                  placeholderTextColor={T.placeholderText}
+                  placeholder="Full name"
+                  onFocus={() => setFocusedField('name')}
+                  onBlur={() => setFocusedField(null)}
+                />
+              </View>
+              {focusedField === 'name' && <View style={[styles.focusIndicator, { backgroundColor: planColor }]} />}
+            </View>
+
+            <View style={[styles.divider, { backgroundColor: T.divider }]} />
+
+            {/* Stripe CardField: number + expiry + CVV (all in one native field) */}
+            {CardField ? (
+              <View style={styles.cardFieldWrap}>
+                <Text style={[styles.fieldLabel, { color: T.textSec, marginBottom: 8 }]}>
+                  Card number · Expiry · CVV
                 </Text>
-                <Text style={[styles.paymentOptionSub, { color: T.paymentSubText }]}>
-                  Secure payment via Stripe
+                <CardField
+                  postalCodeEnabled={false}
+                  placeholders={{ number: '4242 4242 4242 4242', expiration: 'MM/YY', cvc: 'CVV' }}
+                  cardStyle={cardFieldStyle}
+                  style={styles.cardField}
+                  onCardChange={(details: any) => setCardReady(details.complete)}
+                  onFocus={() => setFocusedField('card')}
+                />
+              </View>
+            ) : (
+              <View style={styles.cardFieldFallback}>
+                <Ionicons name="card-outline" size={24} color={T.textMuted} />
+                <Text style={[styles.cardFieldFallbackText, { color: T.textSec }]}>
+                  Card entry requires the native app. Use Apple Pay, Google Pay, or install the app.
+                </Text>
+              </View>
+            )}
+
+            <View style={styles.cardBrands}>
+              {['Visa', 'MC', 'Amex', 'Discover'].map((b) => (
+                <View key={b} style={[styles.cardBrandChip, { borderColor: T.inputBorder }]}>
+                  <Text style={[styles.cardBrandText, { color: T.textMuted }]}>{b}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
+
+        {/* ── Apple Pay info ── */}
+        {method === 'apple' && (
+          <View style={[styles.section, { backgroundColor: T.surface, borderColor: T.surfaceBorder }]}>
+            <View style={styles.payMethodInfo}>
+              <View style={[styles.payMethodIconBig, { backgroundColor: '#000' }]}>
+                <Ionicons name="logo-apple" size={32} color="#FFF" />
+              </View>
+              <Text style={[styles.payMethodInfoTitle, { color: T.text }]}>Apple Pay</Text>
+              <Text style={[styles.payMethodInfoSub, { color: T.textSec }]}>
+                Complete your payment securely using Touch ID or Face ID. No card details required.
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {/* ── Google Pay info ── */}
+        {method === 'google' && (
+          <View style={[styles.section, { backgroundColor: T.surface, borderColor: T.surfaceBorder }]}>
+            <View style={styles.payMethodInfo}>
+              <View style={[styles.payMethodIconBig, { backgroundColor: '#4285F4' }]}>
+                <Ionicons name="logo-google" size={28} color="#FFF" />
+              </View>
+              <Text style={[styles.payMethodInfoTitle, { color: T.text }]}>Google Pay</Text>
+              <Text style={[styles.payMethodInfoSub, { color: T.textSec }]}>
+                Complete your purchase instantly using Google Pay — no card entry required.
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {/* ── MonCash info ── */}
+        {method === 'moncash' && (
+          <View style={[styles.section, { backgroundColor: T.surface, borderColor: T.surfaceBorder }]}>
+            <View style={styles.payMethodInfo}>
+              <View style={[styles.payMethodIconBig, { backgroundColor: '#DC143C' }]}>
+                <Text style={styles.moncashBigIcon}>M</Text>
+              </View>
+              <Text style={[styles.payMethodInfoTitle, { color: T.text }]}>MonCash</Text>
+              <Text style={[styles.payMethodInfoSub, { color: T.textSec }]}>
+                Pay securely with your Digicel MonCash account.{'\n'}Amount: {planPriceHTG} HTG/month
+              </Text>
+              <View style={[styles.moncashNote, { backgroundColor: 'rgba(220,20,60,0.08)', borderColor: 'rgba(220,20,60,0.2)' }]}>
+                <Ionicons name="information-circle-outline" size={14} color="#DC143C" />
+                <Text style={[styles.moncashNoteText, { color: '#DC143C' }]}>
+                  You will be redirected to the MonCash payment gateway within the app.
                 </Text>
               </View>
             </View>
-            {selectedMethod === 'stripe' && (
-              <Ionicons name="checkmark-circle" size={22} color={planColor} />
-            )}
-          </TouchableOpacity>
-
-          {/* MonCash Option (Haiti only) */}
-          {showMonCash && (
-            <TouchableOpacity
-              style={[
-                styles.paymentOption,
-                { backgroundColor: selectedMethod === 'moncash' ? T.optionActive : T.optionInactive },
-                { borderColor: selectedMethod === 'moncash' ? '#DC143C' : T.optionBorderInactive },
-              ]}
-              onPress={() => setSelectedMethod('moncash')}
-            >
-              <View style={styles.paymentOptionLeft}>
-                <View style={[styles.moncashIcon, { backgroundColor: '#DC143C' }]}>
-                  <Text style={styles.moncashIconText}>M</Text>
-                </View>
-                <View style={styles.paymentOptionText}>
-                  <Text style={[styles.paymentOptionLabel, { color: T.text }]}>
-                    MonCash
-                  </Text>
-                  <Text style={[styles.paymentOptionSub, { color: T.paymentSubText }]}>
-                    Pay with Digicel MonCash (Haiti)
-                  </Text>
-                </View>
-              </View>
-              {selectedMethod === 'moncash' && (
-                <Ionicons name="checkmark-circle" size={22} color="#DC143C" />
-              )}
-            </TouchableOpacity>
-          )}
-        </View>
-
-        <Text style={[styles.secureNote, { color: T.secureNote }]}>
-          <Ionicons name="lock-closed" size={12} color={T.textMuted} />
-          {'  '}Payments processed securely by {selectedMethod === 'moncash' ? 'Digicel MonCash' : 'Stripe'}.{'\n'}
-          Cancel anytime from Settings → Subscription.
-        </Text>
-      </ScrollView>
-
-      {/* Bottom CTA */}
-      <View style={[styles.bottomCTA, { backgroundColor: T.bottomBg, borderTopColor: T.bottomBorder, paddingBottom: insets.bottom + 20 }]}>
-        {loading ? (
-          <View style={[styles.payBtn, { backgroundColor: selectedMethod === 'moncash' ? '#DC143C' : planColor, opacity: 0.7 }]}>
-            <ActivityIndicator color="#FFF" />
-            <Text style={styles.payBtnText}>
-              {selectedMethod === 'moncash' ? 'Processing MonCash...' : (paymentSheetReady ? 'Processing...' : 'Setting up...')}
-            </Text>
           </View>
-        ) : (
-          <TouchableOpacity
-            style={[
-              styles.payBtn,
-              { backgroundColor: selectedMethod === 'moncash' ? '#DC143C' : planColor },
-              !paymentSheetReady && selectedMethod === 'stripe' && styles.btnDisabled,
-            ]}
-            onPress={handlePay}
-            disabled={!ready && selectedMethod === 'stripe'}
-            activeOpacity={0.85}
-          >
-            {selectedMethod === 'moncash' ? (
-              <>
-                <View style={[styles.moncashIconSmall, { backgroundColor: '#FFF' }]}>
-                  <Text style={[styles.moncashIconTextSmall, { color: '#DC143C' }]}>M</Text>
-                </View>
-                <Text style={styles.payBtnText}>Pay with MonCash · {planPriceHTG}/mo</Text>
-              </>
-            ) : (
-              <>
-                {Platform.OS === 'ios' ? (
-                  <Ionicons name="logo-apple" size={20} color="#FFF" />
-                ) : (
-                  <Ionicons name="card-outline" size={20} color="#FFF" />
-                )}
-                <Text style={styles.payBtnText}>
-                  {Platform.OS === 'ios'
-                    ? `Pay with Apple Pay · ${planPriceUSD}/mo`
-                    : `Pay · ${planPriceUSD}/mo`}
-                </Text>
-              </>
-            )}
-          </TouchableOpacity>
         )}
 
+        {/* Secure note */}
+        <View style={styles.secureRow}>
+          <Ionicons name="lock-closed" size={12} color={T.secureText} />
+          <Text style={[styles.secureText, { color: T.secureText }]}>
+            {'  '}Payments secured by {method === 'moncash' ? 'Digicel MonCash' : 'Stripe'}. Cancel anytime.
+          </Text>
+        </View>
+      </ScrollView>
+
+      {/* ── Bottom CTA ── */}
+      <View
+        style={[
+          styles.bottomBar,
+          { backgroundColor: T.bottomBg, borderTopColor: T.bottomBorder, paddingBottom: insets.bottom + 16 },
+        ]}
+      >
+        <TouchableOpacity
+          style={[
+            styles.payBtn,
+            { backgroundColor: payBtnColor },
+            (loading || payBtnDisabled) && styles.payBtnDisabled,
+          ]}
+          onPress={handlePay}
+          disabled={loading || payBtnDisabled}
+          activeOpacity={0.85}
+        >
+          {loading ? (
+            <>
+              <ActivityIndicator color="#FFF" size="small" />
+              <Text style={styles.payBtnText}>Processing…</Text>
+            </>
+          ) : (
+            <>
+              {method === 'apple' && <Ionicons name="logo-apple" size={20} color="#FFF" />}
+              {method === 'google' && <Ionicons name="logo-google" size={18} color="#FFF" />}
+              {method === 'card' && <Ionicons name="card-outline" size={20} color="#FFF" />}
+              {method === 'moncash' && (
+                <View style={styles.moncashIconSmall}>
+                  <Text style={styles.moncashIconSmallText}>M</Text>
+                </View>
+              )}
+              <Text style={styles.payBtnText}>{payLabel()}</Text>
+            </>
+          )}
+        </TouchableOpacity>
+
         <TouchableOpacity style={styles.cancelBtn} onPress={() => router.back()}>
-          <Text style={[styles.cancelBtnText, { color: T.cancelText }]}>Cancel</Text>
+          <Text style={[styles.cancelText, { color: T.textSec }]}>Cancel</Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
-// ---------- Root export: wrap with StripeProvider on native ----------
+// ─────────────────────────────────────────────────────────
+// Root export — wrap with StripeProvider on native
+// ─────────────────────────────────────────────────────────
 export default function CheckoutScreen() {
-  const T = useCheckoutTheme();
+  const T = useT();
+
   if (Platform.OS === 'web' || !StripeProvider) {
     return (
-      <View style={[styles.container, { backgroundColor: T.bg, alignItems: 'center', justifyContent: 'center', padding: 32 }]}>
-        <Ionicons name="card-outline" size={48} color={T.textMuted} />
-        <Text style={{ color: T.text, fontSize: 20, fontWeight: '700', marginTop: 16, textAlign: 'center' }}>
+      <View style={[styles.webFallback, { backgroundColor: T.bg }]}>
+        <Ionicons name="card-outline" size={52} color={T.textMuted} />
+        <Text style={[styles.webFallbackTitle, { color: T.text }]}>
           In-app payments unavailable
         </Text>
-        <Text style={{ color: T.textSec, fontSize: 15, marginTop: 10, textAlign: 'center', lineHeight: 22 }}>
-          Please use the "Buy on Web" option from the subscription screen to complete your purchase.
+        <Text style={[styles.webFallbackSub, { color: T.textSec }]}>
+          Please use the "Buy on Web" option on the subscription screen to complete your purchase.
         </Text>
       </View>
     );
@@ -520,7 +750,7 @@ export default function CheckoutScreen() {
 
   return (
     <StripeProvider
-      publishableKey={STRIPE_PUBLISHABLE_KEY}
+      publishableKey={STRIPE_PK}
       merchantIdentifier="merchant.com.dawinix.ht"
       urlScheme="dawinixht"
     >
@@ -529,16 +759,16 @@ export default function CheckoutScreen() {
   );
 }
 
+// ─────────────────────────────────────────────────────────
+// Styles
+// ─────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingVertical: 14,
+    paddingBottom: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   headerTitle: {
@@ -546,166 +776,244 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   scroll: {
-    paddingHorizontal: 24,
-    paddingTop: 28,
-    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 20,
+    gap: 14,
   },
 
   // Plan card
   planCard: {
-    width: '100%',
-    borderRadius: 20,
+    borderRadius: 18,
     borderWidth: 1.5,
-    padding: 24,
+    padding: 20,
     alignItems: 'center',
-    marginBottom: 20,
+    gap: 6,
   },
   planBadge: {
     borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    marginBottom: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 5,
+    marginBottom: 4,
   },
   planBadgeText: {
     color: '#FFF',
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '800',
     letterSpacing: 1,
   },
   planName: {
-    fontSize: 26,
+    fontSize: 22,
     fontWeight: '700',
-    marginBottom: 8,
   },
   planPrice: {
-    fontSize: 38,
+    fontSize: 34,
     fontWeight: '800',
-    marginBottom: 12,
   },
-  planPriceSuffix: {
-    fontSize: 18,
+  planPricePer: {
+    fontSize: 16,
     fontWeight: '500',
   },
-  couponRow: {
+  benefitsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    justifyContent: 'center',
+    marginTop: 6,
+  },
+  benefitChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,214,10,0.12)',
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderWidth: 1,
-    borderColor: 'rgba(255,214,10,0.3)',
+    gap: 4,
   },
-  couponText: {
-    color: '#FFD60A',
-    fontSize: 13,
-    fontWeight: '600',
+  benefitChipText: {
+    fontSize: 12,
   },
 
-  // Benefits
-  benefitsCard: {
-    width: '100%',
+  // Section card
+  section: {
     borderRadius: 16,
     borderWidth: 1,
-    padding: 16,
-    marginBottom: 20,
+    overflow: 'hidden',
   },
-  benefitsTitle: {
-    fontSize: 14,
+  sectionTitle: {
+    fontSize: 11,
     fontWeight: '700',
-    marginBottom: 14,
+    letterSpacing: 0.8,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 4,
   },
-  benefitRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginBottom: 12,
-  },
-  benefitText: {
-    fontSize: 15,
-    flex: 1,
+  sectionHeader: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    marginTop: 4,
+    marginBottom: 8,
   },
 
-  // Payment Selector
-  paymentSelector: {
-    width: '100%',
-    marginBottom: 20,
-  },
-  paymentSelectorTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    marginBottom: 12,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  paymentOption: {
+  // Field rows
+  fieldRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    borderRadius: 16,
-    borderWidth: 1.5,
-    padding: 16,
-    marginBottom: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    position: 'relative',
   },
-  paymentOptionLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
+  fieldIcon: {
+    marginRight: 12,
+  },
+  fieldContent: {
     flex: 1,
   },
-  paymentOptionText: {
-    flex: 1,
-  },
-  paymentOptionLabel: {
-    fontSize: 15,
+  fieldLabel: {
+    fontSize: 11,
     fontWeight: '600',
     marginBottom: 2,
   },
-  paymentOptionSub: {
-    fontSize: 13,
-  },
-  moncashIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 6,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  moncashIconText: {
-    color: '#FFF',
+  fieldInput: {
     fontSize: 16,
-    fontWeight: '800',
+    fontWeight: '400',
+    padding: 0,
+    margin: 0,
   },
-  moncashIconSmall: {
-    width: 22,
-    height: 22,
-    borderRadius: 4,
-    alignItems: 'center',
-    justifyContent: 'center',
+  focusIndicator: {
+    position: 'absolute',
+    right: 0,
+    top: 8,
+    bottom: 8,
+    width: 3,
+    borderRadius: 2,
   },
-  moncashIconTextSmall: {
-    fontSize: 12,
-    fontWeight: '800',
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    marginLeft: 46,
   },
 
-  secureNote: {
-    fontSize: 12,
+  // Card field
+  cardFieldWrap: {
+    paddingHorizontal: 16,
+    paddingBottom: 14,
+    paddingTop: 8,
+  },
+  cardField: {
+    width: '100%',
+    height: 52,
+  },
+  cardFieldFallback: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 16,
+    opacity: 0.7,
+  },
+  cardFieldFallbackText: {
+    fontSize: 13,
+    flex: 1,
+    lineHeight: 18,
+  },
+  cardBrands: {
+    flexDirection: 'row',
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingBottom: 14,
+  },
+  cardBrandChip: {
+    borderWidth: 1,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  cardBrandText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+
+  // Payment method tabs
+  tabs: {
+    flexDirection: 'row',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  tab: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 50,
+  },
+  tabText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+
+  // Payment method info block
+  payMethodInfo: {
+    alignItems: 'center',
+    paddingVertical: 24,
+    paddingHorizontal: 20,
+    gap: 10,
+  },
+  payMethodIconBig: {
+    width: 72,
+    height: 72,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
+  payMethodInfoTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  payMethodInfoSub: {
+    fontSize: 14,
     textAlign: 'center',
     lineHeight: 20,
-    paddingHorizontal: 8,
-    marginBottom: 20,
+  },
+  moncashBigIcon: {
+    color: '#FFF',
+    fontSize: 36,
+    fontWeight: '900',
+  },
+  moncashNote: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginTop: 4,
+  },
+  moncashNoteText: {
+    fontSize: 12,
+    flex: 1,
+    lineHeight: 16,
   },
 
-  // Bottom CTA
-  bottomCTA: {
+  // Secure
+  secureRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 4,
+  },
+  secureText: {
+    fontSize: 12,
+    lineHeight: 18,
+  },
+
+  // Bottom bar
+  bottomBar: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    paddingHorizontal: 24,
-    paddingTop: 16,
+    paddingHorizontal: 16,
+    paddingTop: 14,
     borderTopWidth: StyleSheet.hairlineWidth,
-    gap: 10,
+    gap: 8,
   },
   payBtn: {
     width: '100%',
@@ -721,15 +1029,47 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#FFF',
   },
-  btnDisabled: {
-    opacity: 0.55,
+  payBtnDisabled: {
+    opacity: 0.5,
   },
   cancelBtn: {
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: 6,
   },
-  cancelBtnText: {
+  cancelText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  moncashIconSmall: {
+    width: 22,
+    height: 22,
+    borderRadius: 5,
+    backgroundColor: '#FFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  moncashIconSmallText: {
+    color: '#DC143C',
+    fontSize: 13,
+    fontWeight: '900',
+  },
+
+  // Web fallback
+  webFallback: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+    gap: 12,
+  },
+  webFallbackTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  webFallbackSub: {
     fontSize: 15,
+    textAlign: 'center',
+    lineHeight: 22,
   },
 });
-redesign the checkoud page to enter phone number and email auto set but they can edit it after and when in checkout select you card and enter name cvv expiry number and for apple call strip apple pay pruchase and google pay in the app never in link web and for moncash call edg moncash all in app not outside web.
