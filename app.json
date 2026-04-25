@@ -28,7 +28,8 @@
       "output": "static",
       "favicon": "./assets/images/logo.png"
     },
-    "expo-router",
+    "plugins": [
+      "expo-router",
       "expo-apple-authentication",
       "expo-av",
       "expo-speech",
