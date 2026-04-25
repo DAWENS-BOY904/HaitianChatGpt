@@ -1,0 +1,1 @@
+Create a supabase/functions/stripe-webhook/index.ts edge function that listens for customer.subscription.deleted and invoice.payment_failed Stripe events and automatically sets user_profiles.subscription_tier = 'free' and subscription_expires_at = null so subscriptions auto-expire server-side without any client action.
