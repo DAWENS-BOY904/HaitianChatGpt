@@ -2428,3 +2428,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
   }
 }
 
+the upgrade button avansel plus bo goch komsi kole a 3ba  side menu and the 3ba side menu background li dwe blur effect and upgrade button tro gro and large.
