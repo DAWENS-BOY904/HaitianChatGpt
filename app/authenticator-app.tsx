@@ -19,31 +19,10 @@ import { useTheme } from '../hooks/useTheme';
 import * as Clipboard from 'expo-clipboard';
 
 // ── SUPABASE REAL ─────────────────────────────────────────────────────────
-import { createClient, SupabaseClient, User } from '@supabase/supabase-js';
-import * as SecureStore from 'expo-secure-store';
-import Constants from 'expo-constants';
+import { User } from '@supabase/supabase-js';
+import { getSupabaseClient } from '@/template';
 
-const ExpoSecureStoreAdapter = {
-  getItem: (key: string) => SecureStore.getItemAsync(key),
-  setItem: (key: string, value: string) => SecureStore.setItemAsync(key, value),
-  removeItem: (key: string) => SecureStore.deleteItemAsync(key),
-};
-
-const supabaseUrl = Constants.expoConfig?.extra?.supabaseUrl || process.env.EXPO_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = Constants.expoConfig?.extra?.supabaseAnonKey || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
-
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Missing Supabase credentials. Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY');
-}
-
-const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    storage: ExpoSecureStoreAdapter,
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: false,
-  },
-});
+const supabase = getSupabaseClient();
 
 // ── TYPES ─────────────────────────────────────────────────────────────────
 type ScreenState = 'status' | 'setup' | 'verify';
