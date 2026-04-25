@@ -1,16 +1,16 @@
 /**
- * CHECKOUT — Premium dark-glass redesign v2
- * • Auto-detect country via device locale (200+ countries via react-native-international-phone-number)
+ * CHECKOUT — Premium dark-glass redesign v3
+ * • Custom country picker with FlatList modal (web-compatible, no native-only deps)
+ * • Phone validation via libphonenumber-js
  * • Full BlurView glass panels with glow borders
  * • Real SVG-style card brand logos
- * • Contact: email + auto-detect phone with premium country picker
  * • Coupon / promo code → Stripe discount
  * • Card: Stripe CardField (cardholder name + number/expiry/CVV)
  * • Apple Pay / Google Pay: Stripe in-app PaymentSheet
  * • MonCash: edge-function → in-app WebBrowser (Haiti & USA only)
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -38,16 +38,452 @@ import { FunctionsHttpError } from '@supabase/supabase-js';
 import * as WebBrowser from 'expo-web-browser';
 import * as Localization from 'expo-localization';
 
-// ── Auto-detect phone input with 200+ countries ──
-// npm install react-native-international-phone-number react-native-safe-area-context
-import PhoneInput, {
-  ICountry,
-  getAllCountries,
-  getCountryByCca2,
-  isValidPhoneNumber,
-} from 'react-native-international-phone-number';
-
 const { width: SCREEN_W } = Dimensions.get('window');
+
+// ─────────────────────────────────────────────────────────
+// libphonenumber-js (web-compatible)
+// ─────────────────────────────────────────────────────────
+let parsePhoneNumberFn: ((phone: string, country: string) => any) | null = null;
+try {
+  const lib = require('libphonenumber-js');
+  parsePhoneNumberFn = lib.parsePhoneNumber;
+} catch (_) {}
+
+function validatePhone(national: string, countryCode: string): boolean {
+  if (!parsePhoneNumberFn || !national || !countryCode) return false;
+  try {
+    const fullNumber = national.startsWith('+') ? national : national;
+    const parsed = parsePhoneNumberFn(national, countryCode as any);
+    return parsed?.isValid?.() ?? false;
+  } catch {
+    return false;
+  }
+}
+
+// ─────────────────────────────────────────────────────────
+// Country data (200+ entries)
+// ─────────────────────────────────────────────────────────
+interface Country {
+  code: string;   // ISO 3166-1 alpha-2
+  name: string;
+  flag: string;   // emoji flag
+  dial: string;   // e.g. "+1"
+}
+
+const COUNTRIES: Country[] = [
+  { code: 'AF', name: 'Afghanistan', flag: '🇦🇫', dial: '+93' },
+  { code: 'AL', name: 'Albania', flag: '🇦🇱', dial: '+355' },
+  { code: 'DZ', name: 'Algeria', flag: '🇩🇿', dial: '+213' },
+  { code: 'AD', name: 'Andorra', flag: '🇦🇩', dial: '+376' },
+  { code: 'AO', name: 'Angola', flag: '🇦🇴', dial: '+244' },
+  { code: 'AG', name: 'Antigua & Barbuda', flag: '🇦🇬', dial: '+1' },
+  { code: 'AR', name: 'Argentina', flag: '🇦🇷', dial: '+54' },
+  { code: 'AM', name: 'Armenia', flag: '🇦🇲', dial: '+374' },
+  { code: 'AU', name: 'Australia', flag: '🇦🇺', dial: '+61' },
+  { code: 'AT', name: 'Austria', flag: '🇦🇹', dial: '+43' },
+  { code: 'AZ', name: 'Azerbaijan', flag: '🇦🇿', dial: '+994' },
+  { code: 'BS', name: 'Bahamas', flag: '🇧🇸', dial: '+1' },
+  { code: 'BH', name: 'Bahrain', flag: '🇧🇭', dial: '+973' },
+  { code: 'BD', name: 'Bangladesh', flag: '🇧🇩', dial: '+880' },
+  { code: 'BB', name: 'Barbados', flag: '🇧🇧', dial: '+1' },
+  { code: 'BY', name: 'Belarus', flag: '🇧🇾', dial: '+375' },
+  { code: 'BE', name: 'Belgium', flag: '🇧🇪', dial: '+32' },
+  { code: 'BZ', name: 'Belize', flag: '🇧🇿', dial: '+501' },
+  { code: 'BJ', name: 'Benin', flag: '🇧🇯', dial: '+229' },
+  { code: 'BT', name: 'Bhutan', flag: '🇧🇹', dial: '+975' },
+  { code: 'BO', name: 'Bolivia', flag: '🇧🇴', dial: '+591' },
+  { code: 'BA', name: 'Bosnia & Herzegovina', flag: '🇧🇦', dial: '+387' },
+  { code: 'BW', name: 'Botswana', flag: '🇧🇼', dial: '+267' },
+  { code: 'BR', name: 'Brazil', flag: '🇧🇷', dial: '+55' },
+  { code: 'BN', name: 'Brunei', flag: '🇧🇳', dial: '+673' },
+  { code: 'BG', name: 'Bulgaria', flag: '🇧🇬', dial: '+359' },
+  { code: 'BF', name: 'Burkina Faso', flag: '🇧🇫', dial: '+226' },
+  { code: 'BI', name: 'Burundi', flag: '🇧🇮', dial: '+257' },
+  { code: 'CV', name: 'Cabo Verde', flag: '🇨🇻', dial: '+238' },
+  { code: 'KH', name: 'Cambodia', flag: '🇰🇭', dial: '+855' },
+  { code: 'CM', name: 'Cameroon', flag: '🇨🇲', dial: '+237' },
+  { code: 'CA', name: 'Canada', flag: '🇨🇦', dial: '+1' },
+  { code: 'CF', name: 'Central African Republic', flag: '🇨🇫', dial: '+236' },
+  { code: 'TD', name: 'Chad', flag: '🇹🇩', dial: '+235' },
+  { code: 'CL', name: 'Chile', flag: '🇨🇱', dial: '+56' },
+  { code: 'CN', name: 'China', flag: '🇨🇳', dial: '+86' },
+  { code: 'CO', name: 'Colombia', flag: '🇨🇴', dial: '+57' },
+  { code: 'KM', name: 'Comoros', flag: '🇰🇲', dial: '+269' },
+  { code: 'CG', name: 'Congo', flag: '🇨🇬', dial: '+242' },
+  { code: 'CD', name: 'Congo (DRC)', flag: '🇨🇩', dial: '+243' },
+  { code: 'CR', name: 'Costa Rica', flag: '🇨🇷', dial: '+506' },
+  { code: 'HR', name: 'Croatia', flag: '🇭🇷', dial: '+385' },
+  { code: 'CU', name: 'Cuba', flag: '🇨🇺', dial: '+53' },
+  { code: 'CY', name: 'Cyprus', flag: '🇨🇾', dial: '+357' },
+  { code: 'CZ', name: 'Czech Republic', flag: '🇨🇿', dial: '+420' },
+  { code: 'DK', name: 'Denmark', flag: '🇩🇰', dial: '+45' },
+  { code: 'DJ', name: 'Djibouti', flag: '🇩🇯', dial: '+253' },
+  { code: 'DO', name: 'Dominican Republic', flag: '🇩🇴', dial: '+1' },
+  { code: 'EC', name: 'Ecuador', flag: '🇪🇨', dial: '+593' },
+  { code: 'EG', name: 'Egypt', flag: '🇪🇬', dial: '+20' },
+  { code: 'SV', name: 'El Salvador', flag: '🇸🇻', dial: '+503' },
+  { code: 'GQ', name: 'Equatorial Guinea', flag: '🇬🇶', dial: '+240' },
+  { code: 'ER', name: 'Eritrea', flag: '🇪🇷', dial: '+291' },
+  { code: 'EE', name: 'Estonia', flag: '🇪🇪', dial: '+372' },
+  { code: 'SZ', name: 'Eswatini', flag: '🇸🇿', dial: '+268' },
+  { code: 'ET', name: 'Ethiopia', flag: '🇪🇹', dial: '+251' },
+  { code: 'FJ', name: 'Fiji', flag: '🇫🇯', dial: '+679' },
+  { code: 'FI', name: 'Finland', flag: '🇫🇮', dial: '+358' },
+  { code: 'FR', name: 'France', flag: '🇫🇷', dial: '+33' },
+  { code: 'GA', name: 'Gabon', flag: '🇬🇦', dial: '+241' },
+  { code: 'GM', name: 'Gambia', flag: '🇬🇲', dial: '+220' },
+  { code: 'GE', name: 'Georgia', flag: '🇬🇪', dial: '+995' },
+  { code: 'DE', name: 'Germany', flag: '🇩🇪', dial: '+49' },
+  { code: 'GH', name: 'Ghana', flag: '🇬🇭', dial: '+233' },
+  { code: 'GR', name: 'Greece', flag: '🇬🇷', dial: '+30' },
+  { code: 'GT', name: 'Guatemala', flag: '🇬🇹', dial: '+502' },
+  { code: 'GN', name: 'Guinea', flag: '🇬🇳', dial: '+224' },
+  { code: 'GW', name: 'Guinea-Bissau', flag: '🇬🇼', dial: '+245' },
+  { code: 'GY', name: 'Guyana', flag: '🇬🇾', dial: '+592' },
+  { code: 'HT', name: 'Haiti', flag: '🇭🇹', dial: '+509' },
+  { code: 'HN', name: 'Honduras', flag: '🇭🇳', dial: '+504' },
+  { code: 'HU', name: 'Hungary', flag: '🇭🇺', dial: '+36' },
+  { code: 'IS', name: 'Iceland', flag: '🇮🇸', dial: '+354' },
+  { code: 'IN', name: 'India', flag: '🇮🇳', dial: '+91' },
+  { code: 'ID', name: 'Indonesia', flag: '🇮🇩', dial: '+62' },
+  { code: 'IR', name: 'Iran', flag: '🇮🇷', dial: '+98' },
+  { code: 'IQ', name: 'Iraq', flag: '🇮🇶', dial: '+964' },
+  { code: 'IE', name: 'Ireland', flag: '🇮🇪', dial: '+353' },
+  { code: 'IL', name: 'Israel', flag: '🇮🇱', dial: '+972' },
+  { code: 'IT', name: 'Italy', flag: '🇮🇹', dial: '+39' },
+  { code: 'JM', name: 'Jamaica', flag: '🇯🇲', dial: '+1' },
+  { code: 'JP', name: 'Japan', flag: '🇯🇵', dial: '+81' },
+  { code: 'JO', name: 'Jordan', flag: '🇯🇴', dial: '+962' },
+  { code: 'KZ', name: 'Kazakhstan', flag: '🇰🇿', dial: '+7' },
+  { code: 'KE', name: 'Kenya', flag: '🇰🇪', dial: '+254' },
+  { code: 'KI', name: 'Kiribati', flag: '🇰🇮', dial: '+686' },
+  { code: 'KW', name: 'Kuwait', flag: '🇰🇼', dial: '+965' },
+  { code: 'KG', name: 'Kyrgyzstan', flag: '🇰🇬', dial: '+996' },
+  { code: 'LA', name: 'Laos', flag: '🇱🇦', dial: '+856' },
+  { code: 'LV', name: 'Latvia', flag: '🇱🇻', dial: '+371' },
+  { code: 'LB', name: 'Lebanon', flag: '🇱🇧', dial: '+961' },
+  { code: 'LS', name: 'Lesotho', flag: '🇱🇸', dial: '+266' },
+  { code: 'LR', name: 'Liberia', flag: '🇱🇷', dial: '+231' },
+  { code: 'LY', name: 'Libya', flag: '🇱🇾', dial: '+218' },
+  { code: 'LI', name: 'Liechtenstein', flag: '🇱🇮', dial: '+423' },
+  { code: 'LT', name: 'Lithuania', flag: '🇱🇹', dial: '+370' },
+  { code: 'LU', name: 'Luxembourg', flag: '🇱🇺', dial: '+352' },
+  { code: 'MG', name: 'Madagascar', flag: '🇲🇬', dial: '+261' },
+  { code: 'MW', name: 'Malawi', flag: '🇲🇼', dial: '+265' },
+  { code: 'MY', name: 'Malaysia', flag: '🇲🇾', dial: '+60' },
+  { code: 'MV', name: 'Maldives', flag: '🇲🇻', dial: '+960' },
+  { code: 'ML', name: 'Mali', flag: '🇲🇱', dial: '+223' },
+  { code: 'MT', name: 'Malta', flag: '🇲🇹', dial: '+356' },
+  { code: 'MH', name: 'Marshall Islands', flag: '🇲🇭', dial: '+692' },
+  { code: 'MR', name: 'Mauritania', flag: '🇲🇷', dial: '+222' },
+  { code: 'MU', name: 'Mauritius', flag: '🇲🇺', dial: '+230' },
+  { code: 'MX', name: 'Mexico', flag: '🇲🇽', dial: '+52' },
+  { code: 'FM', name: 'Micronesia', flag: '🇫🇲', dial: '+691' },
+  { code: 'MD', name: 'Moldova', flag: '🇲🇩', dial: '+373' },
+  { code: 'MC', name: 'Monaco', flag: '🇲🇨', dial: '+377' },
+  { code: 'MN', name: 'Mongolia', flag: '🇲🇳', dial: '+976' },
+  { code: 'ME', name: 'Montenegro', flag: '🇲🇪', dial: '+382' },
+  { code: 'MA', name: 'Morocco', flag: '🇲🇦', dial: '+212' },
+  { code: 'MZ', name: 'Mozambique', flag: '🇲🇿', dial: '+258' },
+  { code: 'MM', name: 'Myanmar', flag: '🇲🇲', dial: '+95' },
+  { code: 'NA', name: 'Namibia', flag: '🇳🇦', dial: '+264' },
+  { code: 'NR', name: 'Nauru', flag: '🇳🇷', dial: '+674' },
+  { code: 'NP', name: 'Nepal', flag: '🇳🇵', dial: '+977' },
+  { code: 'NL', name: 'Netherlands', flag: '🇳🇱', dial: '+31' },
+  { code: 'NZ', name: 'New Zealand', flag: '🇳🇿', dial: '+64' },
+  { code: 'NI', name: 'Nicaragua', flag: '🇳🇮', dial: '+505' },
+  { code: 'NE', name: 'Niger', flag: '🇳🇪', dial: '+227' },
+  { code: 'NG', name: 'Nigeria', flag: '🇳🇬', dial: '+234' },
+  { code: 'NO', name: 'Norway', flag: '🇳🇴', dial: '+47' },
+  { code: 'OM', name: 'Oman', flag: '🇴🇲', dial: '+968' },
+  { code: 'PK', name: 'Pakistan', flag: '🇵🇰', dial: '+92' },
+  { code: 'PW', name: 'Palau', flag: '🇵🇼', dial: '+680' },
+  { code: 'PA', name: 'Panama', flag: '🇵🇦', dial: '+507' },
+  { code: 'PG', name: 'Papua New Guinea', flag: '🇵🇬', dial: '+675' },
+  { code: 'PY', name: 'Paraguay', flag: '🇵🇾', dial: '+595' },
+  { code: 'PE', name: 'Peru', flag: '🇵🇪', dial: '+51' },
+  { code: 'PH', name: 'Philippines', flag: '🇵🇭', dial: '+63' },
+  { code: 'PL', name: 'Poland', flag: '🇵🇱', dial: '+48' },
+  { code: 'PT', name: 'Portugal', flag: '🇵🇹', dial: '+351' },
+  { code: 'QA', name: 'Qatar', flag: '🇶🇦', dial: '+974' },
+  { code: 'RO', name: 'Romania', flag: '🇷🇴', dial: '+40' },
+  { code: 'RU', name: 'Russia', flag: '🇷🇺', dial: '+7' },
+  { code: 'RW', name: 'Rwanda', flag: '🇷🇼', dial: '+250' },
+  { code: 'KN', name: 'Saint Kitts & Nevis', flag: '🇰🇳', dial: '+1' },
+  { code: 'LC', name: 'Saint Lucia', flag: '🇱🇨', dial: '+1' },
+  { code: 'VC', name: 'Saint Vincent & Grenadines', flag: '🇻🇨', dial: '+1' },
+  { code: 'WS', name: 'Samoa', flag: '🇼🇸', dial: '+685' },
+  { code: 'SM', name: 'San Marino', flag: '🇸🇲', dial: '+378' },
+  { code: 'ST', name: 'São Tomé & Príncipe', flag: '🇸🇹', dial: '+239' },
+  { code: 'SA', name: 'Saudi Arabia', flag: '🇸🇦', dial: '+966' },
+  { code: 'SN', name: 'Senegal', flag: '🇸🇳', dial: '+221' },
+  { code: 'RS', name: 'Serbia', flag: '🇷🇸', dial: '+381' },
+  { code: 'SC', name: 'Seychelles', flag: '🇸🇨', dial: '+248' },
+  { code: 'SL', name: 'Sierra Leone', flag: '🇸🇱', dial: '+232' },
+  { code: 'SG', name: 'Singapore', flag: '🇸🇬', dial: '+65' },
+  { code: 'SK', name: 'Slovakia', flag: '🇸🇰', dial: '+421' },
+  { code: 'SI', name: 'Slovenia', flag: '🇸🇮', dial: '+386' },
+  { code: 'SB', name: 'Solomon Islands', flag: '🇸🇧', dial: '+677' },
+  { code: 'SO', name: 'Somalia', flag: '🇸🇴', dial: '+252' },
+  { code: 'ZA', name: 'South Africa', flag: '🇿🇦', dial: '+27' },
+  { code: 'SS', name: 'South Sudan', flag: '🇸🇸', dial: '+211' },
+  { code: 'ES', name: 'Spain', flag: '🇪🇸', dial: '+34' },
+  { code: 'LK', name: 'Sri Lanka', flag: '🇱🇰', dial: '+94' },
+  { code: 'SD', name: 'Sudan', flag: '🇸🇩', dial: '+249' },
+  { code: 'SR', name: 'Suriname', flag: '🇸🇷', dial: '+597' },
+  { code: 'SE', name: 'Sweden', flag: '🇸🇪', dial: '+46' },
+  { code: 'CH', name: 'Switzerland', flag: '🇨🇭', dial: '+41' },
+  { code: 'SY', name: 'Syria', flag: '🇸🇾', dial: '+963' },
+  { code: 'TW', name: 'Taiwan', flag: '🇹🇼', dial: '+886' },
+  { code: 'TJ', name: 'Tajikistan', flag: '🇹🇯', dial: '+992' },
+  { code: 'TZ', name: 'Tanzania', flag: '🇹🇿', dial: '+255' },
+  { code: 'TH', name: 'Thailand', flag: '🇹🇭', dial: '+66' },
+  { code: 'TL', name: 'Timor-Leste', flag: '🇹🇱', dial: '+670' },
+  { code: 'TG', name: 'Togo', flag: '🇹🇬', dial: '+228' },
+  { code: 'TO', name: 'Tonga', flag: '🇹🇴', dial: '+676' },
+  { code: 'TT', name: 'Trinidad & Tobago', flag: '🇹🇹', dial: '+1' },
+  { code: 'TN', name: 'Tunisia', flag: '🇹🇳', dial: '+216' },
+  { code: 'TR', name: 'Turkey', flag: '🇹🇷', dial: '+90' },
+  { code: 'TM', name: 'Turkmenistan', flag: '🇹🇲', dial: '+993' },
+  { code: 'TV', name: 'Tuvalu', flag: '🇹🇻', dial: '+688' },
+  { code: 'UG', name: 'Uganda', flag: '🇺🇬', dial: '+256' },
+  { code: 'UA', name: 'Ukraine', flag: '🇺🇦', dial: '+380' },
+  { code: 'AE', name: 'United Arab Emirates', flag: '🇦🇪', dial: '+971' },
+  { code: 'GB', name: 'United Kingdom', flag: '🇬🇧', dial: '+44' },
+  { code: 'US', name: 'United States', flag: '🇺🇸', dial: '+1' },
+  { code: 'UY', name: 'Uruguay', flag: '🇺🇾', dial: '+598' },
+  { code: 'UZ', name: 'Uzbekistan', flag: '🇺🇿', dial: '+998' },
+  { code: 'VU', name: 'Vanuatu', flag: '🇻🇺', dial: '+678' },
+  { code: 'VE', name: 'Venezuela', flag: '🇻🇪', dial: '+58' },
+  { code: 'VN', name: 'Vietnam', flag: '🇻🇳', dial: '+84' },
+  { code: 'YE', name: 'Yemen', flag: '🇾🇪', dial: '+967' },
+  { code: 'ZM', name: 'Zambia', flag: '🇿🇲', dial: '+260' },
+  { code: 'ZW', name: 'Zimbabwe', flag: '🇿🇼', dial: '+263' },
+];
+
+const POPULAR_CODES = ['US', 'HT', 'CA', 'FR', 'GB', 'BR', 'MX', 'DE', 'NG', 'IN'];
+
+function getCountryByCode(code: string): Country | undefined {
+  return COUNTRIES.find((c) => c.code === code);
+}
+
+function guessCountryFromLocale(): Country {
+  try {
+    const locale = Localization.locale?.toUpperCase() || '';
+    const region = locale.split('_')[1] || locale.split('-')[1] || 'US';
+    return getCountryByCode(region) || getCountryByCode('US')!;
+  } catch {
+    return getCountryByCode('US')!;
+  }
+}
+
+// ─────────────────────────────────────────────────────────
+// Custom Country Picker Modal
+// ─────────────────────────────────────────────────────────
+interface CountryPickerModalProps {
+  visible: boolean;
+  selected: Country;
+  onSelect: (c: Country) => void;
+  onClose: () => void;
+  T: ReturnType<typeof useT>;
+  accentColor: string;
+}
+
+function CountryPickerModal({ visible, selected, onSelect, onClose, T, accentColor }: CountryPickerModalProps) {
+  const [search, setSearch] = useState('');
+  const insets = useSafeAreaInsets();
+
+  const popular = POPULAR_CODES.map((c) => getCountryByCode(c)).filter(Boolean) as Country[];
+  const filtered = search.trim()
+    ? COUNTRIES.filter((c) =>
+        c.name.toLowerCase().includes(search.toLowerCase()) ||
+        c.dial.includes(search) ||
+        c.code.toLowerCase().includes(search.toLowerCase())
+      )
+    : COUNTRIES;
+
+  const sections = search.trim()
+    ? [{ title: 'Results', data: filtered }]
+    : [
+        { title: 'Popular', data: popular },
+        { title: 'All countries', data: COUNTRIES },
+      ];
+
+  // Flatten for FlatList
+  type Item = { type: 'header'; title: string } | { type: 'country'; item: Country };
+  const flatData: Item[] = [];
+  for (const sec of sections) {
+    flatData.push({ type: 'header', title: sec.title });
+    for (const item of sec.data) {
+      flatData.push({ type: 'country', item });
+    }
+  }
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={onClose}
+    >
+      <View style={[cpStyles.root, { backgroundColor: T.modalBg }]}>
+        {/* Handle */}
+        <View style={cpStyles.handleWrap}>
+          <View style={[cpStyles.handle, { backgroundColor: T.textMuted }]} />
+        </View>
+
+        {/* Title row */}
+        <View style={cpStyles.titleRow}>
+          <Text style={[cpStyles.title, { color: T.text }]}>Select Country</Text>
+          <TouchableOpacity onPress={onClose} style={cpStyles.closeBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Ionicons name="close" size={22} color={T.textSec} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Search */}
+        <View style={[cpStyles.searchWrap, { backgroundColor: T.searchBg }]}>
+          <Ionicons name="search" size={16} color={T.textSec} />
+          <TextInput
+            style={[cpStyles.searchInput, { color: T.text }]}
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Search country or code…"
+            placeholderTextColor={T.placeholderText}
+            autoCorrect={false}
+            autoCapitalize="none"
+            clearButtonMode="while-editing"
+          />
+          {search.length > 0 && Platform.OS !== 'ios' && (
+            <TouchableOpacity onPress={() => setSearch('')}>
+              <Ionicons name="close-circle" size={16} color={T.textSec} />
+            </TouchableOpacity>
+          )}
+        </View>
+
+        <FlatList
+          data={flatData}
+          keyExtractor={(item, i) =>
+            item.type === 'header' ? `hdr-${i}` : `${item.item.code}-${i}`
+          }
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
+          keyboardShouldPersistTaps="handled"
+          renderItem={({ item }) => {
+            if (item.type === 'header') {
+              return (
+                <Text style={[cpStyles.sectionHeader, { color: T.textMuted }]}>
+                  {item.title.toUpperCase()}
+                </Text>
+              );
+            }
+            const c = item.item;
+            const isSelected = c.code === selected.code;
+            return (
+              <TouchableOpacity
+                style={[
+                  cpStyles.countryRow,
+                  { borderBottomColor: T.divider },
+                  isSelected && { backgroundColor: accentColor + '12' },
+                ]}
+                onPress={() => { onSelect(c); onClose(); }}
+                activeOpacity={0.7}
+              >
+                <Text style={cpStyles.flag}>{c.flag}</Text>
+                <View style={cpStyles.countryInfo}>
+                  <Text style={[cpStyles.countryName, { color: T.text }]} numberOfLines={1}>
+                    {c.name}
+                  </Text>
+                  <Text style={[cpStyles.dialCode, { color: T.textSec }]}>{c.dial}</Text>
+                </View>
+                {isSelected && (
+                  <Ionicons name="checkmark-circle" size={20} color={accentColor} />
+                )}
+              </TouchableOpacity>
+            );
+          }}
+        />
+      </View>
+    </Modal>
+  );
+}
+
+const cpStyles = StyleSheet.create({
+  root: { flex: 1 },
+  handleWrap: { alignItems: 'center', paddingTop: 10, paddingBottom: 4 },
+  handle: { width: 36, height: 4, borderRadius: 2, opacity: 0.35 },
+  titleRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 20, paddingBottom: 10,
+  },
+  title: { fontSize: 18, fontWeight: '700' },
+  closeBtn: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  searchWrap: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    marginHorizontal: 16, marginBottom: 8, borderRadius: 14,
+    paddingHorizontal: 14, paddingVertical: 11,
+  },
+  searchInput: { flex: 1, fontSize: 15, padding: 0, margin: 0 },
+  sectionHeader: {
+    fontSize: 11, fontWeight: '700', letterSpacing: 0.8,
+    paddingHorizontal: 20, paddingTop: 14, paddingBottom: 4,
+  },
+  countryRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 14,
+    paddingHorizontal: 20, paddingVertical: 13,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  flag: { fontSize: 24, width: 32, textAlign: 'center' },
+  countryInfo: { flex: 1 },
+  countryName: { fontSize: 15 },
+  dialCode: { fontSize: 13, fontWeight: '600', marginTop: 1 },
+});
+
+// ─────────────────────────────────────────────────────────
+// Custom Phone Input (Flag + Dial + National number)
+// ─────────────────────────────────────────────────────────
+interface PhoneInputProps {
+  country: Country;
+  value: string;
+  onChange: (val: string) => void;
+  onCountryPress: () => void;
+  focused: boolean;
+  accentColor: string;
+  T: ReturnType<typeof useT>;
+}
+
+function CustomPhoneInput({ country, value, onChange, onCountryPress, focused, accentColor, T }: PhoneInputProps) {
+  return (
+    <View style={[piStyles.root, focused && { borderColor: accentColor + '60' }]}>
+      <TouchableOpacity style={[piStyles.flagBtn, { backgroundColor: T.tabInactive }]} onPress={onCountryPress} activeOpacity={0.7}>
+        <Text style={piStyles.flag}>{country.flag}</Text>
+        <Text style={[piStyles.dial, { color: T.text }]}>{country.dial}</Text>
+        <Ionicons name="chevron-down" size={12} color={T.textSec} />
+      </TouchableOpacity>
+      <TextInput
+        style={[piStyles.input, { color: T.text }]}
+        value={value}
+        onChangeText={onChange}
+        keyboardType="phone-pad"
+        placeholder="Phone number"
+        placeholderTextColor={T.placeholderText}
+      />
+    </View>
+  );
+}
+
+const piStyles = StyleSheet.create({
+  root: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    borderWidth: 0, marginTop: 2,
+  },
+  flagBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    borderRadius: 12, paddingHorizontal: 10, paddingVertical: 8,
+  },
+  flag: { fontSize: 18 },
+  dial: { fontSize: 14, fontWeight: '600' },
+  input: { flex: 1, fontSize: 15, padding: 0, margin: 0 },
+});
 
 // ─────────────────────────────────────────────────────────
 // Theme
@@ -78,7 +514,6 @@ function useT() {
     modalBg: dark ? '#1C1C1E' : '#FFFFFF',
     searchBg: dark ? '#2C2C2E' : '#F2F2F7',
     planCardGlow: dark ? 'rgba(107,92,231,0.15)' : 'rgba(107,92,231,0.08)',
-    glassGlow: dark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
   };
 }
 
@@ -87,49 +522,45 @@ function useT() {
 // ─────────────────────────────────────────────────────────
 function VisaLogo({ width = 48, height = 30 }: { width?: number; height?: number }) {
   return (
-    <View style={[cardBrandStyles.base, { width, height, backgroundColor: '#1A1F71', borderRadius: 5 }]}>
-      <Text style={cardBrandStyles.visaText}>VISA</Text>
+    <View style={[cbStyles.base, { width, height, backgroundColor: '#1A1F71', borderRadius: 5 }]}>
+      <Text style={cbStyles.visaText}>VISA</Text>
     </View>
   );
 }
-
 function MastercardLogo({ width = 48, height = 30 }: { width?: number; height?: number }) {
   return (
-    <View style={[cardBrandStyles.base, { width, height, backgroundColor: '#252525', borderRadius: 5, overflow: 'hidden' }]}>
-      <View style={[cardBrandStyles.mcLeft, { backgroundColor: '#EB001B' }]} />
-      <View style={[cardBrandStyles.mcRight, { backgroundColor: '#F79E1B' }]} />
-      <View style={[cardBrandStyles.mcOverlap, { backgroundColor: '#FF5F00' }]} />
-      <Text style={cardBrandStyles.mcText}>mc</Text>
+    <View style={[cbStyles.base, { width, height, backgroundColor: '#252525', borderRadius: 5, overflow: 'hidden' }]}>
+      <View style={[cbStyles.mcLeft, { backgroundColor: '#EB001B' }]} />
+      <View style={[cbStyles.mcRight, { backgroundColor: '#F79E1B' }]} />
+      <View style={[cbStyles.mcOverlap, { backgroundColor: '#FF5F00' }]} />
+      <Text style={cbStyles.mcText}>mc</Text>
     </View>
   );
 }
-
 function AmexLogo({ width = 48, height = 30 }: { width?: number; height?: number }) {
   return (
-    <View style={[cardBrandStyles.base, { width, height, backgroundColor: '#2E77BC', borderRadius: 5 }]}>
-      <Text style={cardBrandStyles.amexText}>AMEX</Text>
+    <View style={[cbStyles.base, { width, height, backgroundColor: '#2E77BC', borderRadius: 5 }]}>
+      <Text style={cbStyles.amexText}>AMEX</Text>
     </View>
   );
 }
-
 function DiscoverLogo({ width = 48, height = 30 }: { width?: number; height?: number }) {
   return (
-    <View style={[cardBrandStyles.base, { width, height, backgroundColor: '#FFFFFF', borderRadius: 5, borderWidth: 1, borderColor: '#E0E0E0' }]}>
-      <Text style={cardBrandStyles.discoverText}>DISC</Text>
-      <View style={cardBrandStyles.discoverDot} />
+    <View style={[cbStyles.base, { width, height, backgroundColor: '#FFFFFF', borderRadius: 5, borderWidth: 1, borderColor: '#E0E0E0' }]}>
+      <Text style={cbStyles.discoverText}>DISC</Text>
+      <View style={cbStyles.discoverDot} />
     </View>
   );
 }
-
 function UnionPayLogo({ width = 48, height = 30 }: { width?: number; height?: number }) {
   return (
-    <View style={[cardBrandStyles.base, { width, height, backgroundColor: '#CE0000', borderRadius: 5 }]}>
-      <Text style={cardBrandStyles.unionpayText}>UP</Text>
+    <View style={[cbStyles.base, { width, height, backgroundColor: '#CE0000', borderRadius: 5 }]}>
+      <Text style={cbStyles.unionpayText}>UP</Text>
     </View>
   );
 }
 
-const cardBrandStyles = StyleSheet.create({
+const cbStyles = StyleSheet.create({
   base: { alignItems: 'center', justifyContent: 'center', position: 'relative' },
   visaText: { color: '#FFFFFF', fontSize: 14, fontWeight: '900', fontStyle: 'italic', letterSpacing: 0.5 },
   mcLeft: { position: 'absolute', left: 6, width: 18, height: 18, borderRadius: 9, top: 6 },
@@ -184,12 +615,11 @@ const isHaitiOrUSAUser = (user: any) => {
 type PayMethod = 'card' | 'apple' | 'google' | 'moncash';
 
 // ─────────────────────────────────────────────────────────
-// Reusable Glass Section with Glow Border
+// Reusable Glass Section
 // ─────────────────────────────────────────────────────────
 function GlassSection({ T, children, style, glowColor }: { T: ReturnType<typeof useT>; children: React.ReactNode; style?: any; glowColor?: string }) {
   return (
     <View style={[{ marginBottom: 14 }, style]}>
-      {/* Glow layer behind */}
       {glowColor && (
         <View style={[s.glowLayer, { backgroundColor: glowColor, opacity: T.dark ? 0.12 : 0.06 }]} />
       )}
@@ -204,9 +634,6 @@ function GlassSection({ T, children, style, glowColor }: { T: ReturnType<typeof 
   );
 }
 
-// ─────────────────────────────────────────────────────────
-// Section Header with line accent
-// ─────────────────────────────────────────────────────────
 function SectionHeader({ label, T, accentColor }: { label: string; T: ReturnType<typeof useT>; accentColor?: string }) {
   return (
     <View style={s.sectionHeaderRow}>
@@ -217,23 +644,10 @@ function SectionHeader({ label, T, accentColor }: { label: string; T: ReturnType
   );
 }
 
-// ─────────────────────────────────────────────────────────
-// Field Row with animated focus
-// ─────────────────────────────────────────────────────────
 function FieldRow({
-  icon,
-  label,
-  focused,
-  accentColor,
-  T,
-  children,
+  icon, label, focused, accentColor, T, children,
 }: {
-  icon: string;
-  label: string;
-  focused: boolean;
-  accentColor: string;
-  T: ReturnType<typeof useT>;
-  children: React.ReactNode;
+  icon: string; label: string; focused: boolean; accentColor: string; T: ReturnType<typeof useT>; children: React.ReactNode;
 }) {
   return (
     <View style={s.fieldRow}>
@@ -273,40 +687,12 @@ function CheckoutInner() {
   const [email, setEmail] = useState(user?.email || '');
   const [focusedField, setFocusedField] = useState<string | null>(null);
 
-  // ── Auto-detect country from device locale ──
-  const [selectedCountry, setSelectedCountry] = useState<ICountry | undefined>(undefined);
-  const [phoneNumber, setPhoneNumber] = useState('');
-  const [phoneValid, setPhoneValid] = useState(false);
-
-  useEffect(() => {
-    const locale = Localization.locale?.toUpperCase?.() || 'US';
-    const regionCode = locale.split('_')[1] || locale.split('-')[1] || 'US';
-    const country = getCountryByCca2(regionCode);
-    if (country) {
-      setSelectedCountry(country);
-    } else {
-      // Fallback to US
-      setSelectedCountry(getCountryByCca2('US'));
-    }
-  }, []);
-
-  const handlePhoneChange = useCallback((val: string) => {
-    setPhoneNumber(val);
-  }, []);
-
-  const handleCountryChange = useCallback((country: ICountry) => {
-    setSelectedCountry(country);
-  }, []);
-
-  useEffect(() => {
-    if (selectedCountry && phoneNumber) {
-      setPhoneValid(isValidPhoneNumber(phoneNumber, selectedCountry));
-    }
-  }, [phoneNumber, selectedCountry]);
-
-  const fullPhone = selectedCountry?.idd?.root
-    ? `${selectedCountry.idd.root}${selectedCountry.idd?.suffixes?.[0] || ''} ${phoneNumber}`
-    : phoneNumber;
+  // ── Country picker state ──
+  const [country, setCountry] = useState<Country>(() => guessCountryFromLocale());
+  const [showCountryPicker, setShowCountryPicker] = useState(false);
+  const [phoneNational, setPhoneNational] = useState('');
+  const phoneValid = phoneNational.length >= 4 && validatePhone(country.dial + phoneNational, country.code);
+  const fullPhone = `${country.dial}${phoneNational}`;
 
   const [cardholderName, setCardholderName] = useState('');
   const [cardReady, setCardReady] = useState(false);
@@ -388,7 +774,6 @@ function CheckoutInner() {
     }
   };
 
-  // ── Get client secret ──
   const getClientSecret = async (token: string) => {
     const { data, error } = await supabase.functions.invoke('create-checkout-session', {
       body: { plan, priceId, mode: 'payment_sheet', couponCode: couponResult?.valid ? couponCode.trim() : undefined },
@@ -402,7 +787,6 @@ function CheckoutInner() {
     return data as { clientSecret?: string; ephemeralKey?: string; customerId?: string; url?: string };
   };
 
-  // ── Sync subscription ──
   const syncSubscription = async (token: string) => {
     const { data: subData } = await supabase.functions.invoke('check-subscription', { headers: { Authorization: `Bearer ${token}` } });
     if (user?.id) {
@@ -415,7 +799,6 @@ function CheckoutInner() {
     router.replace('/subscription-success');
   };
 
-  // ── Card payment ──
   const handleCardPay = async () => {
     if (!stripe) { showAlert('Error', 'Stripe not available'); return; }
     if (!cardReady) { showAlert('Incomplete', 'Please fill in your card details.'); return; }
@@ -445,7 +828,6 @@ function CheckoutInner() {
     } finally { setLoading(false); }
   };
 
-  // ── Apple Pay ──
   const handleApplePay = async () => {
     if (!applePay || !isApplePaySupported || !stripe) { showAlert('Not Available', 'Apple Pay is not available on this device.'); return; }
     setLoading(true);
@@ -473,7 +855,6 @@ function CheckoutInner() {
     } finally { setLoading(false); }
   };
 
-  // ── Google Pay ──
   const handleGooglePay = async () => {
     if (!googlePay || !googlePayReady || !stripe) { showAlert('Not Available', 'Google Pay is not available on this device.'); return; }
     setLoading(true);
@@ -501,7 +882,6 @@ function CheckoutInner() {
     } finally { setLoading(false); }
   };
 
-  // ── MonCash ──
   const handleMonCash = async () => {
     if (!user) return;
     setLoading(true);
@@ -586,82 +966,6 @@ function CheckoutInner() {
     ...(showMoncash ? [{ key: 'moncash' as PayMethod, label: 'MonCash', icon: 'phone-portrait-outline' }] : []),
   ];
 
-  // ── Custom PhoneInput theme for dark/light ──
-  const phoneInputStyles = {
-    container: {
-      backgroundColor: 'transparent',
-      borderWidth: 0,
-      borderRadius: 0,
-      paddingVertical: 0,
-      height: 44,
-    },
-    flagContainer: {
-      backgroundColor: T.tabInactive,
-      borderRadius: 10,
-      paddingHorizontal: 10,
-      paddingVertical: 6,
-      gap: 4,
-    },
-    flag: { fontSize: 20 },
-    caret: { fontSize: 12, color: T.textSec },
-    divider: { backgroundColor: 'transparent', width: 8 },
-    callingCode: { fontSize: 14, fontWeight: '600', color: T.text },
-    input: {
-      fontSize: 15,
-      fontWeight: '400',
-      color: T.text,
-      padding: 0,
-      margin: 0,
-    },
-  };
-
-  const phoneModalStyles = {
-    backdrop: { backgroundColor: 'rgba(0,0,0,0.55)' },
-    container: {
-      backgroundColor: T.modalBg,
-      borderTopLeftRadius: 26,
-      borderTopRightRadius: 26,
-    },
-    content: { paddingBottom: insets.bottom + 16 },
-    dragHandleContainer: { paddingVertical: 12 },
-    dragHandleIndicator: { width: 36, height: 4, borderRadius: 2, backgroundColor: T.textMuted, opacity: 0.4 },
-    searchContainer: {
-      backgroundColor: T.searchBg,
-      borderRadius: 14,
-      marginHorizontal: 16,
-      marginBottom: 8,
-      paddingHorizontal: 14,
-      paddingVertical: 11,
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-    },
-    searchInput: { fontSize: 15, color: T.text, flex: 1, padding: 0 },
-    list: { maxHeight: 420 },
-    countryItem: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingHorizontal: 20,
-      paddingVertical: 13,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: T.divider,
-      gap: 12,
-    },
-    flag: { fontSize: 22 },
-    countryInfo: { flex: 1 },
-    countryName: { fontSize: 15, color: T.text },
-    callingCode: { fontSize: 14, fontWeight: '600', color: T.textSec },
-    sectionTitle: { fontSize: 12, fontWeight: '700', color: T.textMuted, paddingHorizontal: 20, paddingVertical: 6 },
-    closeButton: { padding: 16, alignItems: 'center' },
-    closeButtonText: { fontSize: 15, fontWeight: '600', color: planColor },
-    countryNotFoundContainer: { padding: 32, alignItems: 'center' },
-    countryNotFoundMessage: { fontSize: 14, color: T.textSec },
-    alphabetContainer: { position: 'absolute', right: 4, top: 60, bottom: 40, width: 20, alignItems: 'center' },
-    alphabetLetter: { paddingVertical: 1.5, width: 20, alignItems: 'center' },
-    alphabetLetterText: { fontSize: 10, color: T.textMuted },
-    alphabetLetterTextActive: { fontSize: 10, fontWeight: '700', color: planColor },
-  };
-
   return (
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: T.bg }}
@@ -669,7 +973,17 @@ function CheckoutInner() {
     >
       <StatusBar barStyle={T.dark ? 'light-content' : 'dark-content'} />
 
-      {/* ── Header with stronger blur ── */}
+      {/* Country Picker Modal */}
+      <CountryPickerModal
+        visible={showCountryPicker}
+        selected={country}
+        onSelect={setCountry}
+        onClose={() => setShowCountryPicker(false)}
+        T={T}
+        accentColor={planColor}
+      />
+
+      {/* Header */}
       <BlurView
         intensity={85}
         tint={T.blurTint}
@@ -693,7 +1007,7 @@ function CheckoutInner() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[s.scroll, { paddingBottom: insets.bottom + 160 }]}
       >
-        {/* ── Plan card with glow ── */}
+        {/* Plan card */}
         <GlassSection T={T} glowColor={planColor}>
           <LinearGradient
             colors={T.dark ? [planColor + '08', 'transparent'] : [planColor + '06', 'transparent']}
@@ -736,7 +1050,7 @@ function CheckoutInner() {
           </LinearGradient>
         </GlassSection>
 
-        {/* ── Contact ── */}
+        {/* Contact */}
         <GlassSection T={T}>
           <SectionHeader label="CONTACT INFORMATION" T={T} accentColor={planColor} />
           <FieldRow icon="mail-outline" label="Email address" focused={focusedField === 'email'} accentColor={planColor} T={T}>
@@ -754,38 +1068,26 @@ function CheckoutInner() {
             />
           </FieldRow>
           <View style={[s.divider, { backgroundColor: T.divider }]} />
-
-          {/* Auto-detect phone with 200+ countries */}
           <FieldRow icon="call-outline" label="Phone number" focused={focusedField === 'phone'} accentColor={planColor} T={T}>
-            <View style={{ marginTop: 2 }}>
-              <PhoneInput
-                value={phoneNumber}
-                onChangePhoneNumber={handlePhoneChange}
-                selectedCountry={selectedCountry}
-                onChangeSelectedCountry={handleCountryChange}
-                defaultCountry={selectedCountry?.cca2}
-                placeholder="Phone number"
-                phoneInputStyles={phoneInputStyles}
-                modalStyles={phoneModalStyles}
-                phoneInputPlaceholderTextColor={T.placeholderText}
-                phoneInputSelectionColor={planColor}
-                customCaret={() => <Ionicons name="chevron-down" size={12} color={T.textSec} />}
-                language="eng"
-                popularCountries={['US', 'HT', 'CA', 'FR', 'GB', 'BR', 'MX', 'DE']}
-                onFocus={() => setFocusedField('phone')}
-                onBlur={() => setFocusedField(null)}
-              />
-            </View>
+            <CustomPhoneInput
+              country={country}
+              value={phoneNational}
+              onChange={setPhoneNational}
+              onCountryPress={() => setShowCountryPicker(true)}
+              focused={focusedField === 'phone'}
+              accentColor={planColor}
+              T={T}
+            />
           </FieldRow>
-          {phoneNumber.length > 0 && !phoneValid && (
+          {phoneNational.length > 3 && !phoneValid && (
             <View style={[s.couponMsg, { backgroundColor: T.couponError + '12', marginHorizontal: 16, marginBottom: 10, borderRadius: 10 }]}>
               <Ionicons name="alert-circle" size={13} color={T.couponError} />
-              <Text style={[s.couponMsgText, { color: T.couponError }]}>Invalid phone number for selected country</Text>
+              <Text style={[s.couponMsgText, { color: T.couponError }]}>Invalid phone number for {country.name}</Text>
             </View>
           )}
         </GlassSection>
 
-        {/* ── Promo code ── */}
+        {/* Promo code */}
         <GlassSection T={T}>
           <SectionHeader label="PROMO CODE" T={T} accentColor={planColor} />
           <FieldRow icon="pricetag-outline" label="Discount code" focused={focusedField === 'coupon'} accentColor={planColor} T={T}>
@@ -815,7 +1117,7 @@ function CheckoutInner() {
           {couponResult && (
             <View style={[s.couponMsg, {
               backgroundColor: couponResult.valid ? T.couponApplied + '14' : T.couponError + '14',
-              marginHorizontal: 16, marginBottom: 12, borderRadius: 12
+              marginHorizontal: 16, marginBottom: 12, borderRadius: 12,
             }]}>
               <Ionicons name={couponResult.valid ? 'checkmark-circle' : 'close-circle'} size={14} color={couponResult.valid ? T.couponApplied : T.couponError} />
               <Text style={[s.couponMsgText, { color: couponResult.valid ? T.couponApplied : T.couponError }]}>{couponResult.message}</Text>
@@ -823,7 +1125,7 @@ function CheckoutInner() {
           )}
         </GlassSection>
 
-        {/* ── Payment method tabs ── */}
+        {/* Payment method tabs */}
         <SectionHeader label="PAYMENT METHOD" T={T} accentColor={planColor} />
         <View style={s.tabsRow}>
           {tabs.map((tab) => {
@@ -854,7 +1156,7 @@ function CheckoutInner() {
           })}
         </View>
 
-        {/* ── Card entry ── */}
+        {/* Card entry */}
         {method === 'card' && (
           <GlassSection T={T} glowColor={planColor}>
             <SectionHeader label="CARD DETAILS" T={T} accentColor={planColor} />
@@ -872,12 +1174,9 @@ function CheckoutInner() {
               />
             </FieldRow>
             <View style={[s.divider, { backgroundColor: T.divider }]} />
-
             {CardField ? (
               <View style={{ paddingHorizontal: 16, paddingVertical: 14 }}>
-                <Text style={[s.fieldLabel, { color: T.textSec, marginBottom: 10 }]}>
-                  Card number · Expiry · CVV
-                </Text>
+                <Text style={[s.fieldLabel, { color: T.textSec, marginBottom: 10 }]}>Card number · Expiry · CVV</Text>
                 <CardField
                   postalCodeEnabled={false}
                   placeholders={{ number: '4242 4242 4242 4242', expiration: 'MM/YY', cvc: 'CVV' }}
@@ -903,7 +1202,6 @@ function CheckoutInner() {
                 </Text>
               </View>
             )}
-
             <View style={s.cardBrandsRow}>
               <VisaLogo width={46} height={28} />
               <MastercardLogo width={46} height={28} />
@@ -914,7 +1212,7 @@ function CheckoutInner() {
           </GlassSection>
         )}
 
-        {/* ── Apple Pay ── */}
+        {/* Apple Pay */}
         {method === 'apple' && (
           <GlassSection T={T} glowColor="#000">
             <View style={s.payInfoCard}>
@@ -923,7 +1221,7 @@ function CheckoutInner() {
               </View>
               <Text style={[s.payInfoTitle, { color: T.text }]}>Apple Pay</Text>
               <Text style={[s.payInfoSub, { color: T.textSec }]}>
-                Authenticate with Face ID or Touch ID.{'\\n'}No card details required.
+                Authenticate with Face ID or Touch ID.{'\n'}No card details required.
               </Text>
               <View style={[s.payInfoAmount, { borderColor: planColor + '40', backgroundColor: planColor + '10' }]}>
                 <Text style={[s.payInfoAmountText, { color: planColor }]}>{displayPrice} / month</Text>
@@ -932,7 +1230,7 @@ function CheckoutInner() {
           </GlassSection>
         )}
 
-        {/* ── Google Pay ── */}
+        {/* Google Pay */}
         {method === 'google' && (
           <GlassSection T={T} glowColor="#4285F4">
             <View style={s.payInfoCard}>
@@ -941,7 +1239,7 @@ function CheckoutInner() {
               </View>
               <Text style={[s.payInfoTitle, { color: T.text }]}>Google Pay</Text>
               <Text style={[s.payInfoSub, { color: T.textSec }]}>
-                Fast and secure — no card entry required.{'\\n'}Uses your Google account payment method.
+                Fast and secure — no card entry required.{'\n'}Uses your Google account payment method.
               </Text>
               <View style={[s.payInfoAmount, { borderColor: planColor + '40', backgroundColor: planColor + '10' }]}>
                 <Text style={[s.payInfoAmountText, { color: planColor }]}>{displayPrice} / month</Text>
@@ -950,17 +1248,17 @@ function CheckoutInner() {
           </GlassSection>
         )}
 
-        {/* ── MonCash ── */}
+        {/* MonCash */}
         {method === 'moncash' && (
-          <GlassSection T={T} glowColor="#DC143C" style={{ borderColor: 'rgba(220,20,60,0.20)' }}>
+          <GlassSection T={T} glowColor="#DC143C">
             <View style={s.payInfoCard}>
               <View style={[s.payIconBig, { backgroundColor: '#DC143C' }]}>
                 <Text style={s.moncashM}>M</Text>
               </View>
               <Text style={[s.payInfoTitle, { color: T.text }]}>MonCash</Text>
               <Text style={[s.payInfoSub, { color: T.textSec }]}>
-                Pay securely with your Digicel MonCash account.{'\\n'}
-                Available for 🇭🇹 Haiti and 🇺🇸 USA users.
+                Pay securely with your Digicel MonCash account.{'\n'}
+                Available for Haiti and USA users.
               </Text>
               <View style={[s.payInfoAmount, { borderColor: 'rgba(220,20,60,0.3)', backgroundColor: 'rgba(220,20,60,0.08)' }]}>
                 <Text style={[s.payInfoAmountText, { color: '#DC143C' }]}>{planPriceHTG} HTG / month</Text>
@@ -975,7 +1273,6 @@ function CheckoutInner() {
           </GlassSection>
         )}
 
-        {/* Secure note */}
         <View style={s.secureRow}>
           <Ionicons name="shield-checkmark" size={13} color={T.secureText} />
           <Text style={[s.secureText, { color: T.secureText }]}>
@@ -984,7 +1281,7 @@ function CheckoutInner() {
         </View>
       </ScrollView>
 
-      {/* ── Bottom CTA with stronger blur ── */}
+      {/* Bottom CTA */}
       <BlurView
         intensity={90}
         tint={T.blurTint}
@@ -1065,26 +1362,21 @@ export default function CheckoutScreen() {
 // Styles
 // ─────────────────────────────────────────────────────────
 const s = StyleSheet.create({
-  // Glow layer behind glass
   glowLayer: {
     position: 'absolute',
     top: -2, left: 8, right: 8, bottom: -2,
     borderRadius: 24,
-    blurRadius: 20,
   },
   glassBase: {
     borderRadius: 22,
     borderWidth: 1,
     overflow: 'hidden',
-    // subtle inner shadow feel
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
     shadowRadius: 8,
     elevation: 3,
   },
-
-  // Header
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingBottom: 14,
@@ -1099,21 +1391,13 @@ const s = StyleSheet.create({
     borderRadius: 20, paddingHorizontal: 8, paddingVertical: 3,
   },
   headerSecureText: { fontSize: 10, fontWeight: '600', color: '#30D158' },
-
-  // Scroll
   scroll: { paddingHorizontal: 16, paddingTop: 20, gap: 12 },
-
-  // Section header with line
   sectionHeaderRow: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
     paddingHorizontal: 16, paddingTop: 14, paddingBottom: 6,
   },
   sectionLine: { width: 16, height: 2, borderRadius: 1 },
-  sectionLabel: {
-    fontSize: 11, fontWeight: '700', letterSpacing: 0.8,
-  },
-
-  // Plan card
+  sectionLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 0.8 },
   planGradient: { borderRadius: 22 },
   planCardInner: { flexDirection: 'row', padding: 18, gap: 12, alignItems: 'flex-start' },
   planLeft: { flex: 1 },
@@ -1134,8 +1418,6 @@ const s = StyleSheet.create({
     borderRadius: 20, paddingHorizontal: 7, paddingVertical: 3, marginTop: 4,
   },
   discountBadgeText: { fontSize: 11, fontWeight: '700' },
-
-  // Field
   fieldRow: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 16, paddingVertical: 12, gap: 12, position: 'relative',
@@ -1146,8 +1428,6 @@ const s = StyleSheet.create({
   fieldInput: { fontSize: 15, fontWeight: '400', padding: 0, margin: 0 },
   focusBar: { position: 'absolute', right: 0, top: 10, bottom: 10, width: 3, borderRadius: 2 },
   divider: { height: StyleSheet.hairlineWidth, marginLeft: 64 },
-
-  // Coupon
   applyBtn: {
     borderRadius: 22, paddingHorizontal: 16, paddingVertical: 8,
     alignItems: 'center', justifyContent: 'center', minWidth: 68,
@@ -1158,8 +1438,6 @@ const s = StyleSheet.create({
     paddingHorizontal: 12, paddingVertical: 8,
   },
   couponMsgText: { fontSize: 12, fontWeight: '500', flex: 1 },
-
-  // Payment tabs
   tabsRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginBottom: 14 },
   tab: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
@@ -1167,20 +1445,14 @@ const s = StyleSheet.create({
     minWidth: 90, justifyContent: 'center',
   },
   tabText: { fontSize: 13, fontWeight: '600' },
-
-  // Card fallback
   cardFallback: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
     margin: 16, borderRadius: 12, padding: 14, borderWidth: 1, opacity: 0.7,
   },
   cardFallbackText: { fontSize: 13, flex: 1, lineHeight: 18 },
-
-  // Card brands row
   cardBrandsRow: {
     flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingBottom: 16, paddingTop: 6, flexWrap: 'wrap',
   },
-
-  // Pay info card
   payInfoCard: { alignItems: 'center', paddingVertical: 28, paddingHorizontal: 24, gap: 10 },
   payIconBig: { width: 72, height: 72, borderRadius: 22, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
   payInfoTitle: { fontSize: 20, fontWeight: '700' },
@@ -1190,20 +1462,14 @@ const s = StyleSheet.create({
     paddingHorizontal: 16, paddingVertical: 8, marginTop: 4,
   },
   payInfoAmountText: { fontSize: 15, fontWeight: '700' },
-
-  // MonCash
   moncashM: { color: '#FFF', fontSize: 34, fontWeight: '900' },
   moncashNote: {
     flexDirection: 'row', alignItems: 'flex-start', gap: 6,
     borderWidth: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8, marginTop: 4,
   },
   moncashNoteText: { fontSize: 11, flex: 1, lineHeight: 16 },
-
-  // Secure
   secureRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 6 },
   secureText: { fontSize: 12, lineHeight: 18 },
-
-  // Bottom bar
   bottomBar: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
     paddingHorizontal: 18, paddingTop: 16,
@@ -1228,8 +1494,6 @@ const s = StyleSheet.create({
   cancelText: { fontSize: 13, fontWeight: '500' },
   moncashBadgeSmall: { width: 22, height: 22, borderRadius: 6, backgroundColor: '#FFF', alignItems: 'center', justifyContent: 'center' },
   moncashBadgeSmallText: { color: '#DC143C', fontSize: 13, fontWeight: '900' },
-
-  // Web fallback
   webFallback: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 16 },
   webFallbackIcon: {
     width: 80, height: 80, borderRadius: 24, alignItems: 'center', justifyContent: 'center',
@@ -1238,4 +1502,3 @@ const s = StyleSheet.create({
   webFallbackTitle: { fontSize: 20, fontWeight: '700', textAlign: 'center' },
   webFallbackSub: { fontSize: 15, textAlign: 'center', lineHeight: 22 },
 });
-please ai if see this make alll change read and make change Replace react-native-international-phone-number in checkout.tsx with a custom country picker built using libphonenumber-js and a FlatList modal, making it fully web-compatible without native-only library errors.
