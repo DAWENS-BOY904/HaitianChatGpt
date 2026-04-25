@@ -1346,3 +1346,4 @@ const s = StyleSheet.create({
   payBtnText: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
   payBtnDisabled: { opacity: 0.5 },
 });
+please make this take you time dont skip and make all change in real time and checkout page put all in blur mode please Implement a full MonCash in-app payment flow for Haiti users in checkout: show a MonCash method card when country is Haiti, call the moncash mode of create-checkout-session, open the payment URL in a WebView modal (not external browser), then poll verify-moncash-payment until confirmed.
