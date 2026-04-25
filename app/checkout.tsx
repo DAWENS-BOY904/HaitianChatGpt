@@ -39,14 +39,8 @@ try {
   WebView = require('react-native-webview').WebView;
 } catch (_e) {}
 
-// Stripe PaymentSheet (react-native only)
-let useStripe: any = null;
-let StripeProvider: any = null;
-try {
-  const stripeModule = require('@stripe/stripe-react-native');
-  useStripe = stripeModule.useStripe;
-  StripeProvider = stripeModule.StripeProvider;
-} catch (_e) {}
+// Stripe PaymentSheet — platform-safe (native.ts / web.ts)
+import { useStripe, StripeProvider } from '../utils/stripe-compat';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -1014,9 +1008,9 @@ function CheckoutInner() {
   const insets = useSafeAreaInsets();
   const supabase = getSupabaseClient();
 
-  const stripeHook = Platform.OS !== 'web' && useStripe ? useStripe() : null;
-  const initPaymentSheet = stripeHook?.initPaymentSheet;
-  const presentPaymentSheet = stripeHook?.presentPaymentSheet;
+  const stripeHook = useStripe();
+  const initPaymentSheet = Platform.OS !== 'web' ? stripeHook?.initPaymentSheet : null;
+  const presentPaymentSheet = Platform.OS !== 'web' ? stripeHook?.presentPaymentSheet : null;
 
   // Plan params
   const params = useLocalSearchParams<{ plan?: string; priceId?: string; price?: string; name?: string }>();
@@ -1418,7 +1412,7 @@ function CheckoutInner() {
 // Root: wrap with StripeProvider on native
 // ─────────────────────────────────────────────────────────
 export default function CheckoutScreen() {
-  if (Platform.OS === 'web' || !StripeProvider) {
+  if (Platform.OS === 'web') {
     return <CheckoutInner />;
   }
   return (
