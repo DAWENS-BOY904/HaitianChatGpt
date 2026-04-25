@@ -683,6 +683,5 @@ export default function AuthenticatorAppScreen() {
     </View>
   );
 }
-make this more real connect it.
 
 
