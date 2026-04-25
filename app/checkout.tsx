@@ -41,7 +41,7 @@ const STRIPE_PUBLISHABLE_KEY =
   'pk_live_51TPUrUE0VkO7z1VnRqkzCbmYPxjnq7sguPT50wDpUHCEBBEcaBXVy8iFxoAWcT5nxQ5kfMJjMEGVjhYaXv5OB9cT00mdXajb91';
 
 // ── Stripe price for Plus plan ──
-const PLUS_PRICE_ID = 'price_1ShK60E0VkO7z1VnHAKICksq'; // $19.99/month
+const PLUS_PRICE_ID = 'price_1TPUrzE0VkO7z1Vnlgj45978'; // $19.99/month
 
 // ---------- Inner component (uses useStripe hook) ----------
 function CheckoutInner() {
