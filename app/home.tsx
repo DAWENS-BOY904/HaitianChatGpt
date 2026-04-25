@@ -1548,8 +1548,8 @@ export default function HomeScreen() {
   const styles = useMemo(() => StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background, paddingTop: Platform.select({ ios: insets.top, android: StatusBar.currentHeight || 0, default: 0 }) },
     headerEmpty: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 10, backgroundColor: colors.background },
-    upgradeBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#2D2B5E', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 7, gap: 5 },
-    upgradeBtnText: { color: '#7C6FF7', fontSize: 14, fontWeight: '600' },
+    upgradeBtn: { flexDirection: 'row', alignItems: 'center', borderRadius: 16, gap: 4 },
+    upgradeBtnText: { fontWeight: '600' },
     headerEmptyRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
     headerIconBtn: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
     headerChat: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10, backgroundColor: colors.background, gap: 10 },
@@ -1667,52 +1667,45 @@ export default function HomeScreen() {
               {/* HEADER */}
               {!hasMessages ? (
                 <View style={styles.headerEmpty}>
-                  <TouchableOpacity onPress={() => setSideMenuVisible(true)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                    <Ionicons name="menu" size={24} color={colors.text} />
-                  </TouchableOpacity>
-                  {isGuest ? (
-                    <TouchableOpacity
-                      style={{ backgroundColor: '#F0F0F5', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8 }}
-                      onPress={() => router.push('/login')}
-                    >
-                      <Text style={{ color: '#000', fontWeight: '600', fontSize: 15 }}>Sign up</Text>
+                  {/* Left side: hamburger + compact upgrade pill */}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <TouchableOpacity onPress={() => setSideMenuVisible(true)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                      <Ionicons name="menu" size={24} color={colors.text} />
                     </TouchableOpacity>
-                  ) : !isPro ? (
-                    Platform.OS === 'ios' ? (
-                      <BlurView
-                        intensity={isDark ? 60 : 50}
-                        tint={isDark ? 'dark' : 'light'}
-                        style={[styles.upgradeBtn, {
-                          overflow: 'hidden',
-                          borderWidth: 1,
-                          borderColor: accentColor + '55',
-                        }]}
-                      >
+                    {!isGuest && !isPro ? (
+                      Platform.OS === 'ios' ? (
+                        <BlurView
+                          intensity={isDark ? 55 : 45}
+                          tint={isDark ? 'dark' : 'light'}
+                          style={[styles.upgradeBtn, { overflow: 'hidden', borderWidth: 1, borderColor: accentColor + '50' }]}
+                        >
+                          <TouchableOpacity
+                            style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5 }}
+                            onPress={() => router.push('/subscription')}
+                          >
+                            <Ionicons name="sparkles" size={11} color={accentColor} />
+                            <Text style={[styles.upgradeBtnText, { color: accentColor, fontSize: 12 }]}>Upgrade</Text>
+                          </TouchableOpacity>
+                        </BlurView>
+                      ) : (
                         <TouchableOpacity
-                          style={{ flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 7 }}
+                          style={[styles.upgradeBtn, { backgroundColor: isDark ? accentColor + '22' : accentColor + '18', borderWidth: 1, borderColor: accentColor + '50', paddingHorizontal: 10, paddingVertical: 5 }]}
                           onPress={() => router.push('/subscription')}
                         >
-                          <Ionicons name="sparkles" size={13} color={accentColor} />
-                          <Text style={[styles.upgradeBtnText, { color: accentColor }]}>Upgrade</Text>
+                          <Ionicons name="sparkles" size={11} color={accentColor} />
+                          <Text style={[styles.upgradeBtnText, { color: accentColor, fontSize: 12 }]}>Upgrade</Text>
                         </TouchableOpacity>
-                      </BlurView>
-                    ) : (
+                      )
+                    ) : isGuest ? (
                       <TouchableOpacity
-                        style={[styles.upgradeBtn, {
-                          backgroundColor: isDark ? accentColor + '22' : accentColor + '18',
-                          borderWidth: 1,
-                          borderColor: accentColor + '55',
-                        }]}
-                        onPress={() => router.push('/subscription')}
+                        style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : '#F0F0F5', borderRadius: 16, paddingHorizontal: 12, paddingVertical: 5 }}
+                        onPress={() => router.push('/login')}
                       >
-                        <Ionicons name="sparkles" size={13} color={accentColor} />
-                        <Text style={[styles.upgradeBtnText, { color: accentColor }]}>Upgrade</Text>
+                        <Text style={{ color: isDark ? '#FFF' : '#000', fontWeight: '600', fontSize: 13 }}>Sign up</Text>
                       </TouchableOpacity>
-                    )
-                  ) : (
-                    <View style={{ width: 80 }} />
-                  )}
-                  {/* Group & Temporary chat buttons — logged-in users only */}
+                    ) : null}
+                  </View>
+                  {/* Right side: Group & Temporary chat buttons — logged-in users only */}
                   {!isGuest ? (
                     <View style={styles.headerEmptyRight}>
                       {Platform.OS === 'ios' ? (
@@ -1738,7 +1731,7 @@ export default function HomeScreen() {
                       )}
                     </View>
                   ) : (
-                    <View style={styles.headerEmptyRight} />
+                    <View />
                   )}
                 </View>
               ) : (
@@ -2428,4 +2421,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
   }
 }
 
-the upgrade button avansel plus bo goch komsi kole a 3ba  side menu and the 3ba side menu background li dwe blur effect and upgrade button tro gro and large.
+
