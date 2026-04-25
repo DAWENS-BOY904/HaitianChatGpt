@@ -684,7 +684,17 @@ function CardForm({
       {/* Stripe CardField — handles number / expiry / CVV in a single native component */}
       {/* No card icon shown here when cardType is already detected (shown in badge above) */}
       {Platform.OS !== 'web' && CardField ? (
-        <View style={[cfS.stripeFieldWrap, { backgroundColor: theme.dark ? 'rgba(44,44,46,0.4)' : 'rgba(242,242,247,0.8)', borderRadius: 12, marginHorizontal: 10, marginBottom: 6 }]}>
+        <View style={[
+          cfS.stripeFieldWrap,
+          {
+            backgroundColor: theme.dark ? 'rgba(44,44,46,0.55)' : 'rgba(255,255,255,0.9)',
+            borderRadius: 12,
+            marginHorizontal: 10,
+            marginBottom: 6,
+            borderWidth: 1,
+            borderColor: theme.dark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)',
+          },
+        ]}>
           {!cardType && (
             <Ionicons name="card-outline" size={16} color={theme.textSec} style={cfS.stripeIcon} />
           )}
@@ -696,9 +706,9 @@ function CardForm({
               cvc: 'CVV',
             }}
             cardStyle={{
-              backgroundColor: theme.dark ? '#2C2C2E' : '#F2F2F7',
+              backgroundColor: theme.dark ? 'rgba(44,44,46,0)' : 'rgba(255,255,255,0)',
               textColor: theme.dark ? '#FFFFFF' : '#000000',
-              placeholderColor: theme.dark ? 'rgba(200,200,200,0.5)' : 'rgba(80,80,80,0.5)',
+              placeholderColor: theme.dark ? 'rgba(180,180,180,0.55)' : 'rgba(80,80,80,0.45)',
               borderColor: 'transparent',
               borderWidth: 0,
               borderRadius: 10,
@@ -1471,77 +1481,77 @@ function CheckoutInner() {
           {/* Billing */}
           <Text style={[s.sectionTitle, { color: T.text }]}>Billing Information</Text>
 
-          {/* Username */}
-          <View style={s.billingFieldWrap}>
-            <Text style={[s.billingLabel, { color: T.text }]}>Username</Text>
-            <BlurView intensity={T.dark ? 30 : 50} tint={T.blurTint} style={[s.billingInputBlur, { borderColor: T.inputBorder }]}>
-              <Ionicons name="person-outline" size={16} color={T.textSec} />
-              <TextInput
-                style={[s.billingInput, { color: T.text }]}
-                value={billingUsername}
-                onChangeText={setBillingUsername}
-                placeholder="Username"
-                placeholderTextColor={T.placeholderText}
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-            </BlurView>
+          {/* Row 1: Username + Email (2 columns) */}
+          <View style={s.billingRow}>
+            <View style={s.billingFieldHalf}>
+              <Text style={[s.billingLabel, { color: T.text }]}>Username</Text>
+              <BlurView intensity={T.dark ? 30 : 55} tint={T.blurTint} style={[s.billingInputBlur, { borderColor: T.inputBorder }]}>
+                <Ionicons name="person-outline" size={14} color={T.textSec} />
+                <TextInput
+                  style={[s.billingInput, { color: T.text }]}
+                  value={billingUsername}
+                  onChangeText={setBillingUsername}
+                  placeholder="Username"
+                  placeholderTextColor={T.placeholderText}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+              </BlurView>
+            </View>
+            <View style={s.billingFieldHalf}>
+              <Text style={[s.billingLabel, { color: T.text }]}>Email</Text>
+              <BlurView intensity={T.dark ? 30 : 55} tint={T.blurTint} style={[s.billingInputBlur, { borderColor: T.inputBorder }]}>
+                <Ionicons name="mail-outline" size={14} color={T.textSec} />
+                <TextInput
+                  style={[s.billingInput, { color: T.text }]}
+                  value={billingEmail}
+                  onChangeText={setBillingEmail}
+                  placeholder="Email"
+                  placeholderTextColor={T.placeholderText}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+              </BlurView>
+            </View>
           </View>
 
-          {/* Email */}
-          <View style={s.billingFieldWrap}>
-            <Text style={[s.billingLabel, { color: T.text }]}>Email</Text>
-            <BlurView intensity={T.dark ? 30 : 50} tint={T.blurTint} style={[s.billingInputBlur, { borderColor: T.inputBorder }]}>
-              <Ionicons name="mail-outline" size={16} color={T.textSec} />
-              <TextInput
-                style={[s.billingInput, { color: T.text }]}
-                value={billingEmail}
-                onChangeText={setBillingEmail}
-                placeholder="your@email.com"
-                placeholderTextColor={T.placeholderText}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-            </BlurView>
-          </View>
-
-          {/* Phone */}
-          <View style={s.billingFieldWrap}>
-            <Text style={[s.billingLabel, { color: T.text }]}>Phone (optional)</Text>
-            <BlurView intensity={T.dark ? 30 : 50} tint={T.blurTint} style={[s.billingInputBlur, { borderColor: T.inputBorder }]}>
-              <TouchableOpacity
-                style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingRight: 10 }}
-                onPress={() => setShowCountryPicker(true)}
-                activeOpacity={0.8}
-              >
-                <Text style={{ fontSize: 18 }}>{country.flag}</Text>
-                <Text style={[{ fontSize: 13, color: T.textSec, fontWeight: '600' }]}>{country.dial}</Text>
-                <Ionicons name="chevron-down" size={14} color={T.textSec} />
-              </TouchableOpacity>
-              <View style={[{ width: StyleSheet.hairlineWidth, height: 20, backgroundColor: T.divider }]} />
-              <TextInput
-                style={[s.billingInput, { color: T.text, marginLeft: 8 }]}
-                value={phoneNumber}
-                onChangeText={setPhoneNumber}
-                placeholder="Phone number"
-                placeholderTextColor={T.placeholderText}
-                keyboardType="phone-pad"
-                autoCorrect={false}
-              />
-            </BlurView>
-          </View>
-
-          {/* Country */}
-          <View style={s.billingFieldWrap}>
-            <Text style={[s.billingLabel, { color: T.text }]}>Country</Text>
-            <BlurView intensity={T.dark ? 30 : 50} tint={T.blurTint} style={[s.billingInputBlur, { borderColor: T.inputBorder }]}>
-              <TouchableOpacity style={s.countryInner} onPress={() => setShowCountryPicker(true)} activeOpacity={0.8}>
-                <Text style={{ fontSize: 20 }}>{country.flag}</Text>
-                <Text style={[{ flex: 1, fontSize: 15, color: T.text, marginLeft: 10 }]}>{country.name}</Text>
-                <Ionicons name="chevron-down" size={18} color={T.textSec} />
-              </TouchableOpacity>
-            </BlurView>
+          {/* Row 2: Phone + Country (2 columns) */}
+          <View style={s.billingRow}>
+            <View style={s.billingFieldHalf}>
+              <Text style={[s.billingLabel, { color: T.text }]}>Phone (opt.)</Text>
+              <BlurView intensity={T.dark ? 30 : 55} tint={T.blurTint} style={[s.billingInputBlur, { borderColor: T.inputBorder }]}>
+                <TouchableOpacity
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingRight: 6 }}
+                  onPress={() => setShowCountryPicker(true)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={{ fontSize: 16 }}>{country.flag}</Text>
+                  <Text style={{ fontSize: 12, color: T.textSec, fontWeight: '600' }}>{country.dial}</Text>
+                  <Ionicons name="chevron-down" size={12} color={T.textSec} />
+                </TouchableOpacity>
+                <View style={{ width: StyleSheet.hairlineWidth, height: 18, backgroundColor: T.divider }} />
+                <TextInput
+                  style={[s.billingInput, { color: T.text, marginLeft: 6 }]}
+                  value={phoneNumber}
+                  onChangeText={setPhoneNumber}
+                  placeholder="Phone"
+                  placeholderTextColor={T.placeholderText}
+                  keyboardType="phone-pad"
+                  autoCorrect={false}
+                />
+              </BlurView>
+            </View>
+            <View style={s.billingFieldHalf}>
+              <Text style={[s.billingLabel, { color: T.text }]}>Country</Text>
+              <BlurView intensity={T.dark ? 30 : 55} tint={T.blurTint} style={[s.billingInputBlur, { borderColor: T.inputBorder }]}>
+                <TouchableOpacity style={s.countryInner} onPress={() => setShowCountryPicker(true)} activeOpacity={0.8}>
+                  <Text style={{ fontSize: 18 }}>{country.flag}</Text>
+                  <Text style={{ flex: 1, fontSize: 13, color: T.text, marginLeft: 6 }} numberOfLines={1}>{country.name}</Text>
+                  <Ionicons name="chevron-down" size={14} color={T.textSec} />
+                </TouchableOpacity>
+              </BlurView>
+            </View>
           </View>
 
           {/* Cancel notice */}
@@ -1624,10 +1634,12 @@ const s = StyleSheet.create({
   scroll: { paddingHorizontal: 16, paddingTop: 16 },
   sectionTitle: { fontSize: 16, fontWeight: '700', marginBottom: 12 },
   billingFieldWrap: { marginBottom: 14 },
-  billingLabel: { fontSize: 14, fontWeight: '600', marginBottom: 8 },
-  billingInputBlur: { flexDirection: 'row', alignItems: 'center', borderRadius: 14, borderWidth: 1, paddingHorizontal: 16, paddingVertical: 4, overflow: 'hidden', gap: 8 },
-  billingInput: { flex: 1, fontSize: 15, padding: 0, margin: 0, paddingVertical: 10 },
-  countryInner: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12 },
+  billingRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },
+  billingFieldHalf: { flex: 1 },
+  billingLabel: { fontSize: 12, fontWeight: '600', marginBottom: 6 },
+  billingInputBlur: { flexDirection: 'row', alignItems: 'center', borderRadius: 12, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 2, overflow: 'hidden', gap: 6 },
+  billingInput: { flex: 1, fontSize: 13, padding: 0, margin: 0, paddingVertical: 10 },
+  countryInner: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, flex: 1 },
   cancelNotice: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginTop: 8, marginBottom: 8, paddingHorizontal: 4 },
   cancelText: { flex: 1, fontSize: 12, lineHeight: 18 },
   bottomBar: {
@@ -1646,4 +1658,3 @@ const s = StyleSheet.create({
   payBtnText: { fontSize: 15, fontWeight: '700', color: '#FFFFFF' },
   payBtnDisabled: { opacity: 0.5 },
 });
-bro remove black lem ap mete card number an nn white mode fix all checkout white/dark mode better sou tex yo poum we ranje billing info in mobile 2fr 1row sam has card input.
