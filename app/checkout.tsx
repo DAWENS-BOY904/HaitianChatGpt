@@ -1333,3 +1333,4 @@ const s = StyleSheet.create({
   webFallbackTitle: { fontSize: 20, fontWeight: '700', textAlign: 'center' },
   webFallbackSub: { fontSize: 15, textAlign: 'center', lineHeight: 22 },
 });
+hello ai if you see this make change dont skip make all change please in real time redesign checkout page like this photo:https://files.catbox.moe/0fxp2x.png and make it more better tout bgy stay fix bien ranje dont skip redesign settings lan real svg logo catd amex visa etc no demo
