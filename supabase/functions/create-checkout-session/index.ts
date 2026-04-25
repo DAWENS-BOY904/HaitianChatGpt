@@ -7,6 +7,10 @@ const PRICE_MAP: Record<string, string> = {
   plus: 'price_1TPUrzE0VkO7z1Vnlgj45978', // $19.99/month – Plus plan
 };
 
+// ── MonCash Sandbox Config ──
+const MONCASH_SANDBOX_API = 'https://sandbox.moncashbutton.digicelgroup.com/Api';
+const MONCASH_SANDBOX_GATEWAY = 'https://sandbox.moncashbutton.digicelgroup.com/Moncash-middleware/Payment/Redirect';
+
 const logStep = (step: string, details?: any) => {
   const d = details ? ` — ${JSON.stringify(details)}` : '';
   console.log(`[create-checkout-session] ${step}${d}`);
@@ -28,9 +32,10 @@ Deno.serve(async (req) => {
       );
     }
 
-    const { plan, priceId: rawPriceId, mode } = body;
+    const { plan, priceId: rawPriceId, mode, amount, orderId } = body;
     const isPaymentSheet = mode === 'payment_sheet';
-    logStep('Request received', { plan, rawPriceId, mode });
+    const isMonCash = mode === 'moncash';
+    logStep('Request received', { plan, rawPriceId, mode, isMonCash });
 
     // ── Auth ──
     const authHeader = req.headers.get('Authorization');
@@ -56,6 +61,120 @@ Deno.serve(async (req) => {
       );
     }
     logStep('User authenticated', { userId: user.id, email: user.email });
+
+    // ══════════════════════════════════════════════════════════
+    // MODE C: MonCash (Haiti only)
+    // ══════════════════════════════════════════════════════════
+    if (isMonCash) {
+      logStep('MonCash mode — creating payment token');
+
+      const moncashClientId = Deno.env.get('MONCASH_SANDBOX_CLIENT_ID');
+      const moncashSecret = Deno.env.get('MONCASH_SANDBOX_SECRET');
+
+      if (!moncashClientId || !moncashSecret) {
+        return new Response(
+          JSON.stringify({ error: 'MonCash not configured' }),
+          { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+
+      // 1. Get OAuth token from MonCash
+      const authRes = await fetch(`${MONCASH_SANDBOX_API}/oauth/token`, {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          grant_type: 'client_credentials',
+          scope: 'read,write',
+        }).toString(),
+      });
+
+      // MonCash uses Basic auth with client_id:secret in the URL or header
+      const authWithBasic = await fetch(`${MONCASH_SANDBOX_API}/oauth/token`, {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': 'Basic ' + btoa(`${moncashClientId}:${moncashSecret}`),
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          grant_type: 'client_credentials',
+          scope: 'read,write',
+        }).toString(),
+      });
+
+      const authData = await authWithBasic.json();
+      if (!authWithBasic.ok || !authData.access_token) {
+        logStep('MonCash auth failed', authData);
+        return new Response(
+          JSON.stringify({ error: 'MonCash authentication failed', details: authData }),
+          { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+
+      const accessToken = authData.access_token;
+      logStep('MonCash auth success');
+
+      // 2. Create payment
+      const moncashOrderId = orderId || `DWNX-${user.id}-${Date.now()}`;
+      const paymentBody = {
+        amount: amount || (plan === 'plus' ? 2650 : 1060),
+        orderId: moncashOrderId,
+      };
+
+      const createRes = await fetch(`${MONCASH_SANDBOX_API}/v1/CreatePayment`, {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(paymentBody),
+      });
+
+      const paymentData = await createRes.json();
+      if (!createRes.ok || !paymentData.payment_token?.token) {
+        logStep('MonCash payment creation failed', paymentData);
+        return new Response(
+          JSON.stringify({ error: 'MonCash payment creation failed', details: paymentData }),
+          { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+
+      const paymentToken = paymentData.payment_token.token;
+      const paymentUrl = `${MONCASH_SANDBOX_GATEWAY}?token=${paymentToken}`;
+      logStep('MonCash payment token created', { orderId: moncashOrderId });
+
+      // 3. Store pending transaction in DB for later verification
+      const supabaseAdmin = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+      );
+
+      try {
+        await supabaseAdmin.from('moncash_transactions').insert({
+          user_id: user.id,
+          order_id: moncashOrderId,
+          plan: plan || 'plus',
+          amount: paymentBody.amount,
+          currency: 'HTG',
+          status: 'pending',
+          token: paymentToken,
+          created_at: new Date().toISOString(),
+        });
+      } catch (_e) {}
+
+      return new Response(
+        JSON.stringify({
+          paymentUrl,
+          orderId: moncashOrderId,
+          token: paymentToken,
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
 
     // ── Stripe key ──
     const stripeKey = Deno.env.get('STRIPE_SECRET_KEY');
