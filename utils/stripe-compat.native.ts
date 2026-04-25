@@ -1,1 +1,1 @@
-export { useStripe, StripeProvider } from '@stripe/stripe-react-native';
+export { useStripe, StripeProvider, useApplePay, useGooglePay, CardField } from '@stripe/stripe-react-native';
