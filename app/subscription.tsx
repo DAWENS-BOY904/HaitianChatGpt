@@ -882,4 +882,4 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   refreshText: { fontSize: 11 },
-});
+}); 
