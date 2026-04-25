@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Dawinix-HT",
+    "name": "Dawinix HT",
     "slug": "dawinix-ht",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -31,15 +31,6 @@
     "plugins": [
       "expo-router",
       "expo-apple-authentication",
-      "expo-av",
-      "expo-speech",
-      "expo-notifications",
-      [
-        "expo-secure-store",
-        {
-          "configureAndroidBackup": true
-        }
-      ],
       [
         "expo-splash-screen",
         {
