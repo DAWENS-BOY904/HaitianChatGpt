@@ -1644,3 +1644,4 @@ const s = StyleSheet.create({
   payBtnText: { fontSize: 15, fontWeight: '700', color: '#FFFFFF' },
   payBtnDisabled: { opacity: 0.5 },
 });
+fix kote poum mete card number cvv expiry an mwen paka we sam mete yo li paret tou noir fix it and any button ni button pay and pay by appple must be in blurr mode white/dark mode system dwe la.
