@@ -883,3 +883,4 @@ const styles = StyleSheet.create({
   },
   refreshText: { fontSize: 11 },
 });
+please ai if you see this mak it real no demo  dont skip pay with card must go to checkout real time and select card or apple/googlepay/moncash-only for haiti moncash and click pay in the app only
