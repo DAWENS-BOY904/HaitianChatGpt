@@ -552,3 +552,4 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 });
+fix this when u upload photo and the ai  must send it to home page auto create conversation chat in side menu and wait the ai to do what yo ask let the ai know all images in real time and design images page in blur mode.
