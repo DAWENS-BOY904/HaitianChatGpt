@@ -883,3 +883,4 @@ const styles = StyleSheet.create({
   },
   refreshText: { fontSize: 11 },
 });
+fix this page when u go to checkout auto ale a prix plus plan an real and lew peye nn checkout auto det to yoh account in real tome and if plan finish example 6month 2days pass auto cancel please.
