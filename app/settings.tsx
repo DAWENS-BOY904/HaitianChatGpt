@@ -970,4 +970,4 @@ export default function SettingsScreen() {
   );
 }
 
-
+when i tap the perfile to add a photo perfile its never work please fix it and test before finish fixall error dont skip.
