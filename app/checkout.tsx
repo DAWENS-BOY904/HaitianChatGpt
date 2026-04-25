@@ -1,3 +1,4 @@
+
 /**
  * CHECKOUT PAGE - In-app Stripe PaymentSheet + MonCash (Haiti)
  * Card + Apple Pay + Google Pay + MonCash
@@ -155,7 +156,7 @@ function CheckoutInner() {
 
   useEffect(() => {
     initSheet();
-  }, []);
+  }, [initSheet]); // Added initSheet to dependency array
 
   // ── MonCash Payment Flow ──
   const handleMonCashPay = async () => {
@@ -721,29 +722,3 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.45)',
   },
 });
-please run this in supabase :create table if not exists public.moncash_transactions (
-  id uuid default gen_random_uuid() primary key,
-  user_id uuid references auth.users(id) on delete cascade,
-  order_id text not null unique,
-  plan text not null,
-  amount integer not null,
-  currency text default 'HTG',
-  status text default 'pending', -- pending, completed, failed
-  token text,
-  payment_details jsonb,
-  created_at timestamptz default now(),
-  verified_at timestamptz,
-  updated_at timestamptz default now()
-);
-
--- Enable RLS
-alter table public.moncash_transactions enable row level security;
-
--- Policies
-create policy "Users can view own moncash transactions"
-  on public.moncash_transactions for select
-  using (auth.uid() = user_id);
-
--- Index for faster lookups
-create index idx_moncash_transactions_order_id on public.moncash_transactions(order_id);
-create index idx_moncash_transactions_user_id on public.moncash_transactions(user_id); and if need more make it real with no demo.
