@@ -1238,4 +1238,3 @@ const s = StyleSheet.create({
   webFallbackTitle: { fontSize: 20, fontWeight: '700', textAlign: 'center' },
   webFallbackSub: { fontSize: 15, textAlign: 'center', lineHeight: 22 },
 });
-
