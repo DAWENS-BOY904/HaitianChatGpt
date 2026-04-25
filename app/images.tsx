@@ -195,25 +195,24 @@ export default function ImagesScreen() {
     }
     setSending(true);
     try {
-      // Create or reuse a conversation
+      // Create a conversation so the side menu shows it
       const convId = await createConversation();
       if (!convId) throw new Error('Could not create conversation');
 
-      // Navigate to home first so the user sees the chat
-      router.replace('/home');
-
-      // Small delay to ensure home is mounted before sending
-      await new Promise(r => setTimeout(r, 400));
-
-      // sendMessage with image
-      const messageText = userText.trim() || 'Analyze and describe this image in detail. Tell me everything you see.';
-      await sendMessage(messageText, undefined, base64, false, 'gemini');
+      // Navigate to home with the image data as params
+      router.replace({
+        pathname: '/home',
+        params: {
+          fromImages: '1',
+          imageBase64: base64,
+          imagePrompt: userText.trim() || 'Analyze and describe this image in detail. Tell me everything you see.',
+        },
+      });
     } catch (err: any) {
       showAlert('Error', err?.message || 'Failed to send image to AI');
-    } finally {
       setSending(false);
     }
-  }, [user, createConversation, sendMessage, router, showAlert]);
+  }, [user, createConversation, router, showAlert]);
 
   // ── Style select handler ──
   const handleStyleSelect = (style: any) => {
@@ -777,4 +776,3 @@ const s = StyleSheet.create({
     paddingHorizontal: 4,
   },
 });
-frucking read my message and make akll change in blur real time please dont skip When user sends an image from images to home page, show a full-screen loading overlay on home while AI is analyzing the photo (spinner + 'AI is analyzing your image...' text), then display the AI response with a 'Save to My Images' button that uploads the result to Supabase storage and inserts into media_files table so it appears in the gallery. After AI responds to an image message on the home page chat, show a 'Save to My Images' action button below the AI response. When tapped, save the image URL to the media_files table with file_type='image' and user_id so it appears in the images gallery grid.

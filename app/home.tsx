@@ -45,7 +45,7 @@ import { MessageItem } from '../components/MessageItem';
 import { ThinkingIndicator } from '../components/ThinkingIndicator';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getSupabaseClient } from '@/template';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Accelerometer } from 'expo-sensors';
 import { Audio } from 'expo-av';
 import { useFocusEffect } from '@react-navigation/native';
@@ -590,6 +590,7 @@ export default function HomeScreen() {
   } = useConversation();
   const { showAlert } = useAlert();
   const router = useRouter();
+  const params = useLocalSearchParams<{ fromImages?: string; imageBase64?: string; imagePrompt?: string }>();
   const insets = useSafeAreaInsets();
   const supabase = getSupabaseClient();
 
@@ -637,6 +638,10 @@ export default function HomeScreen() {
   const [presetsModalVisible, setPresetsModalVisible] = useState(false);
   const [thinkingMode, setThinkingMode] = useState<'thinking' | 'creating_image' | 'analyzing' | 'editing_image'>('thinking');
   const [showCompletionStatus, setShowCompletionStatus] = useState(false);
+  // Image-from-images-page overlay
+  const [imageAnalyzingOverlay, setImageAnalyzingOverlay] = useState(false);
+  const [savedImageUrls, setSavedImageUrls] = useState<Set<string>>(new Set());
+  const [savingImageId, setSavingImageId] = useState<string | null>(null);
   const [isOffline] = useState(false);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
@@ -671,6 +676,45 @@ export default function HomeScreen() {
   const [filteredMentionMembers, setFilteredMentionMembers] = useState<GroupMember[]>([]);
   const [userProfilePhoto, setUserProfilePhoto] = useState<string | null>(null);
   const pushTokenRef = useRef<string | null>(null);
+
+  // ── Handle incoming image from images page ──
+  useEffect(() => {
+    if (params.fromImages === '1' && params.imageBase64) {
+      setImageAnalyzingOverlay(true);
+      const base64 = params.imageBase64;
+      const promptText = params.imagePrompt || 'Analyze and describe this image in detail. Tell me everything you see.';
+      (async () => {
+        try {
+          let convId = currentConversation?.id;
+          if (!convId) { convId = await createConversation(); }
+          if (!convId) return;
+          await sendMessage(promptText, undefined, base64, false, currentAIModel);
+        } catch (e) {}
+        finally { setImageAnalyzingOverlay(false); }
+      })();
+    }
+  }, [params.fromImages]);
+
+  // ── Save AI-generated image to My Images gallery ──
+  const handleSaveToMyImages = useCallback(async (imageUrl: string, messageId: string) => {
+    if (!user?.id || savingImageId) return;
+    setSavingImageId(messageId);
+    try {
+      await supabase.from('media_files').insert({
+        user_id: user.id,
+        file_type: 'image',
+        file_url: imageUrl,
+        file_name: `ai-image-${Date.now()}.jpg`,
+        file_size: 0,
+      });
+      setSavedImageUrls(prev => new Set([...prev, imageUrl]));
+      showAlert('Saved!', 'Image saved to My Images gallery.');
+    } catch (e: any) {
+      showAlert('Error', 'Could not save image.');
+    } finally {
+      setSavingImageId(null);
+    }
+  }, [user?.id, supabase, showAlert, savingImageId]);
 
   // Load persisted draft on mount
   useEffect(() => {
@@ -1493,6 +1537,13 @@ export default function HomeScreen() {
   const renderMessage = useCallback(({ item }: { item: any }) => {
     const isStreaming = streamingMessageId === item.id;
     const mathData = item.role === 'assistant' ? detectMathExpression(item.content) : null;
+    // Detect if the AI message contains an image URL
+    const imageUrlMatch = item.role === 'assistant'
+      ? (item.content || '').match(/https?:\/\/[^\s"')]+\.(?:jpg|jpeg|png|webp|gif)/i)
+      : null;
+    const detectedImageUrl: string | null = imageUrlMatch ? imageUrlMatch[0] : (item.imageUrl || null);
+    const alreadySaved = detectedImageUrl ? savedImageUrls.has(detectedImageUrl) : false;
+    const isSavingThis = savingImageId === item.id;
     return (
       <View>
         <MessageItem
@@ -1513,9 +1564,40 @@ export default function HomeScreen() {
             onOpen={() => { setCalcExpression(mathData.expression); setCalcResult(mathData.result); setCalcVisible(true); }}
           />
         ) : null}
+        {/* Save to My Images button — shown on AI messages with image URLs */}
+        {item.role === 'assistant' && detectedImageUrl && user?.id ? (
+          <View style={{ paddingHorizontal: 16, paddingBottom: 8 }}>
+            <TouchableOpacity
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 6,
+                alignSelf: 'flex-start',
+                backgroundColor: alreadySaved ? 'rgba(48,209,88,0.12)' : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'),
+                borderRadius: 20,
+                paddingHorizontal: 14,
+                paddingVertical: 8,
+                borderWidth: 1,
+                borderColor: alreadySaved ? 'rgba(48,209,88,0.35)' : (isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)'),
+              }}
+              onPress={() => !alreadySaved && handleSaveToMyImages(detectedImageUrl, item.id)}
+              disabled={alreadySaved || isSavingThis}
+              activeOpacity={0.75}
+            >
+              {isSavingThis ? (
+                <ActivityIndicator size="small" color="#30D158" />
+              ) : (
+                <Ionicons name={alreadySaved ? 'checkmark-circle' : 'image-outline'} size={15} color={alreadySaved ? '#30D158' : colors.textSecondary} />
+              )}
+              <Text style={{ fontSize: 13, fontWeight: '600', color: alreadySaved ? '#30D158' : colors.textSecondary }}>
+                {alreadySaved ? 'Saved to My Images' : 'Save to My Images'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
       </View>
     );
-  }, [streamingMessageId, handleCancelGeneration, handleEditMessage, handleCopyMessage, isOffline, isAtBottom]);
+  }, [streamingMessageId, handleCancelGeneration, handleEditMessage, handleCopyMessage, isOffline, isAtBottom, savedImageUrls, savingImageId, handleSaveToMyImages, user?.id, isDark, colors]);
 
   const renderMediaPreview = useCallback(() => {
     if (selectedMedia.length === 0) return null;
@@ -2376,6 +2458,18 @@ export default function HomeScreen() {
                 </View>
               </View>
             </Modal>
+
+            {/* Image analyzing overlay — shown when navigating from images page */}
+            {imageAnalyzingOverlay ? (
+              <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.78)', zIndex: 9998, alignItems: 'center', justifyContent: 'center' }}>
+                <BlurView intensity={70} tint="dark" style={StyleSheet.absoluteFill} />
+                <View style={{ alignItems: 'center', gap: 20 }}>
+                  <ActivityIndicator size="large" color="#FF6B35" />
+                  <Text style={{ color: '#FFF', fontSize: 19, fontWeight: '700', textAlign: 'center' }}>AI is analyzing your image...</Text>
+                  <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, textAlign: 'center' }}>This may take a moment</Text>
+                </View>
+              </View>
+            ) : null}
 
             {showBlurOverlay ? (
               <Animated.View style={[styles.blurOverlayContainer, { opacity: fadeAnim }]}>
