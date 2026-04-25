@@ -1311,3 +1311,4 @@ const s = StyleSheet.create({
   payBtnText: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
   payBtnDisabled: { opacity: 0.5 },
 });
+please add a promo/coupon code input field in checkout that validates the code via the create-checkout-session edge function and shows a discounted price before the user pays and in billing add email auto set but user can edit and username auto set no editable real code promo and when i click pay its must call edg function stripe checkout and pay in the app with success never go outside in web only in the app in the checkout page only.
