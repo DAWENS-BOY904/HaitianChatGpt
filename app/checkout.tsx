@@ -684,7 +684,7 @@ function CardForm({
       {/* Stripe CardField — handles number / expiry / CVV in a single native component */}
       {/* No card icon shown here when cardType is already detected (shown in badge above) */}
       {Platform.OS !== 'web' && CardField ? (
-        <View style={cfS.stripeFieldWrap}>
+        <View style={[cfS.stripeFieldWrap, { backgroundColor: theme.dark ? 'rgba(44,44,46,0.4)' : 'rgba(242,242,247,0.8)', borderRadius: 12, marginHorizontal: 10, marginBottom: 6 }]}>
           {!cardType && (
             <Ionicons name="card-outline" size={16} color={theme.textSec} style={cfS.stripeIcon} />
           )}
@@ -696,13 +696,13 @@ function CardForm({
               cvc: 'CVV',
             }}
             cardStyle={{
-              backgroundColor: 'transparent',
+              backgroundColor: theme.dark ? '#2C2C2E' : '#F2F2F7',
               textColor: theme.dark ? '#FFFFFF' : '#000000',
-              placeholderColor: theme.placeholderText,
+              placeholderColor: theme.dark ? 'rgba(200,200,200,0.5)' : 'rgba(80,80,80,0.5)',
               borderColor: 'transparent',
               borderWidth: 0,
-              borderRadius: 0,
-              fontSize: 15,
+              borderRadius: 10,
+              fontSize: 16,
             }}
             style={[cfS.cardField, !cardType && { paddingLeft: 0 }]}
             onCardChange={(details: any) => onCardChange(details)}
@@ -752,35 +752,35 @@ const cfS = StyleSheet.create({
 // ─────────────────────────────────────────────────────────
 // Apple Pay Panel
 // ─────────────────────────────────────────────────────────
-function ApplePayPanel({ onPress, loading, amount }: { onPress: () => void; loading: boolean; amount: string }) {
+function ApplePayPanel({ onPress, loading, amount, theme }: { onPress: () => void; loading: boolean; amount: string; theme: ThemeType }) {
   return (
-    <GlassCard style={{ marginBottom: 20, padding: 18 }} intensity={40} borderColor="rgba(255,255,255,0.15)">
+    <BlurView intensity={theme.dark ? 45 : 60} tint={theme.blurTint} style={[gcS.card, { borderColor: theme.dark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)', marginBottom: 20, padding: 18, overflow: 'hidden' }]}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 14 }}>
-        <View style={apS.iconWrap}>
-          <Ionicons name="logo-apple" size={24} color="#FFF" />
+        <View style={[apS.iconWrap, { backgroundColor: theme.dark ? '#333' : '#E5E5EA' }]}>
+          <Ionicons name="logo-apple" size={24} color={theme.dark ? '#FFF' : '#000'} />
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={apS.title}>Apple Pay</Text>
-          <Text style={apS.sub}>Touch ID or Face ID — no card entry needed</Text>
+          <Text style={[apS.title, { color: theme.text }]}>Apple Pay</Text>
+          <Text style={[apS.sub, { color: theme.textSec }]}>Touch ID or Face ID — no card entry needed</Text>
         </View>
       </View>
       <TouchableOpacity
-        style={[apS.btn, loading && { opacity: 0.6 }]}
+        style={[apS.btn, { backgroundColor: theme.dark ? '#FFFFFF' : '#000000' }, loading && { opacity: 0.6 }]}
         onPress={onPress}
         disabled={loading}
         activeOpacity={0.85}
       >
         {loading ? (
-          <ActivityIndicator color="#000" />
+          <ActivityIndicator color={theme.dark ? '#000' : '#FFF'} />
         ) : (
           <View style={apS.btnRow}>
-            <Ionicons name="logo-apple" size={20} color="#000" />
-            <Text style={apS.btnText}>Pay with Apple Pay — {amount}</Text>
+            <Ionicons name="logo-apple" size={20} color={theme.dark ? '#000' : '#FFF'} />
+            <Text style={[apS.btnText, { color: theme.dark ? '#000' : '#FFF' }]}>Pay with Apple Pay — {amount}</Text>
           </View>
         )}
       </TouchableOpacity>
-      <Text style={apS.note}>Payment is authorized via Face ID / Touch ID on your device.</Text>
-    </GlassCard>
+      <Text style={[apS.note, { color: theme.textMuted }]}>Payment is authorized via Face ID / Touch ID on your device.</Text>
+    </BlurView>
   );
 }
 
@@ -797,16 +797,16 @@ const apS = StyleSheet.create({
 // ─────────────────────────────────────────────────────────
 // Google Pay Panel
 // ─────────────────────────────────────────────────────────
-function GooglePayPanel({ onPress, loading, amount }: { onPress: () => void; loading: boolean; amount: string }) {
+function GooglePayPanel({ onPress, loading, amount, theme }: { onPress: () => void; loading: boolean; amount: string; theme: ThemeType }) {
   return (
-    <GlassCard style={{ marginBottom: 20, padding: 18 }} intensity={40} borderColor="rgba(66,133,244,0.25)">
+    <BlurView intensity={theme.dark ? 45 : 60} tint={theme.blurTint} style={[gcS.card, { borderColor: 'rgba(66,133,244,0.25)', marginBottom: 20, padding: 18, overflow: 'hidden' }]}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 14 }}>
-        <View style={gpS.iconWrap}>
-          <Ionicons name="logo-google" size={22} color={T.google} />
+        <View style={[gpS.iconWrap, { backgroundColor: theme.dark ? 'rgba(66,133,244,0.15)' : 'rgba(66,133,244,0.1)' }]}>
+          <Ionicons name="logo-google" size={22} color={theme.google} />
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={gpS.title}>Google Pay</Text>
-          <Text style={gpS.sub}>Quick and secure — no card entry needed</Text>
+          <Text style={[gpS.title, { color: theme.text }]}>Google Pay</Text>
+          <Text style={[gpS.sub, { color: theme.textSec }]}>Quick and secure — no card entry needed</Text>
         </View>
       </View>
       <TouchableOpacity
@@ -824,8 +824,8 @@ function GooglePayPanel({ onPress, loading, amount }: { onPress: () => void; loa
           </View>
         )}
       </TouchableOpacity>
-      <Text style={gpS.note}>Authorized via your Google account on this device.</Text>
-    </GlassCard>
+      <Text style={[gpS.note, { color: theme.textMuted }]}>Authorized via your Google account on this device.</Text>
+    </BlurView>
   );
 }
 
@@ -1430,6 +1430,7 @@ function CheckoutInner() {
               onPress={handleApplePay}
               loading={applePayLoading}
               amount={displayFinalPrice || displayBasePrice}
+              theme={T}
             />
           )}
 
@@ -1438,6 +1439,7 @@ function CheckoutInner() {
               onPress={handleGooglePay}
               loading={googlePayLoading}
               amount={displayFinalPrice || displayBasePrice}
+              theme={T}
             />
           )}
 
@@ -1644,4 +1646,3 @@ const s = StyleSheet.create({
   payBtnText: { fontSize: 15, fontWeight: '700', color: '#FFFFFF' },
   payBtnDisabled: { opacity: 0.5 },
 });
-fix kote poum mete card number cvv expiry an mwen paka we sam mete yo li paret tou noir fix it and any button ni button pay and pay by appple must be in blurr mode white/dark mode system dwe la.
