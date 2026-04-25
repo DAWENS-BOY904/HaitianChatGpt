@@ -4,7 +4,7 @@ import { corsHeaders } from '../_shared/cors.ts';
 // ── Real Stripe price IDs (monthly recurring subscriptions) ──
 const PRICE_MAP: Record<string, string> = {
   go:   'price_1SjmtpE0VkO7z1Vn1lpvP0PC', // $8/month – Go plan
-  plus: 'price_1ShK60E0VkO7z1VnHAKICksq', // $19.99/month – Plus plan
+  plus: 'price_1TPUrzE0VkO7z1Vnlgj45978', // $19.99/month – Plus plan
 };
 
 const logStep = (step: string, details?: any) => {
