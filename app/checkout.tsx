@@ -1333,3 +1333,4 @@ const s = StyleSheet.create({
   webFallbackTitle: { fontSize: 20, fontWeight: '700', textAlign: 'center' },
   webFallbackSub: { fontSize: 15, textAlign: 'center', lineHeight: 22 },
 });
+please read my message and make change redesign in blur effect Redesign the checkout page to match a premium dark glass card layout with real SVG-style logos for Visa, Mastercard, Amex, and Discover payment brands, improved typography, better spacing, and polished MonCash/Apple Pay/Google Pay buttons — keeping all existing payment logic intact :https://files.catbox.moe/0fxp2x.png.
