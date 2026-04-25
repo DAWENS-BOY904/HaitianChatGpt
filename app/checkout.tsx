@@ -732,3 +732,4 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
 });
+redesign the checkoud page to enter phone number and email auto set but they can edit it after and when in checkout select you card and enter name cvv expiry number and for apple call strip apple pay pruchase and google pay in the app never in link web and for moncash call edg moncash all in app not outside web.
