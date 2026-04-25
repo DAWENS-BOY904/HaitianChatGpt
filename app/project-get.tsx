@@ -1021,4 +1021,4 @@ export default function ProjectGetScreen() {
       </Modal>
     </View>
   );
-connect this with real ai edg coding function and improve better coding real time.
+}
