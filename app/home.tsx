@@ -2514,5 +2514,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-please when you send the ai a pphoto remove bvackground color la kitel simple backgroyuund lan dwe mache only pou tex but le se photo remove it and fix photo display ai li paret an black color and background user message dwer mache with accent color in settings and lew add yon accent color li dwe rete real pa janm soti siw pa changel.
 
