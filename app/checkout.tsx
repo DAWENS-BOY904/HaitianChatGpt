@@ -907,51 +907,72 @@ const cdStyles = StyleSheet.create({
 });
 
 // ─────────────────────────────────────────────────────────
-// Summary Card
+// Plan Summary Card (subscription-aware)
 // ─────────────────────────────────────────────────────────
-function SummaryCard({
-  packageName,
-  coins,
-  total,
+function PlanSummaryCard({
+  planName,
+  price,
+  priceId,
   T,
 }: {
-  packageName: string;
-  coins: number;
-  total: number;
+  planName: string;
+  price: string;
+  priceId: string;
   T: ReturnType<typeof useT>;
 }) {
+  const isPlus = planName.toLowerCase().includes('plus');
+  const accentColor = isPlus ? '#6B5CE7' : '#30D158';
+  const features = isPlus
+    ? ['Advanced AI models', 'Unlimited smart messages', '20 image/file uploads', 'Agents & deep research', 'Early access to features']
+    : ['More daily messages', '10 image/file uploads', 'Group chat creation', 'Extended memory'];
+
   return (
-    <View style={[scStyles.container, { backgroundColor: T.surface, borderColor: T.surfaceBorder }]}>
-      <View style={scStyles.row}>
-        <Text style={[scStyles.label, { color: T.textSec }]}>Package</Text>
-        <Text style={[scStyles.value, { color: T.text }]}>{coins} Coins</Text>
+    <View style={[psStyles.container, { backgroundColor: T.surface, borderColor: T.surfaceBorder }]}>
+      <View style={psStyles.header}>
+        <View style={[psStyles.badge, { backgroundColor: accentColor + '22', borderColor: accentColor + '55' }]}>
+          <Text style={[psStyles.badgeText, { color: accentColor }]}>
+            {isPlus ? '✨ PLUS' : '⚡ GO'}
+          </Text>
+        </View>
+        <View style={psStyles.priceWrap}>
+          <Text style={[psStyles.price, { color: accentColor }]}>{price}</Text>
+          <Text style={[psStyles.period, { color: T.textSec }]}>/month</Text>
+        </View>
       </View>
-      <View style={[scStyles.divider, { backgroundColor: T.divider }]} />
-      <View style={scStyles.row}>
-        <Text style={[scStyles.label, { color: T.textSec }]}>Total</Text>
-        <Text style={[scStyles.total, { color: T.accent }]}>${total.toFixed(2)}</Text>
+      <View style={[psStyles.divider, { backgroundColor: T.divider }]} />
+      <Text style={[psStyles.featuresTitle, { color: T.textSec }]}>Includes:</Text>
+      {features.map((f) => (
+        <View key={f} style={psStyles.featureRow}>
+          <Ionicons name="checkmark-circle" size={15} color={accentColor} />
+          <Text style={[psStyles.featureText, { color: T.text }]}>{f}</Text>
+        </View>
+      ))}
+      <View style={[psStyles.totalRow, { borderTopColor: T.divider }]}>
+        <Text style={[psStyles.totalLabel, { color: T.textSec }]}>Billed monthly · auto-cancels when expired</Text>
+        <Text style={[psStyles.totalAmount, { color: accentColor }]}>{price}/mo</Text>
       </View>
     </View>
   );
 }
 
-const scStyles = StyleSheet.create({
-  container: {
-    borderRadius: 16,
-    padding: 18,
-    borderWidth: 1,
-    marginBottom: 20,
+const psStyles = StyleSheet.create({
+  container: { borderRadius: 18, padding: 18, borderWidth: 1, marginBottom: 20 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  badge: { borderRadius: 20, paddingHorizontal: 12, paddingVertical: 5, borderWidth: 1 },
+  badgeText: { fontSize: 12, fontWeight: '800', letterSpacing: 0.5 },
+  priceWrap: { flexDirection: 'row', alignItems: 'baseline', gap: 2 },
+  price: { fontSize: 26, fontWeight: '800' },
+  period: { fontSize: 13, fontWeight: '500' },
+  divider: { height: StyleSheet.hairlineWidth, marginBottom: 12 },
+  featuresTitle: { fontSize: 12, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 },
+  featureRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 7 },
+  featureText: { fontSize: 14 },
+  totalRow: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    marginTop: 14, paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth,
   },
-  row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 6,
-  },
-  divider: { height: StyleSheet.hairlineWidth, marginVertical: 8 },
-  label: { fontSize: 15, fontWeight: '500' },
-  value: { fontSize: 15, fontWeight: '600' },
-  total: { fontSize: 20, fontWeight: '800' },
+  totalLabel: { fontSize: 11, flex: 1 },
+  totalAmount: { fontSize: 16, fontWeight: '700' },
 });
 
 // ─────────────────────────────────────────────────────────
@@ -963,38 +984,121 @@ export default function CheckoutScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const T = useT();
+  const supabase = getSupabaseClient();
+
+  // ── Read plan params passed from subscription.tsx ──
+  const params = useLocalSearchParams<{ plan?: string; priceId?: string; price?: string; name?: string }>();
+  const planParam = (params.plan as string) || 'plus';
+  const priceIdParam = (params.priceId as string) || 'price_1TPUrzE0VkO7z1Vnlgj45978';
+  const priceParam = (params.price as string) || '19.99';
+  const planDisplayName = (params.name as string) || 'Dawinix Plus';
 
   const [method, setMethod] = useState<PayMethod>('card');
   const [country, setCountry] = useState<Country>(() => guessCountryFromLocale());
   const [showCountryPicker, setShowCountryPicker] = useState(false);
 
-  const [email, setEmail] = useState(user?.email || '');
   const [phoneNational, setPhoneNational] = useState('');
   const [cardholderName, setCardholderName] = useState('');
   const [cardNumber, setCardNumber] = useState('');
   const [expiry, setExpiry] = useState('');
-  const [cvv, setCvv] = useState('');
+  const [cvv, setCvv] = useState('');  
   const [saveCard, setSaveCard] = useState(false);
   const [autoRenew, setAutoRenew] = useState(true);
   const [loading, setLoading] = useState(false);
 
-  // Package info (can be passed via params)
-  const coins = 0;
-  const total = 0.0;
+  const displayPrice = priceParam ? `$${priceParam}` : '$19.99';
+
+  // ── Open Stripe hosted checkout (handles card, Apple Pay, Google Pay) ──
+  const handleStripeCheckout = useCallback(async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) throw new Error('Not authenticated');
+
+    const { data, error } = await supabase.functions.invoke('create-checkout-session', {
+      body: {
+        plan: planParam,
+        priceId: priceIdParam,
+        autoRenew,
+      },
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+
+    if (error) {
+      let errMsg = error.message;
+      if (error instanceof FunctionsHttpError) {
+        try { errMsg = await error.context?.text() || errMsg; } catch (_e) {}
+      }
+      throw new Error(errMsg);
+    }
+
+    if (!data?.url) throw new Error('No checkout URL from Stripe');
+
+    // Open Stripe hosted page (handles card, Apple Pay, Google Pay natively)
+    try {
+      await WebBrowser.openBrowserAsync(data.url, {
+        presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN,
+        enableBarCollapsing: true,
+      });
+    } catch (_e) {
+      const { Linking } = require('react-native');
+      await Linking.openURL(data.url);
+    }
+
+    // After browser closes, update DB and reflect subscription
+    await syncSubscriptionAfterPayment();
+  }, [supabase, planParam, priceIdParam, autoRenew]);
+
+  // ── Sync subscription state after payment ──
+  const syncSubscriptionAfterPayment = useCallback(async () => {
+    if (!user?.id) return;
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) return;
+
+      const { data } = await supabase.functions.invoke('check-subscription', {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+
+      if (data?.subscribed) {
+        // Compute expiry: Stripe subscription_end or fallback to 1 month
+        const expiresAt = data.subscription_end
+          ? new Date(data.subscription_end).toISOString()
+          : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
+        await supabase.from('user_profiles').update({
+          subscription_tier: planParam,
+          subscription_expires_at: expiresAt,
+        }).eq('id', user.id);
+
+        // Schedule local auto-cancel check (server webhook handles the real cancel)
+        showAlert(
+          'Subscription Active!',
+          `Your ${planDisplayName} plan is active. It will auto-cancel after the billing period ends.`
+        );
+        router.replace('/subscription-success');
+      } else {
+        showAlert('Check Your Email', 'Complete payment in the browser. Your plan will activate instantly after payment.');
+      }
+    } catch (e) {
+      console.log('[checkout] sync error:', e);
+    }
+  }, [user, supabase, planParam, planDisplayName, showAlert, router]);
 
   const handlePay = async () => {
+    if (loading) return;
     setLoading(true);
-    // Payment logic here
-    setTimeout(() => {
+    try {
+      // All payment methods route through Stripe hosted checkout
+      // which natively supports card, Apple Pay, Google Pay
+      await handleStripeCheckout();
+    } catch (err: any) {
+      showAlert('Payment Failed', err?.message || 'Something went wrong. Please try again.');
+    } finally {
       setLoading(false);
-      showAlert('Success', 'Payment processed!');
-    }, 2000);
+    }
   };
 
   const isFormValid = () => {
-    if (method === 'card') {
-      return cardholderName.length > 0 && cardNumber.length >= 19 && expiry.length === 5 && cvv.length >= 3;
-    }
+    // Stripe hosted checkout handles all validation
     return true;
   };
 
@@ -1015,7 +1119,7 @@ export default function CheckoutScreen() {
         <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
           <Ionicons name="arrow-back" size={24} color={T.text} />
         </TouchableOpacity>
-        <Text style={[s.headerTitle, { color: T.text }]}>Checkout</Text>
+        <Text style={[s.headerTitle, { color: T.text }]}>{planDisplayName}</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -1023,19 +1127,24 @@ export default function CheckoutScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[s.scroll, { paddingBottom: insets.bottom + 120 }]}
       >
-        {/* Summary */}
-        <SummaryCard packageName="Standard" coins={coins} total={total} T={T} />
+        {/* Plan Summary */}
+        <PlanSummaryCard
+          planName={planDisplayName}
+          price={displayPrice}
+          priceId={priceIdParam}
+          T={T}
+        />
 
         {/* Payment Method Selector */}
         <PaymentMethodSelector
           selected={method}
           onSelect={setMethod}
           T={T}
-          showPayPal={true}
-          showMoncash={true}
+          showPayPal={false}
+          showMoncash={country.code === 'HT'}
         />
 
-        {/* Card Details (shown when card selected) */}
+        {/* Info panel based on selected method */}
         {method === 'card' && (
           <CardDetailsSection
             cardholderName={cardholderName}
@@ -1052,6 +1161,26 @@ export default function CheckoutScreen() {
             setAutoRenew={setAutoRenew}
             T={T}
           />
+        )}
+
+        {(method === 'apple' || method === 'google') && (
+          <View style={[s.infoPanel, { backgroundColor: T.surface, borderColor: T.surfaceBorder }]}>
+            <Ionicons name={method === 'apple' ? 'logo-apple' : 'logo-google'} size={24} color={T.text} />
+            <Text style={[s.infoPanelText, { color: T.textSec }]}>
+              {method === 'apple'
+                ? 'Tap Pay to complete via Apple Pay. Face ID or Touch ID required.'
+                : 'Tap Pay to complete via Google Pay. Your saved Google account will be used.'}
+            </Text>
+          </View>
+        )}
+
+        {method === 'moncash' && (
+          <View style={[s.infoPanel, { backgroundColor: T.surface, borderColor: T.surfaceBorder }]}>
+            <Ionicons name="phone-portrait-outline" size={24} color="#DC143C" />
+            <Text style={[s.infoPanelText, { color: T.textSec }]}>
+              MonCash payment available for Haiti users. You will be redirected to complete via MonCash.
+            </Text>
+          </View>
         )}
 
         {/* Billing Information */}
@@ -1073,6 +1202,14 @@ export default function CheckoutScreen() {
           T={T}
         />
 
+        {/* Auto-cancel notice */}
+        <View style={s.cancelNotice}>
+          <Ionicons name="information-circle-outline" size={15} color={T.textMuted} />
+          <Text style={[s.cancelNoticeText, { color: T.textMuted }]}>
+            Subscription auto-cancels when the billing period ends unless renewed. No hidden charges.
+          </Text>
+        </View>
+
         {/* Security Note */}
         <View style={s.securityRow}>
           <Ionicons name="lock-closed" size={14} color={T.textMuted} />
@@ -1088,16 +1225,23 @@ export default function CheckoutScreen() {
           style={[
             s.payBtn,
             { backgroundColor: T.accent },
-            (!isFormValid() || loading) && s.payBtnDisabled,
+            loading && s.payBtnDisabled,
           ]}
           onPress={handlePay}
-          disabled={!isFormValid() || loading}
+          disabled={loading}
           activeOpacity={0.85}
         >
           {loading ? (
             <ActivityIndicator color="#FFF" size="small" />
           ) : (
-            <Text style={s.payBtnText}>Pay ${total.toFixed(2)}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Ionicons
+                name={method === 'apple' ? 'logo-apple' : method === 'google' ? 'logo-google' : 'card-outline'}
+                size={18}
+                color="#FFF"
+              />
+              <Text style={s.payBtnText}>Pay {displayPrice}/mo</Text>
+            </View>
           )}
         </TouchableOpacity>
       </View>
@@ -1118,12 +1262,31 @@ const s = StyleSheet.create({
   scroll: { paddingHorizontal: 16, paddingTop: 12 },
   sectionTitle: { marginTop: 8, marginBottom: 12 },
   sectionTitleText: { fontSize: 17, fontWeight: '700' },
+  infoPanel: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    padding: 16,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginBottom: 16,
+  },
+  infoPanelText: { flex: 1, fontSize: 14, lineHeight: 20 },
+  cancelNotice: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    marginTop: 12,
+    marginBottom: 4,
+    paddingHorizontal: 4,
+  },
+  cancelNoticeText: { flex: 1, fontSize: 12, lineHeight: 18 },
   securityRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    marginTop: 20,
+    marginTop: 12,
     marginBottom: 10,
   },
   securityText: { fontSize: 12, fontWeight: '500' },
