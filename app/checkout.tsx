@@ -1,6 +1,6 @@
 /**
- * CHECKOUT PAGE - In-app Stripe PaymentSheet
- * Card + Apple Pay + Google Pay (Face ID) — no web redirect.
+ * CHECKOUT PAGE - In-app Stripe PaymentSheet + MonCash (Haiti)
+ * Card + Apple Pay + Google Pay + MonCash
  * After success → check-subscription → update tier → /subscription-success
  */
 
@@ -20,6 +20,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSubscription } from '../hooks/useSubscription';
 import { FunctionsHttpError } from '@supabase/supabase-js';
+import * as WebBrowser from 'expo-web-browser';
 
 // ---------- stripe-react-native (native only) ----------
 let StripeProvider: React.ComponentType<any> | null = null;
@@ -43,6 +44,15 @@ const STRIPE_PUBLISHABLE_KEY =
 // ── Stripe price for Plus plan ──
 const PLUS_PRICE_ID = 'price_1TPUrzE0VkO7z1Vnlgj45978'; // $19.99/month
 
+// ── MonCash config ──
+const MONCASH_SANDBOX_GATEWAY = 'https://sandbox.moncashbutton.digicelgroup.com/Moncash-middleware/Payment/Redirect';
+const isHaitiUser = (user: any) => {
+  if (!user) return false;
+  const country = user.user_metadata?.country || user.user_metadata?.address?.country;
+  const phone = user.phone || user.user_metadata?.phone || '';
+  return country === 'HT' || country === 'Haiti' || phone.startsWith('+509') || phone.startsWith('509');
+};
+
 // ---------- Inner component (uses useStripe hook) ----------
 function CheckoutInner() {
   const { user } = useAuth();
@@ -60,6 +70,7 @@ function CheckoutInner() {
   const [loading, setLoading] = useState(false);
   const [ready, setReady] = useState(false);
   const [paymentSheetReady, setPaymentSheetReady] = useState(false);
+  const [selectedMethod, setSelectedMethod] = useState<'stripe' | 'moncash'>('stripe');
 
   // Safely call useStripe — only if available
   const stripeHook = useStripe ? useStripe() : null;
@@ -67,8 +78,10 @@ function CheckoutInner() {
   const presentPaymentSheet = stripeHook?.presentPaymentSheet;
 
   const planLabel = plan === 'plus' ? 'Dawinix Plus' : 'Dawinix Go';
-  const planPrice = plan === 'plus' ? '$19.99' : '$8.00';
+  const planPriceUSD = plan === 'plus' ? '$19.99' : '$8.00';
+  const planPriceHTG = plan === 'plus' ? '2,650 HTG' : '1,060 HTG'; // Approximate conversion
   const planColor = plan === 'plus' ? '#6B5CE7' : '#34C759';
+  const showMonCash = isHaitiUser(user);
 
   // ── Initialize Stripe PaymentSheet ──
   const initSheet = useCallback(async () => {
@@ -99,7 +112,6 @@ function CheckoutInner() {
 
       // Fallback: if edge returns a hosted URL instead of clientSecret, open browser
       if (!clientSecret && url) {
-        const WebBrowser = require('expo-web-browser');
         await WebBrowser.openBrowserAsync(url, {
           presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN,
         });
@@ -145,10 +157,84 @@ function CheckoutInner() {
     initSheet();
   }, []);
 
+  // ── MonCash Payment Flow ──
+  const handleMonCashPay = async () => {
+    if (!user) return;
+    setLoading(true);
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      const token = session?.session?.access_token;
+      if (!token) throw new Error('Not authenticated');
+
+      // 1. Call edge function to create MonCash payment token
+      const { data, error } = await supabase.functions.invoke('create-checkout-session', {
+        body: { 
+          plan, 
+          priceId, 
+          mode: 'moncash',
+          amount: plan === 'plus' ? 2650 : 1060, // HTG amount
+          orderId: `DWNX-${user.id}-${Date.now()}`
+        },
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (error) throw new Error(error.message);
+      if (!data?.paymentUrl) throw new Error('No MonCash payment URL returned');
+
+      // 2. Open MonCash hosted gateway
+      const result = await WebBrowser.openBrowserAsync(data.paymentUrl, {
+        presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN,
+        controlsColor: '#6B5CE7',
+      });
+
+      // 3. Handle return from gateway
+      if (result.type === 'dismiss') {
+        // Poll for payment verification
+        await verifyMonCashPayment(data.orderId);
+      }
+    } catch (err: any) {
+      showAlert('MonCash Error', err?.message || 'Could not process MonCash payment.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ── Verify MonCash Payment ──
+  const verifyMonCashPayment = async (orderId: string) => {
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      const token = session?.session?.access_token;
+      if (!token) return;
+
+      // Poll edge function for payment status
+      const { data, error } = await supabase.functions.invoke('verify-moncash-payment', {
+        body: { orderId },
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (error) throw new Error(error.message);
+
+      if (data?.status === 'success') {
+        // Payment succeeded — sync subscription tier
+        await supabase.from('user_profiles').update({
+          subscription_tier: plan,
+          subscription_expires_at: data?.subscription_end || null,
+          billing_info: { ...data?.billingInfo, provider: 'moncash' }
+        }).eq('id', user?.id);
+
+        await refreshSubscription?.();
+        router.replace('/subscription-success');
+      } else {
+        showAlert('Payment Pending', 'Your MonCash payment is being processed. We will update your account shortly.');
+      }
+    } catch (err: any) {
+      showAlert('Verification Error', err?.message || 'Could not verify payment status.');
+    }
+  };
+
   // ── Present PaymentSheet and handle result ──
-  const handlePay = async () => {
+  const handleStripePay = async () => {
     if (!presentPaymentSheet || !paymentSheetReady) {
-      // Stripe not available (web/simulator) — fallback
       showAlert('Not Available', 'In-app payments are not available here. Please use the "Buy on Web" option from the subscription screen.');
       return;
     }
@@ -158,7 +244,6 @@ function CheckoutInner() {
 
       if (error) {
         if (error.code === 'Canceled') {
-          // User dismissed — silent
           return;
         }
         throw new Error(error.message);
@@ -169,12 +254,10 @@ function CheckoutInner() {
       const token = sessionData?.session?.access_token;
 
       if (token) {
-        // Call check-subscription to sync DB
         const { data: subData } = await supabase.functions.invoke('check-subscription', {
           headers: { Authorization: `Bearer ${token}` },
         });
 
-        // Also direct-update user_profiles for immediate effect
         if (user?.id) {
           await supabase.from('user_profiles').update({
             subscription_tier: subData?.plan || plan,
@@ -183,15 +266,20 @@ function CheckoutInner() {
         }
       }
 
-      // Refresh global context
       await refreshSubscription?.();
-
-      // Navigate to success screen
       router.replace('/subscription-success');
     } catch (err: any) {
       showAlert('Payment Failed', err?.message || 'Something went wrong. Please try again.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handlePay = () => {
+    if (selectedMethod === 'moncash') {
+      handleMonCashPay();
+    } else {
+      handleStripePay();
     }
   };
 
@@ -237,7 +325,7 @@ function CheckoutInner() {
           </View>
           <Text style={styles.planName}>{planLabel}</Text>
           <Text style={[styles.planPrice, { color: planColor }]}>
-            {planPrice}
+            {showMonCash && selectedMethod === 'moncash' ? planPriceHTG : planPriceUSD}
             <Text style={styles.planPriceSuffix}>/month</Text>
           </Text>
           {plan === 'plus' ? (
@@ -259,29 +347,72 @@ function CheckoutInner() {
           ))}
         </View>
 
-        {/* Payment method indicator */}
-        <View style={styles.paymentInfo}>
-          <View style={styles.paymentInfoRow}>
-            <Ionicons name="card-outline" size={18} color="rgba(255,255,255,0.7)" />
-            <Text style={styles.paymentInfoText}>Card</Text>
-          </View>
-          {Platform.OS === 'ios' ? (
-            <View style={styles.paymentInfoRow}>
-              <Ionicons name="logo-apple" size={18} color="rgba(255,255,255,0.7)" />
-              <Text style={styles.paymentInfoText}>Apple Pay</Text>
+        {/* Payment Method Selector */}
+        <View style={styles.paymentSelector}>
+          <Text style={styles.paymentSelectorTitle}>Payment Method</Text>
+          
+          {/* Stripe Option */}
+          <TouchableOpacity
+            style={[
+              styles.paymentOption,
+              selectedMethod === 'stripe' && styles.paymentOptionActive,
+              { borderColor: selectedMethod === 'stripe' ? planColor : 'rgba(255,255,255,0.1)' }
+            ]}
+            onPress={() => setSelectedMethod('stripe')}
+          >
+            <View style={styles.paymentOptionLeft}>
+              <Ionicons 
+                name="card-outline" 
+                size={22} 
+                color={selectedMethod === 'stripe' ? planColor : 'rgba(255,255,255,0.6)'} 
+              />
+              <View style={styles.paymentOptionText}>
+                <Text style={[styles.paymentOptionLabel, selectedMethod === 'stripe' && { color: '#FFF' }]}>
+                  Card / Apple Pay / Google Pay
+                </Text>
+                <Text style={styles.paymentOptionSub}>
+                  Secure payment via Stripe
+                </Text>
+              </View>
             </View>
-          ) : null}
-          {Platform.OS === 'android' ? (
-            <View style={styles.paymentInfoRow}>
-              <Ionicons name="logo-google" size={18} color="rgba(255,255,255,0.7)" />
-              <Text style={styles.paymentInfoText}>Google Pay</Text>
-            </View>
-          ) : null}
+            {selectedMethod === 'stripe' && (
+              <Ionicons name="checkmark-circle" size={22} color={planColor} />
+            )}
+          </TouchableOpacity>
+
+          {/* MonCash Option (Haiti only) */}
+          {showMonCash && (
+            <TouchableOpacity
+              style={[
+                styles.paymentOption,
+                selectedMethod === 'moncash' && styles.paymentOptionActive,
+                { borderColor: selectedMethod === 'moncash' ? '#DC143C' : 'rgba(255,255,255,0.1)' }
+              ]}
+              onPress={() => setSelectedMethod('moncash')}
+            >
+              <View style={styles.paymentOptionLeft}>
+                <View style={[styles.moncashIcon, { backgroundColor: '#DC143C' }]}>
+                  <Text style={styles.moncashIconText}>M</Text>
+                </View>
+                <View style={styles.paymentOptionText}>
+                  <Text style={[styles.paymentOptionLabel, selectedMethod === 'moncash' && { color: '#FFF' }]}>
+                    MonCash
+                  </Text>
+                  <Text style={styles.paymentOptionSub}>
+                    Pay with Digicel MonCash (Haiti)
+                  </Text>
+                </View>
+              </View>
+              {selectedMethod === 'moncash' && (
+                <Ionicons name="checkmark-circle" size={22} color="#DC143C" />
+              )}
+            </TouchableOpacity>
+          )}
         </View>
 
         <Text style={styles.secureNote}>
           <Ionicons name="lock-closed" size={12} color="rgba(255,255,255,0.4)" />
-          {'  '}Payments are processed securely by Stripe.{'\n'}
+          {'  '}Payments are processed securely by {selectedMethod === 'moncash' ? 'Digicel MonCash' : 'Stripe'}.{'\n'}
           Cancel anytime from Settings → Subscription.
         </Text>
       </ScrollView>
@@ -289,29 +420,46 @@ function CheckoutInner() {
       {/* Bottom CTA */}
       <View style={[styles.bottomCTA, { paddingBottom: insets.bottom + 20 }]}>
         {loading ? (
-          <View style={[styles.payBtn, { backgroundColor: planColor, opacity: 0.7 }]}>
+          <View style={[styles.payBtn, { backgroundColor: selectedMethod === 'moncash' ? '#DC143C' : planColor, opacity: 0.7 }]}>
             <ActivityIndicator color="#FFF" />
             <Text style={styles.payBtnText}>
-              {paymentSheetReady ? 'Processing...' : 'Setting up...'}
+              {selectedMethod === 'moncash' ? 'Processing MonCash...' : (paymentSheetReady ? 'Processing...' : 'Setting up...')}
             </Text>
           </View>
         ) : (
           <TouchableOpacity
-            style={[styles.payBtn, { backgroundColor: planColor }, !paymentSheetReady && styles.btnDisabled]}
+            style={[
+              styles.payBtn, 
+              { backgroundColor: selectedMethod === 'moncash' ? '#DC143C' : planColor },
+              !paymentSheetReady && selectedMethod === 'stripe' && styles.btnDisabled
+            ]}
             onPress={handlePay}
-            disabled={!ready}
+            disabled={!ready && selectedMethod === 'stripe'}
             activeOpacity={0.85}
           >
-            {Platform.OS === 'ios' ? (
-              <Ionicons name="logo-apple" size={20} color="#FFF" />
+            {selectedMethod === 'moncash' ? (
+              <>
+                <View style={[styles.moncashIconSmall, { backgroundColor: '#FFF' }]}>
+                  <Text style={[styles.moncashIconTextSmall, { color: '#DC143C' }]}>M</Text>
+                </View>
+                <Text style={styles.payBtnText}>
+                  Pay with MonCash · {planPriceHTG}/mo
+                </Text>
+              </>
             ) : (
-              <Ionicons name="card-outline" size={20} color="#FFF" />
+              <>
+                {Platform.OS === 'ios' ? (
+                  <Ionicons name="logo-apple" size={20} color="#FFF" />
+                ) : (
+                  <Ionicons name="card-outline" size={20} color="#FFF" />
+                )}
+                <Text style={styles.payBtnText}>
+                  {Platform.OS === 'ios'
+                    ? `Pay with Apple Pay · ${planPriceUSD}/mo`
+                    : `Pay · ${planPriceUSD}/mo`}
+                </Text>
+              </>
             )}
-            <Text style={styles.payBtnText}>
-              {Platform.OS === 'ios'
-                ? `Pay with Apple Pay · ${planPrice}/mo`
-                : `Pay · ${planPrice}/mo`}
-            </Text>
           </TouchableOpacity>
         )}
 
@@ -326,7 +474,6 @@ function CheckoutInner() {
 // ---------- Root export: wrap with StripeProvider on native ----------
 export default function CheckoutScreen() {
   if (Platform.OS === 'web' || !StripeProvider) {
-    // Web fallback — show unsupported message
     return (
       <View style={[styles.container, { alignItems: 'center', justifyContent: 'center', padding: 32 }]}>
         <Ionicons name="card-outline" size={48} color="rgba(255,255,255,0.4)" />
@@ -457,27 +604,73 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
-  // Payment info
-  paymentInfo: {
-    flexDirection: 'row',
-    gap: 20,
-    marginBottom: 16,
+  // Payment Selector
+  paymentSelector: {
+    width: '100%',
+    marginBottom: 20,
   },
-  paymentInfoRow: {
+  paymentSelectorTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.6)',
+    marginBottom: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  paymentOption: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    backgroundColor: 'rgba(255,255,255,0.07)',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(17,17,17,0.95)',
+    borderRadius: 16,
+    borderWidth: 1.5,
+    padding: 16,
+    marginBottom: 10,
   },
-  paymentInfoText: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: 14,
+  paymentOptionActive: {
+    backgroundColor: 'rgba(255,255,255,0.05)',
+  },
+  paymentOptionLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  paymentOptionText: {
+    flex: 1,
+  },
+  paymentOptionLabel: {
+    color: '#FFF',
+    fontSize: 15,
     fontWeight: '600',
+    marginBottom: 2,
+  },
+  paymentOptionSub: {
+    color: 'rgba(255,255,255,0.45)',
+    fontSize: 13,
+  },
+  moncashIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  moncashIconText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  moncashIconSmall: {
+    width: 22,
+    height: 22,
+    borderRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  moncashIconTextSmall: {
+    fontSize: 12,
+    fontWeight: '800',
   },
 
   secureNote: {
@@ -486,6 +679,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
     paddingHorizontal: 8,
+    marginBottom: 20,
   },
 
   // Bottom CTA
