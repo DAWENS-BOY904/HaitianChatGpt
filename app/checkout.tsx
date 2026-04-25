@@ -1569,3 +1569,4 @@ const s = StyleSheet.create({
   payBtnText: { fontSize: 15, fontWeight: '700', color: '#FFFFFF' },
   payBtnDisabled: { opacity: 0.5 },
 });
+you fortget the username set and number input and fix white/dark theme in blur mode and also fix card button yo nn dark lan mwen pa we yo retire icon card lan nn input cause card type definil.
