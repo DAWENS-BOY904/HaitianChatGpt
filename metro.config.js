@@ -28,4 +28,8 @@ config.resolver.assetExts = [
 // tries to load expo-modules-core's .ts source files directly.
 config.resolver.unstable_enablePackageExports = false;
 
+// Force CJS condition names — prevents Node from picking the ESM
+// entry point for packages that define "exports" in package.json.
+config.resolver.unstable_conditionNames = ['require', 'default'];
+
 module.exports = config;
