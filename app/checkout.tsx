@@ -33,6 +33,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FunctionsHttpError } from '@supabase/supabase-js';
 import * as Localization from 'expo-localization';
+import { useColorScheme } from 'react-native';
 
 // WebView (react-native only)
 let WebView: any = null;
@@ -234,31 +235,52 @@ const PROMO_CODES: Record<string, { discount: number; label: string; couponId: s
 };
 
 // ─────────────────────────────────────────────────────────
-// THEME (always dark glass)
+// THEME — adapts to system dark/light
 // ─────────────────────────────────────────────────────────
-const T = {
-  bg: '#000000',
-  surface: '#1C1C1E',
-  surfaceBorder: 'rgba(255,255,255,0.08)',
-  text: '#FFFFFF',
-  textSec: 'rgba(255,255,255,0.55)',
-  textMuted: 'rgba(255,255,255,0.35)',
-  inputBg: 'rgba(44,44,46,0.6)',
-  inputBorder: 'rgba(255,255,255,0.12)',
-  placeholderText: 'rgba(255,255,255,0.3)',
-  accent: '#30D158',
-  accentLight: 'rgba(48,209,88,0.15)',
-  divider: 'rgba(255,255,255,0.08)',
-  error: '#FF453A',
-  success: '#30D158',
-  warning: '#FF9F0A',
-  searchBg: 'rgba(44,44,46,0.8)',
-  moncash: '#FFD700',
-  moncashLight: 'rgba(255,215,0,0.15)',
-  blurTint: 'dark' as const,
-  apple: '#FFFFFF',
-  google: '#4285F4',
+function useTheme() {
+  const scheme = useColorScheme();
+  const dark = scheme !== 'light';
+  return {
+    dark,
+    bg: dark ? '#000000' : '#F2F2F7',
+    surface: dark ? '#1C1C1E' : '#FFFFFF',
+    surfaceBorder: dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
+    text: dark ? '#FFFFFF' : '#000000',
+    textSec: dark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.5)',
+    textMuted: dark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.3)',
+    inputBg: dark ? 'rgba(44,44,46,0.6)' : 'rgba(0,0,0,0.04)',
+    inputBorder: dark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)',
+    placeholderText: dark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)',
+    accent: '#30D158',
+    accentLight: 'rgba(48,209,88,0.15)',
+    divider: dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
+    error: '#FF453A',
+    success: '#30D158',
+    warning: '#FF9F0A',
+    searchBg: dark ? 'rgba(44,44,46,0.8)' : 'rgba(0,0,0,0.06)',
+    moncash: '#FFD700',
+    moncashLight: 'rgba(255,215,0,0.15)',
+    blurTint: (dark ? 'dark' : 'light') as 'dark' | 'light',
+    apple: dark ? '#FFFFFF' : '#000000',
+    google: '#4285F4',
+    cardBtnText: dark ? '#000000' : '#FFFFFF',
+    cardBtnBg: dark ? '#FFFFFF' : '#000000',
+  };
+}
+// Fallback static T for sub-components that receive T as prop
+type ThemeType = ReturnType<typeof useTheme>;
+const T_STATIC: ThemeType = {
+  dark: true,
+  bg: '#000000', surface: '#1C1C1E', surfaceBorder: 'rgba(255,255,255,0.08)',
+  text: '#FFFFFF', textSec: 'rgba(255,255,255,0.55)', textMuted: 'rgba(255,255,255,0.35)',
+  inputBg: 'rgba(44,44,46,0.6)', inputBorder: 'rgba(255,255,255,0.12)',
+  placeholderText: 'rgba(255,255,255,0.3)', accent: '#30D158', accentLight: 'rgba(48,209,88,0.15)',
+  divider: 'rgba(255,255,255,0.08)', error: '#FF453A', success: '#30D158', warning: '#FF9F0A',
+  searchBg: 'rgba(44,44,46,0.8)', moncash: '#FFD700', moncashLight: 'rgba(255,215,0,0.15)',
+  blurTint: 'dark', apple: '#FFFFFF', google: '#4285F4', cardBtnText: '#000000', cardBtnBg: '#FFFFFF',
 };
+// Use T_STATIC as module-level constant for StyleSheet.create (styles computed at render time per component)
+const T = T_STATIC;
 
 // ─────────────────────────────────────────────────────────
 // PAYMENT METHOD TYPES
@@ -616,51 +638,56 @@ function CardForm({
   onNameChange,
   onCardChange,
   cardType,
+  T: theme,
 }: {
   cardholderName: string;
   onNameChange: (v: string) => void;
   onCardChange: (details: CardDetails) => void;
   cardType: CardType | null;
+  T: ThemeType;
 }) {
   const [nameFocused, setNameFocused] = useState(false);
 
   return (
-    <GlassCard style={{ marginBottom: 20, padding: 0, overflow: 'hidden' }} intensity={40}>
-      {/* Card type badge */}
+    <BlurView intensity={theme.dark ? 40 : 60} tint={theme.blurTint} style={[gcS.card, { borderColor: theme.surfaceBorder, marginBottom: 20, padding: 0, overflow: 'hidden' }]}>
+      {/* Card type badge — replaces generic hint when brand detected */}
       {cardType ? (
-        <View style={cfS.cardTypeBadge}>
-          <Text style={cfS.cardTypeName}>{cardType.name}</Text>
+        <View style={[cfS.cardTypeBadge, { borderBottomColor: theme.divider }]}>
+          <Text style={[cfS.cardTypeName, { color: theme.text }]}>{cardType.name}</Text>
           <View style={[cfS.cardTypeBar, { backgroundColor: cardType.color }]} />
         </View>
       ) : (
-        <View style={cfS.cardTypeHint}>
-          <Text style={cfS.cardTypeHintText}>Visa · Mastercard · Amex · Discover · UnionPay</Text>
+        <View style={[cfS.cardTypeHint, { borderBottomColor: theme.divider }]}>
+          <Text style={[cfS.cardTypeHintText, { color: theme.textMuted }]}>Visa · Mastercard · Amex · Discover · UnionPay</Text>
         </View>
       )}
 
       {/* Cardholder Name */}
-      <View style={[cfS.fieldWrap, { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: T.divider }]}>
-        <Ionicons name="person-outline" size={16} color={T.textSec} />
+      <View style={[cfS.fieldWrap, { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.divider }]}>
+        <Ionicons name="person-outline" size={16} color={theme.textSec} />
         <TextInput
-          style={[cfS.nameInput, { color: T.text }]}
+          style={[cfS.nameInput, { color: theme.text }]}
           value={cardholderName}
           onChangeText={onNameChange}
           placeholder="Cardholder Name"
-          placeholderTextColor={T.placeholderText}
+          placeholderTextColor={theme.placeholderText}
           autoCapitalize="words"
           autoCorrect={false}
           onFocus={() => setNameFocused(true)}
           onBlur={() => setNameFocused(false)}
         />
         {nameFocused && cardholderName.length > 0 && (
-          <Ionicons name="checkmark-circle" size={16} color={T.accent} />
+          <Ionicons name="checkmark-circle" size={16} color={theme.accent} />
         )}
       </View>
 
       {/* Stripe CardField — handles number / expiry / CVV in a single native component */}
+      {/* No card icon shown here when cardType is already detected (shown in badge above) */}
       {Platform.OS !== 'web' && CardField ? (
         <View style={cfS.stripeFieldWrap}>
-          <Ionicons name="card-outline" size={16} color={T.textSec} style={cfS.stripeIcon} />
+          {!cardType && (
+            <Ionicons name="card-outline" size={16} color={theme.textSec} style={cfS.stripeIcon} />
+          )}
           <CardField
             postalCodeEnabled={false}
             placeholders={{
@@ -670,30 +697,30 @@ function CardForm({
             }}
             cardStyle={{
               backgroundColor: 'transparent',
-              textColor: '#FFFFFF',
-              placeholderColor: 'rgba(255,255,255,0.3)',
+              textColor: theme.dark ? '#FFFFFF' : '#000000',
+              placeholderColor: theme.placeholderText,
               borderColor: 'transparent',
               borderWidth: 0,
               borderRadius: 0,
               fontSize: 15,
             }}
-            style={cfS.cardField}
+            style={[cfS.cardField, !cardType && { paddingLeft: 0 }]}
             onCardChange={(details: any) => onCardChange(details)}
           />
         </View>
       ) : (
         <View style={cfS.webCardFallback}>
-          <Ionicons name="card-outline" size={18} color={T.textSec} />
-          <Text style={cfS.webCardText}>Card details entered securely via Stripe checkout</Text>
+          <Ionicons name="card-outline" size={18} color={theme.textSec} />
+          <Text style={[cfS.webCardText, { color: theme.textSec }]}>Card details entered securely via Stripe checkout</Text>
         </View>
       )}
 
       {/* Secure label */}
-      <View style={cfS.secureRow}>
-        <Ionicons name="lock-closed" size={11} color={T.textMuted} />
-        <Text style={cfS.secureText}>Encrypted · Powered by Stripe</Text>
+      <View style={[cfS.secureRow, { borderTopColor: theme.divider }]}>
+        <Ionicons name="lock-closed" size={11} color={theme.textMuted} />
+        <Text style={[cfS.secureText, { color: theme.textMuted }]}>Encrypted · Powered by Stripe</Text>
       </View>
-    </GlassCard>
+    </BlurView>
   );
 }
 
@@ -1023,6 +1050,9 @@ function CheckoutInner() {
 
   const confirmPayment = Platform.OS !== 'web' ? stripeHook?.confirmPayment : null;
 
+  // Theme
+  const T = useTheme();
+
   // Plan params
   const params = useLocalSearchParams<{ plan?: string; priceId?: string; price?: string; name?: string }>();
   const planParam = (params.plan as string) || 'plus';
@@ -1040,7 +1070,8 @@ function CheckoutInner() {
 
   // Billing
   const [billingEmail, setBillingEmail] = useState(user?.email || '');
-  const billingUsername = user?.username || user?.email?.split('@')[0] || 'User';
+  const [billingUsername, setBillingUsername] = useState(user?.username || user?.email?.split('@')[0] || '');
+  const [phoneNumber, setPhoneNumber] = useState('');
 
   // Country / phone
   const [country, setCountry] = useState<Country>(() => guessCountryFromLocale());
@@ -1389,6 +1420,7 @@ function CheckoutInner() {
                   }
                 }}
                 cardType={cardType}
+                T={T}
               />
             </>
           )}
@@ -1437,10 +1469,27 @@ function CheckoutInner() {
           {/* Billing */}
           <Text style={[s.sectionTitle, { color: T.text }]}>Billing Information</Text>
 
+          {/* Username */}
+          <View style={s.billingFieldWrap}>
+            <Text style={[s.billingLabel, { color: T.text }]}>Username</Text>
+            <BlurView intensity={T.dark ? 30 : 50} tint={T.blurTint} style={[s.billingInputBlur, { borderColor: T.inputBorder }]}>
+              <Ionicons name="person-outline" size={16} color={T.textSec} />
+              <TextInput
+                style={[s.billingInput, { color: T.text }]}
+                value={billingUsername}
+                onChangeText={setBillingUsername}
+                placeholder="Username"
+                placeholderTextColor={T.placeholderText}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+            </BlurView>
+          </View>
+
           {/* Email */}
           <View style={s.billingFieldWrap}>
             <Text style={[s.billingLabel, { color: T.text }]}>Email</Text>
-            <BlurView intensity={30} tint="dark" style={s.billingInputBlur}>
+            <BlurView intensity={T.dark ? 30 : 50} tint={T.blurTint} style={[s.billingInputBlur, { borderColor: T.inputBorder }]}>
               <Ionicons name="mail-outline" size={16} color={T.textSec} />
               <TextInput
                 style={[s.billingInput, { color: T.text }]}
@@ -1455,10 +1504,36 @@ function CheckoutInner() {
             </BlurView>
           </View>
 
+          {/* Phone */}
+          <View style={s.billingFieldWrap}>
+            <Text style={[s.billingLabel, { color: T.text }]}>Phone (optional)</Text>
+            <BlurView intensity={T.dark ? 30 : 50} tint={T.blurTint} style={[s.billingInputBlur, { borderColor: T.inputBorder }]}>
+              <TouchableOpacity
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingRight: 10 }}
+                onPress={() => setShowCountryPicker(true)}
+                activeOpacity={0.8}
+              >
+                <Text style={{ fontSize: 18 }}>{country.flag}</Text>
+                <Text style={[{ fontSize: 13, color: T.textSec, fontWeight: '600' }]}>{country.dial}</Text>
+                <Ionicons name="chevron-down" size={14} color={T.textSec} />
+              </TouchableOpacity>
+              <View style={[{ width: StyleSheet.hairlineWidth, height: 20, backgroundColor: T.divider }]} />
+              <TextInput
+                style={[s.billingInput, { color: T.text, marginLeft: 8 }]}
+                value={phoneNumber}
+                onChangeText={setPhoneNumber}
+                placeholder="Phone number"
+                placeholderTextColor={T.placeholderText}
+                keyboardType="phone-pad"
+                autoCorrect={false}
+              />
+            </BlurView>
+          </View>
+
           {/* Country */}
           <View style={s.billingFieldWrap}>
             <Text style={[s.billingLabel, { color: T.text }]}>Country</Text>
-            <BlurView intensity={30} tint="dark" style={s.billingInputBlur}>
+            <BlurView intensity={T.dark ? 30 : 50} tint={T.blurTint} style={[s.billingInputBlur, { borderColor: T.inputBorder }]}>
               <TouchableOpacity style={s.countryInner} onPress={() => setShowCountryPicker(true)} activeOpacity={0.8}>
                 <Text style={{ fontSize: 20 }}>{country.flag}</Text>
                 <Text style={[{ flex: 1, fontSize: 15, color: T.text, marginLeft: 10 }]}>{country.name}</Text>
@@ -1479,7 +1554,7 @@ function CheckoutInner() {
 
       {/* Bottom bar — only shown for Card method */}
       {paymentMethod === 'card' && (
-        <BlurView intensity={80} tint="dark" style={[s.bottomBar, { paddingBottom: insets.bottom + 16 }]}>
+        <BlurView intensity={80} tint={T.blurTint} style={[s.bottomBar, { paddingBottom: insets.bottom + 16, borderTopColor: T.divider }]}>
           <View style={s.totalRow}>
             <Text style={[s.totalLabel, { color: T.textSec }]}>Total due today</Text>
             <View style={s.totalPriceRow}>
@@ -1488,7 +1563,7 @@ function CheckoutInner() {
             </View>
           </View>
           <TouchableOpacity
-            style={[s.payBtn, { backgroundColor: T.accent }, isAnyLoading && s.payBtnDisabled]}
+            style={[s.payBtn, { backgroundColor: T.dark ? T.accent : T.accent }, isAnyLoading && s.payBtnDisabled]}
             onPress={handleCardPay}
             disabled={isAnyLoading}
             activeOpacity={0.85}
@@ -1498,7 +1573,7 @@ function CheckoutInner() {
             ) : (
               <View style={s.payBtnRow}>
                 <Ionicons name="card-outline" size={18} color="#FFF" />
-                <Text style={s.payBtnText}>
+                <Text style={[s.payBtnText, { color: '#FFF' }]}>
                   Pay with Card — {displayFinalPrice || displayBasePrice}/mo
                 </Text>
               </View>
@@ -1533,7 +1608,7 @@ const s = StyleSheet.create({
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingBottom: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: T.divider,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(128,128,128,0.2)',
   },
   backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { fontSize: 18, fontWeight: '700', flex: 1, textAlign: 'center' },
@@ -1548,7 +1623,7 @@ const s = StyleSheet.create({
   sectionTitle: { fontSize: 16, fontWeight: '700', marginBottom: 12 },
   billingFieldWrap: { marginBottom: 14 },
   billingLabel: { fontSize: 14, fontWeight: '600', marginBottom: 8 },
-  billingInputBlur: { borderRadius: 14, borderWidth: 1, borderColor: T.inputBorder, paddingHorizontal: 16, paddingVertical: 4, overflow: 'hidden' },
+  billingInputBlur: { flexDirection: 'row', alignItems: 'center', borderRadius: 14, borderWidth: 1, paddingHorizontal: 16, paddingVertical: 4, overflow: 'hidden', gap: 8 },
   billingInput: { flex: 1, fontSize: 15, padding: 0, margin: 0, paddingVertical: 10 },
   countryInner: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12 },
   cancelNotice: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginTop: 8, marginBottom: 8, paddingHorizontal: 4 },
@@ -1569,4 +1644,3 @@ const s = StyleSheet.create({
   payBtnText: { fontSize: 15, fontWeight: '700', color: '#FFFFFF' },
   payBtnDisabled: { opacity: 0.5 },
 });
-you fortget the username set and number input and fix white/dark theme in blur mode and also fix card button yo nn dark lan mwen pa we yo retire icon card lan nn input cause card type definil.
