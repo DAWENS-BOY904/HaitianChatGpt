@@ -1646,3 +1646,4 @@ const s = StyleSheet.create({
   payBtnText: { fontSize: 15, fontWeight: '700', color: '#FFFFFF' },
   payBtnDisabled: { opacity: 0.5 },
 });
+bro remove black lem ap mete card number an nn white mode fix all checkout white/dark mode better sou tex yo poum we ranje billing info in mobile 2fr 1row sam has card input.
