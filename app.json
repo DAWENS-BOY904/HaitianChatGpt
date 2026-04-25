@@ -106,4 +106,4 @@
     }
   }
 }
-fix this page please to metro.config.js to permanently disable Node's ESM package exports resolver, which was causing it to try loading expo-modules-core's .ts source files directly after the app.json GitHub edit.
+
