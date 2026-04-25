@@ -1511,3 +1511,4 @@ const s = StyleSheet.create({
   },
   moncashQuickText: { color: '#000', fontSize: 15, fontWeight: '800' },
 });
+where is the apple pay/google pay select fix it and the card name number cvv expiory and lew type number card nnn card format allow if visa type real or master etc and if you select apple pay/google pay auto call verify purchase edg but if you click card clll checkout function edg all in app no outside for apple and card.
