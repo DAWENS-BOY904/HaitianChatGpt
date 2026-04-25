@@ -1,15 +1,16 @@
 /**
- * CHECKOUT — Premium dark-glass redesign
- * • Real SVG-style card brand logos (Visa, Mastercard, Amex, Discover, UnionPay)
- * • Full BlurView glass panels throughout
- * • Contact: email + phone with world-wide country-code picker
+ * CHECKOUT — Premium dark-glass redesign v2
+ * • Auto-detect country via device locale (200+ countries via react-native-international-phone-number)
+ * • Full BlurView glass panels with glow borders
+ * • Real SVG-style card brand logos
+ * • Contact: email + auto-detect phone with premium country picker
  * • Coupon / promo code → Stripe discount
  * • Card: Stripe CardField (cardholder name + number/expiry/CVV)
  * • Apple Pay / Google Pay: Stripe in-app PaymentSheet
  * • MonCash: edge-function → in-app WebBrowser (Haiti & USA only)
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -23,15 +24,30 @@ import {
   useColorScheme,
   Modal,
   FlatList,
+  Dimensions,
+  StatusBar,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth, useAlert, getSupabaseClient } from '@/template';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSubscription } from '../hooks/useSubscription';
 import { FunctionsHttpError } from '@supabase/supabase-js';
 import * as WebBrowser from 'expo-web-browser';
+import * as Localization from 'expo-localization';
+
+// ── Auto-detect phone input with 200+ countries ──
+// npm install react-native-international-phone-number react-native-safe-area-context
+import PhoneInput, {
+  ICountry,
+  getAllCountries,
+  getCountryByCca2,
+  isValidPhoneNumber,
+} from 'react-native-international-phone-number';
+
+const { width: SCREEN_W } = Dimensions.get('window');
 
 // ─────────────────────────────────────────────────────────
 // Theme
@@ -40,28 +56,29 @@ function useT() {
   const dark = useColorScheme() !== 'light';
   return {
     dark,
-    bg: dark ? '#080808' : '#F0F0F5',
-    surface: dark ? 'rgba(22,22,26,0.92)' : 'rgba(255,255,255,0.78)',
-    surfaceBorder: dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)',
+    bg: dark ? '#050505' : '#F2F2F7',
+    surface: dark ? 'rgba(22,22,28,0.88)' : 'rgba(255,255,255,0.82)',
+    surfaceBorder: dark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)',
     text: dark ? '#FFFFFF' : '#0A0A0A',
-    textSec: dark ? 'rgba(255,255,255,0.48)' : 'rgba(0,0,0,0.44)',
-    textMuted: dark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.28)',
-    inputBg: dark ? 'rgba(38,38,42,0.95)' : 'rgba(255,255,255,0.95)',
-    inputBorder: dark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.10)',
-    placeholderText: dark ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.28)',
-    headerBorder: dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
-    bottomBorder: dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.08)',
-    tabInactive: dark ? 'rgba(38,38,42,0.85)' : 'rgba(228,228,234,0.95)',
-    tabInactiveText: dark ? 'rgba(255,255,255,0.40)' : 'rgba(0,0,0,0.40)',
-    cardFieldBg: dark ? '#1E1E22' : '#F4F4F8',
-    divider: dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
-    secureText: dark ? 'rgba(255,255,255,0.30)' : 'rgba(0,0,0,0.28)',
+    textSec: dark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.42)',
+    textMuted: dark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.25)',
+    inputBg: dark ? 'rgba(32,32,38,0.95)' : 'rgba(255,255,255,0.95)',
+    inputBorder: dark ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.09)',
+    placeholderText: dark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.25)',
+    headerBorder: dark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)',
+    bottomBorder: dark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.07)',
+    tabInactive: dark ? 'rgba(38,38,44,0.85)' : 'rgba(228,228,234,0.95)',
+    tabInactiveText: dark ? 'rgba(255,255,255,0.38)' : 'rgba(0,0,0,0.38)',
+    cardFieldBg: dark ? '#1C1C22' : '#F4F4F8',
+    divider: dark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)',
+    secureText: dark ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.26)',
     blurTint: (dark ? 'dark' : 'light') as 'dark' | 'light',
     couponApplied: '#30D158',
     couponError: '#FF453A',
     modalBg: dark ? '#1C1C1E' : '#FFFFFF',
     searchBg: dark ? '#2C2C2E' : '#F2F2F7',
-    planCardGlow: dark ? 'rgba(107,92,231,0.18)' : 'rgba(107,92,231,0.10)',
+    planCardGlow: dark ? 'rgba(107,92,231,0.15)' : 'rgba(107,92,231,0.08)',
+    glassGlow: dark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
   };
 }
 
@@ -71,7 +88,7 @@ function useT() {
 function VisaLogo({ width = 48, height = 30 }: { width?: number; height?: number }) {
   return (
     <View style={[cardBrandStyles.base, { width, height, backgroundColor: '#1A1F71', borderRadius: 5 }]}>
-      <Text style={[cardBrandStyles.visaText]}>VISA</Text>
+      <Text style={cardBrandStyles.visaText}>VISA</Text>
     </View>
   );
 }
@@ -126,77 +143,6 @@ const cardBrandStyles = StyleSheet.create({
 });
 
 // ─────────────────────────────────────────────────────────
-// Country codes
-// ─────────────────────────────────────────────────────────
-const COUNTRY_CODES = [
-  { code: '+1', country: 'US', flag: '🇺🇸', name: 'United States', format: '(###) ###-####' },
-  { code: '+509', country: 'HT', flag: '🇭🇹', name: 'Haiti', format: '####-####' },
-  { code: '+1', country: 'CA', flag: '🇨🇦', name: 'Canada', format: '(###) ###-####' },
-  { code: '+44', country: 'GB', flag: '🇬🇧', name: 'United Kingdom', format: '#### ######' },
-  { code: '+33', country: 'FR', flag: '🇫🇷', name: 'France', format: '## ## ## ## ##' },
-  { code: '+49', country: 'DE', flag: '🇩🇪', name: 'Germany', format: '#### #######' },
-  { code: '+39', country: 'IT', flag: '🇮🇹', name: 'Italy', format: '### ### ####' },
-  { code: '+34', country: 'ES', flag: '🇪🇸', name: 'Spain', format: '### ### ###' },
-  { code: '+55', country: 'BR', flag: '🇧🇷', name: 'Brazil', format: '(##) #####-####' },
-  { code: '+52', country: 'MX', flag: '🇲🇽', name: 'Mexico', format: '### ### ####' },
-  { code: '+57', country: 'CO', flag: '🇨🇴', name: 'Colombia', format: '### ### ####' },
-  { code: '+54', country: 'AR', flag: '🇦🇷', name: 'Argentina', format: '### ###-####' },
-  { code: '+56', country: 'CL', flag: '🇨🇱', name: 'Chile', format: '# #### ####' },
-  { code: '+58', country: 'VE', flag: '🇻🇪', name: 'Venezuela', format: '###-###-####' },
-  { code: '+1-876', country: 'JM', flag: '🇯🇲', name: 'Jamaica', format: '(876) ###-####' },
-  { code: '+1-809', country: 'DO', flag: '🇩🇴', name: 'Dominican Republic', format: '(###) ###-####' },
-  { code: '+1-246', country: 'BB', flag: '🇧🇧', name: 'Barbados', format: '(246) ###-####' },
-  { code: '+596', country: 'MQ', flag: '🇲🇶', name: 'Martinique', format: '#### ####' },
-  { code: '+590', country: 'GP', flag: '🇬🇵', name: 'Guadeloupe', format: '#### ####' },
-  { code: '+81', country: 'JP', flag: '🇯🇵', name: 'Japan', format: '##-####-####' },
-  { code: '+82', country: 'KR', flag: '🇰🇷', name: 'South Korea', format: '###-####-####' },
-  { code: '+86', country: 'CN', flag: '🇨🇳', name: 'China', format: '### #### ####' },
-  { code: '+91', country: 'IN', flag: '🇮🇳', name: 'India', format: '##### #####' },
-  { code: '+971', country: 'AE', flag: '🇦🇪', name: 'UAE', format: '## ### ####' },
-  { code: '+966', country: 'SA', flag: '🇸🇦', name: 'Saudi Arabia', format: '## ### ####' },
-  { code: '+27', country: 'ZA', flag: '🇿🇦', name: 'South Africa', format: '## ### ####' },
-  { code: '+234', country: 'NG', flag: '🇳🇬', name: 'Nigeria', format: '### ### ####' },
-  { code: '+254', country: 'KE', flag: '🇰🇪', name: 'Kenya', format: '### ### ###' },
-  { code: '+233', country: 'GH', flag: '🇬🇭', name: 'Ghana', format: '### ### ####' },
-  { code: '+237', country: 'CM', flag: '🇨🇲', name: 'Cameroon', format: '#### ####' },
-  { code: '+225', country: 'CI', flag: '🇨🇮', name: 'Ivory Coast', format: '## ## ## ##' },
-  { code: '+221', country: 'SN', flag: '🇸🇳', name: 'Senegal', format: '## ### ## ##' },
-  { code: '+243', country: 'CD', flag: '🇨🇩', name: 'DR Congo', format: '### ### ###' },
-  { code: '+20', country: 'EG', flag: '🇪🇬', name: 'Egypt', format: '### ### ####' },
-  { code: '+212', country: 'MA', flag: '🇲🇦', name: 'Morocco', format: '###-######' },
-  { code: '+213', country: 'DZ', flag: '🇩🇿', name: 'Algeria', format: '### ## ## ##' },
-  { code: '+216', country: 'TN', flag: '🇹🇳', name: 'Tunisia', format: '## ### ###' },
-  { code: '+61', country: 'AU', flag: '🇦🇺', name: 'Australia', format: '#### ### ###' },
-  { code: '+64', country: 'NZ', flag: '🇳🇿', name: 'New Zealand', format: '### ### ####' },
-  { code: '+7', country: 'RU', flag: '🇷🇺', name: 'Russia', format: '(###) ###-##-##' },
-  { code: '+380', country: 'UA', flag: '🇺🇦', name: 'Ukraine', format: '## ### ## ##' },
-  { code: '+48', country: 'PL', flag: '🇵🇱', name: 'Poland', format: '### ### ###' },
-  { code: '+31', country: 'NL', flag: '🇳🇱', name: 'Netherlands', format: '## ### ####' },
-  { code: '+32', country: 'BE', flag: '🇧🇪', name: 'Belgium', format: '### ## ## ##' },
-  { code: '+41', country: 'CH', flag: '🇨🇭', name: 'Switzerland', format: '## ### ## ##' },
-  { code: '+46', country: 'SE', flag: '🇸🇪', name: 'Sweden', format: '##-### ## ##' },
-  { code: '+47', country: 'NO', flag: '🇳🇴', name: 'Norway', format: '### ## ###' },
-  { code: '+45', country: 'DK', flag: '🇩🇰', name: 'Denmark', format: '## ## ## ##' },
-  { code: '+358', country: 'FI', flag: '🇫🇮', name: 'Finland', format: '## ### ####' },
-];
-
-type CountryEntry = typeof COUNTRY_CODES[0];
-
-function formatPhoneDigits(digits: string, pattern: string): string {
-  let result = '';
-  let di = 0;
-  for (let i = 0; i < pattern.length && di < digits.length; i++) {
-    if (pattern[i] === '#') {
-      result += digits[di++];
-    } else {
-      result += pattern[i];
-      if (di < digits.length && digits[di] === pattern[i]) di++;
-    }
-  }
-  return result;
-}
-
-// ─────────────────────────────────────────────────────────
 // Stripe (native only)
 // ─────────────────────────────────────────────────────────
 let StripeProvider: React.ComponentType<any> | null = null;
@@ -238,113 +184,41 @@ const isHaitiOrUSAUser = (user: any) => {
 type PayMethod = 'card' | 'apple' | 'google' | 'moncash';
 
 // ─────────────────────────────────────────────────────────
-// Country Picker Modal
+// Reusable Glass Section with Glow Border
 // ─────────────────────────────────────────────────────────
-function CountryPickerModal({
-  visible,
-  onClose,
-  onSelect,
-  T,
-}: {
-  visible: boolean;
-  onClose: () => void;
-  onSelect: (c: CountryEntry) => void;
-  T: ReturnType<typeof useT>;
-}) {
-  const [search, setSearch] = useState('');
-  const insets = useSafeAreaInsets();
-  const filtered = COUNTRY_CODES.filter(
-    (c) =>
-      c.name.toLowerCase().includes(search.toLowerCase()) ||
-      c.code.includes(search) ||
-      c.country.toLowerCase().includes(search.toLowerCase()),
-  );
+function GlassSection({ T, children, style, glowColor }: { T: ReturnType<typeof useT>; children: React.ReactNode; style?: any; glowColor?: string }) {
   return (
-    <Modal visible={visible} animationType="slide" transparent>
-      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)' }}>
-        <TouchableOpacity style={{ flex: 1 }} onPress={onClose} />
-        <View style={[cpStyles.sheet, { backgroundColor: T.modalBg, paddingBottom: insets.bottom + 16 }]}>
-          <View style={[cpStyles.handle, { backgroundColor: T.textMuted }]} />
-          <Text style={[cpStyles.title, { color: T.text }]}>Select Country Code</Text>
-          <View style={[cpStyles.searchRow, { backgroundColor: T.searchBg }]}>
-            <Ionicons name="search" size={15} color={T.textSec} />
-            <TextInput
-              style={[cpStyles.searchInput, { color: T.text }]}
-              value={search}
-              onChangeText={setSearch}
-              placeholder="Search country or code…"
-              placeholderTextColor={T.placeholderText}
-              autoCapitalize="none"
-            />
-            {search.length > 0 && (
-              <TouchableOpacity onPress={() => setSearch('')}>
-                <Ionicons name="close-circle" size={15} color={T.textSec} />
-              </TouchableOpacity>
-            )}
-          </View>
-          <FlatList
-            data={filtered}
-            keyExtractor={(item, i) => `${item.country}-${i}`}
-            showsVerticalScrollIndicator={false}
-            style={{ maxHeight: 380 }}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                style={[cpStyles.countryRow, { borderBottomColor: T.divider }]}
-                onPress={() => { onSelect(item); onClose(); setSearch(''); }}
-              >
-                <Text style={cpStyles.flag}>{item.flag}</Text>
-                <Text style={[cpStyles.countryName, { color: T.text }]}>{item.name}</Text>
-                <Text style={[cpStyles.countryCode, { color: T.textSec }]}>{item.code}</Text>
-              </TouchableOpacity>
-            )}
-          />
-        </View>
-      </View>
-    </Modal>
-  );
-}
-
-const cpStyles = StyleSheet.create({
-  sheet: {
-    borderTopLeftRadius: 26,
-    borderTopRightRadius: 26,
-    paddingTop: 12,
-  },
-  handle: { width: 36, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 14, opacity: 0.3 },
-  title: { fontSize: 17, fontWeight: '700', textAlign: 'center', marginBottom: 14, paddingHorizontal: 16 },
-  searchRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    marginHorizontal: 16, marginBottom: 8, borderRadius: 14,
-    paddingHorizontal: 14, paddingVertical: 11,
-  },
-  searchInput: { flex: 1, fontSize: 15, padding: 0 },
-  countryRow: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 20, paddingVertical: 13,
-    borderBottomWidth: StyleSheet.hairlineWidth, gap: 12,
-  },
-  flag: { fontSize: 22 },
-  countryName: { flex: 1, fontSize: 15 },
-  countryCode: { fontSize: 14, fontWeight: '600' },
-});
-
-// ─────────────────────────────────────────────────────────
-// Reusable Glass Section
-// ─────────────────────────────────────────────────────────
-function GlassSection({ T, children, style }: { T: ReturnType<typeof useT>; children: React.ReactNode; style?: any }) {
-  return (
-    <BlurView
-      intensity={52}
-      tint={T.blurTint}
-      style={[{ borderRadius: 20, borderWidth: 1, borderColor: T.surfaceBorder, overflow: 'hidden' }, style]}
-    >
-      {children}
-    </BlurView>
+    <View style={[{ marginBottom: 14 }, style]}>
+      {/* Glow layer behind */}
+      {glowColor && (
+        <View style={[s.glowLayer, { backgroundColor: glowColor, opacity: T.dark ? 0.12 : 0.06 }]} />
+      )}
+      <BlurView
+        intensity={60}
+        tint={T.blurTint}
+        style={[s.glassBase, { borderColor: T.surfaceBorder, backgroundColor: T.surface }]}
+      >
+        {children}
+      </BlurView>
+    </View>
   );
 }
 
 // ─────────────────────────────────────────────────────────
-// Field Row
+// Section Header with line accent
+// ─────────────────────────────────────────────────────────
+function SectionHeader({ label, T, accentColor }: { label: string; T: ReturnType<typeof useT>; accentColor?: string }) {
+  return (
+    <View style={s.sectionHeaderRow}>
+      <View style={[s.sectionLine, { backgroundColor: accentColor || T.textMuted, opacity: 0.4 }]} />
+      <Text style={[s.sectionLabel, { color: T.textSec }]}>{label}</Text>
+      <View style={[s.sectionLine, { backgroundColor: accentColor || T.textMuted, opacity: 0.4, flex: 1 }]} />
+    </View>
+  );
+}
+
+// ─────────────────────────────────────────────────────────
+// Field Row with animated focus
 // ─────────────────────────────────────────────────────────
 function FieldRow({
   icon,
@@ -363,7 +237,7 @@ function FieldRow({
 }) {
   return (
     <View style={s.fieldRow}>
-      <View style={[s.fieldIconWrap, { backgroundColor: focused ? accentColor + '20' : T.tabInactive }]}>
+      <View style={[s.fieldIconWrap, { backgroundColor: focused ? accentColor + '18' : T.tabInactive }]}>
         <Ionicons name={icon as any} size={17} color={focused ? accentColor : T.textSec} />
       </View>
       <View style={s.fieldContent}>
@@ -398,12 +272,41 @@ function CheckoutInner() {
 
   const [email, setEmail] = useState(user?.email || '');
   const [focusedField, setFocusedField] = useState<string | null>(null);
-  const [selectedCountry, setSelectedCountry] = useState<CountryEntry>(COUNTRY_CODES[0]);
-  const [phoneRaw, setPhoneRaw] = useState('');
-  const [countryPickerVisible, setCountryPickerVisible] = useState(false);
-  const handlePhoneChange = (text: string) => setPhoneRaw(text.replace(/\D/g, ''));
-  const formattedPhone = formatPhoneDigits(phoneRaw, selectedCountry.format);
-  const fullPhone = `${selectedCountry.code} ${formattedPhone}`.trim();
+
+  // ── Auto-detect country from device locale ──
+  const [selectedCountry, setSelectedCountry] = useState<ICountry | undefined>(undefined);
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [phoneValid, setPhoneValid] = useState(false);
+
+  useEffect(() => {
+    const locale = Localization.locale?.toUpperCase?.() || 'US';
+    const regionCode = locale.split('_')[1] || locale.split('-')[1] || 'US';
+    const country = getCountryByCca2(regionCode);
+    if (country) {
+      setSelectedCountry(country);
+    } else {
+      // Fallback to US
+      setSelectedCountry(getCountryByCca2('US'));
+    }
+  }, []);
+
+  const handlePhoneChange = useCallback((val: string) => {
+    setPhoneNumber(val);
+  }, []);
+
+  const handleCountryChange = useCallback((country: ICountry) => {
+    setSelectedCountry(country);
+  }, []);
+
+  useEffect(() => {
+    if (selectedCountry && phoneNumber) {
+      setPhoneValid(isValidPhoneNumber(phoneNumber, selectedCountry));
+    }
+  }, [phoneNumber, selectedCountry]);
+
+  const fullPhone = selectedCountry?.idd?.root
+    ? `${selectedCountry.idd.root}${selectedCountry.idd?.suffixes?.[0] || ''} ${phoneNumber}`
+    : phoneNumber;
 
   const [cardholderName, setCardholderName] = useState('');
   const [cardReady, setCardReady] = useState(false);
@@ -468,7 +371,12 @@ function CheckoutInner() {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!error && data?.valid) {
-          setCouponResult({ valid: true, discountPct: data.percent_off, discountAmt: data.amount_off ? data.amount_off / 100 : undefined, message: data.message || 'Discount applied!' });
+          setCouponResult({
+            valid: true,
+            discountPct: data.percent_off,
+            discountAmt: data.amount_off ? data.amount_off / 100 : undefined,
+            message: data.message || 'Discount applied!',
+          });
           return;
         }
       }
@@ -498,7 +406,10 @@ function CheckoutInner() {
   const syncSubscription = async (token: string) => {
     const { data: subData } = await supabase.functions.invoke('check-subscription', { headers: { Authorization: `Bearer ${token}` } });
     if (user?.id) {
-      await supabase.from('user_profiles').update({ subscription_tier: subData?.plan || plan, subscription_expires_at: subData?.subscription_end || null }).eq('id', user.id);
+      await supabase.from('user_profiles').update({
+        subscription_tier: subData?.plan || plan,
+        subscription_expires_at: subData?.subscription_end || null,
+      }).eq('id', user.id);
     }
     await refreshSubscription?.();
     router.replace('/subscription-success');
@@ -517,10 +428,13 @@ function CheckoutInner() {
       const secretData = await getClientSecret(token);
       if (!secretData.clientSecret) throw new Error('No payment secret returned');
       const { error: initErr } = await stripe.initPaymentSheet({
-        merchantDisplayName: 'Dawinix AI', customerId: secretData.customerId,
-        customerEphemeralKeySecret: secretData.ephemeralKey, paymentIntentClientSecret: secretData.clientSecret,
+        merchantDisplayName: 'Dawinix AI',
+        customerId: secretData.customerId,
+        customerEphemeralKeySecret: secretData.ephemeralKey,
+        paymentIntentClientSecret: secretData.clientSecret,
         defaultBillingDetails: { name: cardholderName, email, phone: fullPhone },
-        allowsDelayedPaymentMethods: false, returnURL: 'dawinixht://checkout/return',
+        allowsDelayedPaymentMethods: false,
+        returnURL: 'dawinixht://checkout/return',
       });
       if (initErr) throw new Error(initErr.message);
       const { error: presentErr } = await stripe.presentPaymentSheet();
@@ -542,9 +456,12 @@ function CheckoutInner() {
       const secretData = await getClientSecret(token);
       if (!secretData.clientSecret) throw new Error('No payment secret');
       const { error: initErr } = await stripe.initPaymentSheet({
-        merchantDisplayName: 'Dawinix AI', customerId: secretData.customerId,
-        customerEphemeralKeySecret: secretData.ephemeralKey, paymentIntentClientSecret: secretData.clientSecret,
-        applePay: { merchantCountryCode: 'US' }, defaultBillingDetails: { email, phone: fullPhone },
+        merchantDisplayName: 'Dawinix AI',
+        customerId: secretData.customerId,
+        customerEphemeralKeySecret: secretData.ephemeralKey,
+        paymentIntentClientSecret: secretData.clientSecret,
+        applePay: { merchantCountryCode: 'US' },
+        defaultBillingDetails: { email, phone: fullPhone },
         returnURL: 'dawinixht://checkout/return',
       });
       if (initErr) throw new Error(initErr.message);
@@ -567,10 +484,13 @@ function CheckoutInner() {
       const secretData = await getClientSecret(token);
       if (!secretData.clientSecret) throw new Error('No payment secret');
       const { error: initErr } = await stripe.initPaymentSheet({
-        merchantDisplayName: 'Dawinix AI', customerId: secretData.customerId,
-        customerEphemeralKeySecret: secretData.ephemeralKey, paymentIntentClientSecret: secretData.clientSecret,
+        merchantDisplayName: 'Dawinix AI',
+        customerId: secretData.customerId,
+        customerEphemeralKeySecret: secretData.ephemeralKey,
+        paymentIntentClientSecret: secretData.clientSecret,
         googlePay: { merchantCountryCode: 'US', testEnv: false, currencyCode: 'usd' },
-        defaultBillingDetails: { email, phone: fullPhone }, returnURL: 'dawinixht://checkout/return',
+        defaultBillingDetails: { email, phone: fullPhone },
+        returnURL: 'dawinixht://checkout/return',
       });
       if (initErr) throw new Error(initErr.message);
       const { error: presentErr } = await stripe.presentPaymentSheet();
@@ -612,13 +532,15 @@ function CheckoutInner() {
 
   const verifyMonCash = async (orderId: string, token: string) => {
     const { data, error } = await supabase.functions.invoke('verify-moncash-payment', {
-      body: { orderId }, headers: { Authorization: `Bearer ${token}` },
+      body: { orderId },
+      headers: { Authorization: `Bearer ${token}` },
     });
     if (error) { showAlert('Verification Error', error.message); return; }
     if (data?.status === 'success') {
       if (user?.id) {
         await supabase.from('user_profiles').update({
-          subscription_tier: plan, subscription_expires_at: data?.subscription_end || null,
+          subscription_tier: plan,
+          subscription_expires_at: data?.subscription_end || null,
           billing_info: { provider: 'moncash' },
         }).eq('id', user.id);
       }
@@ -664,16 +586,94 @@ function CheckoutInner() {
     ...(showMoncash ? [{ key: 'moncash' as PayMethod, label: 'MonCash', icon: 'phone-portrait-outline' }] : []),
   ];
 
+  // ── Custom PhoneInput theme for dark/light ──
+  const phoneInputStyles = {
+    container: {
+      backgroundColor: 'transparent',
+      borderWidth: 0,
+      borderRadius: 0,
+      paddingVertical: 0,
+      height: 44,
+    },
+    flagContainer: {
+      backgroundColor: T.tabInactive,
+      borderRadius: 10,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      gap: 4,
+    },
+    flag: { fontSize: 20 },
+    caret: { fontSize: 12, color: T.textSec },
+    divider: { backgroundColor: 'transparent', width: 8 },
+    callingCode: { fontSize: 14, fontWeight: '600', color: T.text },
+    input: {
+      fontSize: 15,
+      fontWeight: '400',
+      color: T.text,
+      padding: 0,
+      margin: 0,
+    },
+  };
+
+  const phoneModalStyles = {
+    backdrop: { backgroundColor: 'rgba(0,0,0,0.55)' },
+    container: {
+      backgroundColor: T.modalBg,
+      borderTopLeftRadius: 26,
+      borderTopRightRadius: 26,
+    },
+    content: { paddingBottom: insets.bottom + 16 },
+    dragHandleContainer: { paddingVertical: 12 },
+    dragHandleIndicator: { width: 36, height: 4, borderRadius: 2, backgroundColor: T.textMuted, opacity: 0.4 },
+    searchContainer: {
+      backgroundColor: T.searchBg,
+      borderRadius: 14,
+      marginHorizontal: 16,
+      marginBottom: 8,
+      paddingHorizontal: 14,
+      paddingVertical: 11,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    searchInput: { fontSize: 15, color: T.text, flex: 1, padding: 0 },
+    list: { maxHeight: 420 },
+    countryItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 20,
+      paddingVertical: 13,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: T.divider,
+      gap: 12,
+    },
+    flag: { fontSize: 22 },
+    countryInfo: { flex: 1 },
+    countryName: { fontSize: 15, color: T.text },
+    callingCode: { fontSize: 14, fontWeight: '600', color: T.textSec },
+    sectionTitle: { fontSize: 12, fontWeight: '700', color: T.textMuted, paddingHorizontal: 20, paddingVertical: 6 },
+    closeButton: { padding: 16, alignItems: 'center' },
+    closeButtonText: { fontSize: 15, fontWeight: '600', color: planColor },
+    countryNotFoundContainer: { padding: 32, alignItems: 'center' },
+    countryNotFoundMessage: { fontSize: 14, color: T.textSec },
+    alphabetContainer: { position: 'absolute', right: 4, top: 60, bottom: 40, width: 20, alignItems: 'center' },
+    alphabetLetter: { paddingVertical: 1.5, width: 20, alignItems: 'center' },
+    alphabetLetterText: { fontSize: 10, color: T.textMuted },
+    alphabetLetterTextActive: { fontSize: 10, fontWeight: '700', color: planColor },
+  };
+
   return (
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: T.bg }}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      {/* ── Header ── */}
+      <StatusBar barStyle={T.dark ? 'light-content' : 'dark-content'} />
+
+      {/* ── Header with stronger blur ── */}
       <BlurView
-        intensity={70}
+        intensity={85}
         tint={T.blurTint}
-        style={[s.header, { paddingTop: insets.top + 10, borderBottomColor: T.headerBorder }]}
+        style={[s.header, { paddingTop: insets.top + 12, borderBottomColor: T.headerBorder }]}
       >
         <TouchableOpacity style={s.backBtn} onPress={() => router.back()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
           <Ionicons name="chevron-back" size={22} color={T.text} />
@@ -691,49 +691,54 @@ function CheckoutInner() {
       <ScrollView
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={[s.scroll, { paddingBottom: insets.bottom + 150 }]}
+        contentContainerStyle={[s.scroll, { paddingBottom: insets.bottom + 160 }]}
       >
-        {/* ── Plan card ── */}
-        <GlassSection T={T} style={{ borderColor: planColor + '50' }}>
-          <View style={s.planCardInner}>
-            {/* Left: info */}
-            <View style={s.planLeft}>
-              <View style={[s.planBadge, { backgroundColor: planColor }]}>
-                <Text style={s.planBadgeText}>{plan === 'plus' ? '✦ PLUS' : '⚡ GO'}</Text>
-              </View>
-              <Text style={[s.planName, { color: T.text }]}>{planLabel}</Text>
-              <Text style={[s.planSub, { color: T.textSec }]}>Monthly subscription</Text>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 8 }}>
-                {benefits.map((b) => (
-                  <View key={b} style={s.benefitRow}>
-                    <View style={[s.benefitDot, { backgroundColor: planColor }]} />
-                    <Text style={[s.benefitText, { color: T.textSec }]}>{b}</Text>
-                  </View>
-                ))}
-              </View>
-            </View>
-            {/* Right: price */}
-            <View style={s.planRight}>
-              {displayOriginalPrice && (
-                <Text style={[s.originalPrice, { color: T.textMuted }]}>{displayOriginalPrice}</Text>
-              )}
-              <Text style={[s.planPrice, { color: planColor }]}>{displayPrice}</Text>
-              <Text style={[s.planPricePer, { color: T.textMuted }]}>/ month</Text>
-              {couponResult?.valid && (
-                <View style={[s.discountBadge, { backgroundColor: T.couponApplied + '20' }]}>
-                  <Ionicons name="pricetag" size={10} color={T.couponApplied} />
-                  <Text style={[s.discountBadgeText, { color: T.couponApplied }]}>
-                    {couponResult.discountPct ? `-${couponResult.discountPct}%` : ''}
-                  </Text>
+        {/* ── Plan card with glow ── */}
+        <GlassSection T={T} glowColor={planColor}>
+          <LinearGradient
+            colors={T.dark ? [planColor + '08', 'transparent'] : [planColor + '06', 'transparent']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={s.planGradient}
+          >
+            <View style={s.planCardInner}>
+              <View style={s.planLeft}>
+                <View style={[s.planBadge, { backgroundColor: planColor }]}>
+                  <Text style={s.planBadgeText}>{plan === 'plus' ? '✦ PLUS' : '⚡ GO'}</Text>
                 </View>
-              )}
+                <Text style={[s.planName, { color: T.text }]}>{planLabel}</Text>
+                <Text style={[s.planSub, { color: T.textSec }]}>Monthly subscription</Text>
+                <View style={s.benefitsWrap}>
+                  {benefits.map((b) => (
+                    <View key={b} style={s.benefitRow}>
+                      <View style={[s.benefitDot, { backgroundColor: planColor }]} />
+                      <Text style={[s.benefitText, { color: T.textSec }]}>{b}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+              <View style={s.planRight}>
+                {displayOriginalPrice && (
+                  <Text style={[s.originalPrice, { color: T.textMuted }]}>{displayOriginalPrice}</Text>
+                )}
+                <Text style={[s.planPrice, { color: planColor }]}>{displayPrice}</Text>
+                <Text style={[s.planPricePer, { color: T.textMuted }]}>/ month</Text>
+                {couponResult?.valid && (
+                  <View style={[s.discountBadge, { backgroundColor: T.couponApplied + '18' }]}>
+                    <Ionicons name="pricetag" size={10} color={T.couponApplied} />
+                    <Text style={[s.discountBadgeText, { color: T.couponApplied }]}>
+                      {couponResult.discountPct ? `-${couponResult.discountPct}%` : 'Discount'}
+                    </Text>
+                  </View>
+                )}
+              </View>
             </View>
-          </View>
+          </LinearGradient>
         </GlassSection>
 
         {/* ── Contact ── */}
         <GlassSection T={T}>
-          <Text style={[s.sectionLabel, { color: T.textSec }]}>CONTACT INFORMATION</Text>
+          <SectionHeader label="CONTACT INFORMATION" T={T} accentColor={planColor} />
           <FieldRow icon="mail-outline" label="Email address" focused={focusedField === 'email'} accentColor={planColor} T={T}>
             <TextInput
               style={[s.fieldInput, { color: T.text }]}
@@ -749,33 +754,40 @@ function CheckoutInner() {
             />
           </FieldRow>
           <View style={[s.divider, { backgroundColor: T.divider }]} />
-          <FieldRow icon="call-outline" label="Phone (optional)" focused={focusedField === 'phone'} accentColor={planColor} T={T}>
-            <View style={s.phoneRow}>
-              <TouchableOpacity
-                style={[s.countryBtn, { backgroundColor: T.tabInactive }]}
-                onPress={() => setCountryPickerVisible(true)}
-              >
-                <Text style={s.countryFlag}>{selectedCountry.flag}</Text>
-                <Text style={[s.countryCodeTxt, { color: T.text }]}>{selectedCountry.code}</Text>
-                <Ionicons name="chevron-down" size={11} color={T.textSec} />
-              </TouchableOpacity>
-              <TextInput
-                style={[s.phoneInput, { color: T.text, flex: 1 }]}
-                value={formattedPhone}
-                onChangeText={handlePhoneChange}
-                keyboardType="phone-pad"
-                placeholder={selectedCountry.format.replace(/#/g, '0')}
-                placeholderTextColor={T.placeholderText}
+
+          {/* Auto-detect phone with 200+ countries */}
+          <FieldRow icon="call-outline" label="Phone number" focused={focusedField === 'phone'} accentColor={planColor} T={T}>
+            <View style={{ marginTop: 2 }}>
+              <PhoneInput
+                value={phoneNumber}
+                onChangePhoneNumber={handlePhoneChange}
+                selectedCountry={selectedCountry}
+                onChangeSelectedCountry={handleCountryChange}
+                defaultCountry={selectedCountry?.cca2}
+                placeholder="Phone number"
+                phoneInputStyles={phoneInputStyles}
+                modalStyles={phoneModalStyles}
+                phoneInputPlaceholderTextColor={T.placeholderText}
+                phoneInputSelectionColor={planColor}
+                customCaret={() => <Ionicons name="chevron-down" size={12} color={T.textSec} />}
+                language="eng"
+                popularCountries={['US', 'HT', 'CA', 'FR', 'GB', 'BR', 'MX', 'DE']}
                 onFocus={() => setFocusedField('phone')}
                 onBlur={() => setFocusedField(null)}
               />
             </View>
           </FieldRow>
+          {phoneNumber.length > 0 && !phoneValid && (
+            <View style={[s.couponMsg, { backgroundColor: T.couponError + '12', marginHorizontal: 16, marginBottom: 10, borderRadius: 10 }]}>
+              <Ionicons name="alert-circle" size={13} color={T.couponError} />
+              <Text style={[s.couponMsgText, { color: T.couponError }]}>Invalid phone number for selected country</Text>
+            </View>
+          )}
         </GlassSection>
 
         {/* ── Promo code ── */}
         <GlassSection T={T}>
-          <Text style={[s.sectionLabel, { color: T.textSec }]}>PROMO CODE</Text>
+          <SectionHeader label="PROMO CODE" T={T} accentColor={planColor} />
           <FieldRow icon="pricetag-outline" label="Discount code" focused={focusedField === 'coupon'} accentColor={planColor} T={T}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <TextInput
@@ -801,7 +813,10 @@ function CheckoutInner() {
             </View>
           </FieldRow>
           {couponResult && (
-            <View style={[s.couponMsg, { backgroundColor: couponResult.valid ? T.couponApplied + '14' : T.couponError + '14', marginHorizontal: 16, marginBottom: 12, borderRadius: 12 }]}>
+            <View style={[s.couponMsg, {
+              backgroundColor: couponResult.valid ? T.couponApplied + '14' : T.couponError + '14',
+              marginHorizontal: 16, marginBottom: 12, borderRadius: 12
+            }]}>
               <Ionicons name={couponResult.valid ? 'checkmark-circle' : 'close-circle'} size={14} color={couponResult.valid ? T.couponApplied : T.couponError} />
               <Text style={[s.couponMsgText, { color: couponResult.valid ? T.couponApplied : T.couponError }]}>{couponResult.message}</Text>
             </View>
@@ -809,7 +824,7 @@ function CheckoutInner() {
         </GlassSection>
 
         {/* ── Payment method tabs ── */}
-        <Text style={[s.sectionLabel, { color: T.textSec, marginLeft: 2 }]}>PAYMENT METHOD</Text>
+        <SectionHeader label="PAYMENT METHOD" T={T} accentColor={planColor} />
         <View style={s.tabsRow}>
           {tabs.map((tab) => {
             const active = method === tab.key;
@@ -823,6 +838,11 @@ function CheckoutInner() {
                     flex: tabs.length > 2 ? 1 : undefined,
                     borderWidth: active ? 0 : 1,
                     borderColor: T.inputBorder,
+                    shadowColor: active ? (tab.key === 'moncash' ? '#DC143C' : planColor) : 'transparent',
+                    shadowOffset: { width: 0, height: active ? 3 : 0 },
+                    shadowOpacity: active ? 0.3 : 0,
+                    shadowRadius: active ? 6 : 0,
+                    elevation: active ? 4 : 0,
                   },
                 ]}
                 onPress={() => setMethod(tab.key)}
@@ -836,8 +856,8 @@ function CheckoutInner() {
 
         {/* ── Card entry ── */}
         {method === 'card' && (
-          <GlassSection T={T}>
-            <Text style={[s.sectionLabel, { color: T.textSec }]}>CARD DETAILS</Text>
+          <GlassSection T={T} glowColor={planColor}>
+            <SectionHeader label="CARD DETAILS" T={T} accentColor={planColor} />
             <FieldRow icon="person-outline" label="Name on card" focused={focusedField === 'cname'} accentColor={planColor} T={T}>
               <TextInput
                 style={[s.fieldInput, { color: T.text }]}
@@ -884,7 +904,6 @@ function CheckoutInner() {
               </View>
             )}
 
-            {/* Card brand logos */}
             <View style={s.cardBrandsRow}>
               <VisaLogo width={46} height={28} />
               <MastercardLogo width={46} height={28} />
@@ -897,14 +916,14 @@ function CheckoutInner() {
 
         {/* ── Apple Pay ── */}
         {method === 'apple' && (
-          <GlassSection T={T}>
+          <GlassSection T={T} glowColor="#000">
             <View style={s.payInfoCard}>
               <View style={[s.payIconBig, { backgroundColor: '#000' }]}>
                 <Ionicons name="logo-apple" size={30} color="#FFF" />
               </View>
               <Text style={[s.payInfoTitle, { color: T.text }]}>Apple Pay</Text>
               <Text style={[s.payInfoSub, { color: T.textSec }]}>
-                Authenticate with Face ID or Touch ID.{'\n'}No card details required.
+                Authenticate with Face ID or Touch ID.{'\\n'}No card details required.
               </Text>
               <View style={[s.payInfoAmount, { borderColor: planColor + '40', backgroundColor: planColor + '10' }]}>
                 <Text style={[s.payInfoAmountText, { color: planColor }]}>{displayPrice} / month</Text>
@@ -915,14 +934,14 @@ function CheckoutInner() {
 
         {/* ── Google Pay ── */}
         {method === 'google' && (
-          <GlassSection T={T}>
+          <GlassSection T={T} glowColor="#4285F4">
             <View style={s.payInfoCard}>
               <View style={[s.payIconBig, { backgroundColor: '#FFFFFF' }]}>
-                <Text style={{ fontSize: 24 }}>G</Text>
+                <Text style={{ fontSize: 24, fontWeight: '800', color: '#4285F4' }}>G</Text>
               </View>
               <Text style={[s.payInfoTitle, { color: T.text }]}>Google Pay</Text>
               <Text style={[s.payInfoSub, { color: T.textSec }]}>
-                Fast and secure — no card entry required.{'\n'}Uses your Google account payment method.
+                Fast and secure — no card entry required.{'\\n'}Uses your Google account payment method.
               </Text>
               <View style={[s.payInfoAmount, { borderColor: planColor + '40', backgroundColor: planColor + '10' }]}>
                 <Text style={[s.payInfoAmountText, { color: planColor }]}>{displayPrice} / month</Text>
@@ -933,14 +952,14 @@ function CheckoutInner() {
 
         {/* ── MonCash ── */}
         {method === 'moncash' && (
-          <GlassSection T={T} style={{ borderColor: 'rgba(220,20,60,0.25)' }}>
+          <GlassSection T={T} glowColor="#DC143C" style={{ borderColor: 'rgba(220,20,60,0.20)' }}>
             <View style={s.payInfoCard}>
               <View style={[s.payIconBig, { backgroundColor: '#DC143C' }]}>
                 <Text style={s.moncashM}>M</Text>
               </View>
               <Text style={[s.payInfoTitle, { color: T.text }]}>MonCash</Text>
               <Text style={[s.payInfoSub, { color: T.textSec }]}>
-                Pay securely with your Digicel MonCash account.{'\n'}
+                Pay securely with your Digicel MonCash account.{'\\n'}
                 Available for 🇭🇹 Haiti and 🇺🇸 USA users.
               </Text>
               <View style={[s.payInfoAmount, { borderColor: 'rgba(220,20,60,0.3)', backgroundColor: 'rgba(220,20,60,0.08)' }]}>
@@ -965,21 +984,28 @@ function CheckoutInner() {
         </View>
       </ScrollView>
 
-      {/* ── Bottom CTA ── */}
+      {/* ── Bottom CTA with stronger blur ── */}
       <BlurView
-        intensity={85}
+        intensity={90}
         tint={T.blurTint}
-        style={[s.bottomBar, { paddingBottom: insets.bottom + 18, borderTopColor: T.bottomBorder }]}
+        style={[s.bottomBar, { paddingBottom: insets.bottom + 20, borderTopColor: T.bottomBorder }]}
       >
         <View style={s.totalRow}>
           <Text style={[s.totalLabel, { color: T.textSec }]}>Total today</Text>
-          <Text style={[s.totalPrice, { color: T.text }]}>{method === 'moncash' ? `${planPriceHTG} HTG` : displayPrice}</Text>
+          <View style={{ alignItems: 'flex-end' }}>
+            {couponResult?.valid && method !== 'moncash' && (
+              <Text style={[s.totalOriginal, { color: T.textMuted }]}>${planPriceUSD.toFixed(2)}</Text>
+            )}
+            <Text style={[s.totalPrice, { color: T.text }]}>
+              {method === 'moncash' ? `${planPriceHTG} HTG` : displayPrice}
+            </Text>
+          </View>
         </View>
         <TouchableOpacity
           style={[s.payBtn, { backgroundColor: payBtnColor }, (loading || payBtnDisabled) && s.payBtnDisabled]}
           onPress={handlePay}
           disabled={loading || payBtnDisabled}
-          activeOpacity={0.87}
+          activeOpacity={0.85}
         >
           {loading ? (
             <>
@@ -1002,13 +1028,6 @@ function CheckoutInner() {
           <Text style={[s.cancelText, { color: T.textSec }]}>Cancel subscription</Text>
         </TouchableOpacity>
       </BlurView>
-
-      <CountryPickerModal
-        visible={countryPickerVisible}
-        onClose={() => setCountryPickerVisible(false)}
-        onSelect={(c) => { setSelectedCountry(c); setPhoneRaw(''); }}
-        T={T}
-      />
     </KeyboardAvoidingView>
   );
 }
@@ -1046,6 +1065,25 @@ export default function CheckoutScreen() {
 // Styles
 // ─────────────────────────────────────────────────────────
 const s = StyleSheet.create({
+  // Glow layer behind glass
+  glowLayer: {
+    position: 'absolute',
+    top: -2, left: 8, right: 8, bottom: -2,
+    borderRadius: 24,
+    blurRadius: 20,
+  },
+  glassBase: {
+    borderRadius: 22,
+    borderWidth: 1,
+    overflow: 'hidden',
+    // subtle inner shadow feel
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+
   // Header
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
@@ -1063,15 +1101,27 @@ const s = StyleSheet.create({
   headerSecureText: { fontSize: 10, fontWeight: '600', color: '#30D158' },
 
   // Scroll
-  scroll: { paddingHorizontal: 16, paddingTop: 18, gap: 12 },
+  scroll: { paddingHorizontal: 16, paddingTop: 20, gap: 12 },
+
+  // Section header with line
+  sectionHeaderRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingHorizontal: 16, paddingTop: 14, paddingBottom: 6,
+  },
+  sectionLine: { width: 16, height: 2, borderRadius: 1 },
+  sectionLabel: {
+    fontSize: 11, fontWeight: '700', letterSpacing: 0.8,
+  },
 
   // Plan card
+  planGradient: { borderRadius: 22 },
   planCardInner: { flexDirection: 'row', padding: 18, gap: 12, alignItems: 'flex-start' },
   planLeft: { flex: 1 },
   planBadge: { borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4, alignSelf: 'flex-start', marginBottom: 6 },
   planBadgeText: { color: '#FFF', fontSize: 10, fontWeight: '800', letterSpacing: 0.8 },
   planName: { fontSize: 20, fontWeight: '800', marginBottom: 2 },
   planSub: { fontSize: 12 },
+  benefitsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 8 },
   benefitRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   benefitDot: { width: 4, height: 4, borderRadius: 2 },
   benefitText: { fontSize: 11 },
@@ -1085,33 +1135,17 @@ const s = StyleSheet.create({
   },
   discountBadgeText: { fontSize: 11, fontWeight: '700' },
 
-  // Section
-  sectionLabel: {
-    fontSize: 11, fontWeight: '700', letterSpacing: 0.7,
-    paddingHorizontal: 16, paddingTop: 14, paddingBottom: 2,
-  },
-
   // Field
   fieldRow: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 16, paddingVertical: 12, gap: 12, position: 'relative',
   },
-  fieldIconWrap: { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  fieldIconWrap: { width: 36, height: 36, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
   fieldContent: { flex: 1 },
   fieldLabel: { fontSize: 10, fontWeight: '600', marginBottom: 3, letterSpacing: 0.2 },
   fieldInput: { fontSize: 15, fontWeight: '400', padding: 0, margin: 0 },
   focusBar: { position: 'absolute', right: 0, top: 10, bottom: 10, width: 3, borderRadius: 2 },
-  divider: { height: StyleSheet.hairlineWidth, marginLeft: 62 },
-
-  // Phone
-  phoneRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  countryBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    borderRadius: 10, paddingHorizontal: 8, paddingVertical: 6,
-  },
-  countryFlag: { fontSize: 18 },
-  countryCodeTxt: { fontSize: 13, fontWeight: '600' },
-  phoneInput: { fontSize: 15, padding: 0 },
+  divider: { height: StyleSheet.hairlineWidth, marginLeft: 64 },
 
   // Coupon
   applyBtn: {
@@ -1126,7 +1160,7 @@ const s = StyleSheet.create({
   couponMsgText: { fontSize: 12, fontWeight: '500', flex: 1 },
 
   // Payment tabs
-  tabsRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
+  tabsRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginBottom: 14 },
   tab: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     paddingHorizontal: 16, paddingVertical: 11, borderRadius: 50,
@@ -1166,25 +1200,26 @@ const s = StyleSheet.create({
   moncashNoteText: { fontSize: 11, flex: 1, lineHeight: 16 },
 
   // Secure
-  secureRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 4 },
+  secureRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 6 },
   secureText: { fontSize: 12, lineHeight: 18 },
 
   // Bottom bar
   bottomBar: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
-    paddingHorizontal: 18, paddingTop: 14,
-    borderTopWidth: StyleSheet.hairlineWidth, gap: 8, overflow: 'hidden',
+    paddingHorizontal: 18, paddingTop: 16,
+    borderTopWidth: StyleSheet.hairlineWidth, gap: 10, overflow: 'hidden',
   },
   totalRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     marginBottom: 4,
   },
   totalLabel: { fontSize: 13, fontWeight: '500' },
-  totalPrice: { fontSize: 18, fontWeight: '800' },
+  totalOriginal: { fontSize: 13, textDecorationLine: 'line-through' },
+  totalPrice: { fontSize: 20, fontWeight: '800' },
   payBtn: {
     width: '100%', borderRadius: 50, paddingVertical: 16,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.25, shadowRadius: 8,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 10,
     elevation: 6,
   },
   payBtnText: { fontSize: 16, fontWeight: '700', color: '#FFF' },
@@ -1203,3 +1238,4 @@ const s = StyleSheet.create({
   webFallbackTitle: { fontSize: 20, fontWeight: '700', textAlign: 'center' },
   webFallbackSub: { fontSize: 15, textAlign: 'center', lineHeight: 22 },
 });
+
