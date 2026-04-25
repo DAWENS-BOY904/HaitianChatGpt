@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,68 +9,24 @@ import {
   TextInput,
   Platform,
   Image,
-  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAuth, useAlert } from '@/template';
+import { getSupabaseClient } from '@/template';
 import { useTheme } from '../hooks/useTheme';
 import * as Clipboard from 'expo-clipboard';
 
-// ── SUPABASE REAL ─────────────────────────────────────────────────────────
-import { createClient, SupabaseClient, User } from '@supabase/supabase-js';
-import * as SecureStore from 'expo-secure-store';
-import Constants from 'expo-constants';
-
-const ExpoSecureStoreAdapter = {
-  getItem: (key: string) => SecureStore.getItemAsync(key),
-  setItem: (key: string, value: string) => SecureStore.setItemAsync(key, value),
-  removeItem: (key: string) => SecureStore.deleteItemAsync(key),
-};
-
-const supabaseUrl = Constants.expoConfig?.extra?.supabaseUrl || process.env.EXPO_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = Constants.expoConfig?.extra?.supabaseAnonKey || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
-
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Missing Supabase credentials. Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY');
-}
-
-const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    storage: ExpoSecureStoreAdapter,
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: false,
-  },
-});
-
-// ── TYPES ─────────────────────────────────────────────────────────────────
-type ScreenState = 'status' | 'setup' | 'verify';
-type FactorStatus = 'verified' | 'unverified';
-
-interface Factor {
-  id: string;
-  status: FactorStatus;
-  friendly_name: string;
-  factor_type: string;
-}
-
-interface TotpData {
-  id: string;
-  totp?: {
-    qr_code?: string;
-    secret?: string;
-  };
-}
-
-// ── COMPONENT ─────────────────────────────────────────────────────────────
 export default function AuthenticatorAppScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
+  const { showAlert } = useAlert();
+  const supabase = getSupabaseClient();
   const { isDark } = useTheme();
 
-  const [user, setUser] = useState<User | null>(null);
   const [factorId, setFactorId] = useState<string | null>(null);
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [secret, setSecret] = useState<string | null>(null);
@@ -78,13 +34,11 @@ export default function AuthenticatorAppScreen() {
   const [loading, setLoading] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [enrolled, setEnrolled] = useState(false);
-  const [screen, setScreen] = useState<ScreenState>('status');
-  const [existingFactors, setExistingFactors] = useState<Factor[]>([]);
-  const [initLoading, setInitLoading] = useState(true);
+  const [screen, setScreen] = useState<'status' | 'setup' | 'verify'>('status');
+  const [existingFactors, setExistingFactors] = useState<any[]>([]);
   const inputRef = useRef<TextInput>(null);
-  const mountedRef = useRef(true);
 
-  // ── Theme tokens ────────────────────────────────────────────────────────
+  // ── Theme tokens ──────────────────────────────────────────────────────────
   const bg = isDark ? '#000000' : '#F2F2F7';
   const cardBg = isDark ? '#1C1C1E' : '#FFFFFF';
   const primaryText = isDark ? '#FFFFFF' : '#000000';
@@ -95,118 +49,65 @@ export default function AuthenticatorAppScreen() {
   const actionBtnBg = isDark ? '#2C2C2E' : '#EBEBEB';
   const actionBtnBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
 
-  // ── Session Recovery & Auth State ───────────────────────────────────────
   useEffect(() => {
-    mountedRef.current = true;
-
-    const initAuth = async () => {
-      try {
-        const { data: { session }, error } = await supabase.auth.getSession();
-        if (error) throw error;
-        if (mountedRef.current) {
-          setUser(session?.user ?? null);
-        }
-      } catch (e) {
-        console.error('Session recovery error:', e);
-      } finally {
-        if (mountedRef.current) setInitLoading(false);
-      }
-    };
-
-    initAuth();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        if (mountedRef.current) {
-          setUser(session?.user ?? null);
-        }
-      }
-    );
-
-    return () => {
-      mountedRef.current = false;
-      subscription.unsubscribe();
-    };
+    checkEnrollment();
   }, []);
 
-  // ── Check enrollment when user changes ──────────────────────────────────
-  useEffect(() => {
-    if (user) {
-      checkEnrollment();
-    }
-  }, [user]);
-
-  const checkEnrollment = useCallback(async (retryCount = 0) => {
+  const checkEnrollment = async () => {
     try {
       const { data, error } = await supabase.auth.mfa.listFactors();
-      if (error) {
-        if (retryCount < 3) {
-          setTimeout(() => checkEnrollment(retryCount + 1), 1000);
-          return;
-        }
-        throw error;
-      }
-      const totpFactors: Factor[] = data?.totp || [];
-      if (mountedRef.current) {
-        setExistingFactors(totpFactors);
-        const verified = totpFactors.filter((f) => f.status === 'verified');
-        setEnrolled(verified.length > 0);
-      }
+      if (error) return;
+      const totpFactors = data?.totp || [];
+      setExistingFactors(totpFactors);
+      const verified = totpFactors.filter((f: any) => f.status === 'verified');
+      setEnrolled(verified.length > 0);
     } catch (e) {
-      console.error('MFA check error:', e);
-      if (mountedRef.current) {
-        Alert.alert('Error', 'Failed to check 2FA status. Please try again.');
-      }
+      console.log('MFA check error:', e);
     }
-  }, []);
+  };
 
   const handleStartSetup = async () => {
-    if (!user) {
-      Alert.alert('Error', 'You must be logged in to set up 2FA');
-      return;
-    }
+    if (!user) return;
     setLoading(true);
     try {
-      // Clean up unverified factors first
-      const unverified = existingFactors.filter((f) => f.status === 'unverified');
+      const unverified = existingFactors.filter((f: any) => f.status === 'unverified');
       for (const f of unverified) {
         await supabase.auth.mfa.unenroll({ factorId: f.id });
       }
 
       const { data, error } = await supabase.auth.mfa.enroll({
         factorType: 'totp',
-        friendlyName: `App-${user.email?.split('@')[0] || 'user'}-${Date.now()}`,
+        friendlyName: `HaitianAI-${user.email?.split('@')[0] || 'user'}`,
       });
 
       if (error) {
-        Alert.alert('Setup Error', error.message || 'Failed to start MFA setup');
+        showAlert('Setup Error', error.message || 'Failed to start MFA setup');
         return;
       }
 
       if (data) {
-        const totpData = data as unknown as TotpData;
-        setFactorId(totpData.id);
-        setQrCode(totpData.totp?.qr_code || null);
-        setSecret(totpData.totp?.secret || null);
+        setFactorId(data.id);
+        setQrCode(data.totp?.qr_code || null);
+        setSecret(data.totp?.secret || null);
         setScreen('setup');
       }
     } catch (e: any) {
-      Alert.alert('Error', e?.message || 'Failed to enroll TOTP');
+      showAlert('Error', e?.message || 'Failed to enroll TOTP');
     } finally {
       setLoading(false);
     }
   };
 
   const handleVerify = async () => {
-    if (!factorId || totpCode.length !== 6) {
-      Alert.alert('Error', 'Please enter the 6-digit code from your authenticator app');
+    if (!factorId || totpCode.length < 6) {
+      showAlert('Error', 'Please enter the 6-digit code from your authenticator app');
       return;
     }
     setVerifying(true);
     try {
       const { data: challengeData, error: challengeError } = await supabase.auth.mfa.challenge({ factorId });
       if (challengeError) {
-        Alert.alert('Verification Error', challengeError.message || 'Failed to create challenge');
+        showAlert('Verification Error', challengeError.message || 'Failed to create challenge');
         return;
       }
 
@@ -217,75 +118,57 @@ export default function AuthenticatorAppScreen() {
       });
 
       if (verifyError) {
-        Alert.alert('Wrong Code', verifyError.message || 'Invalid code. Please try again.');
+        showAlert('Wrong Code', verifyError.message || 'Invalid code. Please try again.');
         setTotpCode('');
         return;
       }
 
       setEnrolled(true);
       setScreen('status');
-      setTotpCode('');
-      Alert.alert('Success', 'Authenticator app enabled! Your account is now protected with 2FA.');
+      showAlert('Success', 'Authenticator app enabled! Your account is now protected with 2FA.');
       await checkEnrollment();
     } catch (e: any) {
-      Alert.alert('Error', e?.message || 'Verification failed');
+      showAlert('Error', e?.message || 'Verification failed');
     } finally {
       setVerifying(false);
     }
   };
 
   const handleDisable = () => {
-    Alert.alert(
-      'Disable 2FA',
-      'Are you sure you want to disable your authenticator app? This makes your account less secure.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Disable',
-          style: 'destructive',
-          onPress: async () => {
-            setLoading(true);
-            try {
-              const verified = existingFactors.filter((f) => f.status === 'verified');
-              for (const f of verified) {
-                await supabase.auth.mfa.unenroll({ factorId: f.id });
-              }
-              setEnrolled(false);
-              setFactorId(null);
-              setQrCode(null);
-              setSecret(null);
-              setExistingFactors([]);
-              Alert.alert('Disabled', 'Authenticator app has been disabled.');
-            } catch (e: any) {
-              Alert.alert('Error', e?.message || 'Failed to disable 2FA');
-            } finally {
-              setLoading(false);
+    showAlert('Disable 2FA', 'Are you sure you want to disable your authenticator app?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Disable', style: 'destructive',
+        onPress: async () => {
+          setLoading(true);
+          try {
+            const verified = existingFactors.filter((f: any) => f.status === 'verified');
+            for (const f of verified) {
+              await supabase.auth.mfa.unenroll({ factorId: f.id });
             }
-          },
+            setEnrolled(false);
+            setFactorId(null);
+            setQrCode(null);
+            setSecret(null);
+            setExistingFactors([]);
+            showAlert('Disabled', 'Authenticator app has been disabled.');
+          } catch (e: any) {
+            showAlert('Error', e?.message || 'Failed to disable 2FA');
+          } finally {
+            setLoading(false);
+          }
         },
-      ]
-    );
+      },
+    ]);
   };
 
   const copySecret = async () => {
     if (secret) {
       await Clipboard.setStringAsync(secret);
-      Alert.alert('Copied', 'Secret key copied to clipboard');
+      showAlert('Copied', 'Secret key copied to clipboard');
     }
   };
 
-  const goToVerify = () => {
-    setScreen('verify');
-    setTimeout(() => inputRef.current?.focus(), 300);
-  };
-
-  const goBack = () => {
-    if (screen === 'verify') setScreen('setup');
-    else if (screen === 'setup') setScreen('status');
-    else router.back();
-  };
-
-  // ── Styles ──────────────────────────────────────────────────────────────
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: bg },
     header: {
@@ -385,50 +268,11 @@ export default function AuthenticatorAppScreen() {
       padding: 32, alignItems: 'center', gap: 16, minWidth: 200,
     },
     loadingText: { fontSize: 15, color: primaryText },
-    initOverlay: {
-      flex: 1,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: bg,
-    },
   });
-
-  // ── Init Loading ────────────────────────────────────────────────────────
-  if (initLoading) {
-    return (
-      <View style={styles.initOverlay}>
-        <ActivityIndicator size="large" color="#10A37F" />
-        <Text style={{ color: secondaryText, marginTop: 16, fontSize: 15 }}>
-          Loading...
-        </Text>
-      </View>
-    );
-  }
-
-  // ── Not Logged In Guard ─────────────────────────────────────────────────
-  if (!user) {
-    return (
-      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center', padding: 32 }]}>
-        <Ionicons name="log-in-outline" size={64} color={secondaryText} />
-        <Text style={[styles.setupTitle, { marginTop: 16, marginBottom: 8 }]}>
-          Not Logged In
-        </Text>
-        <Text style={[styles.setupSub, { marginBottom: 24 }]}>
-          Please log in to manage two-factor authentication.
-        </Text>
-        <TouchableOpacity
-          style={[styles.actionBtn, { backgroundColor: '#10A37F', borderColor: '#10A37F', width: '100%' }]}
-          onPress={() => router.push('/login')}
-        >
-          <Text style={[styles.actionBtnText, { color: '#FFFFFF' }]}>Go to Login</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
 
   const HeaderContent = () => (
     <>
-      <TouchableOpacity style={styles.backBtn} onPress={goBack}>
+      <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
         <Ionicons name="chevron-back" size={18} color={primaryText} />
       </TouchableOpacity>
       <Text style={styles.headerTitle}>Authenticator App</Text>
@@ -437,6 +281,7 @@ export default function AuthenticatorAppScreen() {
 
   return (
     <View style={styles.container}>
+      {/* BlurView header on iOS */}
       {Platform.OS === 'ios' ? (
         <BlurView
           intensity={isDark ? 60 : 50}
@@ -451,11 +296,8 @@ export default function AuthenticatorAppScreen() {
         </View>
       )}
 
-      <ScrollView
-        style={styles.content}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-      >
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+
         {/* ── STATUS SCREEN ── */}
         {screen === 'status' && (
           <>
@@ -464,18 +306,13 @@ export default function AuthenticatorAppScreen() {
               <View style={styles.row}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.rowLabel}>Authenticator App</Text>
-                  <Text style={styles.rowSub}>
-                    {enrolled ? 'Active and protecting your account' : 'Not configured'}
-                  </Text>
+                  <Text style={styles.rowSub}>{enrolled ? 'Active and protecting your account' : 'Not configured'}</Text>
                 </View>
-                <View style={[
-                  styles.statusBadge,
-                  {
-                    backgroundColor: enrolled
-                      ? (isDark ? '#1A3D20' : '#D4F5DC')
-                      : (isDark ? '#3A2020' : '#FFE5E5'),
-                  },
-                ]}>
+                <View style={[styles.statusBadge, {
+                  backgroundColor: enrolled
+                    ? (isDark ? '#1A3D20' : '#D4F5DC')
+                    : (isDark ? '#3A2020' : '#FFE5E5'),
+                }]}>
                   <Text style={[styles.statusText, { color: enrolled ? '#34C759' : '#FF453A' }]}>
                     {enrolled ? 'On' : 'Off'}
                   </Text>
@@ -497,13 +334,10 @@ export default function AuthenticatorAppScreen() {
                   <Text style={styles.actionBtnText}>Re-configure App</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[
-                    styles.actionBtn,
-                    {
-                      backgroundColor: isDark ? '#3A1A1A' : '#FFE5E5',
-                      borderColor: isDark ? '#FF453A33' : '#FFCCCC',
-                    },
-                  ]}
+                  style={[styles.actionBtn, {
+                    backgroundColor: isDark ? '#3A1A1A' : '#FFE5E5',
+                    borderColor: isDark ? '#FF453A33' : '#FFCCCC',
+                  }]}
                   onPress={handleDisable}
                   disabled={loading}
                 >
@@ -513,13 +347,10 @@ export default function AuthenticatorAppScreen() {
               </View>
             ) : (
               <TouchableOpacity
-                style={[
-                  styles.actionBtn,
-                  {
-                    backgroundColor: isDark ? '#10A37F22' : '#E8F7F3',
-                    borderColor: isDark ? '#10A37F55' : '#A8DECE',
-                  },
-                ]}
+                style={[styles.actionBtn, {
+                  backgroundColor: isDark ? '#10A37F22' : '#E8F7F3',
+                  borderColor: isDark ? '#10A37F55' : '#A8DECE',
+                }]}
                 onPress={handleStartSetup}
                 disabled={loading}
               >
@@ -528,9 +359,7 @@ export default function AuthenticatorAppScreen() {
                 ) : (
                   <>
                     <Ionicons name="shield-checkmark-outline" size={20} color="#10A37F" />
-                    <Text style={[styles.actionBtnText, { color: '#10A37F' }]}>
-                      Enable Authenticator App
-                    </Text>
+                    <Text style={[styles.actionBtnText, { color: '#10A37F' }]}>Enable Authenticator App</Text>
                   </>
                 )}
               </TouchableOpacity>
@@ -556,11 +385,9 @@ export default function AuthenticatorAppScreen() {
                 <Image source={{ uri: qrCode }} style={styles.qrImage} resizeMode="contain" />
               </View>
             ) : (
-              <View style={[styles.qrCard, { justifyContent: 'center', alignItems: 'center' }]}>
+              <View style={[styles.qrCard, { justifyContent: 'center', alignItems: 'center', height: 220 }]}>
                 <ActivityIndicator color="#10A37F" size="large" />
-                <Text style={{ color: secondaryText, marginTop: 12, fontSize: 14 }}>
-                  Generating QR Code...
-                </Text>
+                <Text style={{ color: secondaryText, marginTop: 12, fontSize: 14 }}>Generating QR Code...</Text>
               </View>
             )}
 
@@ -582,9 +409,7 @@ export default function AuthenticatorAppScreen() {
                 'Enter the 6-digit code below',
               ].map((step, i) => (
                 <View key={i} style={styles.stepRow}>
-                  <View style={styles.stepNum}>
-                    <Text style={styles.stepNumText}>{i + 1}</Text>
-                  </View>
+                  <View style={styles.stepNum}><Text style={styles.stepNumText}>{i + 1}</Text></View>
                   <Text style={styles.stepText}>{step}</Text>
                 </View>
               ))}
@@ -592,7 +417,7 @@ export default function AuthenticatorAppScreen() {
 
             <TouchableOpacity
               style={[styles.actionBtn, { marginTop: 4 }]}
-              onPress={goToVerify}
+              onPress={() => { setScreen('verify'); setTimeout(() => inputRef.current?.focus(), 300); }}
             >
               <Ionicons name="arrow-forward" size={18} color={primaryText} />
               <Text style={styles.actionBtnText}>I have scanned the code</Text>
@@ -608,10 +433,9 @@ export default function AuthenticatorAppScreen() {
         {screen === 'verify' && (
           <>
             <View style={styles.setupHeader}>
-              <View style={[
-                styles.setupIconWrap,
-                { backgroundColor: isDark ? '#1A2A40' : '#D6EEF9' },
-              ]}>
+              <View style={[styles.setupIconWrap, {
+                backgroundColor: isDark ? '#1A2A40' : '#D6EEF9',
+              }]}>
                 <Ionicons name="keypad-outline" size={36} color="#5AC8FA" />
               </View>
               <Text style={styles.setupTitle}>Enter Verification Code</Text>
@@ -637,10 +461,9 @@ export default function AuthenticatorAppScreen() {
             </View>
 
             <TouchableOpacity
-              style={[
-                styles.actionBtn,
-                { backgroundColor: totpCode.length === 6 ? '#10A37F' : actionBtnBg },
-              ]}
+              style={[styles.actionBtn, {
+                backgroundColor: totpCode.length === 6 ? '#10A37F' : actionBtnBg,
+              }]}
               onPress={handleVerify}
               disabled={verifying || totpCode.length < 6}
             >
@@ -648,17 +471,8 @@ export default function AuthenticatorAppScreen() {
                 <ActivityIndicator color="#FFFFFF" />
               ) : (
                 <>
-                  <Ionicons
-                    name="checkmark-circle-outline"
-                    size={20}
-                    color={totpCode.length === 6 ? '#FFF' : primaryText}
-                  />
-                  <Text style={[
-                    styles.actionBtnText,
-                    totpCode.length === 6 && { color: '#FFF' },
-                  ]}>
-                    Verify & Enable
-                  </Text>
+                  <Ionicons name="checkmark-circle-outline" size={20} color={totpCode.length === 6 ? '#FFF' : primaryText} />
+                  <Text style={[styles.actionBtnText, totpCode.length === 6 && { color: '#FFF' }]}>Verify & Enable</Text>
                 </>
               )}
             </TouchableOpacity>

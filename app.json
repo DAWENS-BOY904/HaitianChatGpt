@@ -1,70 +1,36 @@
 {
   "expo": {
-    "name": "Dawinix-HT",
+    "name": "Dawinix HT",
     "slug": "dawinix-ht",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/logo.png",
     "scheme": "dawinixht",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": false,
-    "owner": "dawens-boy",
-
+    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.onspace.dawinixht",
+      "bundleIdentifier": "com.onspace.dawinix-ht",
       "buildNumber": "1.0.0",
-      "usesAppleSignIn": true,
-      "infoPlist": {
-        "NSMicrophoneUsageDescription": "This app uses microphone for AI voice chat.",
-        "NSCameraUsageDescription": "This app uses camera for AI features.",
-        "NSPhotoLibraryUsageDescription": "This app accesses photos for uploads."
-      }
+      "usesAppleSignIn": true
     },
-
     "android": {
-      "package": "com.onspace.dawinixht",
-      "versionCode": 1,
-      "edgeToEdgeEnabled": true,
-      "permissions": [
-        "RECORD_AUDIO",
-        "CAMERA"
-      ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/logo.png",
         "backgroundColor": "#ffffff"
       },
-      "intentFilters": [
-        {
-          "action": "VIEW",
-          "data": [
-            {
-              "scheme": "dawinixht"
-            }
-          ],
-          "category": ["BROWSABLE", "DEFAULT"]
-        }
-      ]
+      "package": "com.onspace.dawinix-ht",
+      "versionCode": 1,
+      "edgeToEdgeEnabled": true
     },
-
     "web": {
       "bundler": "metro",
       "output": "static",
       "favicon": "./assets/images/logo.png"
     },
-
     "plugins": [
       "expo-router",
       "expo-apple-authentication",
-      "expo-av",
-      "expo-speech",
-      "expo-notifications",
-      [
-        "expo-secure-store",
-        {
-          "configureAndroidBackup": true
-        }
-      ],
       [
         "expo-splash-screen",
         {
@@ -76,23 +42,8 @@
       ],
       "expo-web-browser"
     ],
-
-    "extra": {
-      "SUPABASE_URL": "${SUPABASE_URL}",
-      "SUPABASE_ANON_KEY": "${SUPABASE_ANON_KEY}",
-      "OPENAI_API_KEY": "${OPENAI_API_KEY}"
-    },
-
-    "updates": {
-      "fallbackToCacheTimeout": 0
-    },
-
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
-
     "experiments": {
-      "typedRoutes": false
+      "typedRoutes": true
     }
   }
 }
