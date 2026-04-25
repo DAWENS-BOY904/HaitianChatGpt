@@ -176,7 +176,7 @@ if (Platform.OS !== 'web') {
 // ─────────────────────────────────────────────────────────
 const STRIPE_PK =
   process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY ||
-  'pk_live_51TPUrUE0VkO7z1VnRqkzCbmYPxjnq7sguPT50wDpUHCEBBEcaBXVy8iFxoAWcT5nxQ5kfMJjMEGVjhYaXv5OB9cT00mdXajb91';
+  'pk_live_51RjvcRE0VkO7z1VngDeBXrHSrAe6uRiOl47oNZ2R3i0xoBP7UeVWxcvsWAO2rhSgRmCS2773WNHHCyvlVSZrmBtW00Qs95QFc3';
 
 const PLUS_PRICE_ID = 'price_1TPUrzE0VkO7z1Vnlgj45978';
 
