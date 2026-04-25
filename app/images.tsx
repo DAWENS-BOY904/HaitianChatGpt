@@ -777,3 +777,4 @@ const s = StyleSheet.create({
     paddingHorizontal: 4,
   },
 });
+please it must go to home page and create chat id in side menu like others fok message save in real time and lel al nn homepage ai thinking and baw real photo model lan nn edg function ai dwe knw all photo yo When a user uploads a photo on the images page and taps send, show a loading overlay on the home page while AI analyzes the image, then display the AI response with an 'Save to My Images' button that stores the result in media_files table for the gallery.
