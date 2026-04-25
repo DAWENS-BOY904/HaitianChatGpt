@@ -1332,5 +1332,4 @@ const s = StyleSheet.create({
   webFallback: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 12 },
   webFallbackTitle: { fontSize: 20, fontWeight: '700', textAlign: 'center' },
   webFallbackSub: { fontSize: 15, textAlign: 'center', lineHeight: 22 },
-}).
-redesign checkout page like this photo:https://files.catbox.moe/0fxp2x.png and make it more better tout bgy stay fix bien ranje dont skip redesign settings lan real svg logo catd amex visa etc no demo
+});
