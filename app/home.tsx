@@ -2658,4 +2658,3 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-please make this change in real time blur mode donmt skip Please clean up the UI and functionality: remove the duplicate like/unlike icons (keep only the top two and delete the bottom ones), ensure the like/unlike functions work on the top icons and inside the message action modal, make the message action modal use a blur background, prevent audio from continuing to play when the modal is open, fix the feedback page by adding real photo upload, and change the issue selection to open in a blur modal instead of displaying inline—implement all changes fully (no demo or skipped parts).
