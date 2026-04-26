@@ -340,3 +340,4 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
 });
+add this in blur mode effect and better in mobile clean.
