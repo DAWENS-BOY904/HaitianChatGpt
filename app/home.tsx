@@ -2558,5 +2558,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-please add this feature Integrate Midjourney API as a Priority 3 image generation provider in supabase/functions/_shared/ai-providers using the MIDJOURNEY_API_KEY secret. Add it to generateImageSmart after ElevenLabs and before Stability AI, using the Midjourney REST API endpoint to generate real high-quality images.
-
+please add this feature when ai send you a message you click the like and unlik if click like icon its says thank for feeback message lan dwe an blur mode and mete mini x button siw vle retirel rapid and if click like the unlik icon must soti li pa la and if you retire like lan lap paret and if click unlike its auto open a full moda in blur mode  select issue menu n blur and  limit 2000  and if click learn more i ope real link nn app lan like this:https://ibb.co/xqK9qW3r,https://ibb.co/qMWZBp1B make all real in blur.
