@@ -514,3 +514,4 @@ const s = StyleSheet.create({
   },
   historyScoreText: { fontSize: 16, fontWeight: '700' },
 });
+please fix it never show modal quizzess in home pages if not ask for create and when click next  never send the same quizzess send 10 new and fix it better real ai edg.
