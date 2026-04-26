@@ -2612,4 +2612,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-
+please read my message and make change in real time and in blur mode effect siable edg chat message for quizzes request and When the user clicks 'Next quiz' on the completion screen in QuizView, automatically call the generate-quiz edge function with the same topic/difficulty and load the new questions inline without showing the topic picker again — instant seamless flow Remove the close (X) button from the QuizView header so the quiz widget stays visible in the chat permanently and cannot be dismissed by the user — it should only disappear after viewing results funtion chat message edg disable for quizess request.
