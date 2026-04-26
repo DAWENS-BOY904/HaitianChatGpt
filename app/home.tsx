@@ -642,6 +642,14 @@ export default function HomeScreen() {
   const [imageAnalyzingOverlay, setImageAnalyzingOverlay] = useState(false);
   const [savedImageUrls, setSavedImageUrls] = useState<Set<string>>(new Set());
   const [savingImageId, setSavingImageId] = useState<string | null>(null);
+  // Message reactions
+  const [likedMessages, setLikedMessages] = useState<Set<string>>(new Set());
+  const [unlikedMessages, setUnlikedMessages] = useState<Set<string>>(new Set());
+  const [feedbackToastId, setFeedbackToastId] = useState<string | null>(null);
+  const [dislikeFeedbackVisible, setDislikeFeedbackVisible] = useState(false);
+  const [dislikeTargetId, setDislikeTargetId] = useState<string | null>(null);
+  const [dislikeIssue, setDislikeIssue] = useState('');
+  const [dislikeCustomText, setDislikeCustomText] = useState('');
   const [isOffline] = useState(false);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
@@ -696,6 +704,36 @@ export default function HomeScreen() {
   }, [params.fromImages]);
 
   // ── Save AI-generated image to My Images gallery ──
+  const handleLikeMessage = useCallback((messageId: string) => {
+    const alreadyLiked = likedMessages.has(messageId);
+    if (alreadyLiked) {
+      setLikedMessages(prev => { const s = new Set(prev); s.delete(messageId); return s; });
+      setFeedbackToastId(null);
+    } else {
+      setLikedMessages(prev => new Set([...prev, messageId]));
+      setUnlikedMessages(prev => { const s = new Set(prev); s.delete(messageId); return s; });
+      setFeedbackToastId(messageId);
+      setTimeout(() => setFeedbackToastId(curr => curr === messageId ? null : curr), 3500);
+    }
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  }, [likedMessages]);
+
+  const handleUnlikeMessage = useCallback((messageId: string) => {
+    const alreadyUnliked = unlikedMessages.has(messageId);
+    if (alreadyUnliked) {
+      setUnlikedMessages(prev => { const s = new Set(prev); s.delete(messageId); return s; });
+    } else {
+      setUnlikedMessages(prev => new Set([...prev, messageId]));
+      setLikedMessages(prev => { const s = new Set(prev); s.delete(messageId); return s; });
+      setFeedbackToastId(null);
+      setDislikeTargetId(messageId);
+      setDislikeIssue('');
+      setDislikeCustomText('');
+      setDislikeFeedbackVisible(true);
+    }
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  }, [unlikedMessages]);
+
   const handleSaveToMyImages = useCallback(async (imageUrl: string, messageId: string) => {
     if (!user?.id || savingImageId) return;
     setSavingImageId(messageId);
@@ -1555,6 +1593,9 @@ export default function HomeScreen() {
     const detectedImageUrl: string | null = imageUrlMatch ? imageUrlMatch[0] : (item.imageUrl || null);
     const alreadySaved = detectedImageUrl ? savedImageUrls.has(detectedImageUrl) : false;
     const isSavingThis = savingImageId === item.id;
+    const isLiked = likedMessages.has(item.id);
+    const isUnliked = unlikedMessages.has(item.id);
+    const showFeedbackToast = feedbackToastId === item.id;
     return (
       <View>
         <MessageItem
@@ -1574,6 +1615,58 @@ export default function HomeScreen() {
             result={mathData.result}
             onOpen={() => { setCalcExpression(mathData.expression); setCalcResult(mathData.result); setCalcVisible(true); }}
           />
+        ) : null}
+        {/* Like/Unlike reaction row — AI messages only */}
+        {item.role === 'assistant' && !item.isDeleted ? (
+          <View style={{ paddingHorizontal: 16, paddingBottom: 4 }}>
+            {showFeedbackToast ? (
+              <View style={{ overflow: 'hidden', borderRadius: 14, alignSelf: 'flex-start', marginBottom: 6 }}>
+                {Platform.OS === 'ios' ? (
+                  <BlurView intensity={70} tint={isDark ? 'dark' : 'light'} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 9 }}>
+                    <Ionicons name="checkmark-circle" size={15} color="#30D158" />
+                    <Text style={{ color: isDark ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.78)', fontSize: 13, fontWeight: '600' }}>Thank you for your feedback!</Text>
+                    <TouchableOpacity onPress={() => setFeedbackToastId(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                      <Ionicons name="close" size={13} color={isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.4)'} />
+                    </TouchableOpacity>
+                  </BlurView>
+                ) : (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 9, backgroundColor: isDark ? 'rgba(44,44,46,0.95)' : 'rgba(242,242,247,0.97)', borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)', borderRadius: 14 }}>
+                    <Ionicons name="checkmark-circle" size={15} color="#30D158" />
+                    <Text style={{ color: isDark ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.78)', fontSize: 13, fontWeight: '600' }}>Thank you for your feedback!</Text>
+                    <TouchableOpacity onPress={() => setFeedbackToastId(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                      <Ionicons name="close" size={13} color={isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.4)'} />
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+            ) : null}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <TouchableOpacity
+                onPress={() => handleLikeMessage(item.id)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                style={{ padding: 4 }}
+              >
+                <Ionicons
+                  name={isLiked ? 'thumbs-up' : 'thumbs-up-outline'}
+                  size={17}
+                  color={isLiked ? accentColor : colors.textSecondary}
+                />
+              </TouchableOpacity>
+              {!isLiked ? (
+                <TouchableOpacity
+                  onPress={() => handleUnlikeMessage(item.id)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  style={{ padding: 4 }}
+                >
+                  <Ionicons
+                    name={isUnliked ? 'thumbs-down' : 'thumbs-down-outline'}
+                    size={17}
+                    color={isUnliked ? '#FF453A' : colors.textSecondary}
+                  />
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          </View>
         ) : null}
         {/* Save to My Images button — shown on AI messages with image URLs */}
         {item.role === 'assistant' && detectedImageUrl && user?.id ? (
@@ -2402,6 +2495,75 @@ export default function HomeScreen() {
               </View>
             </Modal>
 
+            {/* Dislike Feedback Modal */}
+            <Modal visible={dislikeFeedbackVisible} transparent animationType="none" onRequestClose={() => setDislikeFeedbackVisible(false)}>
+              <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                <BlurView intensity={60} tint="dark" style={StyleSheet.absoluteFill} />
+                <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setDislikeFeedbackVisible(false)} />
+                <View style={{ width: '90%', maxWidth: 380, borderRadius: 22, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.45, shadowRadius: 24, elevation: 24 }}>
+                  <BlurView intensity={90} tint="dark" style={{ padding: 24, borderRadius: 22 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+                      <Text style={{ color: '#FFF', fontSize: 18, fontWeight: '700' }}>Share your feedback</Text>
+                      <TouchableOpacity onPress={() => setDislikeFeedbackVisible(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                        <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center' }}>
+                          <Ionicons name="close" size={14} color="rgba(255,255,255,0.7)" />
+                        </View>
+                      </TouchableOpacity>
+                    </View>
+                    <Text style={{ color: 'rgba(255,255,255,0.55)', fontSize: 13, marginBottom: 14 }}>What was the issue with this response?</Text>
+                    {[
+                      { label: "Didn't fully follow instructions", icon: 'alert-circle-outline' },
+                      { label: 'Not factually correct', icon: 'close-circle-outline' },
+                      { label: 'Refused when it should not have', icon: 'ban-outline' },
+                      { label: 'Response was incomplete', icon: 'git-merge-outline' },
+                      { label: 'Harmful or unsafe content', icon: 'warning-outline' },
+                      { label: 'Other', icon: 'ellipsis-horizontal-circle-outline' },
+                    ].map((issue, i) => (
+                      <TouchableOpacity
+                        key={issue.label}
+                        style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, borderTopWidth: i > 0 ? StyleSheet.hairlineWidth : 0, borderTopColor: 'rgba(255,255,255,0.1)' }}
+                        onPress={() => setDislikeIssue(issue.label)}
+                        activeOpacity={0.7}
+                      >
+                        <Ionicons name={issue.icon as any} size={20} color={dislikeIssue === issue.label ? accentColor : 'rgba(255,255,255,0.6)'} />
+                        <Text style={{ flex: 1, color: dislikeIssue === issue.label ? accentColor : 'rgba(255,255,255,0.85)', fontSize: 15, fontWeight: dislikeIssue === issue.label ? '700' : '400' }}>{issue.label}</Text>
+                        {dislikeIssue === issue.label ? <Ionicons name="checkmark" size={18} color={accentColor} /> : null}
+                      </TouchableOpacity>
+                    ))}
+                    <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.1)', marginVertical: 14 }} />
+                    <Text style={{ color: 'rgba(255,255,255,0.55)', fontSize: 13, marginBottom: 8 }}>Additional details (optional)</Text>
+                    <TextInput
+                      style={{ backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, color: '#FFF', fontSize: 14, minHeight: 80, textAlignVertical: 'top', marginBottom: 6 }}
+                      placeholder="Describe the issue..."
+                      placeholderTextColor="rgba(255,255,255,0.3)"
+                      value={dislikeCustomText}
+                      onChangeText={txt => { if (txt.length <= 2000) setDislikeCustomText(txt); }}
+                      multiline
+                      maxLength={2000}
+                    />
+                    <Text style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11, textAlign: 'right', marginBottom: 16 }}>{dislikeCustomText.length}/2000</Text>
+                    <TouchableOpacity
+                      style={{ marginBottom: 10 }}
+                      onPress={() => { Linking.openURL('https://help.openai.com/en/articles/6825527-what-feedback-can-i-submit-in-chatgpt'); }}
+                    >
+                      <Text style={{ color: accentColor, fontSize: 13, fontWeight: '600', textAlign: 'center' }}>Learn more about our feedback policy</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={{ backgroundColor: accentColor, borderRadius: 14, paddingVertical: 14, alignItems: 'center', opacity: dislikeIssue ? 1 : 0.45 }}
+                      disabled={!dislikeIssue}
+                      onPress={() => {
+                        setDislikeFeedbackVisible(false);
+                        showAlert('Feedback submitted', 'Thank you! Your feedback helps us improve.');
+                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                      }}
+                    >
+                      <Text style={{ color: '#FFF', fontSize: 16, fontWeight: '700' }}>Submit feedback</Text>
+                    </TouchableOpacity>
+                  </BlurView>
+                </View>
+              </View>
+            </Modal>
+
             <PresetsModal
               visible={presetsModalVisible}
               onClose={() => setPresetsModalVisible(false)}
@@ -2558,4 +2720,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-please add this feature when ai send you a message you click the like and unlik if click like icon its says thank for feeback message lan dwe an blur mode and mete mini x button siw vle retirel rapid and if click like the unlik icon must soti li pa la and if you retire like lan lap paret and if click unlike its auto open a full moda in blur mode  select issue menu n blur and  limit 2000  and if click learn more i ope real link nn app lan like this:https://ibb.co/xqK9qW3r,https://ibb.co/qMWZBp1B make all real in blur.
+
