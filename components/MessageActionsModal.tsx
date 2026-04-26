@@ -13,6 +13,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import * as Clipboard from 'expo-clipboard';
+import * as Haptics from 'expo-haptics';
 import * as Speech from 'expo-speech';
 import { useTheme } from '../hooks/useTheme';
 import { useAlert } from '@/template';
@@ -99,6 +100,7 @@ export function MessageActionsModal({
 
   // Copy
   const handleCopy = useCallback(async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     await Clipboard.setStringAsync(message.content);
     showAlert('Copied!', 'Message copied to clipboard');
     onClose();
@@ -106,6 +108,7 @@ export function MessageActionsModal({
 
   // Share
   const handleShare = useCallback(async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     try {
       await Share.share({ message: message.content, title: 'Haitian AI Message' });
     } catch (_e) {}
@@ -113,6 +116,7 @@ export function MessageActionsModal({
 
   // Like handler — uses home.tsx handler if provided, falls back to onLike
   const handleLike = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     if (handleLikeMessage) {
       handleLikeMessage(message.id);
     } else {
@@ -122,6 +126,7 @@ export function MessageActionsModal({
 
   // Dislike handler — uses home.tsx handler if provided, falls back to onLike
   const handleDislike = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     if (handleUnlikeMessage) {
       handleUnlikeMessage(message.id);
       onClose(); // close modal before feedback page opens
@@ -357,4 +362,4 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 });
-add haptic feedback (Haptics.impactAsync) to the Like, Dislike, Copy, and Share buttons inside MessageActionsModal so every tap has a physical response.
+
