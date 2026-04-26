@@ -443,6 +443,113 @@ export async function generateImageWithElevenLabs(prompt: string): Promise<{
 }
 
 /**
+ * Midjourney Image Generation (Priority 3 — after ElevenLabs)
+ * Uses the Midjourney REST API via MIDJOURNEY_API_KEY
+ */
+export async function generateImageWithMidjourney(prompt: string): Promise<{
+  imageUrl?: string;
+  error?: string;
+}> {
+  const apiKey = Deno.env.get('MIDJOURNEY_API_KEY');
+  if (!apiKey) {
+    console.log('[Image] MIDJOURNEY_API_KEY not set — skipping Midjourney');
+    return { error: 'Midjourney key not configured' };
+  }
+
+  const enhancedPrompt = buildEnhancedImagePrompt(prompt);
+
+  // Try multiple Midjourney-compatible REST API endpoints
+  const endpoints = [
+    {
+      url: 'https://api.useapi.net/v2/jobs/imagine',
+      headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: enhancedPrompt.slice(0, 2000) }),
+    },
+    {
+      url: 'https://api.midjourney.com/v1/imagine',
+      headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: enhancedPrompt.slice(0, 2000), width: 1024, height: 1024 }),
+    },
+  ];
+
+  for (const endpoint of endpoints) {
+    try {
+      console.log(`[Image] Trying Midjourney endpoint: ${endpoint.url}`);
+      const response = await fetch(endpoint.url, {
+        method: 'POST',
+        headers: endpoint.headers,
+        body: endpoint.body,
+        signal: AbortSignal.timeout(90000),
+      });
+
+      if (!response.ok) {
+        const errText = await response.text().catch(() => response.statusText);
+        console.log(`[Image] Midjourney ${endpoint.url} failed (${response.status}): ${errText.slice(0, 200)}`);
+        continue;
+      }
+
+      const data = await response.json().catch(() => null);
+      if (!data) { console.log('[Image] Midjourney returned non-JSON'); continue; }
+
+      // Handle various response shapes
+      const imageUrl =
+        data.imageUrl ||
+        data.image_url ||
+        data.url ||
+        data.result?.imageUrl ||
+        data.result?.url ||
+        data.attachments?.[0]?.url ||
+        data.data?.[0]?.url;
+
+      if (imageUrl) {
+        console.log('[Image] Midjourney success!');
+        return { imageUrl };
+      }
+
+      // Poll for async job completion (useapi.net pattern)
+      const jobId = data.jobid || data.job_id || data.id;
+      if (jobId) {
+        console.log(`[Image] Midjourney job submitted: ${jobId}, polling...`);
+        for (let attempt = 0; attempt < 15; attempt++) {
+          await new Promise(r => setTimeout(r, 5000));
+          try {
+            const pollUrl = `https://api.useapi.net/v2/jobs/?jobid=${jobId}`;
+            const pollRes = await fetch(pollUrl, {
+              headers: { 'Authorization': `Bearer ${apiKey}` },
+              signal: AbortSignal.timeout(15000),
+            });
+            if (!pollRes.ok) continue;
+            const pollData = await pollRes.json().catch(() => null);
+            if (!pollData) continue;
+            const status = pollData.status?.toLowerCase() || '';
+            if (status === 'completed' || status === 'done' || status === 'finished') {
+              const polledUrl =
+                pollData.imageUrl ||
+                pollData.url ||
+                pollData.attachments?.[0]?.url ||
+                pollData.result?.url;
+              if (polledUrl) {
+                console.log('[Image] Midjourney async job completed!');
+                return { imageUrl: polledUrl };
+              }
+            }
+            if (status === 'failed' || status === 'error') {
+              console.log('[Image] Midjourney async job failed');
+              break;
+            }
+          } catch (_e) {}
+        }
+        console.log('[Image] Midjourney polling timed out');
+      }
+    } catch (error: any) {
+      console.log(`[Image] Midjourney endpoint exception:`, error.message);
+    }
+  }
+
+  return { error: 'Midjourney image generation failed' };
+}
+
+/**
  * Stability AI Image Generation (FALLBACK)
  * Uses the stable-diffusion-xl-1024-v1-0 model
  */
@@ -717,6 +824,15 @@ export async function generateImageSmart(
   }
   console.log('[Image] ElevenLabs failed:', elevenLabsResult.error);
 
+  // ── Priority 3: Midjourney ────────────────────────────────────────────────
+  const midjourneyResult = await generateImageWithMidjourney(prompt);
+  if (midjourneyResult.imageUrl) {
+    const resolvedUrl = await resolveImageUrl(midjourneyResult.imageUrl);
+    console.log('[Image] Midjourney success');
+    return { imageUrl: resolvedUrl, model: 'midjourney' };
+  }
+  console.log('[Image] Midjourney failed:', midjourneyResult.error);
+
   const stabilityResult = await generateImageWithStabilityAI(prompt);
   if (stabilityResult.imageUrl) {
     const resolvedUrl = await resolveImageUrl(stabilityResult.imageUrl);
@@ -725,7 +841,7 @@ export async function generateImageSmart(
   }
   console.log('[Image] Stability AI failed:', stabilityResult.error);
 
-  // ── Priority 4: Gemini native ──────────────────────────────────────────────
+  // ── Priority 5: Gemini native ──────────────────────────────────────────────
   const geminiResult = await generateImageWithGemini(prompt);
   if (geminiResult.imageUrl) {
     const resolvedUrl = await resolveImageUrl(geminiResult.imageUrl);
@@ -734,7 +850,7 @@ export async function generateImageSmart(
   }
   console.log('[Image] Gemini image failed:', geminiResult.error);
 
-  // ── Priority 5: OnSpace AI ─────────────────────────────────────────────────
+  // ── Priority 6: OnSpace AI ─────────────────────────────────────────────────
   const onspaceResult = await generateImageWithOnSpaceAI(prompt);
   if (onspaceResult.imageUrl) {
     const resolvedUrl = await resolveImageUrl(onspaceResult.imageUrl);
