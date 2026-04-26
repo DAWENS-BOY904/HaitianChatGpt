@@ -2558,5 +2558,5 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-
+please add this feature Integrate Midjourney API as a Priority 3 image generation provider in supabase/functions/_shared/ai-providers using the MIDJOURNEY_API_KEY secret. Add it to generateImageSmart after ElevenLabs and before Stability AI, using the Midjourney REST API endpoint to generate real high-quality images.
 
