@@ -2551,10 +2551,26 @@ export default function HomeScreen() {
                     <TouchableOpacity
                       style={{ backgroundColor: accentColor, borderRadius: 14, paddingVertical: 14, alignItems: 'center', opacity: dislikeIssue ? 1 : 0.45 }}
                       disabled={!dislikeIssue}
-                      onPress={() => {
+                      onPress={async () => {
                         setDislikeFeedbackVisible(false);
                         showAlert('Feedback submitted', 'Thank you! Your feedback helps us improve.');
                         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                        // Track feedback in activity_logs
+                        if (user?.id) {
+                          try {
+                            await supabase.from('activity_logs').insert({
+                              user_id: user.id,
+                              action: 'dislike',
+                              action_type: 'message_feedback',
+                              details: {
+                                issue_category: dislikeIssue,
+                                additional_text: dislikeCustomText || null,
+                                message_id: dislikeTargetId,
+                                conversation_id: currentConversation?.id || null,
+                              },
+                            });
+                          } catch (_e) {}
+                        }
                       }}
                     >
                       <Text style={{ color: '#FFF', fontSize: 16, fontWeight: '700' }}>Submit feedback</Text>
@@ -2720,4 +2736,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-Track dislike feedback submissions in the activity_logs table — when a user submits a dislike with issue type and optional text, insert a row with action_type='message_feedback', action='dislike', and details containing the issue category and message ID.
+
