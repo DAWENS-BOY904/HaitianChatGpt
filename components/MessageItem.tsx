@@ -786,10 +786,10 @@ export const MessageItem = memo(function MessageItem({
   const styles = useMemo(() => StyleSheet.create({
     container: { paddingHorizontal: Spacing.md, paddingVertical: 10, marginVertical: 2, maxWidth: '78%' },
     userMessage: { alignSelf: 'flex-end', backgroundColor: colors.primary, borderRadius: 18, borderBottomRightRadius: 4, marginRight: Spacing.sm },
-    userMessageImageOnly: { alignSelf: 'flex-end', backgroundColor: 'transparent', borderRadius: 0, marginRight: Spacing.sm },
+    userMessageImageOnly: { alignSelf: 'flex-end', backgroundColor: 'transparent', borderRadius: 0, marginRight: Spacing.sm, padding: 0 },
     assistantMessage: { alignSelf: 'flex-start', backgroundColor: 'transparent', borderRadius: 0, marginLeft: Spacing.sm, maxWidth: '92%' },
     messageImage: { width: '100%', height: 220, borderRadius: BorderRadius.md, marginBottom: Spacing.sm },
-    downloadOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: BorderRadius.md, justifyContent: 'center', alignItems: 'center' },
+    downloadOverlay: { ...StyleSheet.absoluteFillObject, borderRadius: BorderRadius.md, justifyContent: 'center', alignItems: 'center', backgroundColor: 'transparent' },
     downloadButton: { position: 'absolute', bottom: 12, right: 12, backgroundColor: 'rgba(0,0,0,0.75)', borderRadius: BorderRadius.full, width: 44, height: 44, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#fff' },
     fileAttachment: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.background, borderRadius: BorderRadius.md, padding: Spacing.md, marginBottom: Spacing.sm, borderWidth: 1, borderColor: colors.border, gap: Spacing.md },
     fileIcon: { width: 48, height: 48, borderRadius: BorderRadius.md, backgroundColor: `${colors.primary}15`, alignItems: 'center', justifyContent: 'center' },
@@ -825,20 +825,28 @@ export const MessageItem = memo(function MessageItem({
             </TouchableOpacity>
           )}
 
-          {/* AI Generated Image */}
+          {/* AI Generated Image — clean display, no black overlay */}
           {hasGeneratedImage && message.role === 'assistant' && (
             <View style={imgCardStyles.cardWrap}>
               <Text style={imgCardStyles.label}>Image created</Text>
-              <TouchableOpacity onPress={() => handleImagePress(message.image_url!)} activeOpacity={0.9} disabled={downloadingImage} style={imgCardStyles.imageContainer}>
-                <Image source={{ uri: message.image_url }} style={imgCardStyles.image} contentFit="cover" transition={400} />
+              <View style={imgCardStyles.imageContainer}>
+                <TouchableOpacity onPress={() => handleImagePress(message.image_url!)} activeOpacity={0.9} disabled={downloadingImage}>
+                  <Image source={{ uri: message.image_url }} style={imgCardStyles.image} contentFit="cover" transition={400} />
+                </TouchableOpacity>
                 {downloadingImage ? (
-                  <View style={styles.downloadOverlay}><ActivityIndicator color="#fff" size="large" /><Text style={{ color: '#fff', marginTop: 8, fontSize: 13 }}>Saving...</Text></View>
-                ) : (
-                  <TouchableOpacity style={styles.downloadButton} onPress={(e) => { e.stopPropagation(); handleDownloadImage(message.image_url!); }}>
-                    <Ionicons name="download" size={22} color="#fff" />
-                  </TouchableOpacity>
-                )}
-              </TouchableOpacity>
+                  <View style={[StyleSheet.absoluteFillObject, { borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', alignItems: 'center' }]}>
+                    <ActivityIndicator color="#fff" size="large" />
+                    <Text style={{ color: '#fff', marginTop: 8, fontSize: 13 }}>Saving...</Text>
+                  </View>
+                ) : null}
+                <TouchableOpacity
+                  style={styles.downloadButton}
+                  onPress={() => handleDownloadImage(message.image_url!)}
+                  disabled={downloadingImage}
+                >
+                  <Ionicons name="download" size={22} color="#fff" />
+                </TouchableOpacity>
+              </View>
             </View>
           )}
 

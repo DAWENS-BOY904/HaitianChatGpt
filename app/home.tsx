@@ -2515,4 +2515,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
   }
 }
 
-please fix all make all change for me dont skip In the MessageItem component, when a user message contains only an image (no text), remove the bubble background color so it shows as a clean photo without a colored container. When there IS text + photo, keep the accent color background only on the text bubble. Also fix AI image display that appears with black background overlay. Fix accent color persistence in SettingsContext so when user selects an accent color it's saved to Supabase user_settings table (accent_color column) and reloaded on app start — ensuring the color never resets between sessions.
+
