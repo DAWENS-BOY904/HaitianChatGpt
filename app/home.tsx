@@ -2720,4 +2720,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-
+Track dislike feedback submissions in the activity_logs table — when a user submits a dislike with issue type and optional text, insert a row with action_type='message_feedback', action='dislike', and details containing the issue category and message ID.
