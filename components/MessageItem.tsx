@@ -587,6 +587,33 @@ const BlurContextMenu = memo(function BlurContextMenu({
   );
 });
 
+const aiImgMenuStyles = StyleSheet.create({
+  bar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 16,
+    overflow: 'hidden',
+    marginTop: 8,
+  },
+  btn: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    gap: 3,
+  },
+  btnLabel: {
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  divider: {
+    width: StyleSheet.hairlineWidth,
+    height: 36,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+  },
+});
+
 const ctxStyles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' },
   menuWrap: { width: 260, borderRadius: 18, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.45, shadowRadius: 24, elevation: 24 },
@@ -625,6 +652,9 @@ export const MessageItem = memo(function MessageItem({
   const [fileData, setFileData] = useState({ name: '', content: '', type: '' });
   const [modals, setModals] = useState({ link: false, webView: false, imageViewer: false, imageEdit: false, file: false });
   const [downloadingImage, setDownloadingImage] = useState(false);
+  // AI image action menu
+  const [showImageMenu, setShowImageMenu] = useState(false);
+  const [menuImageUrl, setMenuImageUrl] = useState('');
 
   // Entrance animation
   const entranceOpacity = useRef(new Animated.Value(0)).current;
@@ -658,10 +688,20 @@ export const MessageItem = memo(function MessageItem({
 
   // Only allow long-press on text messages — not on image-only uploads
   const hasOnlyImage = message.role === 'user' && !!message.image_url && !message.content.trim();
+  const hasBothTextAndImage = message.role === 'user' && !!message.image_url && !!message.content.trim();
   const handleLongPress = useCallback(() => {
     if (hasOnlyImage) return; // no context menu for image-only uploads
     setShowContextMenu(true);
   }, [hasOnlyImage]);
+
+  const handleAIImageLongPress = useCallback((imageUrl: string) => {
+    setMenuImageUrl(imageUrl);
+    setShowImageMenu(true);
+  }, []);
+
+  const handleShareImage = useCallback(async (imageUrl: string) => {
+    try { await Share.share({ message: imageUrl, url: imageUrl }); } catch {}
+  }, []);
 
   const handleCopy = useCallback(async () => {
     await Clipboard.setStringAsync(message.content);
@@ -787,6 +827,7 @@ export const MessageItem = memo(function MessageItem({
     container: { paddingHorizontal: Spacing.md, paddingVertical: 10, marginVertical: 2, maxWidth: '78%' },
     userMessage: { alignSelf: 'flex-end', backgroundColor: colors.primary, borderRadius: 18, borderBottomRightRadius: 4, marginRight: Spacing.sm },
     userMessageImageOnly: { alignSelf: 'flex-end', backgroundColor: 'transparent', borderRadius: 0, marginRight: Spacing.sm, padding: 0 },
+    userMessageTextOnly: { alignSelf: 'flex-end', backgroundColor: colors.primary, borderRadius: 18, borderTopRightRadius: 4, borderBottomRightRadius: 4, marginRight: Spacing.sm, paddingHorizontal: Spacing.md, paddingVertical: 10 },
     assistantMessage: { alignSelf: 'flex-start', backgroundColor: 'transparent', borderRadius: 0, marginLeft: Spacing.sm, maxWidth: '92%' },
     messageImage: { width: '100%', height: 220, borderRadius: BorderRadius.md, marginBottom: Spacing.sm },
     downloadOverlay: { ...StyleSheet.absoluteFillObject, borderRadius: BorderRadius.md, justifyContent: 'center', alignItems: 'center', backgroundColor: 'transparent' },
@@ -813,26 +854,58 @@ export const MessageItem = memo(function MessageItem({
   return (
     <>
       <Animated.View style={{ opacity: entranceOpacity, transform: [{ translateY: entranceTranslateY }] }}>
+        {/* ── User message with BOTH image + text: split layout ── */}
+        {hasBothTextAndImage ? (
+          <View style={{ alignSelf: 'flex-end', marginRight: Spacing.sm, maxWidth: '78%', gap: 6 }}>
+            {/* Image floats cleanly above — no colored container */}
+            <TouchableOpacity onPress={() => handleImagePress(message.image_url!)} style={{ borderRadius: 18, overflow: 'hidden', alignSelf: 'flex-end' }} activeOpacity={0.9}>
+              <Image source={{ uri: message.image_url }} style={styles.userImagePreview} contentFit="cover" transition={200} />
+            </TouchableOpacity>
+            {/* Text bubble with accent color */}
+            <Pressable onLongPress={handleLongPress} delayLongPress={350} style={styles.userMessageTextOnly}>
+              {contentParts.map((part, index) => {
+                if (part.type === 'code') {
+                  return <CodeBlock key={`code-${index}`} code={part.content} language={part.language || 'code'} streaming={false} speed={streamingSpeed} />;
+                }
+                const textParts = parseTextWithLinks(part.content);
+                return (
+                  <Text key={`seg-${index}`} style={[styles.messageText, styles.userMessageText]}>
+                    {textParts.map((tp, ti) => tp.type === 'link'
+                      ? <Text key={`lnk-${ti}`} style={styles.linkText} onPress={() => handleLinkPress(tp.url)}>{tp.content}</Text>
+                      : <Text key={`tx-${ti}`}>{tp.content}</Text>
+                    )}
+                  </Text>
+                );
+              })}
+              {message.edited && <Text style={styles.editedLabel}>(edited)</Text>}
+            </Pressable>
+          </View>
+        ) : (
         <Pressable
           onLongPress={handleLongPress}
           delayLongPress={350}
           style={[styles.container, message.role === 'user' ? (hasOnlyImage ? styles.userMessageImageOnly : styles.userMessage) : styles.assistantMessage]}
         >
-          {/* User uploaded image — no background, no long-press context menu */}
-          {message.role === 'user' && message.image_url && (
+          {/* User uploaded image — no background, no long-press context menu (image-only case) */}
+          {message.role === 'user' && message.image_url && !hasBothTextAndImage && (
             <TouchableOpacity onPress={() => handleImagePress(message.image_url!)} style={{ borderRadius: 18, overflow: 'hidden', marginBottom: message.content.trim() ? Spacing.sm : 0 }} activeOpacity={0.9}>
               <Image source={{ uri: message.image_url }} style={styles.userImagePreview} contentFit="cover" transition={200} />
             </TouchableOpacity>
           )}
 
-          {/* AI Generated Image — clean display, no black overlay */}
+          {/* AI Generated Image — clean display, long-press action menu */}
           {hasGeneratedImage && message.role === 'assistant' && (
             <View style={imgCardStyles.cardWrap}>
               <Text style={imgCardStyles.label}>Image created</Text>
               <View style={imgCardStyles.imageContainer}>
-                <TouchableOpacity onPress={() => handleImagePress(message.image_url!)} activeOpacity={0.9} disabled={downloadingImage}>
+                <Pressable
+                  onPress={() => handleImagePress(message.image_url!)}
+                  onLongPress={() => handleAIImageLongPress(message.image_url!)}
+                  delayLongPress={350}
+                  disabled={downloadingImage}
+                >
                   <Image source={{ uri: message.image_url }} style={imgCardStyles.image} contentFit="cover" transition={400} />
-                </TouchableOpacity>
+                </Pressable>
                 {downloadingImage ? (
                   <View style={[StyleSheet.absoluteFillObject, { borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', alignItems: 'center' }]}>
                     <ActivityIndicator color="#fff" size="large" />
@@ -847,6 +920,28 @@ export const MessageItem = memo(function MessageItem({
                   <Ionicons name="download" size={22} color="#fff" />
                 </TouchableOpacity>
               </View>
+              {/* ── Blur action bar below image ── */}
+              <BlurView intensity={75} tint="dark" style={aiImgMenuStyles.bar}>
+                <TouchableOpacity style={aiImgMenuStyles.btn} onPress={() => handleDownloadImage(message.image_url!)}>
+                  <Ionicons name="arrow-down-circle-outline" size={22} color="#FFF" />
+                  <Text style={aiImgMenuStyles.btnLabel}>Save</Text>
+                </TouchableOpacity>
+                <View style={aiImgMenuStyles.divider} />
+                <TouchableOpacity style={aiImgMenuStyles.btn} onPress={() => handleShareImage(message.image_url!)}>
+                  <Ionicons name="share-outline" size={22} color="#FFF" />
+                  <Text style={aiImgMenuStyles.btnLabel}>Share</Text>
+                </TouchableOpacity>
+                <View style={aiImgMenuStyles.divider} />
+                <TouchableOpacity style={aiImgMenuStyles.btn} onPress={() => handleLike('like')}>
+                  <Ionicons name={liked === 'like' ? 'thumbs-up' : 'thumbs-up-outline'} size={22} color={liked === 'like' ? '#34C759' : '#FFF'} />
+                  <Text style={[aiImgMenuStyles.btnLabel, liked === 'like' && { color: '#34C759' }]}>Good</Text>
+                </TouchableOpacity>
+                <View style={aiImgMenuStyles.divider} />
+                <TouchableOpacity style={aiImgMenuStyles.btn} onPress={() => handleLike('dislike')}>
+                  <Ionicons name={liked === 'dislike' ? 'thumbs-down' : 'thumbs-down-outline'} size={22} color={liked === 'dislike' ? '#FF453A' : '#FFF'} />
+                  <Text style={[aiImgMenuStyles.btnLabel, liked === 'dislike' && { color: '#FF453A' }]}>Bad</Text>
+                </TouchableOpacity>
+              </BlurView>
             </View>
           )}
 
@@ -956,7 +1051,7 @@ export const MessageItem = memo(function MessageItem({
           )}
 
           {/* Action buttons */}
-          {message.role === 'assistant' && !isGenerating && (
+          {message.role === 'assistant' && !isGenerating && !hasGeneratedImage && (
             <View style={styles.actionsContainer}>
               <TouchableOpacity style={styles.actionButton} onPress={handleCopy}>
                 <Ionicons name="copy-outline" size={14} color={colors.text} />
@@ -974,6 +1069,7 @@ export const MessageItem = memo(function MessageItem({
             </View>
           )}
         </Pressable>
+        )}
       </Animated.View>
 
       {/* Analysis Modal */}
