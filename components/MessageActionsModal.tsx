@@ -151,7 +151,7 @@ export function MessageActionsModal({
         {/* Full-screen BlurView background */}
         <BlurView
           intensity={Platform.OS === 'ios' ? 60 : 80}
-          tint="dark"
+          tint={isDark ? 'dark' : 'light'}
           style={StyleSheet.absoluteFill}
         />
 
@@ -165,24 +165,24 @@ export function MessageActionsModal({
         {/* Sheet */}
         <Animated.View
           entering={FadeInDown.duration(280).springify()}
-          style={styles.container}
+          style={[styles.container, { borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)' }]}
         >
           {/* Blur inside the sheet */}
           <BlurView
             intensity={Platform.OS === 'ios' ? 90 : 95}
-            tint="dark"
+            tint={isDark ? 'dark' : 'light'}
             style={styles.sheetBlur}
           >
             {/* Handle bar */}
-            <View style={styles.handleBar} />
+            <View style={[styles.handleBar, { backgroundColor: isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.18)' }]} />
 
             <ScrollView
               style={styles.scrollContent}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
             >
-              <Text style={styles.title}>Message Actions</Text>
-              <Text style={styles.subtitle}>
+              <Text style={[styles.title, { color: isDark ? '#FFF' : '#000' }]}>Message Actions</Text>
+              <Text style={[styles.subtitle, { color: isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.45)' }]}>
                 {new Date(message.created_at).toLocaleString()}
               </Text>
 
@@ -191,51 +191,60 @@ export function MessageActionsModal({
                 <View style={styles.row}>
                   {/* Like */}
                   <TouchableOpacity
-                    style={[styles.actionButton, isLiked && { backgroundColor: accentColor + '22', borderColor: accentColor + '55' }]}
+                    style={[styles.actionButton, {
+                      backgroundColor: isLiked ? accentColor + '22' : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'),
+                      borderColor: isLiked ? accentColor + '55' : (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'),
+                    }]}
                     onPress={handleLike}
                     activeOpacity={0.7}
                   >
                     <Ionicons
                       name={isLiked ? 'thumbs-up' : 'thumbs-up-outline'}
                       size={24}
-                      color={isLiked ? accentColor : 'rgba(255,255,255,0.75)'}
+                      color={isLiked ? accentColor : (isDark ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.6)')}
                       style={styles.actionIcon}
                     />
-                    <Text style={[styles.actionText, isLiked && { color: accentColor }]}>
+                    <Text style={[styles.actionText, { color: isLiked ? accentColor : (isDark ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.6)') }]}>
                       {isLiked ? 'Liked' : 'Like'}
                     </Text>
                   </TouchableOpacity>
 
                   {/* Dislike */}
                   <TouchableOpacity
-                    style={[styles.actionButton, isUnliked && { backgroundColor: '#FF453A22', borderColor: '#FF453A55' }]}
+                    style={[styles.actionButton, {
+                      backgroundColor: isUnliked ? '#FF453A22' : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'),
+                      borderColor: isUnliked ? '#FF453A55' : (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'),
+                    }]}
                     onPress={handleDislike}
                     activeOpacity={0.7}
                   >
                     <Ionicons
                       name={isUnliked ? 'thumbs-down' : 'thumbs-down-outline'}
                       size={24}
-                      color={isUnliked ? '#FF453A' : 'rgba(255,255,255,0.75)'}
+                      color={isUnliked ? '#FF453A' : (isDark ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.6)')}
                       style={styles.actionIcon}
                     />
-                    <Text style={[styles.actionText, isUnliked && { color: '#FF453A' }]}>
+                    <Text style={[styles.actionText, { color: isUnliked ? '#FF453A' : (isDark ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.6)') }]}>
                       {isUnliked ? 'Reported' : 'Dislike'}
                     </Text>
                   </TouchableOpacity>
 
                   {/* Read Aloud */}
                   <TouchableOpacity
-                    style={[styles.actionButton, isSpeaking && { backgroundColor: accentColor + '22', borderColor: accentColor + '55' }]}
+                    style={[styles.actionButton, {
+                      backgroundColor: isSpeaking ? accentColor + '22' : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'),
+                      borderColor: isSpeaking ? accentColor + '55' : (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'),
+                    }]}
                     onPress={handleReadAloud}
                     activeOpacity={0.7}
                   >
                     <Ionicons
                       name={isSpeaking ? 'stop-circle' : 'volume-high-outline'}
                       size={24}
-                      color={isSpeaking ? accentColor : 'rgba(255,255,255,0.75)'}
+                      color={isSpeaking ? accentColor : (isDark ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.6)')}
                       style={styles.actionIcon}
                     />
-                    <Text style={[styles.actionText, isSpeaking && { color: accentColor }]}>
+                    <Text style={[styles.actionText, { color: isSpeaking ? accentColor : (isDark ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.6)') }]}>
                       {isSpeaking ? 'Stop' : 'Read Aloud'}
                     </Text>
                   </TouchableOpacity>
@@ -244,18 +253,18 @@ export function MessageActionsModal({
 
               {/* Copy & Share */}
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Export</Text>
+                <Text style={[styles.sectionTitle, { color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)' }]}>Export</Text>
 
-                <TouchableOpacity style={styles.shareButton} onPress={handleCopy} activeOpacity={0.7}>
-                  <Ionicons name="copy-outline" size={20} color="rgba(255,255,255,0.8)" />
-                  <Text style={styles.shareText}>Copy Text</Text>
-                  <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.3)" />
+                <TouchableOpacity style={[styles.shareButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.05)', borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)' }]} onPress={handleCopy} activeOpacity={0.7}>
+                  <Ionicons name="copy-outline" size={20} color={isDark ? 'rgba(255,255,255,0.8)' : 'rgba(0,0,0,0.7)'} />
+                  <Text style={[styles.shareText, { color: isDark ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.8)' }]}>Copy Text</Text>
+                  <Ionicons name="chevron-forward" size={18} color={isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.25)'} />
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.shareButton} onPress={handleShare} activeOpacity={0.7}>
-                  <Ionicons name="share-outline" size={20} color="rgba(255,255,255,0.8)" />
-                  <Text style={styles.shareText}>Share</Text>
-                  <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.3)" />
+                <TouchableOpacity style={[styles.shareButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.05)', borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)' }]} onPress={handleShare} activeOpacity={0.7}>
+                  <Ionicons name="share-outline" size={20} color={isDark ? 'rgba(255,255,255,0.8)' : 'rgba(0,0,0,0.7)'} />
+                  <Text style={[styles.shareText, { color: isDark ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.8)' }]}>Share</Text>
+                  <Ionicons name="chevron-forward" size={18} color={isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.25)'} />
                 </TouchableOpacity>
               </View>
             </ScrollView>
@@ -279,7 +288,6 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 24,
     overflow: 'hidden',
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.12)',
   },
   sheetBlur: {
     paddingBottom: Platform.OS === 'ios' ? 34 : 20,
@@ -288,7 +296,6 @@ const styles = StyleSheet.create({
     width: 36,
     height: 5,
     borderRadius: 3,
-    backgroundColor: 'rgba(255,255,255,0.3)',
     alignSelf: 'center',
     marginTop: 12,
     marginBottom: 20,
@@ -299,12 +306,10 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#FFF',
     marginBottom: 6,
   },
   subtitle: {
     fontSize: 13,
-    color: 'rgba(255,255,255,0.45)',
     marginBottom: 22,
   },
   row: {
@@ -314,19 +319,16 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     flex: 1,
-    backgroundColor: 'rgba(255,255,255,0.08)',
     borderRadius: 14,
     padding: 14,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
   },
   actionIcon: {
     marginBottom: 8,
   },
   actionText: {
     fontSize: 12,
-    color: 'rgba(255,255,255,0.75)',
     fontWeight: '600',
   },
   section: {
@@ -336,7 +338,6 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 12,
     fontWeight: '700',
-    color: 'rgba(255,255,255,0.4)',
     marginBottom: 12,
     textTransform: 'uppercase',
     letterSpacing: 0.6,
@@ -344,19 +345,16 @@ const styles = StyleSheet.create({
   shareButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.07)',
     borderRadius: 14,
     padding: 16,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
     marginBottom: 10,
   },
   shareText: {
     fontSize: 15,
-    color: 'rgba(255,255,255,0.85)',
     fontWeight: '500',
     marginLeft: 12,
     flex: 1,
   },
 });
-please add dark/white and blur.
+
