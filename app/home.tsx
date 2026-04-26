@@ -2525,5 +2525,5 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-
+please ai dont skip the icon 3ba menu background icon lan dwe in blur mode effect amd top left the icon for new chat and the ... background blur mode effect and Integrate ElevenLabs into the image generation pipeline in supabase/functions/_shared/ai-providers as an additional image generation provider. Add it to the generateImageSmart router with priority after DALL-E 3, using the ElevenLabs image generation API endpoint with the ELEVENLABS_API_KEY secret already configured in the backend.
 
