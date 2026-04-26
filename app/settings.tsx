@@ -27,7 +27,9 @@ import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useProfile } from '../contexts/ProfileContext';
 
-// ── Edit Profile Modal Content ─────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+// EDIT PROFILE MODAL CONTENT
+// ═══════════════════════════════════════════════════════════════════════════════
 function EditModalContent({
   isDark, editPhoto, initials, uploadingPhoto, editName, editUsername,
   canChangeUsername, daysUntilUsernameChange, savingProfile,
@@ -147,7 +149,9 @@ function EditModalContent({
   );
 }
 
-// ── Guest-mode limited settings view ──────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+// GUEST SETTINGS (Limited)
+// ═══════════════════════════════════════════════════════════════════════════════
 function GuestSettings() {
   const { isDark } = useTheme();
   const router = useRouter();
@@ -184,7 +188,7 @@ function GuestSettings() {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Account — limited */}
+        {/* Account */}
         <View style={{ marginTop: 24, paddingHorizontal: 16 }}>
           <Text style={{ fontSize: 13, fontWeight: '500', color: secondaryText, marginBottom: 8, marginLeft: 4 }}>Account</Text>
           <View style={{ backgroundColor: cardBg, borderRadius: 14, overflow: 'hidden' }}>
@@ -213,7 +217,7 @@ function GuestSettings() {
           </View>
         </View>
 
-        {/* App Settings — language only */}
+        {/* App Settings */}
         <View style={{ marginTop: 24, paddingHorizontal: 16 }}>
           <Text style={{ fontSize: 13, fontWeight: '500', color: secondaryText, marginBottom: 8, marginLeft: 4 }}>App Settings</Text>
           <View style={{ backgroundColor: cardBg, borderRadius: 14, overflow: 'hidden' }}>
@@ -299,7 +303,43 @@ function GuestSettings() {
   );
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// GLASS CARD COMPONENT — Reusable frosted glass card
+// ═══════════════════════════════════════════════════════════════════════════════
+function GlassCard({ children, isDark, style = {} }: { children: React.ReactNode; isDark: boolean; style?: any }) {
+  if (Platform.OS === 'ios') {
+    return (
+      <BlurView
+        intensity={isDark ? 25 : 18}
+        tint={isDark ? 'dark' : 'light'}
+        style={[{
+          borderRadius: 18,
+          overflow: 'hidden',
+          backgroundColor: isDark ? 'rgba(28,28,30,0.55)' : 'rgba(255,255,255,0.72)',
+          borderWidth: StyleSheet.hairlineWidth,
+          borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)',
+        }, style]}
+      >
+        {children}
+      </BlurView>
+    );
+  }
+  return (
+    <View style={[{
+      borderRadius: 18,
+      overflow: 'hidden',
+      backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF',
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+    }, style]}>
+      {children}
+    </View>
+  );
+}
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// MAIN SETTINGS SCREEN
+// ═══════════════════════════════════════════════════════════════════════════════
 export default function SettingsScreen() {
   const { colors, isDark } = useTheme();
   const { settings, updateSetting } = useSettings();
@@ -327,12 +367,11 @@ export default function SettingsScreen() {
   const currentVersion = Constants.expoConfig?.version || '1.0.0';
 
   const bg = isDark ? '#000000' : '#F2F2F7';
-  const cardBg = isDark ? '#1C1C1E' : '#FFFFFF';
-  const dividerColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
   const primaryText = isDark ? '#FFFFFF' : '#000000';
   const secondaryText = '#8E8E93';
   const sectionLabelColor = '#8E8E93';
   const switchTrackFalse = isDark ? '#3A3A3C' : '#E5E5EA';
+  const dividerColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
 
   useEffect(() => {
     checkAdminAccess();
@@ -357,7 +396,6 @@ export default function SettingsScreen() {
       setFullName(data.full_name || '');
       setProfilePhoto(data.profile_photo_url || '');
       setUsernameLastChanged(data.username_last_changed || null);
-      // Sync initial values to global context
       setGlobalPhoto(data.profile_photo_url || '');
       setGlobalName(data.full_name || data.username || '');
       setGlobalUsername(data.username || '');
@@ -388,7 +426,6 @@ export default function SettingsScreen() {
   };
 
   const pickEditPhoto = () => {
-    // Dismiss edit modal first so photo picker appears on top without z-index conflicts
     setEditModalVisible(false);
     setTimeout(() => setPhotoPickerVisible(true), 350);
   };
@@ -436,7 +473,6 @@ export default function SettingsScreen() {
     if (!result.canceled && result.assets[0]) {
       await uploadAsset(result.assets[0]);
     }
-    // Reopen edit modal after picking
     setEditModalVisible(true);
   };
 
@@ -458,7 +494,6 @@ export default function SettingsScreen() {
     if (!result.canceled && result.assets[0]) {
       await uploadAsset(result.assets[0]);
     }
-    // Reopen edit modal after picking
     setEditModalVisible(true);
   };
 
@@ -483,13 +518,11 @@ export default function SettingsScreen() {
       const { error } = await supabase.from('user_profiles').update(updates).eq('id', user.id);
       if (error) throw error;
 
-      // Update local state
       setFullName(editName);
       setUsername(editUsername);
       setProfilePhoto(editPhoto);
       if (usernameChanged) setUsernameLastChanged(new Date().toISOString());
 
-      // ── Instantly sync to global ProfileContext → SideMenu updates immediately ──
       setGlobalPhoto(editPhoto);
       setGlobalName(editName);
       setGlobalUsername(editUsername);
@@ -532,15 +565,17 @@ export default function SettingsScreen() {
     return 'Free Plan';
   };
 
-  // Guest mode: show limited settings
   if (!user) return <GuestSettings />;
 
   const displayName = fullName || username || user?.email?.split('@')[0] || 'User';
   const displayUsername = username || '';
   const initials = (displayName[0] || 'U').toUpperCase();
 
+  // ── Styles ──────────────────────────────────────────────────────────────
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: bg },
+
+    // Header — clean, no metal effect, with subtle border
     header: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -560,10 +595,12 @@ export default function SettingsScreen() {
       width: 32,
       height: 32,
       borderRadius: 16,
-      backgroundColor: isDark ? '#2C2C2E' : 'rgba(0,0,0,0.08)',
+      backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
       alignItems: 'center',
       justifyContent: 'center',
     },
+
+    // Profile section
     profileSection: {
       alignItems: 'center',
       paddingVertical: 28,
@@ -578,11 +615,6 @@ export default function SettingsScreen() {
       alignItems: 'center',
       justifyContent: 'center',
       marginBottom: 12,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: isDark ? 0.4 : 0.12,
-      shadowRadius: 6,
-      elevation: 4,
     },
     avatarImg: { width: 80, height: 80, borderRadius: 40 },
     avatarInitial: { fontSize: 32, fontWeight: '600', color: primaryText },
@@ -597,6 +629,8 @@ export default function SettingsScreen() {
       backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
     },
     editBtnText: { fontSize: 15, color: primaryText, fontWeight: '500' },
+
+    // Section labels
     sectionLabel: {
       fontSize: 13,
       fontWeight: '500',
@@ -604,18 +638,20 @@ export default function SettingsScreen() {
       marginBottom: 8,
       marginLeft: 4,
       letterSpacing: 0.1,
+      textTransform: 'none' as any,
     },
     section: { marginTop: 24, paddingHorizontal: 16 },
+
+    // Card — glass effect
     card: {
-      backgroundColor: cardBg,
-      borderRadius: 14,
+      borderRadius: 18,
       overflow: 'hidden',
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 1 },
-      shadowOpacity: isDark ? 0 : 0.06,
-      shadowRadius: 4,
-      elevation: isDark ? 0 : 1,
+      backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF',
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
     },
+
+    // Row styles
     row: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -635,18 +671,93 @@ export default function SettingsScreen() {
     },
     rowLabel: { fontSize: 16, color: primaryText, fontWeight: '400', flex: 1 },
     rowValue: { fontSize: 15, color: secondaryText, marginRight: 4 },
+
+    // Inline row (for appearance, accent color)
+    inlineRow: {
+      flexDirection: 'column',
+      alignItems: 'flex-start',
+      paddingVertical: 13,
+      paddingHorizontal: 16,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: dividerColor,
+    },
+    inlineRowLast: {
+      flexDirection: 'column',
+      alignItems: 'flex-start',
+      paddingVertical: 13,
+      paddingHorizontal: 16,
+      borderBottomWidth: 0,
+    },
+    inlineRowHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      marginBottom: 0,
+    },
+    inlineContent: { paddingLeft: 36, marginTop: 8 },
+
+    // Appearance chips
+    appearRow: { flexDirection: 'row', gap: 8 },
+    appearChip: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 8, backgroundColor: isDark ? '#3A3A3C' : '#E5E5EA' },
+    appearChipActive: { backgroundColor: '#0A84FF' },
+    appearChipText: { fontSize: 13, color: primaryText },
+    appearChipTextActive: { fontSize: 13, color: '#FFFFFF' },
+
+    // Color dots
+    colorRow: { flexDirection: 'row', gap: 8 },
+    colorDot: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: 'transparent' },
+    colorDotSelected: { borderColor: isDark ? '#FFFFFF' : '#000000' },
+
+    // Switch row
+    switchRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: 13,
+      paddingHorizontal: 16,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: dividerColor,
+    },
+    switchRowLast: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: 13,
+      paddingHorizontal: 16,
+      borderBottomWidth: 0,
+    },
+
+    // Descriptive text below sections
+    descText: {
+      fontSize: 13,
+      color: secondaryText,
+      marginTop: 8,
+      marginHorizontal: 16,
+      lineHeight: 18,
+    },
+    descTextLink: {
+      fontSize: 13,
+      color: '#0A84FF',
+      marginTop: 8,
+      marginHorizontal: 16,
+      lineHeight: 18,
+    },
+
+    // Log out button — matches photo style (full width card, not red text)
     logoutBtn: {
       marginHorizontal: 16,
       marginTop: 32,
       marginBottom: 8,
       paddingVertical: 14,
-      borderRadius: 14,
+      borderRadius: 18,
       backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF',
       alignItems: 'center',
       borderWidth: StyleSheet.hairlineWidth,
       borderColor: dividerColor,
     },
     logoutText: { fontSize: 17, color: '#FF453A', fontWeight: '600' },
+
+    // Version text
     versionText: {
       fontSize: 12,
       color: secondaryText,
@@ -654,16 +765,9 @@ export default function SettingsScreen() {
       marginBottom: 40,
       marginTop: 8,
     },
-    colorRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
-    colorDot: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: 'transparent' },
-    colorDotSelected: { borderColor: isDark ? '#FFFFFF' : '#000000' },
-    appearRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
-    appearChip: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 8, backgroundColor: isDark ? '#3A3A3C' : '#E5E5EA' },
-    appearChipActive: { backgroundColor: '#0A84FF' },
-    appearChipText: { fontSize: 13, color: primaryText },
-    appearChipTextActive: { fontSize: 13, color: '#FFFFFF' },
   });
 
+  // ── Row Components ──────────────────────────────────────────────────────
   const Row = ({ icon, label, value = '', onPress = null as any, isLast = false, rightEl = null as any }) => (
     <TouchableOpacity
       style={[styles.row, isLast && styles.rowLast]}
@@ -687,7 +791,7 @@ export default function SettingsScreen() {
   );
 
   const SwitchRow = ({ icon, label, value, onChange, isLast = false }) => (
-    <View style={[styles.row, isLast && styles.rowLast]}>
+    <View style={isLast ? styles.switchRowLast : styles.switchRow}>
       <View style={styles.rowLeft}>
         <View style={styles.rowIcon}>
           <Ionicons name={icon as any} size={20} color={secondaryText} />
@@ -704,14 +808,14 @@ export default function SettingsScreen() {
   );
 
   const InlineRow = ({ icon, label, children, isLast = false }) => (
-    <View style={[styles.row, isLast && styles.rowLast, { flexDirection: 'column', alignItems: 'flex-start' }]}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 0 }}>
+    <View style={isLast ? styles.inlineRowLast : styles.inlineRow}>
+      <View style={styles.inlineRowHeader}>
         <View style={styles.rowIcon}>
           <Ionicons name={icon as any} size={20} color={secondaryText} />
         </View>
         <Text style={styles.rowLabel}>{label}</Text>
       </View>
-      <View style={{ paddingLeft: 36 }}>{children}</View>
+      <View style={styles.inlineContent}>{children}</View>
     </View>
   );
 
@@ -720,6 +824,9 @@ export default function SettingsScreen() {
 
   return (
     <View style={styles.container}>
+      {/* ═══════════════════════════════════════════════════════════════
+          HEADER — Clean, no metal effect, subtle border
+          ═══════════════════════════════════════════════════════════════ */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Settings</Text>
         <TouchableOpacity style={styles.closeButton} onPress={() => router.back()}>
@@ -728,7 +835,9 @@ export default function SettingsScreen() {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Profile */}
+        {/* ═══════════════════════════════════════════════════════════════
+            PROFILE SECTION
+            ═══════════════════════════════════════════════════════════════ */}
         <View style={styles.profileSection}>
           <View style={styles.avatarWrap}>
             {profilePhoto ? (
@@ -744,32 +853,38 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Account */}
+        {/* ═══════════════════════════════════════════════════════════════
+            ACCOUNT SECTION
+            ═══════════════════════════════════════════════════════════════ */}
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>Account</Text>
-          <View style={styles.card}>
+          <GlassCard isDark={isDark}>
             <Row icon="mail-outline" label="Email" value={(user?.email?.length ?? 0) > 22 ? (user?.email?.slice(0, 20) + '...') : (user?.email || '')} />
             <Row icon="add-circle-outline" label="Subscription" value={tierLabel()} onPress={() => router.push('/subscription')} />
             {!isPaidPlan && (
-              <Row icon="arrow-up-circle-outline" label="Upgrade to Dawinix Plus" onPress={() => router.push('/subscription')} />
+              <Row icon="arrow-up-circle-outline" label="Upgrade to ChatGPT Plus" onPress={() => router.push('/subscription')} />
             )}
             <Row icon="refresh-outline" label="Restore purchases" onPress={() => router.push('/subscription')} />
             <Row icon="receipt-outline" label="Orders" onPress={() => router.push('/orders')} />
             <Row icon="person-circle-outline" label="Personalization" onPress={() => router.push('/personalization')} />
             <Row icon="notifications-outline" label="Notifications" onPress={() => router.push('/notifications')} />
-            <Row icon="lock-closed-outline" label="Security" onPress={() => router.push('/security')} />
+            <Row icon="grid-outline" label="Apps" onPress={() => router.push('/apps')} />
             <Row icon="people-outline" label="Parental controls" onPress={() => router.push('/parental-controls')} />
             <Row icon="document-lock-outline" label="Data controls" onPress={() => router.push('/data-controls')} />
             <Row icon="megaphone-outline" label="Ads controls" onPress={() => router.push('/ads-controls')} />
             <Row icon="archive-outline" label="Archived chats" onPress={() => router.push('/archived-chats')} isLast />
-          </View>
+            <Row icon="lock-closed-outline" label="Security" onPress={() => router.push('/security')} />
+          </GlassCard>
         </View>
 
-        {/* App Settings */}
+        {/* ═══════════════════════════════════════════════════════════════
+            APP SETTINGS SECTION
+            ═══════════════════════════════════════════════════════════════ */}
         <View style={styles.section}>
-          <Text style={styles.sectionLabel}>App Settings</Text>
-          <View style={styles.card}>
-            <InlineRow icon="contrast-outline" label="Appearance">
+          <Text style={styles.sectionLabel}>App</Text>
+          <GlassCard isDark={isDark}>
+            <Row icon="globe-outline" label="App language" value={settings.appLanguage || 'English'} onPress={() => router.push('/languages')} />
+            <InlineRow icon="moon-outline" label="Appearance">
               <View style={styles.appearRow}>
                 {appearOptions.map(opt => {
                   const active = settings.appearance === opt;
@@ -782,62 +897,112 @@ export default function SettingsScreen() {
                 })}
               </View>
             </InlineRow>
-            <InlineRow icon="color-palette-outline" label="Accent color">
-              <View style={styles.colorRow}>
-                {accentColors.map(c => (
-                  <TouchableOpacity key={c} onPress={() => updateSetting('accentColor', c)}
-                    style={[styles.colorDot, { backgroundColor: c }, settings.accentColor === c && styles.colorDotSelected]} />
-                ))}
+            <Row icon="color-palette-outline" label="Accent color" value={settings.accentColor ? 'Green' : 'Green'} onPress={() => router.push('/accent-color')} rightEl={
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: settings.accentColor || '#10A37F', marginRight: 6 }} />
+                <Text style={styles.rowValue}>Green</Text>
+                <Ionicons name="chevron-forward" size={17} color={secondaryText} />
               </View>
-            </InlineRow>
+            } />
             <SwitchRow icon="phone-portrait-outline" label="Haptic feedback"
               value={settings.hapticFeedback} onChange={v => updateSetting('hapticFeedback', v)} />
-            <SwitchRow icon="text-outline" label="Auto spelling correction"
-              value={settings.autoSpelling} onChange={v => updateSetting('autoSpelling', v)} />
-            <Row icon="globe-outline" label="App language" value={settings.appLanguage} onPress={() => router.push('/languages')} />
-            <Row icon="language-outline" label="Main language for speech" value={settings.mainLanguage} onPress={() => router.push('/languages')} />
-            <Row icon="mic-outline" label="Voice selection" value={settings.voiceSelection} onPress={() => router.push('/voice-settings')} />
+            <SwitchRow icon="text-outline" label="Correct spelling automatically"
+              value={settings.autoSpelling} onChange={v => updateSetting('autoSpelling', v)} isLast />
+          </GlassCard>
+        </View>
+
+        {/* ═══════════════════════════════════════════════════════════════
+            SPEECH SECTION — with descriptive text
+            ═══════════════════════════════════════════════════════════════ */}
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>Speech</Text>
+          <GlassCard isDark={isDark}>
+            <Row icon="globe-outline" label="Main language" value={settings.mainLanguage || 'English'} onPress={() => router.push('/languages')} />
+          </GlassCard>
+          <Text style={styles.descText}>
+            For best results, select the language you mainly speak. If it's not listed, it may still be supported via auto-detection.
+          </Text>
+        </View>
+
+        {/* Voice subsection */}
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>Voice</Text>
+          <GlassCard isDark={isDark}>
+            <Row icon="mic-outline" label="Voice" value={settings.voiceSelection || 'Juniper'} onPress={() => router.push('/voice-settings')} />
             <SwitchRow icon="chatbubbles-outline" label="Background conversations"
-              value={settings.backgroundConversations} onChange={v => updateSetting('backgroundConversations', v)} />
+              value={settings.backgroundConversations} onChange={v => updateSetting('backgroundConversations', v)} isLast />
+          </GlassCard>
+          <Text style={styles.descText}>
+            Background conversations keep the conversation going in other apps or while your screen is off.{' '}
+            <Text style={{ color: '#0A84FF' }} onPress={() => router.push('/background-conversations-info')}>
+              Learn more
+            </Text>
+          </Text>
+        </View>
+
+        {/* ═══════════════════════════════════════════════════════════════
+            SUGGESTIONS SECTION
+            ═══════════════════════════════════════════════════════════════ */}
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>Suggestions</Text>
+          <GlassCard isDark={isDark}>
             <SwitchRow icon="create-outline" label="Autocomplete"
               value={settings.autocomplete} onChange={v => updateSetting('autocomplete', v)} />
             <SwitchRow icon="trending-up-outline" label="Trending searches"
-              value={settings.trendingSearches} onChange={v => updateSetting('trendingSearches', v)} />
-            <SwitchRow icon="list-outline" label="Follow-up suggestions"
-              value={settings.followupSuggestions} onChange={v => updateSetting('followupSuggestions', v)} isLast />
-          </View>
+              value={settings.trendingSearches} onChange={v => updateSetting('trendingSearches', v)} isLast />
+          </GlassCard>
         </View>
 
-        {/* Admin */}
+        {/* ═══════════════════════════════════════════════════════════════
+            ADMIN SECTION
+            ═══════════════════════════════════════════════════════════════ */}
         {isAdmin && (
           <View style={styles.section}>
             <Text style={styles.sectionLabel}>Admin</Text>
-            <View style={styles.card}>
+            <GlassCard isDark={isDark}>
               <Row icon="shield-outline" label="Admin Dashboard" onPress={() => router.push('/admin')} />
               <Row icon="key-outline" label="Apple JWT Key Generator" onPress={() => router.push('/AppleGenerateJWTkey')} />
               <Row icon="mail-outline" label="Send Email to Users" onPress={() => router.push('/admin-email')} isLast />
-            </View>
+            </GlassCard>
           </View>
         )}
 
-        {/* About */}
+        {/* ═══════════════════════════════════════════════════════════════
+            ABOUT SECTION
+            ═══════════════════════════════════════════════════════════════ */}
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>About</Text>
-          <View style={styles.card}>
+          <GlassCard isDark={isDark}>
             <Row icon="bug-outline" label="Report bug" onPress={() => router.push('/bugreport')} />
-            <Row icon="document-text-outline" label="Terms of Use" onPress={() => router.push('/terms-of-use')} />
-            <Row icon="shield-checkmark-outline" label="Privacy Policy" onPress={() => router.push('/privacy-policy')} isLast />
-          </View>
+            <Row icon="help-circle-outline" label="Help Center" onPress={() => router.push('/help-center')} />
+            <Row icon="document-text-outline" label="Terms of Use" onPress={() => router.push('https://dawinix.com')} />
+            <Row icon="shield-checkmark-outline" label="Privacy Policy" onPress={() => router.push('https://dawinix.com')} />
+            <Row icon="information-circle-outline" label="ChatGPT for iOS" value={`${currentVersion} (24584068813)`} isLast />
+          </GlassCard>
         </View>
 
-        <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
-          <Text style={styles.logoutText}>Log Out</Text>
-        </TouchableOpacity>
+        {/* ═══════════════════════════════════════════════════════════════
+            LOG OUT — Full width card style like in photos
+            ═══════════════════════════════════════════════════════════════ */}
+        <View style={{ marginTop: 32, paddingHorizontal: 16 }}>
+          <GlassCard isDark={isDark}>
+            <TouchableOpacity
+              style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 16 }}
+              onPress={handleLogout}
+              activeOpacity={0.6}
+            >
+              <Ionicons name="log-out-outline" size={20} color="#FF453A" style={{ marginRight: 12 }} />
+              <Text style={{ fontSize: 16, color: '#FF453A', fontWeight: '600' }}>Log out</Text>
+            </TouchableOpacity>
+          </GlassCard>
+        </View>
 
-        <Text style={styles.versionText}>Dawinix v{currentVersion}</Text>
+        <View style={{ height: insets.bottom + 40 }} />
       </ScrollView>
 
-      {/* Edit Profile Modal */}
+      {/* ═══════════════════════════════════════════════════════════════
+          EDIT PROFILE MODAL — with blur/glass effect
+          ═══════════════════════════════════════════════════════════════ */}
       <Modal visible={editModalVisible} transparent animationType="slide" onRequestClose={() => setEditModalVisible(false)}>
         <View style={{ flex: 1 }}>
           <BlurView intensity={isDark ? 55 : 40} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
@@ -899,7 +1064,9 @@ export default function SettingsScreen() {
         </View>
       </Modal>
 
-      {/* Photo Picker — rendered AFTER edit modal so it appears on top */}
+      {/* ═══════════════════════════════════════════════════════════════
+          PHOTO PICKER MODAL — with blur/glass effect
+          ═══════════════════════════════════════════════════════════════ */}
       <Modal visible={photoPickerVisible} transparent animationType="fade" onRequestClose={() => setPhotoPickerVisible(false)}>
         <View style={{ flex: 1, justifyContent: 'flex-end' }}>
           <BlurView intensity={isDark ? 55 : 40} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
@@ -913,7 +1080,6 @@ export default function SettingsScreen() {
             }}>
               {Platform.OS === 'ios' ? (
                 <BlurView intensity={isDark ? 90 : 75} tint={isDark ? 'dark' : 'light'} style={{ borderRadius: 18, overflow: 'hidden' }}>
-                  {/* Camera */}
                   <TouchableOpacity
                     style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 18, gap: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)' }}
                     onPress={pickFromCamera} activeOpacity={0.7}
@@ -923,7 +1089,6 @@ export default function SettingsScreen() {
                     </View>
                     <Text style={{ fontSize: 17, color: primaryText, fontWeight: '500' }}>Take Photo</Text>
                   </TouchableOpacity>
-                  {/* Library */}
                   <TouchableOpacity
                     style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 18, gap: 14 }}
                     onPress={pickFromLibrary} activeOpacity={0.7}
@@ -981,5 +1146,3 @@ export default function SettingsScreen() {
     </View>
   );
 }
-
-
