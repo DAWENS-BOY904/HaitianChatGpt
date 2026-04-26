@@ -357,4 +357,4 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 });
-
+add haptic feedback (Haptics.impactAsync) to the Like, Dislike, Copy, and Share buttons inside MessageActionsModal so every tap has a physical response.
