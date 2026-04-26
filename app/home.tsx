@@ -2558,5 +2558,5 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-
+update home handleLikeMessage and handleUnlikeMessage so they are mutually exclusive — liking a message automatically clears its dislike state in message_likes table, and vice versa, so both states are never active at the same time and if unlike open feedback page.
 
