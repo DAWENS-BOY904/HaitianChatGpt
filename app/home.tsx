@@ -1219,6 +1219,40 @@ export default function HomeScreen() {
 
     if ((!currentText && currentMedia.length === 0) || sending) return;
 
+    // ── Quiz keyword interception — route to generate-quiz, never to chat ──
+    const QUIZ_KEYWORDS = [
+      'quiz', 'quizz', 'make me a quiz', 'give me a quiz', 'create a quiz', 'generate a quiz',
+      'test my knowledge', 'trivia', 'make quiz', 'create quiz', 'generate quiz',
+      'fe yon quiz', 'ban mwen yon quiz', 'kreye yon quiz',
+      'fais un quiz', 'créer un quiz', 'générer un quiz',
+      'hazme un quiz', 'crear un quiz', 'genera un quiz',
+    ];
+    const lowerTextForQuiz = currentText.toLowerCase();
+    const isQuizRequest = QUIZ_KEYWORDS.some(kw => lowerTextForQuiz.includes(kw));
+    if (isQuizRequest && !currentEditingId) {
+      Keyboard.dismiss();
+      setInputText('');
+      setSelectedMedia([]);
+      clearDraft();
+      setQuizGenerating(true);
+      // Extract topic from message (everything after quiz keyword)
+      let detectedTopic = 'General Knowledge';
+      const topicMatch = currentText.match(/(?:quiz|trivia)\s+(?:about|on|sur|sou|sobre)?\s*(.+)/i);
+      if (topicMatch && topicMatch[1]?.trim().length > 2) {
+        detectedTopic = topicMatch[1].trim().replace(/[?!.]+$/, '');
+      }
+      setSelectedQuizTopic(detectedTopic);
+      try {
+        const questions = await generateAIQuizQuestions(detectedTopic, selectedDifficulty);
+        showInlineQuiz(questions);
+      } catch (_e) {
+        showInlineQuiz(generateQuizQuestions(detectedTopic));
+      } finally {
+        setQuizGenerating(false);
+      }
+      return;
+    }
+
     // Guest: block photo/file uploads
     if (isGuest && currentMedia.length > 0) {
       setGuestLockFeature('file upload');
@@ -2628,4 +2662,3 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-in home, detect when the user's message contains quiz-related keywords (quiz, quizz, make me a quiz, etc.) and automatically call the generate-quiz edge function and show the inline QuizView instead of routing through the chat edge function — so quiz requests never leak into chat history fix when ai send you a message you click unlike its open feedback page when you click like the unlike icon dispaear and whe  yu unselect the like its apear agin make all in blur.
