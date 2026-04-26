@@ -2515,4 +2515,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-
+please dont skip make the change please In the chat edge function (supabase/functions/chat/index), improve image handling so that when a base64 image is sent with empty text, the AI automatically analyzes and describes the image in full detail without needing a text prompt.
