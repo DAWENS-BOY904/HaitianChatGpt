@@ -2612,5 +2612,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-when you ask the ai to create a quizzes its not call edg chat its call quizzess edg function and give a quizzes via api quiz funtion chat message edg disable for quizess request and when click next auto send bay api and generate new in quizzes modal in home page no button x to remove it auto stay.
 
