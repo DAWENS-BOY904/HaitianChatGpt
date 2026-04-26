@@ -1528,6 +1528,64 @@ export default function HomeScreen() {
     catch (e) { showAlert('Error', 'Failed to archive chat'); }
   }, [currentConversation, archiveConversation, createConversation, showAlert]);
 
+  // ── Like / Unlike handlers — mutually exclusive ──
+  const [messageLikes, setMessageLikes] = useState<Record<string, 'like' | 'dislike' | null>>({});
+
+  const handleLikeMessage = useCallback(async (messageId: string) => {
+    const current = messageLikes[messageId];
+    const isAlreadyLiked = current === 'like';
+
+    // Optimistic UI update
+    setMessageLikes(prev => ({ ...prev, [messageId]: isAlreadyLiked ? null : 'like' }));
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+    if (!user?.id) return;
+    try {
+      if (isAlreadyLiked) {
+        // Toggle off like
+        await supabase.from('message_likes').delete().eq('message_id', messageId).eq('user_id', user.id).eq('like_type', 'like');
+      } else {
+        // Remove any existing dislike first, then insert like
+        await supabase.from('message_likes').delete().eq('message_id', messageId).eq('user_id', user.id);
+        await supabase.from('message_likes').insert({ message_id: messageId, user_id: user.id, like_type: 'like' });
+      }
+    } catch (_e) {
+      // Revert optimistic update on error
+      setMessageLikes(prev => ({ ...prev, [messageId]: current }));
+    }
+  }, [messageLikes, user?.id, supabase]);
+
+  const handleUnlikeMessage = useCallback(async (messageId: string) => {
+    const current = messageLikes[messageId];
+    const isAlreadyDisliked = current === 'dislike';
+
+    // Optimistic UI update
+    setMessageLikes(prev => ({ ...prev, [messageId]: isAlreadyDisliked ? null : 'dislike' }));
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+    if (!user?.id) return;
+    try {
+      if (isAlreadyDisliked) {
+        // Toggle off dislike
+        await supabase.from('message_likes').delete().eq('message_id', messageId).eq('user_id', user.id).eq('like_type', 'dislike');
+      } else {
+        // Remove any existing like first, then insert dislike
+        await supabase.from('message_likes').delete().eq('message_id', messageId).eq('user_id', user.id);
+        await supabase.from('message_likes').insert({ message_id: messageId, user_id: user.id, like_type: 'dislike' });
+        // Navigate to feedback page
+        setTimeout(() => {
+          router.push({
+            pathname: '/feedback',
+            params: { messageId, conversationId: currentConversation?.id || '' },
+          } as any);
+        }, 150);
+      }
+    } catch (_e) {
+      // Revert optimistic update on error
+      setMessageLikes(prev => ({ ...prev, [messageId]: current }));
+    }
+  }, [messageLikes, user?.id, supabase, router, currentConversation?.id]);
+
   const handleCopyMessage = useCallback(async (content: string) => { await Clipboard.setString(content); showAlert('Copied', 'Message copied to clipboard'); }, [showAlert]);
 
   const handleAddPeople = useCallback(async () => {
@@ -2558,5 +2616,5 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-update home handleLikeMessage and handleUnlikeMessage so they are mutually exclusive — liking a message automatically clears its dislike state in message_likes table, and vice versa, so both states are never active at the same time and if unlike open feedback page.
+
 
