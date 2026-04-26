@@ -2515,5 +2515,5 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-
+please ai for the images creation also add elevenlabs to create image for people to and fix chat edg pafwa ask ai la eske li konn kreye photo just bcs li gen photo nn message lan li vire sou thiinking photo ranje sa koz uka mete mot photo,logo nn sa wp di an menw pa need ai ln create logo.
 
