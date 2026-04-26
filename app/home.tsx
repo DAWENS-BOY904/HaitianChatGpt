@@ -2628,4 +2628,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-
+in home, detect when the user's message contains quiz-related keywords (quiz, quizz, make me a quiz, etc.) and automatically call the generate-quiz edge function and show the inline QuizView instead of routing through the chat edge function — so quiz requests never leak into chat history fix when ai send you a message you click unlike its open feedback page when you click like the unlike icon dispaear and whe  yu unselect the like its apear agin make all in blur.
