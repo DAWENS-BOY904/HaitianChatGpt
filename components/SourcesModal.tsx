@@ -340,3 +340,4 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
 });
+please dont skip make all change real Update SourcesModal to use BlurView for the modal background and source list — replace the plain modal container with a frosted glass effect (BlurView intensity 80, dark/light tint) and add rounded corners, backdrop blur overlay, and improved mobile padding for a cleaner look on both iOS and Android. Redesign the source item rows in SourcesModal with card-style layout: add rounded corners (borderRadius 14), subtle shadow/elevation, a color-tinted favicon background per domain, and a snippet preview chip — making sources visually richer on mobile.
