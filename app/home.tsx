@@ -2516,3 +2516,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
   }
 }
 
+in home, after sending an image to the AI, show a small thumbnail preview of the sent image in the chat (as a user bubble with the image even white/dark) before the AI responds, so users can see what was sent.
