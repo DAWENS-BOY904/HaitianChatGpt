@@ -2658,3 +2658,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
+Please clean up the UI and functionality: remove the duplicate like/unlike icons (keep only the top two and delete the bottom ones), ensure the like/unlike functions work on the top icons and inside the message action modal.
