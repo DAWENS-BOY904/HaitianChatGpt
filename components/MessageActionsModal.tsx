@@ -362,4 +362,4 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 });
-
+replace the native Speech.speak in MessageActionsModal with the generate-tts edge function using ElevenLabs for higher quality text-to-speech playback via expo-av.
