@@ -494,3 +494,4 @@ const s = StyleSheet.create({
   },
   historyScoreText: { fontSize: 16, fontWeight: '700' },
 });
+please create a edg function that give 10 quizzes example if you click next the ai generate 10 rapid siw dil hard li f yun hard ou dil easy li f yun easy and fix siw mandel quizess li pa dwe send other quizes only make more and multi.
