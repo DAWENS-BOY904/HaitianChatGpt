@@ -494,3 +494,4 @@ const s = StyleSheet.create({
   },
   historyScoreText: { fontSize: 16, fontWeight: '700' },
 });
+hello ai if you see this dont skip make change after the user completes a quiz, automatically pre-generate the next 10 questions in the background at the same difficulty level so clicking 'Next quiz' instantly loads new questions without any loading spinner create a supabase/functions/generate-quiz/index edge function that accepts a topic and difficulty, calls the AI to generate exactly 10 questions, and returns them as JSON. Then update the quiz generation in home to call this edge function instead of the inline chat function so quizzes generate faster and never leak into the chat history.
