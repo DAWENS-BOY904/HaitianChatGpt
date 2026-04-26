@@ -1364,43 +1364,37 @@ export default function HomeScreen() {
     if (quizMode && user?.id) fetchQuizHistory();
   }, [quizMode, user?.id]);
 
-  // ── AI-powered quiz generation ──
+  // ── AI-powered quiz generation via dedicated edge function (never leaks into chat) ──
   const generateAIQuizQuestions = async (topic: string, difficulty: string = 'Medium'): Promise<QuizQuestion[]> => {
     const topicLabel = topic || 'General Knowledge';
-    const difficultyInstructions: Record<string, string> = {
-      Easy: 'Make the questions simple and beginner-friendly. Use straightforward facts and obvious distractors.',
-      Medium: 'Make the questions moderately challenging with plausible distractors. Suitable for general knowledge.',
-      Hard: 'Make the questions difficult and detailed, requiring deeper knowledge. Distractors should be close to the correct answer.',
-      Expert: 'Make the questions expert-level and very challenging. Include tricky edge cases, specialized knowledge, and very similar-looking options that require deep understanding.',
-    };
-    const difficultyHint = difficultyInstructions[difficulty] || difficultyInstructions.Medium;
-    const prompt = `Generate exactly 10 multiple-choice quiz questions about ${topicLabel}. Difficulty: ${difficulty}. ${difficultyHint} Return ONLY a valid JSON array with no extra text, markdown, or code fences. Use this exact format:\n[{"question":"...","options":["Option A","Option B","Option C","Option D"],"answer":0,"explanation":"..."}]\nThe "answer" field must be the 0-based index of the correct option.`;
     try {
-      const { data, error } = await supabase.functions.invoke('chat', {
-        body: {
-          messages: [{ role: 'user', content: prompt }],
-          model: currentAIModel,
-          conversationId: 'quiz-gen',
-          userId: user?.id,
-        },
+      const { data, error } = await supabase.functions.invoke('generate-quiz', {
+        body: { topic: topicLabel, difficulty },
       });
-      if (error) throw error;
-      const raw = data?.content || data?.message || data?.response || '';
-      const jsonMatch = raw.match(/\[[\s\S]*\]/);
-      if (!jsonMatch) throw new Error('No JSON array found in response');
-      const parsed = JSON.parse(jsonMatch[0]);
-      if (!Array.isArray(parsed) || parsed.length === 0) throw new Error('Empty or invalid array');
-      return parsed.slice(0, 10).map((q: any, i: number) => ({
-        question: String(q.question || `Question ${i + 1}`),
-        options: Array.isArray(q.options) ? q.options.slice(0, 4).map(String) : ['A', 'B', 'C', 'D'],
-        answer: typeof q.answer === 'number' ? Math.min(3, Math.max(0, q.answer)) : 0,
-        explanation: String(q.explanation || ''),
-      }));
+      if (error) throw new Error(error.message || 'Quiz generation failed');
+      const questions: QuizQuestion[] = data?.questions;
+      if (!Array.isArray(questions) || questions.length === 0) throw new Error('No questions returned');
+      return questions;
     } catch (err) {
-      console.log('[Quiz] AI generation failed, using fallback:', err);
+      console.log('[Quiz] Edge function failed, using fallback:', err);
       return generateQuizQuestions(topicLabel);
     }
   };
+
+  // ── Pre-generate next quiz batch in the background after quiz completes ──
+  const preGenerateNextQuiz = useCallback(async (topic: string, difficulty: string) => {
+    if (preGenRunning.current) return;
+    preGenRunning.current = true;
+    setPreGeneratedQuestions(null);
+    try {
+      const questions = await generateAIQuizQuestions(topic, difficulty);
+      setPreGeneratedQuestions(questions);
+    } catch (_e) {
+      setPreGeneratedQuestions(null);
+    } finally {
+      preGenRunning.current = false;
+    }
+  }, [supabase]);
 
   const handleLaunchQuiz = async (topic: string) => {
     setQuizTopicVisible(false);
@@ -1421,6 +1415,8 @@ export default function HomeScreen() {
   // ── Show quiz inline in chat when AI generates one ──
   const [inlineQuizVisible, setInlineQuizVisible] = useState(false);
   const [inlineQuizQuestions, setInlineQuizQuestions] = useState<QuizQuestion[]>([]);
+  const [preGeneratedQuestions, setPreGeneratedQuestions] = useState<QuizQuestion[] | null>(null);
+  const preGenRunning = useRef(false);
 
   const showInlineQuiz = useCallback((questions: QuizQuestion[]) => {
     setInlineQuizQuestions(questions);

@@ -41,6 +41,8 @@ interface QuizViewProps {
   onTryAnother: () => void;
   onHarderQuiz: () => void;
   quizHistory?: QuizHistoryEntry[];
+  onComplete?: () => void; // fires when user reaches the results screen
+  preGeneratedQuestions?: QuizQuestion[] | null; // instantly loaded on Next Quiz
 }
 
 // ── Export for compatibility ──
@@ -52,7 +54,7 @@ export interface QuizModalProps extends QuizViewProps {
 const OPTION_LABELS = ['A', 'B', 'C', 'D'];
 
 // ── Inline quiz widget that renders directly in the chat page ──
-export function QuizView({ questions, onClose, onViewResults, onTryAnother, onHarderQuiz, quizHistory }: QuizViewProps) {
+export function QuizView({ questions, onClose, onViewResults, onTryAnother, onHarderQuiz, quizHistory, onComplete, preGeneratedQuestions }: QuizViewProps) {
   const [currentQ, setCurrentQ] = useState(0);
   const [answers, setAnswers] = useState<QuizAnswer[]>([]);
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
@@ -100,6 +102,7 @@ export function QuizView({ questions, onClose, onViewResults, onTryAnother, onHa
       const nextIdx = currentQ + 1;
       if (nextIdx >= total) {
         setFinished(true);
+        onComplete?.();
       } else {
         Animated.timing(fadeAnim, { toValue: 0, duration: 180, useNativeDriver: true }).start(() => {
           setCurrentQ(nextIdx);
@@ -494,4 +497,3 @@ const s = StyleSheet.create({
   },
   historyScoreText: { fontSize: 16, fontWeight: '700' },
 });
-hello ai if you see this dont skip make change after the user completes a quiz, automatically pre-generate the next 10 questions in the background at the same difficulty level so clicking 'Next quiz' instantly loads new questions without any loading spinner create a supabase/functions/generate-quiz/index edge function that accepts a topic and difficulty, calls the AI to generate exactly 10 questions, and returns them as JSON. Then update the quiz generation in home to call this edge function instead of the inline chat function so quizzes generate faster and never leak into the chat history.
