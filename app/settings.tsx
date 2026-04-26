@@ -159,41 +159,73 @@ function GuestSettings() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
-  const bg = isDark ? '#000000' : '#F2F2F7';
-  const cardBg = isDark ? '#1C1C1E' : '#FFFFFF';
   const dividerColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
-  const primaryText = isDark ? '#FFFFFF' : '#000000';
-  const secondaryText = '#8E8E93';
+  const primaryText = isDark ? '#FFFFFF' : '#0A0A14';
+  const secondaryText = isDark ? 'rgba(200,200,210,0.75)' : 'rgba(60,60,80,0.65)';
+  const iconColor = isDark ? 'rgba(220,225,255,0.82)' : 'rgba(30,30,60,0.72)';
 
   return (
-    <View style={{ flex: 1, backgroundColor: bg }}>
+    <View style={{ flex: 1, backgroundColor: 'transparent' }}>
+      {Platform.OS === 'ios' ? (
+        <BlurView intensity={isDark ? 72 : 60} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
+      ) : (
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? 'rgba(16,16,22,0.96)' : 'rgba(228,230,240,0.97)' }]} />
+      )}
       {/* Header */}
-      <View style={{
-        flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-        paddingTop: insets.top + 14, paddingBottom: 14, paddingHorizontal: 20,
-        backgroundColor: bg,
-        borderBottomWidth: StyleSheet.hairlineWidth,
-        borderBottomColor: dividerColor,
-      }}>
-        <Text style={{ fontSize: 17, fontWeight: '600', color: primaryText }}>Settings</Text>
-        <TouchableOpacity
-          style={{
-            position: 'absolute', right: 16, top: insets.top + 8,
-            width: 32, height: 32, borderRadius: 16,
-            backgroundColor: isDark ? '#2C2C2E' : 'rgba(0,0,0,0.08)',
-            alignItems: 'center', justifyContent: 'center',
-          }}
-          onPress={() => router.back()}
-        >
-          <Ionicons name="close" size={18} color={primaryText} />
-        </TouchableOpacity>
-      </View>
+      {Platform.OS === 'ios' ? (
+        <BlurView intensity={isDark ? 55 : 45} tint={isDark ? 'dark' : 'light'} style={{
+          flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+          paddingTop: insets.top + 16, paddingBottom: 16, paddingHorizontal: 20,
+          borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: dividerColor,
+        }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Ionicons name="settings-outline" size={20} color={iconColor} />
+            <Text style={{ fontSize: 19, fontWeight: '700', color: primaryText, letterSpacing: -0.3 }}>Settings</Text>
+          </View>
+          <TouchableOpacity
+            style={{
+              position: 'absolute', right: 16, top: insets.top + 10,
+              width: 34, height: 34, borderRadius: 17,
+              backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.09)',
+              alignItems: 'center', justifyContent: 'center',
+              borderWidth: StyleSheet.hairlineWidth,
+              borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)',
+            }}
+            onPress={() => router.back()}
+          >
+            <Ionicons name="close" size={16} color={primaryText} />
+          </TouchableOpacity>
+        </BlurView>
+      ) : (
+        <View style={{
+          flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+          paddingTop: insets.top + 16, paddingBottom: 16, paddingHorizontal: 20,
+          backgroundColor: isDark ? 'rgba(20,20,30,0.92)' : 'rgba(235,237,248,0.92)',
+          borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: dividerColor,
+        }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Ionicons name="settings-outline" size={20} color={iconColor} />
+            <Text style={{ fontSize: 19, fontWeight: '700', color: primaryText }}>Settings</Text>
+          </View>
+          <TouchableOpacity
+            style={{
+              position: 'absolute', right: 16, top: insets.top + 10,
+              width: 34, height: 34, borderRadius: 17,
+              backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.09)',
+              alignItems: 'center', justifyContent: 'center',
+            }}
+            onPress={() => router.back()}
+          >
+            <Ionicons name="close" size={16} color={primaryText} />
+          </TouchableOpacity>
+        </View>
+      )}
 
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Account */}
         <View style={{ marginTop: 24, paddingHorizontal: 16 }}>
-          <Text style={{ fontSize: 13, fontWeight: '500', color: secondaryText, marginBottom: 8, marginLeft: 4 }}>Account</Text>
-          <View style={{ backgroundColor: cardBg, borderRadius: 14, overflow: 'hidden' }}>
+          <Text style={{ fontSize: 13, fontWeight: '600', color: secondaryText, marginBottom: 8, marginLeft: 4 }}>Account</Text>
+          <GlassCard isDark={isDark}>
             {[
               { icon: 'megaphone-outline', label: 'Ads controls', route: '/ads-controls' },
               { icon: 'document-lock-outline', label: 'Data controls', route: '/data-controls' },
@@ -202,7 +234,7 @@ function GuestSettings() {
                 key={item.label}
                 style={{
                   flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-                  paddingVertical: 13, paddingHorizontal: 16,
+                  paddingVertical: 14, paddingHorizontal: 16,
                   borderBottomWidth: i < arr.length - 1 ? StyleSheet.hairlineWidth : 0,
                   borderBottomColor: dividerColor,
                 }}
@@ -210,93 +242,45 @@ function GuestSettings() {
                 activeOpacity={0.6}
               >
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                  <Ionicons name={item.icon as any} size={20} color={secondaryText} />
+                  <View style={{ width: 30, height: 30, borderRadius: 8, backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.07)', alignItems: 'center', justifyContent: 'center' }}>
+                    <Ionicons name={item.icon as any} size={17} color={iconColor} />
+                  </View>
                   <Text style={{ fontSize: 16, color: primaryText }}>{item.label}</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={17} color={secondaryText} />
               </TouchableOpacity>
             ))}
-          </View>
-        </View>
-
-        {/* App Settings */}
-        <View style={{ marginTop: 24, paddingHorizontal: 16 }}>
-          <Text style={{ fontSize: 13, fontWeight: '500', color: secondaryText, marginBottom: 8, marginLeft: 4 }}>App Settings</Text>
-          <View style={{ backgroundColor: cardBg, borderRadius: 14, overflow: 'hidden' }}>
-            <TouchableOpacity
-              style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 13, paddingHorizontal: 16 }}
-              onPress={() => router.push('/languages')}
-              activeOpacity={0.6}
-            >
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                <Ionicons name="globe-outline" size={20} color={secondaryText} />
-                <Text style={{ fontSize: 16, color: primaryText }}>App language</Text>
-              </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                <Text style={{ fontSize: 15, color: secondaryText }}>English</Text>
-                <Ionicons name="chevron-forward" size={17} color={secondaryText} />
-              </View>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* About */}
-        <View style={{ marginTop: 24, paddingHorizontal: 16 }}>
-          <Text style={{ fontSize: 13, fontWeight: '500', color: secondaryText, marginBottom: 8, marginLeft: 4 }}>About</Text>
-          <View style={{ backgroundColor: cardBg, borderRadius: 14, overflow: 'hidden' }}>
-            {[
-              { icon: 'document-text-outline', label: 'Terms of Use', route: '/terms-of-use' },
-              { icon: 'shield-checkmark-outline', label: 'Privacy Policy', route: '/privacy-policy' },
-            ].map((item, i, arr) => (
-              <TouchableOpacity
-                key={item.label}
-                style={{
-                  flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-                  paddingVertical: 13, paddingHorizontal: 16,
-                  borderBottomWidth: i < arr.length - 1 ? StyleSheet.hairlineWidth : 0,
-                  borderBottomColor: dividerColor,
-                }}
-                onPress={() => router.push(item.route as any)}
-                activeOpacity={0.6}
-              >
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                  <Ionicons name={item.icon as any} size={20} color={secondaryText} />
-                  <Text style={{ fontSize: 16, color: primaryText }}>{item.label}</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={17} color={secondaryText} />
-              </TouchableOpacity>
-            ))}
-          </View>
+          </GlassCard>
         </View>
 
         {/* Sign up CTA */}
-        <View style={{ marginHorizontal: 16, marginTop: 36, marginBottom: 8 }}>
-          <View style={{
-            backgroundColor: cardBg, borderRadius: 18, padding: 24, alignItems: 'center',
-            borderWidth: StyleSheet.hairlineWidth, borderColor: dividerColor,
-          }}>
-            <View style={{
-              width: 60, height: 60, borderRadius: 30,
-              backgroundColor: '#10A37F22', alignItems: 'center', justifyContent: 'center', marginBottom: 14,
-            }}>
-              <Ionicons name="lock-open-outline" size={28} color="#10A37F" />
+        <View style={{ marginHorizontal: 16, marginTop: 32, marginBottom: 8 }}>
+          <GlassCard isDark={isDark}>
+            <View style={{ padding: 24, alignItems: 'center' }}>
+              <View style={{
+                width: 64, height: 64, borderRadius: 32,
+                backgroundColor: '#10A37F22', alignItems: 'center', justifyContent: 'center', marginBottom: 14,
+                borderWidth: 1, borderColor: '#10A37F44',
+              }}>
+                <Ionicons name="lock-open-outline" size={30} color="#10A37F" />
+              </View>
+              <Text style={{ color: primaryText, fontSize: 18, fontWeight: '700', textAlign: 'center', marginBottom: 8 }}>
+                Unlock all settings
+              </Text>
+              <Text style={{ color: secondaryText, fontSize: 14, textAlign: 'center', lineHeight: 20, marginBottom: 20 }}>
+                Create an account to access personalization, notifications, parental controls, and more.
+              </Text>
+              <TouchableOpacity
+                style={{ backgroundColor: '#10A37F', borderRadius: 50, paddingVertical: 14, paddingHorizontal: 32, width: '100%', alignItems: 'center' }}
+                onPress={() => router.push('/login')}
+              >
+                <Text style={{ color: '#FFF', fontSize: 16, fontWeight: '700' }}>Sign up for free</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={{ marginTop: 12, paddingVertical: 8 }} onPress={() => router.push('/login')}>
+                <Text style={{ color: secondaryText, fontSize: 15 }}>Already have an account? Log in</Text>
+              </TouchableOpacity>
             </View>
-            <Text style={{ color: primaryText, fontSize: 18, fontWeight: '700', textAlign: 'center', marginBottom: 8 }}>
-              Unlock all settings
-            </Text>
-            <Text style={{ color: secondaryText, fontSize: 14, textAlign: 'center', lineHeight: 20, marginBottom: 20 }}>
-              Create an account to access personalization, notifications, parental controls, and more.
-            </Text>
-            <TouchableOpacity
-              style={{ backgroundColor: '#10A37F', borderRadius: 50, paddingVertical: 14, paddingHorizontal: 32, width: '100%', alignItems: 'center' }}
-              onPress={() => router.push('/login')}
-            >
-              <Text style={{ color: '#FFF', fontSize: 16, fontWeight: '700' }}>Sign up for free</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={{ marginTop: 12, paddingVertical: 8 }} onPress={() => router.push('/login')}>
-              <Text style={{ color: secondaryText, fontSize: 15 }}>Already have an account? Log in</Text>
-            </TouchableOpacity>
-          </View>
+          </GlassCard>
         </View>
 
         <View style={{ height: insets.bottom + 40 }} />
@@ -312,14 +296,14 @@ function GlassCard({ children, isDark, style = {} }: { children: React.ReactNode
   if (Platform.OS === 'ios') {
     return (
       <BlurView
-        intensity={isDark ? 25 : 18}
+        intensity={isDark ? 40 : 28}
         tint={isDark ? 'dark' : 'light'}
         style={[{
           borderRadius: 18,
           overflow: 'hidden',
-          backgroundColor: isDark ? 'rgba(28,28,30,0.55)' : 'rgba(255,255,255,0.72)',
+          backgroundColor: isDark ? 'rgba(36,36,52,0.5)' : 'rgba(255,255,255,0.68)',
           borderWidth: StyleSheet.hairlineWidth,
-          borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)',
+          borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.07)',
         }, style]}
       >
         {children}
@@ -330,9 +314,9 @@ function GlassCard({ children, isDark, style = {} }: { children: React.ReactNode
     <View style={[{
       borderRadius: 18,
       overflow: 'hidden',
-      backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF',
+      backgroundColor: isDark ? 'rgba(36,36,52,0.88)' : 'rgba(255,255,255,0.88)',
       borderWidth: StyleSheet.hairlineWidth,
-      borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+      borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)',
     }, style]}>
       {children}
     </View>
@@ -369,12 +353,13 @@ export default function SettingsScreen() {
   const currentVersion = Constants.expoConfig?.version || '1.0.0';
   const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'update' | 'no-update' | 'version'>('idle');
 
-  const bg = isDark ? '#000000' : '#F2F2F7';
-  const primaryText = isDark ? '#FFFFFF' : '#000000';
-  const secondaryText = '#8E8E93';
-  const sectionLabelColor = '#8E8E93';
-  const switchTrackFalse = isDark ? '#3A3A3C' : '#E5E5EA';
-  const dividerColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
+  // ── Design tokens — blur/glass theme ──────────────────────────────────
+  const primaryText = isDark ? '#FFFFFF' : '#0A0A14';
+  const secondaryText = isDark ? 'rgba(200,200,215,0.72)' : 'rgba(50,50,75,0.62)';
+  const sectionLabelColor = isDark ? 'rgba(180,182,200,0.68)' : 'rgba(70,72,95,0.62)';
+  const switchTrackFalse = isDark ? '#3A3A4C' : '#C8C8D8';
+  const dividerColor = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)';
+  const iconColor = isDark ? 'rgba(215,220,255,0.85)' : 'rgba(25,25,60,0.75)';
 
   useEffect(() => {
     checkAdminAccess();
@@ -388,58 +373,42 @@ export default function SettingsScreen() {
   };
 
   const checkUpdate = async () => {
-  setUpdateStatus('checking');
-
-  try {
-    const latest = await VersionCheck.getLatestVersion();
-    const current = VersionCheck.getCurrentVersion();
-
-    if (latest !== current) {
-      setUpdateStatus('update');
-    } else {
-      setUpdateStatus('no-update');
-
-      setTimeout(() => {
-        setUpdateStatus('version');
-
+    setUpdateStatus('checking');
+    try {
+      const latest = await VersionCheck.getLatestVersion();
+      const current = VersionCheck.getCurrentVersion();
+      if (latest !== current) {
+        setUpdateStatus('update');
+      } else {
+        setUpdateStatus('no-update');
         setTimeout(() => {
-          setUpdateStatus('no-update');
+          setUpdateStatus('version');
+          setTimeout(() => { setUpdateStatus('no-update'); }, 3000);
         }, 3000);
-
-      }, 3000);
+      }
+    } catch (e) {
+      setUpdateStatus('idle');
     }
-  } catch (e) {
-    setUpdateStatus('idle');
-  }
-};
+  };
 
-const openStore = () => {
-  const url = VersionCheck.getStoreUrl();
-  Linking.openURL(url);
-};
+  const openStore = () => {
+    const url = VersionCheck.getStoreUrl();
+    Linking.openURL(url);
+  };
 
-const handleUpdatePress = () => {
-  if (updateStatus === 'update') {
-    openStore();
-  } else {
-    checkUpdate();
-  }
-};
+  const handleUpdatePress = () => {
+    if (updateStatus === 'update') { openStore(); } else { checkUpdate(); }
+  };
 
-const getUpdateLabel = () => {
-  switch (updateStatus) {
-    case 'checking':
-      return 'Checking...';
-    case 'update':
-      return 'Update';
-    case 'no-update':
-      return 'Already up to date';
-    case 'version':
-      return `Version ${currentVersion}`;
-    default:
-      return 'Check update';
-  }
-};
+  const getUpdateLabel = () => {
+    switch (updateStatus) {
+      case 'checking': return 'Checking...';
+      case 'update': return 'Update';
+      case 'no-update': return 'Up to date';
+      case 'version': return `v${currentVersion}`;
+      default: return 'Check update';
+    }
+  };
 
   const loadProfile = async () => {
     if (!user) return;
@@ -630,31 +599,33 @@ const getUpdateLabel = () => {
 
   // ── Styles ──────────────────────────────────────────────────────────────
   const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: bg },
+    container: { flex: 1, backgroundColor: 'transparent' },
 
-    // Header — clean, no metal effect, with subtle border
+    // Header — glass blur redesign
     header: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      paddingTop: insets.top + 14,
-      paddingBottom: 14,
+      paddingTop: insets.top + 16,
+      paddingBottom: 16,
       paddingHorizontal: 20,
-      backgroundColor: bg,
+      backgroundColor: 'transparent',
       borderBottomWidth: StyleSheet.hairlineWidth,
       borderBottomColor: dividerColor,
     },
-    headerTitle: { fontSize: 17, fontWeight: '600', color: primaryText },
+    headerTitle: { fontSize: 19, fontWeight: '700', color: primaryText, letterSpacing: -0.3 },
     closeButton: {
       position: 'absolute',
       right: 16,
-      top: insets.top + 8,
-      width: 32,
-      height: 32,
-      borderRadius: 16,
-      backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+      top: insets.top + 10,
+      width: 34,
+      height: 34,
+      borderRadius: 17,
+      backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.09)',
       alignItems: 'center',
       justifyContent: 'center',
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)',
     },
 
     // Profile section
@@ -664,49 +635,42 @@ const getUpdateLabel = () => {
       paddingHorizontal: 20,
     },
     avatarWrap: {
-      width: 80,
-      height: 80,
-      borderRadius: 40,
-      backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA',
+      width: 84,
+      height: 84,
+      borderRadius: 42,
+      backgroundColor: isDark ? 'rgba(60,60,80,0.6)' : 'rgba(200,200,220,0.5)',
       overflow: 'hidden',
       alignItems: 'center',
       justifyContent: 'center',
       marginBottom: 12,
+      borderWidth: 2,
+      borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)',
     },
-    avatarImg: { width: 80, height: 80, borderRadius: 40 },
-    avatarInitial: { fontSize: 32, fontWeight: '600', color: primaryText },
-    profileName: { fontSize: 24, fontWeight: '600', color: primaryText, marginBottom: 4 },
+    avatarImg: { width: 84, height: 84, borderRadius: 42 },
+    avatarInitial: { fontSize: 34, fontWeight: '700', color: primaryText },
+    profileName: { fontSize: 22, fontWeight: '700', color: primaryText, marginBottom: 4 },
     profileUsername: { fontSize: 15, color: secondaryText, marginBottom: 14 },
     editBtn: {
-      paddingHorizontal: 20,
-      paddingVertical: 8,
+      paddingHorizontal: 22,
+      paddingVertical: 9,
       borderRadius: 20,
       borderWidth: 1,
-      borderColor: isDark ? '#3A3A3C' : 'rgba(0,0,0,0.15)',
-      backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
+      borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)',
+      backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)',
     },
-    editBtnText: { fontSize: 15, color: primaryText, fontWeight: '500' },
+    editBtnText: { fontSize: 15, color: primaryText, fontWeight: '600' },
 
     // Section labels
     sectionLabel: {
-      fontSize: 13,
-      fontWeight: '500',
+      fontSize: 12,
+      fontWeight: '700',
       color: sectionLabelColor,
       marginBottom: 8,
       marginLeft: 4,
-      letterSpacing: 0.1,
-      textTransform: 'none' as any,
+      letterSpacing: 0.5,
+      textTransform: 'uppercase' as any,
     },
     section: { marginTop: 24, paddingHorizontal: 16 },
-
-    // Card — glass effect
-    card: {
-      borderRadius: 18,
-      overflow: 'hidden',
-      backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF',
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
-    },
 
     // Row styles
     row: {
@@ -721,13 +685,15 @@ const getUpdateLabel = () => {
     rowLast: { borderBottomWidth: 0 },
     rowLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, gap: 12 },
     rowIcon: {
-      width: 24,
-      height: 24,
+      width: 30,
+      height: 30,
+      borderRadius: 8,
+      backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.07)',
       alignItems: 'center',
       justifyContent: 'center',
     },
     rowLabel: { fontSize: 16, color: primaryText, fontWeight: '400', flex: 1 },
-    rowValue: { fontSize: 15, color: secondaryText, marginRight: 4 },
+    rowValue: { fontSize: 14, color: secondaryText, marginRight: 4 },
 
     // Inline row (for appearance, accent color)
     inlineRow: {
@@ -751,19 +717,18 @@ const getUpdateLabel = () => {
       gap: 12,
       marginBottom: 0,
     },
-    inlineContent: { paddingLeft: 36, marginTop: 8 },
+    inlineContent: { paddingLeft: 42, marginTop: 8 },
 
     // Appearance chips
     appearRow: { flexDirection: 'row', gap: 8 },
-    appearChip: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 8, backgroundColor: isDark ? '#3A3A3C' : '#E5E5EA' },
-    appearChipActive: { backgroundColor: '#0A84FF' },
+    appearChip: {
+      paddingHorizontal: 14, paddingVertical: 6, borderRadius: 10,
+      backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)',
+      borderWidth: 1, borderColor: 'transparent',
+    },
+    appearChipActive: { backgroundColor: '#0A84FF22', borderColor: '#0A84FF55' },
     appearChipText: { fontSize: 13, color: primaryText },
-    appearChipTextActive: { fontSize: 13, color: '#FFFFFF' },
-
-    // Color dots
-    colorRow: { flexDirection: 'row', gap: 8 },
-    colorDot: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: 'transparent' },
-    colorDotSelected: { borderColor: isDark ? '#FFFFFF' : '#000000' },
+    appearChipTextActive: { fontSize: 13, color: '#0A84FF', fontWeight: '600' },
 
     // Switch row
     switchRow: {
@@ -792,27 +757,6 @@ const getUpdateLabel = () => {
       marginHorizontal: 16,
       lineHeight: 18,
     },
-    descTextLink: {
-      fontSize: 13,
-      color: '#0A84FF',
-      marginTop: 8,
-      marginHorizontal: 16,
-      lineHeight: 18,
-    },
-
-    // Log out button — matches photo style (full width card, not red text)
-    logoutBtn: {
-      marginHorizontal: 16,
-      marginTop: 32,
-      marginBottom: 8,
-      paddingVertical: 14,
-      borderRadius: 18,
-      backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF',
-      alignItems: 'center',
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: dividerColor,
-    },
-    logoutText: { fontSize: 17, color: '#FF453A', fontWeight: '600' },
 
     // Version text
     versionText: {
@@ -834,7 +778,7 @@ const getUpdateLabel = () => {
     >
       <View style={styles.rowLeft}>
         <View style={styles.rowIcon}>
-          <Ionicons name={icon as any} size={20} color={secondaryText} />
+          <Ionicons name={icon as any} size={17} color={iconColor} />
         </View>
         <Text style={styles.rowLabel}>{label}</Text>
       </View>
@@ -851,7 +795,7 @@ const getUpdateLabel = () => {
     <View style={isLast ? styles.switchRowLast : styles.switchRow}>
       <View style={styles.rowLeft}>
         <View style={styles.rowIcon}>
-          <Ionicons name={icon as any} size={20} color={secondaryText} />
+          <Ionicons name={icon as any} size={17} color={iconColor} />
         </View>
         <Text style={styles.rowLabel}>{label}</Text>
       </View>
@@ -868,7 +812,7 @@ const getUpdateLabel = () => {
     <View style={isLast ? styles.inlineRowLast : styles.inlineRow}>
       <View style={styles.inlineRowHeader}>
         <View style={styles.rowIcon}>
-          <Ionicons name={icon as any} size={20} color={secondaryText} />
+          <Ionicons name={icon as any} size={17} color={iconColor} />
         </View>
         <Text style={styles.rowLabel}>{label}</Text>
       </View>
@@ -876,20 +820,49 @@ const getUpdateLabel = () => {
     </View>
   );
 
-  const accentColors = ['#10A37F', '#0084FF', '#FF3B30', '#FF9500', '#5856D6'];
   const appearOptions = ['System', 'Light', 'Dark'];
 
   return (
     <View style={styles.container}>
+      {/* Full-screen blur background */}
+      {Platform.OS === 'ios' ? (
+        <BlurView
+          intensity={isDark ? 72 : 60}
+          tint={isDark ? 'dark' : 'light'}
+          style={StyleSheet.absoluteFill}
+        />
+      ) : (
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? 'rgba(16,16,22,0.96)' : 'rgba(228,230,240,0.97)' }]} />
+      )}
+
       {/* ═══════════════════════════════════════════════════════════════
-          HEADER — Clean, no metal effect, subtle border
+          HEADER — Glass blur redesign with icon + bold title
           ═══════════════════════════════════════════════════════════════ */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Settings</Text>
-        <TouchableOpacity style={styles.closeButton} onPress={() => router.back()}>
-          <Ionicons name="close" size={18} color={primaryText} />
-        </TouchableOpacity>
-      </View>
+      {Platform.OS === 'ios' ? (
+        <BlurView
+          intensity={isDark ? 55 : 45}
+          tint={isDark ? 'dark' : 'light'}
+          style={[styles.header]}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Ionicons name="settings-outline" size={20} color={iconColor} />
+            <Text style={styles.headerTitle}>Settings</Text>
+          </View>
+          <TouchableOpacity style={styles.closeButton} onPress={() => router.back()}>
+            <Ionicons name="close" size={16} color={primaryText} />
+          </TouchableOpacity>
+        </BlurView>
+      ) : (
+        <View style={[styles.header, { backgroundColor: isDark ? 'rgba(20,20,30,0.92)' : 'rgba(235,237,248,0.92)' }]}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Ionicons name="settings-outline" size={20} color={iconColor} />
+            <Text style={styles.headerTitle}>Settings</Text>
+          </View>
+          <TouchableOpacity style={styles.closeButton} onPress={() => router.back()}>
+            <Ionicons name="close" size={16} color={primaryText} />
+          </TouchableOpacity>
+        </View>
+      )}
 
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* ═══════════════════════════════════════════════════════════════
@@ -917,9 +890,9 @@ const getUpdateLabel = () => {
           <Text style={styles.sectionLabel}>Account</Text>
           <GlassCard isDark={isDark}>
             <Row icon="mail-outline" label="Email" value={(user?.email?.length ?? 0) > 22 ? (user?.email?.slice(0, 20) + '...') : (user?.email || '')} />
-            <Row icon="add-circle-outline" label="Subscription" value={tierLabel()} onPress={() => router.push('/subscription')} />
+            <Row icon="star-outline" label="Subscription" value={tierLabel()} onPress={() => router.push('/subscription')} />
             {!isPaidPlan && (
-              <Row icon="arrow-up-circle-outline" label="Upgrade to ChatGPT Plus" onPress={() => router.push('/subscription')} />
+              <Row icon="arrow-up-circle-outline" label="Upgrade to Plus" onPress={() => router.push('/subscription')} />
             )}
             <Row icon="refresh-outline" label="Restore purchases" onPress={() => router.push('/subscription')} />
             <Row icon="receipt-outline" label="Orders" onPress={() => router.push('/orders')} />
@@ -928,8 +901,8 @@ const getUpdateLabel = () => {
             <Row icon="people-outline" label="Parental controls" onPress={() => router.push('/parental-controls')} />
             <Row icon="document-lock-outline" label="Data controls" onPress={() => router.push('/data-controls')} />
             <Row icon="megaphone-outline" label="Ads controls" onPress={() => router.push('/ads-controls')} />
-            <Row icon="archive-outline" label="Archived chats" onPress={() => router.push('/archived-chats')} isLast />
-            <Row icon="lock-closed-outline" label="Security" onPress={() => router.push('/security')} />
+            <Row icon="archive-outline" label="Archived chats" onPress={() => router.push('/archived-chats')} />
+            <Row icon="lock-closed-outline" label="Security" onPress={() => router.push('/security')} isLast />
           </GlassCard>
         </View>
 
@@ -953,10 +926,9 @@ const getUpdateLabel = () => {
                 })}
               </View>
             </InlineRow>
-            <Row icon="color-palette-outline" label="Accent color" value={settings.accentColor ? 'Green' : 'Green'} onPress={() => router.push('/accent-color')} rightEl={
+            <Row icon="color-palette-outline" label="Accent color" onPress={() => router.push('/accent-color')} rightEl={
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: settings.accentColor || '#10A37F', marginRight: 6 }} />
-                <Text style={styles.rowValue}>Green</Text>
+                <View style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: settings.accentColor || '#10A37F', marginRight: 6, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' }} />
                 <Ionicons name="chevron-forward" size={17} color={secondaryText} />
               </View>
             } />
@@ -968,15 +940,15 @@ const getUpdateLabel = () => {
         </View>
 
         {/* ═══════════════════════════════════════════════════════════════
-            SPEECH SECTION — with descriptive text
+            SPEECH SECTION
             ═══════════════════════════════════════════════════════════════ */}
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>Speech</Text>
           <GlassCard isDark={isDark}>
-            <Row icon="globe-outline" label="Main language" value={settings.mainLanguage || 'English'} onPress={() => router.push('/languages')} />
+            <Row icon="globe-outline" label="Main language" value={settings.mainLanguage || 'English'} onPress={() => router.push('/languages')} isLast />
           </GlassCard>
           <Text style={styles.descText}>
-            For best results, select the language you mainly speak. If it's not listed, it may still be supported via auto-detection.
+            For best results, select the language you mainly speak. If not listed, it may still be supported via auto-detection.
           </Text>
         </View>
 
@@ -989,10 +961,8 @@ const getUpdateLabel = () => {
               value={settings.backgroundConversations} onChange={v => updateSetting('backgroundConversations', v)} isLast />
           </GlassCard>
           <Text style={styles.descText}>
-            Background conversations keep the conversation going in other apps or while your screen is off.{' '}
-            <Text style={{ color: '#0A84FF' }} onPress={() => router.push('/background-conversations-info')}>
-              Learn more
-            </Text>
+            Background conversations keep the chat going in other apps or while the screen is off.{' '}
+            <Text style={{ color: '#0A84FF' }} onPress={() => {}}>Learn more</Text>
           </Text>
         </View>
 
@@ -1034,34 +1004,34 @@ const getUpdateLabel = () => {
             <Row icon="document-text-outline" label="Terms of Use" onPress={() => router.push('https://dawinix.com')} />
             <Row icon="shield-checkmark-outline" label="Privacy Policy" onPress={() => router.push('https://dawinix.com')} />
             <Row
-  icon="cloud-download-outline"
-  label="Check for updates"
-  isLast
-  onPress={handleUpdatePress}
-  rightEl={
-    updateStatus === 'checking' ? (
-      <ActivityIndicator size="small" />
-    ) : (
-      <Text style={styles.rowValue}>
-        {getUpdateLabel()}
-      </Text>
-    )
-  }
-/>
+              icon="cloud-download-outline"
+              label="Check for updates"
+              isLast
+              onPress={handleUpdatePress}
+              rightEl={
+                updateStatus === 'checking' ? (
+                  <ActivityIndicator size="small" color={iconColor} />
+                ) : (
+                  <Text style={styles.rowValue}>{getUpdateLabel()}</Text>
+                )
+              }
+            />
           </GlassCard>
         </View>
 
         {/* ═══════════════════════════════════════════════════════════════
-            LOG OUT — Full width card style like in photos
+            LOG OUT — Glass card with icon badge
             ═══════════════════════════════════════════════════════════════ */}
         <View style={{ marginTop: 32, paddingHorizontal: 16 }}>
           <GlassCard isDark={isDark}>
             <TouchableOpacity
-              style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 16 }}
+              style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 15, paddingHorizontal: 16 }}
               onPress={handleLogout}
               activeOpacity={0.6}
             >
-              <Ionicons name="log-out-outline" size={20} color="#FF453A" style={{ marginRight: 12 }} />
+              <View style={{ width: 30, height: 30, borderRadius: 8, backgroundColor: '#FF453A22', alignItems: 'center', justifyContent: 'center', marginRight: 12, borderWidth: 1, borderColor: '#FF453A33' }}>
+                <Ionicons name="log-out-outline" size={17} color="#FF453A" />
+              </View>
               <Text style={{ fontSize: 16, color: '#FF453A', fontWeight: '600' }}>Log out</Text>
             </TouchableOpacity>
           </GlassCard>
@@ -1143,7 +1113,6 @@ const getUpdateLabel = () => {
           <View style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? 'rgba(0,0,0,0.4)' : 'rgba(0,0,0,0.22)' }]} />
           <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setPhotoPickerVisible(false)} />
           <View style={{ paddingHorizontal: 12, paddingBottom: insets.bottom + 8 }}>
-            {/* Options card */}
             <View style={{
               borderRadius: 18, overflow: 'hidden', marginBottom: 10,
               shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 20, elevation: 20,
@@ -1170,7 +1139,7 @@ const getUpdateLabel = () => {
                   </TouchableOpacity>
                 </BlurView>
               ) : (
-                <View style={{ backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF', borderRadius: 18, overflow: 'hidden' }}>
+                <View style={{ backgroundColor: isDark ? 'rgba(36,36,52,0.95)' : 'rgba(255,255,255,0.95)', borderRadius: 18, overflow: 'hidden' }}>
                   <TouchableOpacity
                     style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 18, gap: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }}
                     onPress={pickFromCamera} activeOpacity={0.7}
@@ -1205,7 +1174,7 @@ const getUpdateLabel = () => {
                   <Text style={{ fontSize: 17, fontWeight: '600', color: primaryText }}>Cancel</Text>
                 </BlurView>
               ) : (
-                <View style={{ backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF', borderRadius: 16, paddingVertical: 18, alignItems: 'center' }}>
+                <View style={{ backgroundColor: isDark ? 'rgba(36,36,52,0.95)' : 'rgba(255,255,255,0.95)', borderRadius: 16, paddingVertical: 18, alignItems: 'center' }}>
                   <Text style={{ fontSize: 17, fontWeight: '600', color: primaryText }}>Cancel</Text>
                 </View>
               )}
@@ -1216,4 +1185,3 @@ const getUpdateLabel = () => {
     </View>
   );
 }
-please remove dark background add gri and tex+icon yo dwe klere icon yo dwe clear like on flash limier bien we yo and header settings redesign li like photo sa:https://files.catbox.moe/0lgl4g.png and all in blur effect mode.
