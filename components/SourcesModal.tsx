@@ -399,4 +399,3 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
 });
-please dont skip make all change make this better redesign it and when you click a source domain its must auto open in the app never go to safari its must open the linnk in the app.
