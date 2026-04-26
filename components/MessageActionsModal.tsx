@@ -9,12 +9,14 @@ import {
   Platform,
   ScrollView,
   Dimensions,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import { Audio } from 'expo-av';
+import { useRouter } from 'expo-router';
 import { useTheme } from '../hooks/useTheme';
 import { useAlert, getSupabaseClient } from '@/template';
 import { useSettings } from '../hooks/useSettings';
@@ -55,9 +57,17 @@ export function MessageActionsModal({
   const { showAlert } = useAlert();
   const { settings } = useSettings();
   const supabase = getSupabaseClient();
+  const router = useRouter();
   const accentColor = settings.accentColor || colors.primary;
+
+  // TTS state
   const [isSpeaking, setIsSpeaking] = useState(false);
   const soundRef = useRef<Audio.Sound | null>(null);
+
+  // Translate state
+  const [isTranslating, setIsTranslating] = useState(false);
+  const [translateResult, setTranslateResult] = useState('');
+  const [translateSheetVisible, setTranslateSheetVisible] = useState(false);
 
   const stopTTS = useCallback(async () => {
     if (soundRef.current) {
@@ -73,7 +83,7 @@ export function MessageActionsModal({
     if (!visible && isSpeaking) stopTTS();
   }, [visible]);
 
-  // Stop TTS when modal opens (in case something is already playing)
+  // Stop TTS when modal opens
   useEffect(() => {
     if (visible) stopTTS();
   }, [visible]);
@@ -126,6 +136,39 @@ export function MessageActionsModal({
     }
   }, [message.content, isSpeaking, stopTTS, supabase, showAlert]);
 
+  // Translate via chat edge function
+  const handleTranslate = useCallback(async () => {
+    if (isTranslating) return;
+    setIsTranslating(true);
+
+    // Detect user preferred language from settings
+    const userLang = settings.appLanguage || settings.mainLanguage || 'English';
+    const cleanText = message.content.replace(/```[\s\S]*?```/g, '[code block]').slice(0, 3000);
+    const translatePrompt = `Translate the following text to ${userLang}. Return ONLY the translated text, no explanations or extra text:\n\n${cleanText}`;
+
+    try {
+      const { data, error } = await supabase.functions.invoke('chat', {
+        body: {
+          messages: [{ role: 'user', content: translatePrompt }],
+          model: 'gemini',
+          conversationId: 'translate-temp',
+        },
+      });
+
+      if (error) throw new Error(error.message || 'Translation failed');
+
+      const result = data?.content || data?.message || data?.response || '';
+      if (!result.trim()) throw new Error('Empty translation result');
+
+      setTranslateResult(result.trim());
+      setTranslateSheetVisible(true);
+    } catch (_err) {
+      showAlert('Translation Error', 'Could not translate the message. Please try again.');
+    } finally {
+      setIsTranslating(false);
+    }
+  }, [message.content, settings, supabase, showAlert, isTranslating]);
+
   // Copy
   const handleCopy = useCallback(async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -142,26 +185,38 @@ export function MessageActionsModal({
     } catch (_e) {}
   }, [message.content]);
 
-  // Like handler — uses home.tsx handler if provided, falls back to onLike
+  // Like handler — clears unlike state, uses home.tsx handler if provided
   const handleLike = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     if (handleLikeMessage) {
       handleLikeMessage(message.id);
+      // If currently unliked, also clear the unlike
+      if (isUnliked && handleUnlikeMessage) {
+        // Re-calling unlike toggles it off
+        handleUnlikeMessage(message.id);
+      }
     } else {
       onLike?.('like');
     }
-  }, [handleLikeMessage, onLike, message.id]);
+  }, [handleLikeMessage, handleUnlikeMessage, onLike, message.id, isUnliked]);
 
-  // Dislike handler — uses home.tsx handler if provided, falls back to onLike
+  // Dislike handler — opens feedback page
   const handleDislike = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     if (handleUnlikeMessage) {
       handleUnlikeMessage(message.id);
-      onClose(); // close modal before feedback page opens
     } else {
       onLike?.('dislike');
     }
-  }, [handleUnlikeMessage, onLike, message.id, onClose]);
+    onClose();
+    // Navigate to feedback page with message context
+    setTimeout(() => {
+      router.push({
+        pathname: '/feedback',
+        params: { messageId: message.id },
+      } as any);
+    }, 150);
+  }, [handleUnlikeMessage, onLike, message.id, onClose, router]);
 
   // Stop TTS on close
   const handleClose = useCallback(() => {
@@ -170,138 +225,255 @@ export function MessageActionsModal({
   }, [isSpeaking, stopTTS, onClose]);
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      statusBarTranslucent
-      onRequestClose={handleClose}
-    >
-      <View style={styles.overlay}>
-        {/* Full-screen BlurView background */}
-        <BlurView
-          intensity={Platform.OS === 'ios' ? 60 : 80}
-          tint={isDark ? 'dark' : 'light'}
-          style={StyleSheet.absoluteFill}
-        />
-
-        {/* Tap outside to dismiss */}
-        <TouchableOpacity
-          style={styles.dismissArea}
-          activeOpacity={1}
-          onPress={handleClose}
-        />
-
-        {/* Sheet */}
-        <Animated.View
-          entering={FadeInDown.duration(280).springify()}
-          style={[styles.container, { borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)' }]}
-        >
-          {/* Blur inside the sheet */}
+    <>
+      <Modal
+        visible={visible}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={handleClose}
+      >
+        <View style={styles.overlay}>
+          {/* Full-screen BlurView background */}
           <BlurView
-            intensity={Platform.OS === 'ios' ? 90 : 95}
+            intensity={Platform.OS === 'ios' ? 60 : 80}
             tint={isDark ? 'dark' : 'light'}
-            style={styles.sheetBlur}
+            style={StyleSheet.absoluteFill}
+          />
+
+          {/* Tap outside to dismiss */}
+          <TouchableOpacity
+            style={styles.dismissArea}
+            activeOpacity={1}
+            onPress={handleClose}
+          />
+
+          {/* Sheet */}
+          <Animated.View
+            entering={FadeInDown.duration(280).springify()}
+            style={[styles.container, { borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)' }]}
           >
-            {/* Handle bar */}
-            <View style={[styles.handleBar, { backgroundColor: isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.18)' }]} />
-
-            <ScrollView
-              style={styles.scrollContent}
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
+            {/* Blur inside the sheet */}
+            <BlurView
+              intensity={Platform.OS === 'ios' ? 90 : 95}
+              tint={isDark ? 'dark' : 'light'}
+              style={styles.sheetBlur}
             >
-              <Text style={[styles.title, { color: isDark ? '#FFF' : '#000' }]}>Message Actions</Text>
-              <Text style={[styles.subtitle, { color: isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.45)' }]}>
-                {new Date(message.created_at).toLocaleString()}
-              </Text>
+              {/* Handle bar */}
+              <View style={[styles.handleBar, { backgroundColor: isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.18)' }]} />
 
-              {/* Like / Dislike / Read Aloud row */}
-              {message.role === 'assistant' ? (
-                <View style={styles.row}>
-                  {/* Like */}
-                  <TouchableOpacity
-                    style={[styles.actionButton, {
-                      backgroundColor: isLiked ? accentColor + '22' : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'),
-                      borderColor: isLiked ? accentColor + '55' : (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'),
-                    }]}
-                    onPress={handleLike}
-                    activeOpacity={0.7}
-                  >
-                    <Ionicons
-                      name={isLiked ? 'thumbs-up' : 'thumbs-up-outline'}
-                      size={24}
-                      color={isLiked ? accentColor : (isDark ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.6)')}
-                      style={styles.actionIcon}
-                    />
-                    <Text style={[styles.actionText, { color: isLiked ? accentColor : (isDark ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.6)') }]}>
-                      {isLiked ? 'Liked' : 'Like'}
-                    </Text>
+              <ScrollView
+                style={styles.scrollContent}
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+              >
+                <Text style={[styles.title, { color: isDark ? '#FFF' : '#000' }]}>Message Actions</Text>
+                <Text style={[styles.subtitle, { color: isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.45)' }]}>
+                  {new Date(message.created_at).toLocaleString()}
+                </Text>
+
+                {/* Like / Dislike / Read Aloud row */}
+                {message.role === 'assistant' ? (
+                  <View style={styles.row}>
+                    {/* Like */}
+                    <TouchableOpacity
+                      style={[styles.actionButton, {
+                        backgroundColor: isLiked ? accentColor + '22' : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'),
+                        borderColor: isLiked ? accentColor + '55' : (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'),
+                      }]}
+                      onPress={handleLike}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons
+                        name={isLiked ? 'thumbs-up' : 'thumbs-up-outline'}
+                        size={24}
+                        color={isLiked ? accentColor : (isDark ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.6)')}
+                        style={styles.actionIcon}
+                      />
+                      <Text style={[styles.actionText, { color: isLiked ? accentColor : (isDark ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.6)') }]}>
+                        {isLiked ? 'Liked' : 'Like'}
+                      </Text>
+                    </TouchableOpacity>
+
+                    {/* Dislike — opens feedback page */}
+                    <TouchableOpacity
+                      style={[styles.actionButton, {
+                        backgroundColor: isUnliked ? '#FF453A22' : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'),
+                        borderColor: isUnliked ? '#FF453A55' : (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'),
+                      }]}
+                      onPress={handleDislike}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons
+                        name={isUnliked ? 'thumbs-down' : 'thumbs-down-outline'}
+                        size={24}
+                        color={isUnliked ? '#FF453A' : (isDark ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.6)')}
+                        style={styles.actionIcon}
+                      />
+                      <Text style={[styles.actionText, { color: isUnliked ? '#FF453A' : (isDark ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.6)') }]}>
+                        {isUnliked ? 'Reported' : 'Dislike'}
+                      </Text>
+                    </TouchableOpacity>
+
+                    {/* Read Aloud */}
+                    <TouchableOpacity
+                      style={[styles.actionButton, {
+                        backgroundColor: isSpeaking ? accentColor + '22' : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'),
+                        borderColor: isSpeaking ? accentColor + '55' : (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'),
+                      }]}
+                      onPress={handleReadAloud}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons
+                        name={isSpeaking ? 'stop-circle' : 'volume-high-outline'}
+                        size={24}
+                        color={isSpeaking ? accentColor : (isDark ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.6)')}
+                        style={styles.actionIcon}
+                      />
+                      <Text style={[styles.actionText, { color: isSpeaking ? accentColor : (isDark ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.6)') }]}>
+                        {isSpeaking ? 'Stop' : 'Read Aloud'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : null}
+
+                {/* Translate button — full width row */}
+                <TouchableOpacity
+                  style={[styles.translateBtn, {
+                    backgroundColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.05)',
+                    borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
+                  }]}
+                  onPress={handleTranslate}
+                  activeOpacity={0.7}
+                  disabled={isTranslating}
+                >
+                  {isTranslating ? (
+                    <ActivityIndicator size="small" color={accentColor} style={{ marginRight: 10 }} />
+                  ) : (
+                    <Ionicons name="language-outline" size={20} color={accentColor} style={{ marginRight: 10 }} />
+                  )}
+                  <Text style={[styles.translateBtnText, { color: accentColor }]}>
+                    {isTranslating ? 'Translating...' : 'Translate Message'}
+                  </Text>
+                  {!isTranslating ? (
+                    <Ionicons name="chevron-forward" size={16} color={accentColor + '88'} style={{ marginLeft: 'auto' }} />
+                  ) : null}
+                </TouchableOpacity>
+
+                {/* Copy & Share */}
+                <View style={styles.section}>
+                  <Text style={[styles.sectionTitle, { color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)' }]}>Export</Text>
+
+                  <TouchableOpacity style={[styles.shareButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.05)', borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)' }]} onPress={handleCopy} activeOpacity={0.7}>
+                    <Ionicons name="copy-outline" size={20} color={isDark ? 'rgba(255,255,255,0.8)' : 'rgba(0,0,0,0.7)'} />
+                    <Text style={[styles.shareText, { color: isDark ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.8)' }]}>Copy Text</Text>
+                    <Ionicons name="chevron-forward" size={18} color={isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.25)'} />
                   </TouchableOpacity>
 
-                  {/* Dislike */}
-                  <TouchableOpacity
-                    style={[styles.actionButton, {
-                      backgroundColor: isUnliked ? '#FF453A22' : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'),
-                      borderColor: isUnliked ? '#FF453A55' : (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'),
-                    }]}
-                    onPress={handleDislike}
-                    activeOpacity={0.7}
-                  >
-                    <Ionicons
-                      name={isUnliked ? 'thumbs-down' : 'thumbs-down-outline'}
-                      size={24}
-                      color={isUnliked ? '#FF453A' : (isDark ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.6)')}
-                      style={styles.actionIcon}
-                    />
-                    <Text style={[styles.actionText, { color: isUnliked ? '#FF453A' : (isDark ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.6)') }]}>
-                      {isUnliked ? 'Reported' : 'Dislike'}
-                    </Text>
-                  </TouchableOpacity>
-
-                  {/* Read Aloud */}
-                  <TouchableOpacity
-                    style={[styles.actionButton, {
-                      backgroundColor: isSpeaking ? accentColor + '22' : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'),
-                      borderColor: isSpeaking ? accentColor + '55' : (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'),
-                    }]}
-                    onPress={handleReadAloud}
-                    activeOpacity={0.7}
-                  >
-                    <Ionicons
-                      name={isSpeaking ? 'stop-circle' : 'volume-high-outline'}
-                      size={24}
-                      color={isSpeaking ? accentColor : (isDark ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.6)')}
-                      style={styles.actionIcon}
-                    />
-                    <Text style={[styles.actionText, { color: isSpeaking ? accentColor : (isDark ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.6)') }]}>
-                      {isSpeaking ? 'Stop' : 'Read Aloud'}
-                    </Text>
+                  <TouchableOpacity style={[styles.shareButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.05)', borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)' }]} onPress={handleShare} activeOpacity={0.7}>
+                    <Ionicons name="share-outline" size={20} color={isDark ? 'rgba(255,255,255,0.8)' : 'rgba(0,0,0,0.7)'} />
+                    <Text style={[styles.shareText, { color: isDark ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.8)' }]}>Share</Text>
+                    <Ionicons name="chevron-forward" size={18} color={isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.25)'} />
                   </TouchableOpacity>
                 </View>
-              ) : null}
+              </ScrollView>
+            </BlurView>
+          </Animated.View>
+        </View>
+      </Modal>
 
-              {/* Copy & Share */}
-              <View style={styles.section}>
-                <Text style={[styles.sectionTitle, { color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)' }]}>Export</Text>
+      {/* Translate Result Sheet */}
+      <Modal
+        visible={translateSheetVisible}
+        transparent
+        animationType="slide"
+        statusBarTranslucent
+        onRequestClose={() => setTranslateSheetVisible(false)}
+      >
+        <View style={styles.overlay}>
+          <BlurView
+            intensity={Platform.OS === 'ios' ? 70 : 90}
+            tint="dark"
+            style={StyleSheet.absoluteFill}
+          />
+          <TouchableOpacity
+            style={styles.dismissArea}
+            activeOpacity={1}
+            onPress={() => setTranslateSheetVisible(false)}
+          />
+          <View style={styles.translateSheet}>
+            <BlurView
+              intensity={Platform.OS === 'ios' ? 95 : 100}
+              tint="dark"
+              style={styles.translateSheetBlur}
+            >
+              {/* Handle */}
+              <View style={styles.translateHandle} />
 
-                <TouchableOpacity style={[styles.shareButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.05)', borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)' }]} onPress={handleCopy} activeOpacity={0.7}>
-                  <Ionicons name="copy-outline" size={20} color={isDark ? 'rgba(255,255,255,0.8)' : 'rgba(0,0,0,0.7)'} />
-                  <Text style={[styles.shareText, { color: isDark ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.8)' }]}>Copy Text</Text>
-                  <Ionicons name="chevron-forward" size={18} color={isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.25)'} />
-                </TouchableOpacity>
-
-                <TouchableOpacity style={[styles.shareButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.05)', borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)' }]} onPress={handleShare} activeOpacity={0.7}>
-                  <Ionicons name="share-outline" size={20} color={isDark ? 'rgba(255,255,255,0.8)' : 'rgba(0,0,0,0.7)'} />
-                  <Text style={[styles.shareText, { color: isDark ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.8)' }]}>Share</Text>
-                  <Ionicons name="chevron-forward" size={18} color={isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.25)'} />
+              {/* Header */}
+              <View style={styles.translateHeader}>
+                <View style={styles.translateHeaderLeft}>
+                  <Ionicons name="language" size={20} color={accentColor} />
+                  <Text style={styles.translateHeaderTitle}>Translation</Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => setTranslateSheetVisible(false)}
+                  style={styles.translateCloseBtn}
+                >
+                  <Ionicons name="close" size={18} color="rgba(255,255,255,0.6)" />
                 </TouchableOpacity>
               </View>
-            </ScrollView>
-          </BlurView>
-        </Animated.View>
-      </View>
-    </Modal>
+
+              {/* Language badge */}
+              <View style={[styles.langBadge, { backgroundColor: accentColor + '22', borderColor: accentColor + '44' }]}>
+                <Ionicons name="globe-outline" size={13} color={accentColor} />
+                <Text style={[styles.langBadgeText, { color: accentColor }]}>
+                  {settings.appLanguage || settings.mainLanguage || 'English'}
+                </Text>
+              </View>
+
+              {/* Translated text */}
+              <ScrollView
+                style={styles.translateScroll}
+                showsVerticalScrollIndicator={false}
+              >
+                <Text style={styles.translateText}>{translateResult}</Text>
+              </ScrollView>
+
+              {/* Actions */}
+              <View style={styles.translateActions}>
+                <TouchableOpacity
+                  style={[styles.translateActionBtn, { backgroundColor: 'rgba(255,255,255,0.08)', borderColor: 'rgba(255,255,255,0.1)' }]}
+                  onPress={async () => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    await Clipboard.setStringAsync(translateResult);
+                    showAlert('Copied!', 'Translation copied to clipboard');
+                    setTranslateSheetVisible(false);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="copy-outline" size={18} color="rgba(255,255,255,0.8)" />
+                  <Text style={styles.translateActionText}>Copy</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.translateActionBtn, { backgroundColor: accentColor + '22', borderColor: accentColor + '44' }]}
+                  onPress={async () => {
+                    try {
+                      await Share.share({ message: translateResult });
+                    } catch (_e) {}
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="share-outline" size={18} color={accentColor} />
+                  <Text style={[styles.translateActionText, { color: accentColor }]}>Share</Text>
+                </TouchableOpacity>
+              </View>
+            </BlurView>
+          </View>
+        </View>
+      </Modal>
+    </>
   );
 }
 
@@ -345,7 +517,7 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     gap: 10,
-    marginBottom: 18,
+    marginBottom: 14,
   },
   actionButton: {
     flex: 1,
@@ -359,6 +531,19 @@ const styles = StyleSheet.create({
   },
   actionText: {
     fontSize: 12,
+    fontWeight: '600',
+  },
+  // Translate button
+  translateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 1,
+    marginBottom: 18,
+  },
+  translateBtnText: {
+    fontSize: 15,
     fontWeight: '600',
   },
   section: {
@@ -386,5 +571,95 @@ const styles = StyleSheet.create({
     marginLeft: 12,
     flex: 1,
   },
+  // Translate sheet
+  translateSheet: {
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    overflow: 'hidden',
+    maxHeight: '70%',
+  },
+  translateSheetBlur: {
+    paddingBottom: Platform.OS === 'ios' ? 34 : 20,
+  },
+  translateHandle: {
+    width: 36,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    alignSelf: 'center',
+    marginTop: 12,
+    marginBottom: 16,
+  },
+  translateHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    marginBottom: 12,
+  },
+  translateHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  translateHeaderTitle: {
+    color: '#FFF',
+    fontSize: 17,
+    fontWeight: '700',
+  },
+  translateCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  langBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    alignSelf: 'flex-start',
+    marginHorizontal: 20,
+    marginBottom: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  langBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  translateScroll: {
+    paddingHorizontal: 20,
+    maxHeight: 280,
+    marginBottom: 16,
+  },
+  translateText: {
+    color: 'rgba(255,255,255,0.92)',
+    fontSize: 16,
+    lineHeight: 26,
+    fontWeight: '400',
+  },
+  translateActions: {
+    flexDirection: 'row',
+    gap: 12,
+    paddingHorizontal: 20,
+  },
+  translateActionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderRadius: 14,
+    paddingVertical: 13,
+    borderWidth: 1,
+  },
+  translateActionText: {
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 15,
+    fontWeight: '600',
+  },
 });
-hello ai dont skip make all change please Add a 'Translate' action in MessageActionsModal that calls the chat edge function to translate the selected message to the user's tex language, then shows the result in a blur overlay sheet if user click unlike its must open febbad page and in home page if user click unlike its open feeback page but if click like the unlike soti.
