@@ -2514,5 +2514,5 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-
+please make this change dont skip In MessageItem, when a user message has BOTH text and an image, show the image cleanly (no colored container) above a separate text bubble with the accent color background. Right now the entire container uses the same style for both cases. On AI-generated images in the chat, add a long-press gesture that shows a context menu with 'Save to Camera Roll' and share,good response,bad response in blur and menu an dwe anba image lan like photo sa:https://files.catbox.moe/oqw0gq.jpeg.
 
