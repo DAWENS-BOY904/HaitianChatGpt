@@ -43,6 +43,7 @@ function detectIntent(message?: string, mode?: string): IntentType {
   if (!message) return 'message';
   const msg = message.toLowerCase();
   for (const [intent, keywords] of Object.entries(INTENT_KEYWORDS)) {
+    if (intent === 'message') continue;
     if (keywords.some(kw => msg.includes(kw))) return intent as IntentType;
   }
   return 'message';
@@ -158,12 +159,12 @@ const SpinningBadge = memo(function SpinningBadge({
 
 // ── 3-dot typing animation ─────────────────────────────────────────────────
 const ThinkingDots = memo(function ThinkingDots({ color }: { color: string }) {
-  const dots = [
-    useRef(new Animated.Value(0)).current,
-    useRef(new Animated.Value(0)).current,
-    useRef(new Animated.Value(0)).current,
-  ];
+  const dot1 = useRef(new Animated.Value(0)).current;
+  const dot2 = useRef(new Animated.Value(0)).current;
+  const dot3 = useRef(new Animated.Value(0)).current;
+
   useEffect(() => {
+    const dots = [dot1, dot2, dot3];
     const anims = dots.map((dot, i) =>
       Animated.loop(
         Animated.sequence([
@@ -177,6 +178,9 @@ const ThinkingDots = memo(function ThinkingDots({ color }: { color: string }) {
     anims.forEach(a => a.start());
     return () => anims.forEach(a => a.stop());
   }, []);
+
+  const dots = [dot1, dot2, dot3];
+
   return (
     <View style={dotStyles.row}>
       {dots.map((dot, i) => (
@@ -231,7 +235,7 @@ function useCyclingLabel(intent: IntentType): string {
       });
     }, 2200);
     return () => clearInterval(cycle);
-  }, [intent]);
+  }, [intent, labels.length]);
 
   return labels[idx];
 }
@@ -276,12 +280,14 @@ function useStepLabel(intent: IntentType, elapsed: number): string {
 function useElapsedSeconds(): number {
   const [elapsed, setElapsed] = useState(0);
   const startRef = useRef(Date.now());
+
   useEffect(() => {
     startRef.current = Date.now();
     setElapsed(0);
     const id = setInterval(() => setElapsed(Math.floor((Date.now() - startRef.current) / 1000)), 500);
     return () => clearInterval(id);
   }, []);
+
   return elapsed;
 }
 
@@ -407,7 +413,6 @@ export function ThinkingIndicator({
   const elapsed = useElapsedSeconds();
   const stepLabel = useStepLabel(intent, elapsed);
   const cyclingLabel = useCyclingLabel(intent);
-  const labelFadeAnim = useRef(new Animated.Value(1)).current;
 
   // Accent color (green default)
   const accentColor = '#10A37F';
