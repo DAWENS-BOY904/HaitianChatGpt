@@ -1280,7 +1280,8 @@ export default function HomeScreen() {
         }
       }
 
-      let finalText = currentText || (base64Image ? '[Image]' : '');
+      // Image-only: send empty string so AI knows it's a pure image analysis request
+      let finalText = currentText || '';
       if (groupChatMode && groupCustomInstructions && groupRespondAuto) {
         finalText = `[System instruction: ${groupCustomInstructions}]\n\n${finalText}`;
       }
@@ -2514,4 +2515,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-fix when i send the ai a images its says li gen trouble connecting try again fix ai can read photo and can read photo+tex and when you just send a ai a images without message images lan dwe ale san tex and ai lan ap diw sal we or li ask siw vlel explikew and allow message display yo ai ka send pluzier format li vle fix code block ai send real code file.
+
