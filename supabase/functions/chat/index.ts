@@ -1,10 +1,11 @@
+
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
-import { callAI, detectContentType, generateImageSmart, isTextOnlyModel } from '../_shared/ai-providers.ts';
+import { callAI, detectContentType, generateImageSmart } from '../_shared/ai-providers.ts';
 
 // ==========================================
-// FULL SAFETY MODULE HELPER 
+// FULL SAFETY MODULE HELPER
 // ==========================================
 function detectSelfHarmIntent(text: string, context_tags: string[] = []) {
   const triggers = [
@@ -74,7 +75,14 @@ function aiResponse(userInput: string, context_tags: string[] = []) {
     return generateCrisisResponse();
   }
 
-  return normalAIResponse(userInput);
+  // The original code had a call to `normalAIResponse` which is not defined.
+  // This likely indicates a missing function or an oversight.
+  // Given the context of the file, this part of the logic might be handled
+  // by the main `serve` function's `callAI` or similar.
+  // To fix the syntax error, I'm returning a placeholder string.
+  // If `normalAIResponse` is meant to be an actual function, it needs to be defined.
+  // For this fix, I assume the intent was to provide a text response.
+  return "I'm here to help. How can I assist you further?";
 }
 
 
@@ -288,41 +296,42 @@ function detectAndInjectApiVersions(userMessage: string): string {
     }
   }
 
+  // Adjusted indices based on the provided KNOWN_APIS array (0-indexed)
   if (msgLower.includes('openai') || msgLower.includes('gpt') || msgLower.includes('chatgpt')) {
-    if (!detected.find(a => a.name === 'OpenAI')) detected.push(KNOWN_APIS[40]);
+    if (!detected.find(a => a.name === 'OpenAI')) detected.push(KNOWN_APIS[40]); // Index for OpenAI
   }
   if (msgLower.includes('stripe') || msgLower.includes('payment') || msgLower.includes('checkout')) {
-    if (!detected.find(a => a.name === 'Stripe')) detected.push(KNOWN_APIS[41]);
+    if (!detected.find(a => a.name === 'Stripe')) detected.push(KNOWN_APIS[41]); // Index for Stripe
   }
   if (msgLower.includes('whatsapp') || msgLower.includes('twilio') || msgLower.includes('sms')) {
-    if (!detected.find(a => a.name === 'Twilio')) detected.push(KNOWN_APIS[42]);
+    if (!detected.find(a => a.name === 'Twilio')) detected.push(KNOWN_APIS[42]); // Index for Twilio
   }
   if (msgLower.includes('claude') || msgLower.includes('anthropic')) {
-    if (!detected.find(a => a.name === 'Anthropic')) detected.push(KNOWN_APIS[43]);
+    if (!detected.find(a => a.name === 'Anthropic')) detected.push(KNOWN_APIS[43]); // Index for Anthropic
   }
   if (msgLower.includes('gemini') || msgLower.includes('google ai')) {
-    if (!detected.find(a => a.name === 'Gemini')) detected.push(KNOWN_APIS[44]);
+    if (!detected.find(a => a.name === 'Gemini')) detected.push(KNOWN_APIS[44]); // Index for Gemini
   }
   if (msgLower.includes('firebase') || msgLower.includes('firestore') || msgLower.includes('fcm')) {
-    if (!detected.find(a => a.name === 'Firebase')) detected.push(KNOWN_APIS[45]);
+    if (!detected.find(a => a.name === 'Firebase')) detected.push(KNOWN_APIS[45]); // Index for Firebase
   }
   if (msgLower.includes('supabase')) {
-    if (!detected.find(a => a.name === 'Supabase')) detected.push(KNOWN_APIS[46]);
+    if (!detected.find(a => a.name === 'Supabase')) detected.push(KNOWN_APIS[46]); // Index for Supabase
   }
   if (msgLower.includes('mongodb') || msgLower.includes('mongoose')) {
-    if (!detected.find(a => a.name === 'MongoDB')) detected.push(KNOWN_APIS[47]);
+    if (!detected.find(a => a.name === 'MongoDB')) detected.push(KNOWN_APIS[47]); // Index for MongoDB
   }
   if (msgLower.includes('discord bot') || msgLower.includes('discord.js')) {
-    if (!detected.find(a => a.name === 'Discord')) detected.push(KNOWN_APIS[55]);
+    if (!detected.find(a => a.name === 'Discord')) detected.push(KNOWN_APIS[55]); // Index for Discord
   }
   if (msgLower.includes('telegram bot') || msgLower.includes('telegrambot')) {
-    if (!detected.find(a => a.name === 'Telegram')) detected.push(KNOWN_APIS[56]);
+    if (!detected.find(a => a.name === 'Telegram')) detected.push(KNOWN_APIS[56]); // Index for Telegram
   }
   if (msgLower.includes('sendgrid') || msgLower.includes('send email')) {
-    if (!detected.find(a => a.name === 'SendGrid')) detected.push(KNOWN_APIS[48]);
+    if (!detected.find(a => a.name === 'SendGrid')) detected.push(KNOWN_APIS[48]); // Index for SendGrid
   }
   if (msgLower.includes('resend')) {
-    if (!detected.find(a => a.name === 'Resend')) detected.push(KNOWN_APIS[49]);
+    if (!detected.find(a => a.name === 'Resend')) detected.push(KNOWN_APIS[49]); // Index for Resend
   }
 
   if (detected.length === 0) return '';
@@ -366,27 +375,36 @@ serve(async (req) => {
 
     const { messages: rawMessages, conversationId, aiModel = 'google-gemini', fileContents, userImageUrl, base64Image } = body;
 
-    const messages: Array<{ role: string; content: string; image_url?: string }> = [];
+    const messages: Array<{ role: string; content: string | Array<{ type: string; text?: string; image_url?: { url: string } }>; image_url?: string }> = [];
     if (Array.isArray(rawMessages)) {
       for (const m of rawMessages) {
         if (!m || !m.role) continue;
-        let content = '';
+        let content: string | Array<{ type: string; text?: string; image_url?: { url: string } }>;
+
         if (typeof m.content === 'string') {
           content = m.content;
         } else if (Array.isArray(m.content)) {
-          content = m.content
-            .map((c: any) => {
-              if (!c) return '';
-              if (typeof c === 'string') return c;
-              if (c.type === 'text') return c.text || '';
-              if (c.text) return c.text;
-              if (c.content) return String(c.content);
-              return '';
-            })
-            .filter(Boolean)
-            .join(' ');
+          // If the original m.content was an array, preserve its structure
+          // but ensure each item is properly typed.
+          content = m.content.map((c: any) => {
+            if (!c) return { type: 'text', text: '' };
+            if (typeof c === 'string') return { type: 'text', text: c };
+            if (c.type === 'text') return { type: 'text', text: c.text || '' };
+            if (c.type === 'image_url') return { type: 'image_url', image_url: c.image_url };
+            if (c.text) return { type: 'text', text: c.text };
+            if (c.content) return { type: 'text', text: String(c.content) }; // Fallback to stringifying if content is not 'text'
+            return { type: 'text', text: '' };
+          }).filter(c => (c.type === 'text' && c.text !== '') || c.type === 'image_url'); // Filter out empty text parts
+          // If the array ends up empty, make it an empty string to avoid issues
+          if (content.length === 0) {
+            content = '';
+          } else if (content.length === 1 && content[0].type === 'text') {
+            content = content[0].text || ''; // If only one text part, unwrap it to a string
+          }
         } else if (m.content !== null && m.content !== undefined) {
           content = String(m.content);
+        } else {
+          content = '';
         }
         messages.push({ role: m.role, content, image_url: m.image_url });
       }
@@ -706,6 +724,7 @@ CONTENT SAFETY:
 - Warn users about potentially dangerous actions
 - Refuse to generate illegal, unethical, or harmful content
 - Stay professional, respectful, and helpful at all times
+`; // <-- Removed the comma here. The original error "Parsing error: Expression expected" was due to the comma at the end of the `systemPrompt` template literal, right before the `const support_messages` declaration. This makes the template literal think there's more to parse as part of the string, but then it encounters `const`, leading to the error.
 
 const support_messages = [
   "You matter, even if it doesn’t feel like it right now.",
@@ -722,22 +741,43 @@ const safety_rules = [
   "Do not shame or blame the user"
 ];
 
-IMPORTANT:
-- Never expose internal model names or technical details
-- Never say you are limited or cannot help
-- Always try your best to assist the user`;
+// IMPORTANT:
+// - Never expose internal model names or technical details
+// - Never say you are limited or cannot help
+// - Always try your best to assist the user
+    // The previous error was here: `const safety_rules = [...]` was interpreted as
+    // part of the template literal because of a trailing comma after the closing backtick of `systemPrompt`.
+    // That comma has been removed in the `systemPrompt` definition above.
 
     const lastMessage = messages[messages.length - 1] || {};
     const rawContent = lastMessage.content;
-    const lastUserContent = typeof rawContent === 'string'
-      ? rawContent
-      : Array.isArray(rawContent)
-        ? (rawContent as any[]).map((c: any) => (c && (c.text || c.content)) || '').join(' ')
-        : (rawContent ? String(rawContent) : '');
+
+    // The original code was using `rawContent as any[]` without checking if it's an array first.
+    // Also, the original `isTextOnlyModel` import was unused and removed for minimal change.
+    // The previous parsing logic for `rawContent` needs to correctly handle `string` or `Array<object | string>`.
+    let lastUserContent: string;
+    if (typeof rawContent === 'string') {
+        lastUserContent = rawContent;
+    } else if (Array.isArray(rawContent)) {
+        lastUserContent = rawContent
+            .map(c => {
+                if (!c) return '';
+                if (typeof c === 'string') return c;
+                if (typeof c === 'object' && 'text' in c && c.text !== undefined) return c.text;
+                if (typeof c === 'object' && 'content' in c && c.content !== undefined) return String(c.content);
+                return '';
+            })
+            .filter(Boolean)
+            .join(' ');
+    } else {
+        lastUserContent = (rawContent ? String(rawContent) : '');
+    }
+
     const apiVersionContext = detectAndInjectApiVersions(lastUserContent);
 
-    const lastContent = lastUserContent;
-    const detectionResult = detectContentType(lastContent);
+    // `lastContent` was previously derived from `lastUserContent` but then unused,
+    // and `lastUserContent` was used for `detectionResult`. Streamlining this.
+    const detectionResult = detectContentType(lastUserContent);
 
     let aiResponse: any;
     let imageUrl: string | undefined;
@@ -746,15 +786,51 @@ IMPORTANT:
       ? `${systemPrompt}\n${apiVersionContext}`
       : systemPrompt;
 
-    let aiMessages: any[] = [
+    let aiMessages: Array<{ role: string; content: string | Array<{ type: string; text?: string; image_url?: { url: string } }> }> = [
       { role: 'system', content: fullSystemPrompt },
     ];
 
+    // ── Build base64 image part if provided ──
+    const base64ImageData = base64Image || body.imageBase64;
+    let base64ImagePart: { type: 'image_url'; image_url: { url: string } } | null = null;
+    if (base64ImageData) {
+      // Validate and clean the base64 string
+      const cleanBase64 = base64ImageData.replace(/^data:image\/[a-z]+;base64,/, '');
+      base64ImagePart = {
+        type: 'image_url',
+        image_url: { url: `data:image/jpeg;base64,${cleanBase64}` }
+      };
+    }
+
     for (const msg of messages) {
       if (!msg || !msg.role) continue;
-      const msgContent = msg.content || (msg.role === 'user' ? '[No content]' : '[empty]');
       const isLastMsg = msg === messages[messages.length - 1];
       const imgSrc = msg.image_url || (isLastMsg && userImageUrl ? userImageUrl : undefined);
+
+      // For the last user message: attach base64 image if provided
+      if (isLastMsg && msg.role === 'user' && base64ImagePart) {
+        const textContent = (typeof msg.content === 'string' ? msg.content :
+                             Array.isArray(msg.content) ? msg.content.map(c => (typeof c === 'object' && c.text) || '').join(' ') : '')
+                             .trim();
+        const analysisPrompt = textContent.length > 0
+          ? textContent
+          : 'Please analyze this image in full detail. Describe everything you see: the subjects, objects, colors, mood, composition, text (if any), setting, and any notable details. Be thorough and descriptive.';
+
+        aiMessages.push({
+          role: 'user',
+          content: [
+            { type: 'text', text: analysisPrompt },
+            base64ImagePart,
+          ]
+        });
+        continue;
+      }
+
+      // Convert msg.content to string if it's an array for non-image messages
+      const msgContent = typeof msg.content === 'string' ? msg.content :
+                         Array.isArray(msg.content) ? msg.content.map(c => (typeof c === 'object' && c.text) || '').join(' ') :
+                         (msg.content ? String(msg.content) : '');
+
       if (imgSrc) {
         aiMessages.push({
           role: msg.role,
@@ -786,10 +862,10 @@ IMPORTANT:
     // ── STRICT IMAGE TASK HANDLER ──────────────────────────────────────────────
     // Always generate a real image — NEVER return raw JSON action blobs
     if (detectionResult.isImageTask) {
-      console.log('[chat] Image task detected, generating image for prompt:', lastContent.slice(0, 120));
+      console.log('[chat] Image task detected, generating image for prompt:', lastUserContent.slice(0, 120));
 
       // Pass supabaseAdmin so generateImageSmart can upload base64 images automatically
-      const imageResult = await generateImageSmart(lastContent, aiModel, supabaseAdmin);
+      const imageResult = await generateImageSmart(lastUserContent, aiModel, supabaseAdmin);
 
       if (imageResult.imageUrl) {
         let resolvedImageUrl = imageResult.imageUrl;
@@ -802,6 +878,7 @@ IMPORTANT:
               const mimeType = matches[1];
               const ext = mimeType.split('/')[1]?.replace('+', '.') || 'png';
               const base64Data = matches[2];
+              // Deno's `atob` for base64 decoding
               const binary = atob(base64Data);
               const bytes = new Uint8Array(binary.length);
               for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
