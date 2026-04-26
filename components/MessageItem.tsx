@@ -729,7 +729,8 @@ export const MessageItem = memo(function MessageItem({
   }, [liked, message.id, user, supabase, showAlert]);
 
   const handleLinkPress = useCallback((url: string) => { setSelectedLink(url); toggleModal('link', true); }, [toggleModal]);
-  const handleImagePress = useCallback((imageUrl: string) => { setSelectedImageUrl(imageUrl); toggleModal('imageViewer', true); }, [toggleModal]);
+  const [viewerIsUserImage, setViewerIsUserImage] = useState(false);
+  const handleImagePress = useCallback((imageUrl: string, isUser = false) => { setSelectedImageUrl(imageUrl); setViewerIsUserImage(isUser); toggleModal('imageViewer', true); }, [toggleModal]);
   const handleImageEdit = useCallback(() => { toggleModal('imageViewer', false); toggleModal('imageEdit', true); }, [toggleModal]);
 
   const handleApplyImageEdits = useCallback(async (editPrompt: string) => {
@@ -858,7 +859,7 @@ export const MessageItem = memo(function MessageItem({
         {hasBothTextAndImage ? (
           <View style={{ alignSelf: 'flex-end', marginRight: Spacing.sm, maxWidth: '78%', gap: 6 }}>
             {/* Image floats cleanly above — no colored container */}
-            <TouchableOpacity onPress={() => handleImagePress(message.image_url!)} style={{ borderRadius: 18, overflow: 'hidden', alignSelf: 'flex-end' }} activeOpacity={0.9}>
+            <TouchableOpacity onPress={() => handleImagePress(message.image_url!, true)} style={{ borderRadius: 18, overflow: 'hidden', alignSelf: 'flex-end' }} activeOpacity={0.9}>
               <Image source={{ uri: message.image_url }} style={styles.userImagePreview} contentFit="cover" transition={200} />
             </TouchableOpacity>
             {/* Text bubble with accent color */}
@@ -888,7 +889,7 @@ export const MessageItem = memo(function MessageItem({
         >
           {/* User uploaded image — no background, no long-press context menu (image-only case) */}
           {message.role === 'user' && message.image_url && !hasBothTextAndImage && (
-            <TouchableOpacity onPress={() => handleImagePress(message.image_url!)} style={{ borderRadius: 18, overflow: 'hidden', marginBottom: message.content.trim() ? Spacing.sm : 0 }} activeOpacity={0.9}>
+            <TouchableOpacity onPress={() => handleImagePress(message.image_url!, true)} style={{ borderRadius: 18, overflow: 'hidden', marginBottom: message.content.trim() ? Spacing.sm : 0 }} activeOpacity={0.9}>
               <Image source={{ uri: message.image_url }} style={styles.userImagePreview} contentFit="cover" transition={200} />
             </TouchableOpacity>
           )}
@@ -1111,7 +1112,7 @@ export const MessageItem = memo(function MessageItem({
 
       <LinkSafetyModal visible={modals.link} url={selectedLink} onClose={() => toggleModal('link', false)} onOpenLink={() => { toggleModal('link', false); toggleModal('webView', true); }} />
       <WebViewModal visible={modals.webView} url={selectedLink} onClose={() => toggleModal('webView', false)} />
-      <ImageViewerModal visible={modals.imageViewer} imageUrl={selectedImageUrl} onClose={() => toggleModal('imageViewer', false)} onEdit={handleImageEdit} title="Image" />
+      <ImageViewerModal visible={modals.imageViewer} imageUrl={selectedImageUrl} onClose={() => toggleModal('imageViewer', false)} onEdit={viewerIsUserImage ? undefined : handleImageEdit} title={viewerIsUserImage ? 'Photo' : 'Image created'} isUserImage={viewerIsUserImage} />
       <ImageEditModal visible={modals.imageEdit} imageUrl={selectedImageUrl} onClose={() => toggleModal('imageEdit', false)} onApplyEdits={handleApplyImageEdits} />
       <FileDownloadModal visible={modals.file} fileName={fileData.name} fileContent={fileData.content} fileType={fileData.type} onClose={() => toggleModal('file', false)} />
       <MessageActionsModal visible={showActionsModal} onClose={() => setShowActionsModal(false)} message={message} onLike={handleLike} />
