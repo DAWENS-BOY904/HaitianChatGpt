@@ -387,4 +387,4 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 });
-
+hello ai dont skip make all change please Add a 'Translate' action in MessageActionsModal that calls the chat edge function to translate the selected message to the user's tex language, then shows the result in a blur overlay sheet if user click unlike its must open febbad page and in home page if user click unlike its open feeback page but if click like the unlike soti.
