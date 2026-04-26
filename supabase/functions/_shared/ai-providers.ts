@@ -370,6 +370,79 @@ export async function generateImageWithDalle(prompt: string): Promise<{
 }
 
 /**
+ * ElevenLabs Image Generation (Priority 2 — after DALL-E 3)
+ * Uses the ElevenLabs text-to-image endpoint
+ */
+export async function generateImageWithElevenLabs(prompt: string): Promise<{
+  imageUrl?: string;
+  error?: string;
+}> {
+  const apiKey = Deno.env.get('ELEVENLABS_API_KEY');
+  if (!apiKey) {
+    console.log('[Image] ELEVENLABS_API_KEY not set — skipping ElevenLabs');
+    return { error: 'ElevenLabs key not configured' };
+  }
+
+  const enhancedPrompt = buildEnhancedImagePrompt(prompt);
+
+  try {
+    console.log('[Image] Trying ElevenLabs image generation...');
+    const response = await fetch('https://api.elevenlabs.io/v1/text-to-image', {
+      method: 'POST',
+      headers: {
+        'xi-api-key': apiKey,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        prompt: enhancedPrompt.slice(0, 2000),
+        output_format: 'jpeg',
+        width: 1024,
+        height: 1024,
+      }),
+      signal: AbortSignal.timeout(60000),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text().catch(() => response.statusText);
+      console.log(`[Image] ElevenLabs failed (${response.status}): ${errText.slice(0, 200)}`);
+      return { error: `ElevenLabs error: ${response.status}` };
+    }
+
+    // ElevenLabs returns binary image data directly
+    const contentType = response.headers.get('content-type') || 'image/jpeg';
+    if (contentType.startsWith('image/')) {
+      const arrayBuffer = await response.arrayBuffer();
+      const bytes = new Uint8Array(arrayBuffer);
+      let binary = '';
+      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+      const base64 = btoa(binary);
+      const imageUrl = `data:${contentType};base64,${base64}`;
+      console.log('[Image] ElevenLabs success!');
+      return { imageUrl };
+    }
+
+    // If JSON response with URL
+    const data = await response.json().catch(() => null);
+    if (data?.url) {
+      console.log('[Image] ElevenLabs success (URL response)');
+      return { imageUrl: data.url };
+    }
+    if (data?.image_url) {
+      console.log('[Image] ElevenLabs success (image_url field)');
+      return { imageUrl: data.image_url };
+    }
+    if (data?.data?.[0]?.url) {
+      return { imageUrl: data.data[0].url };
+    }
+
+    return { error: 'No image data returned from ElevenLabs' };
+  } catch (error: any) {
+    console.log('[Image] ElevenLabs exception:', error.message);
+    return { error: error.message || 'ElevenLabs request failed' };
+  }
+}
+
+/**
  * Stability AI Image Generation (FALLBACK)
  * Uses the stable-diffusion-xl-1024-v1-0 model
  */
@@ -635,7 +708,15 @@ export async function generateImageSmart(
   }
   console.log('[Image] DALL-E 3 failed:', dalleResult.error);
 
-  // ── Priority 2: Stability AI ───────────────────────────────────────────────
+  // ── Priority 2: ElevenLabs ────────────────────────────────────────────────
+  const elevenLabsResult = await generateImageWithElevenLabs(prompt);
+  if (elevenLabsResult.imageUrl) {
+    const resolvedUrl = await resolveImageUrl(elevenLabsResult.imageUrl);
+    console.log('[Image] ElevenLabs success');
+    return { imageUrl: resolvedUrl, model: 'elevenlabs' };
+  }
+  console.log('[Image] ElevenLabs failed:', elevenLabsResult.error);
+
   const stabilityResult = await generateImageWithStabilityAI(prompt);
   if (stabilityResult.imageUrl) {
     const resolvedUrl = await resolveImageUrl(stabilityResult.imageUrl);
@@ -644,7 +725,7 @@ export async function generateImageSmart(
   }
   console.log('[Image] Stability AI failed:', stabilityResult.error);
 
-  // ── Priority 3: Gemini native ──────────────────────────────────────────────
+  // ── Priority 4: Gemini native ──────────────────────────────────────────────
   const geminiResult = await generateImageWithGemini(prompt);
   if (geminiResult.imageUrl) {
     const resolvedUrl = await resolveImageUrl(geminiResult.imageUrl);
@@ -653,7 +734,7 @@ export async function generateImageSmart(
   }
   console.log('[Image] Gemini image failed:', geminiResult.error);
 
-  // ── Priority 4: OnSpace AI ─────────────────────────────────────────────────
+  // ── Priority 5: OnSpace AI ─────────────────────────────────────────────────
   const onspaceResult = await generateImageWithOnSpaceAI(prompt);
   if (onspaceResult.imageUrl) {
     const resolvedUrl = await resolveImageUrl(onspaceResult.imageUrl);

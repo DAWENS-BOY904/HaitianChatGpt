@@ -1829,19 +1829,52 @@ export default function HomeScreen() {
                 </View>
               ) : (
                 <View style={styles.headerChat}>
-                  <TouchableOpacity style={styles.headerChatLeft} onPress={() => setSideMenuVisible(true)}>
-                    <Ionicons name="menu" size={24} color={colors.text} />
-                  </TouchableOpacity>
+                  {/* Menu button — blur pill */}
+                  {Platform.OS === 'ios' ? (
+                    <TouchableOpacity style={styles.headerChatLeft} onPress={() => setSideMenuVisible(true)}>
+                      <BlurView intensity={55} tint={isDark ? 'dark' : 'light'} style={{ width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)' }}>
+                        <Ionicons name="menu" size={22} color={colors.text} />
+                      </BlurView>
+                    </TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity style={styles.headerChatLeft} onPress={() => setSideMenuVisible(true)}>
+                      <View style={{ width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: isDark ? 'rgba(44,44,46,0.85)' : 'rgba(242,242,247,0.85)', borderWidth: StyleSheet.hairlineWidth, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)' }}>
+                        <Ionicons name="menu" size={22} color={colors.text} />
+                      </View>
+                    </TouchableOpacity>
+                  )}
                   <Text style={styles.headerChatTitle} numberOfLines={1}>
                     {groupChatMode ? 'Group Chat' : (temporaryChatMode ? 'Temporary chat' : (currentConversation?.title || 'Haitian AI'))}
                   </Text>
                   <View style={styles.headerChatRight}>
-                    <TouchableOpacity style={styles.headerChatEditBtn} onPress={handleNewChat} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                      <Ionicons name="create-outline" size={17} color={colors.text} />
-                    </TouchableOpacity>
-                    <TouchableOpacity hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} onPress={() => setConversationMenuVisible(true)}>
-                      <Ionicons name="ellipsis-horizontal" size={21} color={colors.text} />
-                    </TouchableOpacity>
+                    {/* New chat icon — blur pill */}
+                    {Platform.OS === 'ios' ? (
+                      <TouchableOpacity onPress={handleNewChat} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                        <BlurView intensity={55} tint={isDark ? 'dark' : 'light'} style={{ width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)' }}>
+                          <Ionicons name="create-outline" size={17} color={colors.text} />
+                        </BlurView>
+                      </TouchableOpacity>
+                    ) : (
+                      <TouchableOpacity onPress={handleNewChat} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                        <View style={{ width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: isDark ? 'rgba(44,44,46,0.85)' : 'rgba(242,242,247,0.85)', borderWidth: StyleSheet.hairlineWidth, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)' }}>
+                          <Ionicons name="create-outline" size={17} color={colors.text} />
+                        </View>
+                      </TouchableOpacity>
+                    )}
+                    {/* Three-dots menu — blur pill */}
+                    {Platform.OS === 'ios' ? (
+                      <TouchableOpacity hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} onPress={() => setConversationMenuVisible(true)}>
+                        <BlurView intensity={55} tint={isDark ? 'dark' : 'light'} style={{ width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)' }}>
+                          <Ionicons name="ellipsis-horizontal" size={19} color={colors.text} />
+                        </BlurView>
+                      </TouchableOpacity>
+                    ) : (
+                      <TouchableOpacity hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} onPress={() => setConversationMenuVisible(true)}>
+                        <View style={{ width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: isDark ? 'rgba(44,44,46,0.85)' : 'rgba(242,242,247,0.85)', borderWidth: StyleSheet.hairlineWidth, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)' }}>
+                          <Ionicons name="ellipsis-horizontal" size={19} color={colors.text} />
+                        </View>
+                      </TouchableOpacity>
+                    )}
                   </View>
                 </View>
               )}
@@ -2525,5 +2558,5 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-please ai dont skip the icon 3ba menu background icon lan dwe in blur mode effect amd top left the icon for new chat and the ... background blur mode effect and Integrate ElevenLabs into the image generation pipeline in supabase/functions/_shared/ai-providers as an additional image generation provider. Add it to the generateImageSmart router with priority after DALL-E 3, using the ElevenLabs image generation API endpoint with the ELEVENLABS_API_KEY secret already configured in the backend.
+
 
