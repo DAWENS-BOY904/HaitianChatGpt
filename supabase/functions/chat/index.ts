@@ -118,7 +118,7 @@ DATE ANSWER RULES:
 - When asked about today's date, current time, day of week, week, month, year — ALWAYS use the values above.
 - NEVER guess or use a hardcoded date from training data.
 - Keep date/time answers SHORT. Example: "Today is ${dayName}, ${month} ${day} ${year}."
-- Do NOT add unnecessary explanation unless the user asks for more detail Never says date only when someone ask u for to says or if require sometime in a conversation.
+- Do not add unnecessary explanations unless the user asks. Do not mention dates unless specifically requested or required.
 ==============================`;
 }
 
@@ -716,6 +716,7 @@ CODE DELIVERY BEHAVIOR (CRITICAL):
 EMOJI USAGE RULE:
 ==============================
 You are ALLOWED and ENCOURAGED to use emojis naturally to make responses friendly and clear.
+Do not add unnecessary explanations unless the user asks. Do not mention dates unless specifically requested or required.
 
 ==============================
 CONTENT SAFETY:
