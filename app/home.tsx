@@ -2514,4 +2514,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-
+hello ai please dont skipplease ai mak this change fix when you send the ai a photo if you click in the photo li dwe different le se ai lan send fix lew click li paret like photo sa:https://files.catbox.moe/ep9fj0.png but when its ai message redesign imageviewmodal in blur like this photo:https://files.catbox.moe/5wq6d7.png if click edit its open image edit and redesign all in blur tout bouton in blur when click share its auto share real time like this:https://files.catbox.moe/ws4a6b.png read all photo make all change in blur real and f click right top ... its show modal souli in top right for good response and bad if click help center its open help center link in the app:https://files.catbox.moe/ofrabh.jpeg,https://files.catbox.moe/ehfn01.png please dont skip make all change read all photo please makeall in blur mode.
