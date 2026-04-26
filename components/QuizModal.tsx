@@ -41,8 +41,9 @@ interface QuizViewProps {
   onTryAnother: () => void;
   onHarderQuiz: () => void;
   quizHistory?: QuizHistoryEntry[];
-  onComplete?: () => void; // fires when user reaches the results screen
-  preGeneratedQuestions?: QuizQuestion[] | null; // instantly loaded on Next Quiz
+  onComplete?: () => void;
+  preGeneratedQuestions?: QuizQuestion[] | null;
+  onNextQuiz?: () => Promise<void>; // instant next quiz — no topic picker
 }
 
 // ── Export for compatibility ──
@@ -54,7 +55,7 @@ export interface QuizModalProps extends QuizViewProps {
 const OPTION_LABELS = ['A', 'B', 'C', 'D'];
 
 // ── Inline quiz widget that renders directly in the chat page ──
-export function QuizView({ questions, onClose, onViewResults, onTryAnother, onHarderQuiz, quizHistory, onComplete, preGeneratedQuestions }: QuizViewProps) {
+export function QuizView({ questions, onClose, onViewResults, onTryAnother, onHarderQuiz, quizHistory, onComplete, preGeneratedQuestions, onNextQuiz }: QuizViewProps) {
   const [currentQ, setCurrentQ] = useState(0);
   const [answers, setAnswers] = useState<QuizAnswer[]>([]);
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
@@ -62,6 +63,7 @@ export function QuizView({ questions, onClose, onViewResults, onTryAnother, onHa
   const [showFeedback, setShowFeedback] = useState<'correct' | 'wrong' | null>(null);
   const [finished, setFinished] = useState(false);
   const [score, setScore] = useState(0);
+  const [loadingNext, setLoadingNext] = useState(false);
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const shakeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(0)).current;
@@ -185,11 +187,9 @@ export function QuizView({ questions, onClose, onViewResults, onTryAnother, onHa
 
   return (
     <View style={s.wrapper}>
-      {/* Header */}
+      {/* Header — no X button; quiz stays until results are viewed */}
       <View style={s.header}>
-        <TouchableOpacity onPress={onClose} style={s.closeBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <Ionicons name="close" size={20} color="rgba(255,255,255,0.6)" />
-        </TouchableOpacity>
+        <View style={s.closeBtn} />
         <Text style={s.headerTitle}>Quizzes</Text>
         <View style={s.thumbsRow}>
           <TouchableOpacity style={s.thumbBtn}>
@@ -255,9 +255,26 @@ export function QuizView({ questions, onClose, onViewResults, onTryAnother, onHa
             <Text style={s.viewResultsBtnText}>View results</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={s.nextQuizBtn} onPress={onTryAnother}>
-            <Text style={s.nextQuizLabel}>Next quiz</Text>
-            <Text style={s.nextQuizSub}>Try another general knowledge quiz</Text>
+          <TouchableOpacity
+            style={[s.nextQuizBtn, loadingNext && { opacity: 0.6 }]}
+            disabled={loadingNext}
+            onPress={async () => {
+              if (onNextQuiz) {
+                setLoadingNext(true);
+                try { await onNextQuiz(); } finally { setLoadingNext(false); }
+              } else {
+                onTryAnother();
+              }
+            }}
+          >
+            {loadingNext ? (
+              <Text style={s.nextQuizLabel}>Generating quiz…</Text>
+            ) : (
+              <>
+                <Text style={s.nextQuizLabel}>Next quiz</Text>
+                <Text style={s.nextQuizSub}>Try another general knowledge quiz</Text>
+              </>
+            )}
           </TouchableOpacity>
 
           {/* Quiz History */}

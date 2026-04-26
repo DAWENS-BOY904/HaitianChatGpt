@@ -1479,6 +1479,20 @@ export default function HomeScreen() {
     setCustomTopicInput('');
     setQuizTopicVisible(true);
   };
+
+  // ── Next quiz inline — re-generates with same topic/difficulty, no topic picker ──
+  const handleNextQuizInline = useCallback(async () => {
+    const topic = customTopicInput.trim() || selectedQuizTopic || 'General Knowledge';
+    setQuizGenerating(true);
+    try {
+      const questions = await generateAIQuizQuestions(topic, selectedDifficulty);
+      setInlineQuizQuestions([...questions]); // new reference forces QuizView reset
+    } catch (_e) {
+      setInlineQuizQuestions([...generateQuizQuestions(topic)]);
+    } finally {
+      setQuizGenerating(false);
+    }
+  }, [customTopicInput, selectedQuizTopic, selectedDifficulty]);
   const handleEditMessage = useCallback((messageId: string, content: string) => { setEditingMessageId(messageId); setInputText(content); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }, []);
   const handleCancelEdit = useCallback(() => { setEditingMessageId(null); setInputText(''); }, []);
   const handleMediaPicked = useCallback((media: MediaFile[]) => { if (media.length > 5) { showAlert('Limit', 'You can select a maximum of 5 files'); return; } setSelectedMedia(media); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }, [showAlert]);
@@ -2023,6 +2037,8 @@ export default function HomeScreen() {
                               onTryAnother={handleTryAnotherQuiz}
                               onHarderQuiz={handleHarderQuiz}
                               quizHistory={quizHistory}
+                              onNextQuiz={handleNextQuizInline}
+                              preGeneratedQuestions={preGeneratedQuestions}
                             />
                           ) : null}
                           {streamingMessageId ? null : generating ? (
@@ -2612,4 +2628,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-please read my message and make change in real time and in blur mode effect siable edg chat message for quizzes request and When the user clicks 'Next quiz' on the completion screen in QuizView, automatically call the generate-quiz edge function with the same topic/difficulty and load the new questions inline without showing the topic picker again — instant seamless flow Remove the close (X) button from the QuizView header so the quiz widget stays visible in the chat permanently and cannot be dismissed by the user — it should only disappear after viewing results funtion chat message edg disable for quizess request.
+
