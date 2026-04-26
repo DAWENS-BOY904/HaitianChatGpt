@@ -119,7 +119,6 @@ export default function RootLayout() {
                     <Stack.Screen name="ads-off" />
                     <Stack.Screen name="AppleGenerateJWTkey" />
                     <Stack.Screen name="subscription-success" />
-                    <Stack.Screen name="feedback" options={{ presentation: 'fullScreenModal', headerShown: false, animation: 'slide_from_bottom' }} />
                     </Stack>
                   </ConversationProvider>
                 </SocialProvider>
