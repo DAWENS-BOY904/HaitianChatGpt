@@ -2658,3 +2658,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
+hello ai please dont skip make all change remove the new like unlike function only leave the old top and add al function in the top old like unlik and Update app/feedback to move the ISSUES list into a separate blur Modal overlay (full-screen BlurView with a scrollable list of issue cards), triggered by tapping a 'Select issue' button, instead of showing the list inline in the scroll view. Update components/MessageActionsModal to use BlurView as the full-screen background, add working like/unlike buttons that call handleLikeMessage/handleUnlikeMessage passed as props, and stop any playing TTS audio when the modal opens. Update app/feedback to let users attach a screenshot with expo-image-picker, show a thumbnail preview, upload to Supabase chat-images bucket, and store the URL in the activity_logs details JSON alongside the issue category. 
