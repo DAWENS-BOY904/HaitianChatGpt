@@ -6,11 +6,11 @@ import {
   StyleSheet,
   Modal,
   FlatList,
-  Animated,
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
+import { BlurView } from 'expo-blur';
 import { useTheme } from '../hooks/useTheme';
 import { Spacing, BorderRadius, Typography } from '../constants/theme';
 import { WebViewModal } from './WebViewModal';
@@ -52,6 +52,18 @@ function getFaviconUrl(url: string): string {
   }
 }
 
+// Generate a deterministic tint color per domain for the favicon badge
+function getDomainTint(domain: string): string {
+  const palette = [
+    '#FF6B6B', '#FF9F43', '#FECA57', '#48DBFB',
+    '#1DD1A1', '#54A0FF', '#5F27CD', '#EE5A24',
+    '#009432', '#0652DD',
+  ];
+  let hash = 0;
+  for (let i = 0; i < domain.length; i++) hash = (hash * 31 + domain.charCodeAt(i)) & 0xffffff;
+  return palette[Math.abs(hash) % palette.length];
+}
+
 // ── Full-screen sources list modal ──
 export const SourcesListModal = memo(function SourcesListModal({
   visible,
@@ -65,56 +77,59 @@ export const SourcesListModal = memo(function SourcesListModal({
   const renderSource = ({ item, index }: { item: Source; index: number }) => {
     const domain = item.domain || getDomain(item.url);
     const faviconUrl = item.favicon || getFaviconUrl(item.url);
-    const isFirst = index === 0;
+    const tint = getDomainTint(domain);
 
     return (
       <TouchableOpacity
         style={[
-          styles.sourceItem,
-          { borderBottomColor: colors.border },
-          isFirst && styles.sourceItemFirst,
+          styles.card,
+          {
+            backgroundColor: isDark ? 'rgba(28,28,32,0.92)' : 'rgba(255,255,255,0.92)',
+            borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)',
+            shadowColor: isDark ? '#000' : '#888',
+          },
         ]}
         onPress={() => {
           setSelectedUrl(item.url);
           setWebViewVisible(true);
         }}
-        activeOpacity={0.7}
+        activeOpacity={0.75}
       >
-        <View style={styles.sourceIconWrap}>
+        {/* Favicon badge */}
+        <View style={[styles.faviconBadge, { backgroundColor: tint + '22', borderColor: tint + '44' }]}>
           {faviconUrl ? (
             <Image
               source={{ uri: faviconUrl }}
-              style={styles.favicon}
+              style={styles.faviconImg}
               contentFit="contain"
               transition={150}
             />
           ) : (
-            <View style={[styles.favicon, { backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' }]}>
-              <Ionicons name="globe-outline" size={16} color={colors.textSecondary} />
-            </View>
+            <Ionicons name="globe-outline" size={20} color={tint} />
           )}
         </View>
 
-        <View style={styles.sourceContent}>
-          <Text style={[styles.sourceDomain, { color: colors.textSecondary }]} numberOfLines={1}>
+        {/* Content */}
+        <View style={styles.cardContent}>
+          <Text style={[styles.cardDomain, { color: tint }]} numberOfLines={1}>
             {domain}
           </Text>
-          <Text style={[styles.sourceTitle, { color: colors.text }]} numberOfLines={2}>
+          <Text style={[styles.cardTitle, { color: colors.text }]} numberOfLines={2}>
             {item.title}
           </Text>
           {item.snippet ? (
-            <Text style={[styles.sourceSnippet, { color: colors.textSecondary }]} numberOfLines={2}>
-              {item.snippet}
-            </Text>
+            <View style={[styles.snippetChip, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)' }]}>
+              <Text style={[styles.snippetText, { color: colors.textSecondary }]} numberOfLines={2}>
+                {item.snippet}
+              </Text>
+            </View>
           ) : null}
           {item.date ? (
-            <Text style={[styles.sourceDate, { color: colors.textSecondary }]}>
-              {item.date}
-            </Text>
+            <Text style={[styles.cardDate, { color: colors.textSecondary }]}>{item.date}</Text>
           ) : null}
         </View>
 
-        <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+        <Ionicons name="chevron-forward" size={16} color={isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.2)'} />
       </TouchableOpacity>
     );
   };
@@ -127,24 +142,40 @@ export const SourcesListModal = memo(function SourcesListModal({
         presentationStyle="pageSheet"
         onRequestClose={onClose}
       >
-        <View style={[styles.modalContainer, { backgroundColor: colors.background }]}>
+        {/* Blurred background */}
+        <View style={[styles.modalRoot, { backgroundColor: isDark ? 'rgba(10,10,12,0.96)' : 'rgba(240,240,245,0.96)' }]}>
+          {Platform.OS === 'ios' ? (
+            <BlurView
+              intensity={isDark ? 80 : 70}
+              tint={isDark ? 'dark' : 'light'}
+              style={StyleSheet.absoluteFill}
+            />
+          ) : null}
+
           {/* Header */}
-          <View style={[styles.header, { borderBottomColor: colors.border }]}>
-            <Text style={[styles.headerTitle, { color: colors.text }]}>Sources</Text>
-            <TouchableOpacity
-              style={[styles.closeBtn, { backgroundColor: colors.surface }]}
-              onPress={onClose}
-            >
-              <Ionicons name="close" size={18} color={colors.text} />
-            </TouchableOpacity>
+          <View style={[styles.header, { borderBottomColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)' }]}>
+            <View style={[styles.handleBar, { backgroundColor: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.18)' }]} />
+            <View style={styles.headerRow}>
+              <Ionicons name="globe-outline" size={18} color={colors.primary} style={{ marginRight: 6 }} />
+              <Text style={[styles.headerTitle, { color: colors.text }]}>
+                Sources{sources.length > 0 ? ` (${sources.length})` : ''}
+              </Text>
+              <TouchableOpacity
+                style={[styles.closeBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)' }]}
+                onPress={onClose}
+              >
+                <Ionicons name="close" size={16} color={colors.text} />
+              </TouchableOpacity>
+            </View>
           </View>
 
           <FlatList
             data={sources}
             renderItem={renderSource}
             keyExtractor={(item, i) => `${i}-${item.url}`}
-            contentContainerStyle={{ paddingBottom: 32 }}
+            contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
+            ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
           />
         </View>
       </Modal>
@@ -160,7 +191,7 @@ export const SourcesListModal = memo(function SourcesListModal({
 
 // ── Inline "Sources" pill shown below an AI message (compact with favicons) ──
 export const SourcesButton = memo(function SourcesButton({ sources }: SourcesButtonProps) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const [modalVisible, setModalVisible] = useState(false);
 
   if (!sources || sources.length === 0) return null;
@@ -170,7 +201,7 @@ export const SourcesButton = memo(function SourcesButton({ sources }: SourcesBut
   return (
     <>
       <TouchableOpacity
-        style={[styles.pill, { borderColor: colors.border }]}
+        style={[styles.pill, { borderColor: colors.border, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]}
         onPress={() => setModalVisible(true)}
         activeOpacity={0.75}
       >
@@ -178,12 +209,14 @@ export const SourcesButton = memo(function SourcesButton({ sources }: SourcesBut
         <View style={styles.faviconStack}>
           {firstThree.map((s, i) => {
             const faviconUrl = s.favicon || getFaviconUrl(s.url);
+            const domain = s.domain || getDomain(s.url);
+            const tint = getDomainTint(domain);
             return (
               <View
                 key={i}
                 style={[
                   styles.faviconCircle,
-                  { marginLeft: i === 0 ? 0 : -7, zIndex: 3 - i, borderColor: colors.background },
+                  { marginLeft: i === 0 ? 0 : -7, zIndex: 3 - i, borderColor: colors.background, backgroundColor: tint + '22' },
                 ]}
               >
                 {faviconUrl ? (
@@ -193,7 +226,7 @@ export const SourcesButton = memo(function SourcesButton({ sources }: SourcesBut
                     contentFit="contain"
                   />
                 ) : (
-                  <Ionicons name="globe-outline" size={11} color={colors.textSecondary} />
+                  <Ionicons name="globe-outline" size={11} color={tint} />
                 )}
               </View>
             );
@@ -237,6 +270,105 @@ export function parseSources(content: string): { text: string; sources: Source[]
 }
 
 const styles = StyleSheet.create({
+  // Modal
+  modalRoot: {
+    flex: 1,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    overflow: 'hidden',
+  },
+  header: {
+    paddingTop: Platform.OS === 'ios' ? 8 : 16,
+    paddingBottom: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  handleBar: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginBottom: 14,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+  },
+  headerTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    flex: 1,
+  },
+  closeBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  listContent: {
+    paddingHorizontal: 14,
+    paddingTop: 14,
+    paddingBottom: 36,
+  },
+  // Card
+  card: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 14,
+    gap: 12,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  faviconBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    flexShrink: 0,
+  },
+  faviconImg: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+  },
+  cardContent: {
+    flex: 1,
+    gap: 4,
+  },
+  cardDomain: {
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  cardTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    lineHeight: 20,
+  },
+  snippetChip: {
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    marginTop: 2,
+  },
+  snippetText: {
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  cardDate: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+  // Pill
   pill: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -257,7 +389,6 @@ const styles = StyleSheet.create({
     width: 22,
     height: 22,
     borderRadius: 11,
-    backgroundColor: '#555',
     borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
@@ -267,77 +398,4 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
   },
-  // Modal
-  modalContainer: {
-    flex: 1,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'ios' ? 16 : 24,
-    paddingBottom: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    position: 'relative',
-  },
-  headerTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-  },
-  closeBtn: {
-    position: 'absolute',
-    right: 16,
-    top: Platform.OS === 'ios' ? 14 : 22,
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sourceItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    gap: 12,
-  },
-  sourceItemFirst: {
-    marginTop: 8,
-  },
-  sourceIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    overflow: 'hidden',
-  },
-  favicon: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-  },
-  sourceContent: {
-    flex: 1,
-    gap: 2,
-  },
-  sourceDomain: {
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  sourceTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    lineHeight: 19,
-  },
-  sourceSnippet: {
-    fontSize: 12,
-    lineHeight: 17,
-    marginTop: 2,
-  },
-  sourceDate: {
-    fontSize: 11,
-    marginTop: 3,
-  },
 });
-please dont skip make all change real Update SourcesModal to use BlurView for the modal background and source list — replace the plain modal container with a frosted glass effect (BlurView intensity 80, dark/light tint) and add rounded corners, backdrop blur overlay, and improved mobile padding for a cleaner look on both iOS and Android. Redesign the source item rows in SourcesModal with card-style layout: add rounded corners (borderRadius 14), subtle shadow/elevation, a color-tinted favicon background per domain, and a snippet preview chip — making sources visually richer on mobile.
