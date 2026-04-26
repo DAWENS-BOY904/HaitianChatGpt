@@ -8,10 +8,12 @@ import {
   Switch,
   Platform,
   Modal,
+  Linking,
   TextInput,
   ActivityIndicator,
   KeyboardAvoidingView,
 } from 'react-native';
+import VersionCheck from 'react-native-version-check';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { BlurView } from 'expo-blur';
@@ -365,6 +367,7 @@ export default function SettingsScreen() {
   const [photoPickerVisible, setPhotoPickerVisible] = useState(false);
 
   const currentVersion = Constants.expoConfig?.version || '1.0.0';
+  const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'update' | 'no-update' | 'version'>('idle');
 
   const bg = isDark ? '#000000' : '#F2F2F7';
   const primaryText = isDark ? '#FFFFFF' : '#000000';
@@ -383,6 +386,60 @@ export default function SettingsScreen() {
     const adminEmails = ['berryxoe@gmail.com', 'newdawens@gmail.com'];
     setIsAdmin(adminEmails.includes(user.email || ''));
   };
+
+  const checkUpdate = async () => {
+  setUpdateStatus('checking');
+
+  try {
+    const latest = await VersionCheck.getLatestVersion();
+    const current = VersionCheck.getCurrentVersion();
+
+    if (latest !== current) {
+      setUpdateStatus('update');
+    } else {
+      setUpdateStatus('no-update');
+
+      setTimeout(() => {
+        setUpdateStatus('version');
+
+        setTimeout(() => {
+          setUpdateStatus('no-update');
+        }, 3000);
+
+      }, 3000);
+    }
+  } catch (e) {
+    setUpdateStatus('idle');
+  }
+};
+
+const openStore = () => {
+  const url = VersionCheck.getStoreUrl();
+  Linking.openURL(url);
+};
+
+const handleUpdatePress = () => {
+  if (updateStatus === 'update') {
+    openStore();
+  } else {
+    checkUpdate();
+  }
+};
+
+const getUpdateLabel = () => {
+  switch (updateStatus) {
+    case 'checking':
+      return 'Checking...';
+    case 'update':
+      return 'Update';
+    case 'no-update':
+      return 'Already up to date';
+    case 'version':
+      return `Version ${currentVersion}`;
+    default:
+      return 'Check update';
+  }
+};
 
   const loadProfile = async () => {
     if (!user) return;
@@ -868,7 +925,6 @@ export default function SettingsScreen() {
             <Row icon="receipt-outline" label="Orders" onPress={() => router.push('/orders')} />
             <Row icon="person-circle-outline" label="Personalization" onPress={() => router.push('/personalization')} />
             <Row icon="notifications-outline" label="Notifications" onPress={() => router.push('/notifications')} />
-            <Row icon="grid-outline" label="Apps" onPress={() => router.push('/apps')} />
             <Row icon="people-outline" label="Parental controls" onPress={() => router.push('/parental-controls')} />
             <Row icon="document-lock-outline" label="Data controls" onPress={() => router.push('/data-controls')} />
             <Row icon="megaphone-outline" label="Ads controls" onPress={() => router.push('/ads-controls')} />
@@ -977,7 +1033,21 @@ export default function SettingsScreen() {
             <Row icon="help-circle-outline" label="Help Center" onPress={() => router.push('/help-center')} />
             <Row icon="document-text-outline" label="Terms of Use" onPress={() => router.push('https://dawinix.com')} />
             <Row icon="shield-checkmark-outline" label="Privacy Policy" onPress={() => router.push('https://dawinix.com')} />
-            <Row icon="information-circle-outline" label="ChatGPT for iOS" value={`${currentVersion} (24584068813)`} isLast />
+            <Row
+  icon="cloud-download-outline"
+  label="Check for updates"
+  isLast
+  onPress={handleUpdatePress}
+  rightEl={
+    updateStatus === 'checking' ? (
+      <ActivityIndicator size="small" />
+    ) : (
+      <Text style={styles.rowValue}>
+        {getUpdateLabel()}
+      </Text>
+    )
+  }
+/>
           </GlassCard>
         </View>
 
@@ -1146,3 +1216,4 @@ export default function SettingsScreen() {
     </View>
   );
 }
+please remove dark background add gri and tex+icon yo dwe klere icon yo dwe clear like on flash limier bien we yo and header settings redesign li like photo sa:https://files.catbox.moe/0lgl4g.png and all in blur effect mode.
