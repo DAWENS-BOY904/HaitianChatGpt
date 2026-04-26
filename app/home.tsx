@@ -2658,5 +2658,3 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-
-please please dont skip make all change please remove duplicate like unlike icon the new one ki anba 2 premier yo remove sak anba and function an dwe mache sou 2 ki anle an and message action modal unlike and like dwe gen function sayo and message action modal page must in blur mode and uka retire modal action an speech tex audio ap still play fix feedback page add photo upload real and for isssue its must select in a modal dont display like that li dwe select in a blur modal https://files.catbox.moe/4rx6h8.jpeg please add all this real no demo dont skip.
