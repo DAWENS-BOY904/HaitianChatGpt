@@ -642,6 +642,14 @@ export default function HomeScreen() {
   const [imageAnalyzingOverlay, setImageAnalyzingOverlay] = useState(false);
   const [savedImageUrls, setSavedImageUrls] = useState<Set<string>>(new Set());
   const [savingImageId, setSavingImageId] = useState<string | null>(null);
+  // Message reactions
+  const [likedMessages, setLikedMessages] = useState<Set<string>>(new Set());
+  const [unlikedMessages, setUnlikedMessages] = useState<Set<string>>(new Set());
+  const [feedbackToastId, setFeedbackToastId] = useState<string | null>(null);
+  const [dislikeFeedbackVisible, setDislikeFeedbackVisible] = useState(false);
+  const [dislikeTargetId, setDislikeTargetId] = useState<string | null>(null);
+  const [dislikeIssue, setDislikeIssue] = useState('');
+  const [dislikeCustomText, setDislikeCustomText] = useState('');
   const [isOffline] = useState(false);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
@@ -696,6 +704,41 @@ export default function HomeScreen() {
   }, [params.fromImages]);
 
   // ── Save AI-generated image to My Images gallery ──
+  const handleLikeMessage = useCallback((messageId: string) => {
+    const alreadyLiked = likedMessages.has(messageId);
+    if (alreadyLiked) {
+      setLikedMessages(prev => { const s = new Set(prev); s.delete(messageId); return s; });
+      setFeedbackToastId(null);
+    } else {
+      setLikedMessages(prev => new Set([...prev, messageId]));
+      setUnlikedMessages(prev => { const s = new Set(prev); s.delete(messageId); return s; });
+      setFeedbackToastId(messageId);
+      setTimeout(() => setFeedbackToastId(curr => curr === messageId ? null : curr), 3500);
+    }
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  }, [likedMessages]);
+
+  const handleUnlikeMessage = useCallback((messageId: string) => {
+    const alreadyUnliked = unlikedMessages.has(messageId);
+    if (alreadyUnliked) {
+      setUnlikedMessages(prev => { const s = new Set(prev); s.delete(messageId); return s; });
+    } else {
+      setUnlikedMessages(prev => new Set([...prev, messageId]));
+      setLikedMessages(prev => { const s = new Set(prev); s.delete(messageId); return s; });
+      setFeedbackToastId(null);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      // Navigate to full-page feedback screen
+      router.push({
+        pathname: '/feedback',
+        params: {
+          messageId,
+          conversationId: currentConversation?.id || '',
+        },
+      });
+    }
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  }, [unlikedMessages, currentConversation?.id, router]);
+
   const handleSaveToMyImages = useCallback(async (imageUrl: string, messageId: string) => {
     if (!user?.id || savingImageId) return;
     setSavingImageId(messageId);
@@ -1555,8 +1598,11 @@ export default function HomeScreen() {
     const detectedImageUrl: string | null = imageUrlMatch ? imageUrlMatch[0] : (item.imageUrl || null);
     const alreadySaved = detectedImageUrl ? savedImageUrls.has(detectedImageUrl) : false;
     const isSavingThis = savingImageId === item.id;
+    const isLiked = likedMessages.has(item.id);
+    const isUnliked = unlikedMessages.has(item.id);
+    const showFeedbackToast = feedbackToastId === item.id;
     return (
-      <View>
+      <View key={item.id}>
         <MessageItem
           message={item}
           onCancel={handleCancelGeneration}
@@ -1574,6 +1620,58 @@ export default function HomeScreen() {
             result={mathData.result}
             onOpen={() => { setCalcExpression(mathData.expression); setCalcResult(mathData.result); setCalcVisible(true); }}
           />
+        ) : null}
+        {/* Like/Unlike reaction row — AI messages only */}
+        {item.role === 'assistant' && !item.isDeleted ? (
+          <View style={{ paddingHorizontal: 16, paddingBottom: 4 }}>
+            {showFeedbackToast ? (
+              <View style={{ overflow: 'hidden', borderRadius: 14, alignSelf: 'flex-start', marginBottom: 6 }}>
+                {Platform.OS === 'ios' ? (
+                  <BlurView intensity={70} tint={isDark ? 'dark' : 'light'} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 9 }}>
+                    <Ionicons name="checkmark-circle" size={15} color="#30D158" />
+                    <Text style={{ color: isDark ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.78)', fontSize: 13, fontWeight: '600' }}>Thank you for your feedback!</Text>
+                    <TouchableOpacity onPress={() => setFeedbackToastId(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                      <Ionicons name="close" size={13} color={isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.4)'} />
+                    </TouchableOpacity>
+                  </BlurView>
+                ) : (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 9, backgroundColor: isDark ? 'rgba(44,44,46,0.95)' : 'rgba(242,242,247,0.97)', borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)', borderRadius: 14 }}>
+                    <Ionicons name="checkmark-circle" size={15} color="#30D158" />
+                    <Text style={{ color: isDark ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.78)', fontSize: 13, fontWeight: '600' }}>Thank you for your feedback!</Text>
+                    <TouchableOpacity onPress={() => setFeedbackToastId(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                      <Ionicons name="close" size={13} color={isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.4)'} />
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+            ) : null}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <TouchableOpacity
+                onPress={() => handleLikeMessage(item.id)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                style={{ padding: 4 }}
+              >
+                <Ionicons
+                  name={isLiked ? 'thumbs-up' : 'thumbs-up-outline'}
+                  size={17}
+                  color={isLiked ? accentColor : colors.textSecondary}
+                />
+              </TouchableOpacity>
+              {!isLiked ? (
+                <TouchableOpacity
+                  onPress={() => handleUnlikeMessage(item.id)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  style={{ padding: 4 }}
+                >
+                  <Ionicons
+                    name={isUnliked ? 'thumbs-down' : 'thumbs-down-outline'}
+                    size={17}
+                    color={isUnliked ? '#FF453A' : colors.textSecondary}
+                  />
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          </View>
         ) : null}
         {/* Save to My Images button — shown on AI messages with image URLs */}
         {item.role === 'assistant' && detectedImageUrl && user?.id ? (
@@ -2402,6 +2500,8 @@ export default function HomeScreen() {
               </View>
             </Modal>
 
+            {/* Dislike Feedback — navigates to full-page /feedback route */}
+
             <PresetsModal
               visible={presetsModalVisible}
               onClose={() => setPresetsModalVisible(false)}
@@ -2558,5 +2658,3 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-please add this feature Integrate Midjourney API as a Priority 3 image generation provider in supabase/functions/_shared/ai-providers using the MIDJOURNEY_API_KEY secret. Add it to generateImageSmart after ElevenLabs and before Stability AI, using the Midjourney REST API endpoint to generate real high-quality images.
-
