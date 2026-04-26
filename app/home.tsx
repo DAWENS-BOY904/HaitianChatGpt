@@ -1255,11 +1255,21 @@ export default function HomeScreen() {
     // Detect intent for thinking indicator
     const lowerText = (currentText || '').toLowerCase();
     const isImageIntent = [
-      'logo', 'create image', 'generate image', 'make image', 'create photo', 'generate photo',
-      'make a logo', 'create a logo', 'design a logo', 'draw a', 'paint a', 'illustrate',
-      'create art', 'generate art', 'create an image', 'make an image', 'create a picture',
-      'generate a picture', 'create icon', 'create banner', 'kreye', 'fe foto', 'fe imaj', 'fe logo',
-      'créer', 'generer', 'crear', 'generar',
+      'create a logo', 'create logo', 'generate logo', 'make a logo', 'design a logo',
+      'generate a logo', 'make me a logo', 'design me a logo',
+      'create an image', 'create image', 'generate image', 'make an image', 'generate an image of',
+      'generate a photo', 'create a photo', 'make a photo',
+      'generate a picture', 'make a picture', 'create a picture', 'generate a picture of',
+      'draw me a', 'draw me an', 'paint me a', 'illustrate a', 'sketch me a',
+      'create art', 'generate art', 'make art', 'create artwork', 'generate artwork',
+      'create an icon', 'generate icon', 'make an icon', 'design an icon',
+      'create a banner', 'generate banner', 'make a banner', 'design a banner',
+      'generate thumbnail', 'create an illustration', 'generate an illustration',
+      'kreye logo', 'fe logo', 'fe imaj', 'kreye yon imaj', 'kreye imaj',
+      'fè logo', 'fè yon logo', 'fè imaj', 'fè yon imaj',
+      'kreye foto', 'kreye yon foto', 'fè foto', 'fè yon foto',
+      'créer un logo', 'générer une image', 'créer une image', 'faire un logo',
+      'crear un logo', 'generar una imagen', 'crear una imagen', 'hacer un logo',
     ].some(kw => lowerText.includes(kw));
     setThinkingMode(isImageIntent ? 'creating_image' : 'thinking');
     setSending(true);
@@ -2515,5 +2525,5 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-please ai for the images creation also add elevenlabs to create image for people to and fix chat edg pafwa ask ai la eske li konn kreye photo just bcs li gen photo nn message lan li vire sou thiinking photo ranje sa koz uka mete mot photo,logo nn sa wp di an menw pa need ai ln create logo.
+
 

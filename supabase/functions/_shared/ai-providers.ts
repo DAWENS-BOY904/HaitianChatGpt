@@ -762,25 +762,35 @@ export function detectContentType(userMessage: string): {
   const lowerMsg = userMessage.toLowerCase();
 
   const imageKeywords = [
+    // English — explicit creation intent only
     'create a logo', 'create logo', 'generate logo', 'make a logo', 'design a logo', 'build a logo',
     'generate a logo', 'make me a logo', 'design me a logo',
     'create an image', 'create image', 'generate image', 'make an image', 'design an image',
     'generate a photo', 'create a photo', 'make a photo',
     'generate a picture', 'make a picture', 'generate picture', 'create picture', 'create a picture',
-    'draw a', 'draw me', 'paint a', 'paint me', 'illustrate', 'sketch a', 'sketch me',
+    'draw a picture', 'draw me a', 'draw me an', 'draw me a picture',
+    'paint a picture', 'paint me a', 'paint me an',
+    'illustrate a', 'illustrate me',
+    'sketch a picture', 'sketch me a',
     'create art', 'generate art', 'make art', 'create artwork', 'generate artwork',
     'create an icon', 'create icon', 'generate icon', 'make an icon', 'design an icon',
     'create a banner', 'generate banner', 'make a banner', 'design a banner',
     'create a thumbnail', 'generate thumbnail',
     'generate a visual', 'create a visual', 'make a visual',
     'create an illustration', 'generate an illustration',
+    // Haitian Creole — explicit creation
     'kreye yon logo', 'kreye logo', 'fe yon logo', 'fe logo', 'desine logo',
-    'kreye foto', 'kreye imaj', 'fe foto', 'fe imaj', 'kreye yon imaj',
-    'fè yon logo', 'fè logo',
+    'kreye foto', 'kreye imaj', 'fe imaj', 'kreye yon imaj', 'kreye yon foto',
+    'fè yon logo', 'fè logo', 'fè yon imaj', 'fè imaj',
+    // French — explicit creation
     'créer un logo', 'creer un logo', 'générer une image', 'generer une image',
-    'créer une image', 'faire un logo', 'dessiner',
+    'créer une image', 'faire un logo', 'dessine moi', 'génère une image',
+    // Spanish — explicit creation
     'crear un logo', 'generar una imagen', 'crear una imagen', 'hacer un logo',
-    'photo of', 'picture of', 'image of', 'logo for', 'logo of',
+    // Generic generation phrases (must contain action verbs)
+    'generate an image of', 'create an image of', 'make an image of',
+    'generate a picture of', 'create a picture of', 'make a picture of',
+    'generate a photo of', 'create a photo of', 'make a photo of',
   ];
 
   const editKeywords = [
