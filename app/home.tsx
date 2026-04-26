@@ -726,13 +726,18 @@ export default function HomeScreen() {
       setUnlikedMessages(prev => new Set([...prev, messageId]));
       setLikedMessages(prev => { const s = new Set(prev); s.delete(messageId); return s; });
       setFeedbackToastId(null);
-      setDislikeTargetId(messageId);
-      setDislikeIssue('');
-      setDislikeCustomText('');
-      setDislikeFeedbackVisible(true);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      // Navigate to full-page feedback screen
+      router.push({
+        pathname: '/feedback',
+        params: {
+          messageId,
+          conversationId: currentConversation?.id || '',
+        },
+      });
     }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  }, [unlikedMessages]);
+  }, [unlikedMessages, currentConversation?.id, router]);
 
   const handleSaveToMyImages = useCallback(async (imageUrl: string, messageId: string) => {
     if (!user?.id || savingImageId) return;
@@ -1597,7 +1602,7 @@ export default function HomeScreen() {
     const isUnliked = unlikedMessages.has(item.id);
     const showFeedbackToast = feedbackToastId === item.id;
     return (
-      <View>
+      <View key={item.id}>
         <MessageItem
           message={item}
           onCancel={handleCancelGeneration}
@@ -2495,90 +2500,7 @@ export default function HomeScreen() {
               </View>
             </Modal>
 
-            {/* Dislike Feedback Modal */}
-            <Modal visible={dislikeFeedbackVisible} transparent animationType="none" onRequestClose={() => setDislikeFeedbackVisible(false)}>
-              <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-                <BlurView intensity={60} tint="dark" style={StyleSheet.absoluteFill} />
-                <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setDislikeFeedbackVisible(false)} />
-                <View style={{ width: '90%', maxWidth: 380, borderRadius: 22, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.45, shadowRadius: 24, elevation: 24 }}>
-                  <BlurView intensity={90} tint="dark" style={{ padding: 24, borderRadius: 22 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
-                      <Text style={{ color: '#FFF', fontSize: 18, fontWeight: '700' }}>Share your feedback</Text>
-                      <TouchableOpacity onPress={() => setDislikeFeedbackVisible(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                        <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center' }}>
-                          <Ionicons name="close" size={14} color="rgba(255,255,255,0.7)" />
-                        </View>
-                      </TouchableOpacity>
-                    </View>
-                    <Text style={{ color: 'rgba(255,255,255,0.55)', fontSize: 13, marginBottom: 14 }}>What was the issue with this response?</Text>
-                    {[
-                      { label: "Didn't fully follow instructions", icon: 'alert-circle-outline' },
-                      { label: 'Not factually correct', icon: 'close-circle-outline' },
-                      { label: 'Refused when it should not have', icon: 'ban-outline' },
-                      { label: 'Response was incomplete', icon: 'git-merge-outline' },
-                      { label: 'Harmful or unsafe content', icon: 'warning-outline' },
-                      { label: 'Other', icon: 'ellipsis-horizontal-circle-outline' },
-                    ].map((issue, i) => (
-                      <TouchableOpacity
-                        key={issue.label}
-                        style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, borderTopWidth: i > 0 ? StyleSheet.hairlineWidth : 0, borderTopColor: 'rgba(255,255,255,0.1)' }}
-                        onPress={() => setDislikeIssue(issue.label)}
-                        activeOpacity={0.7}
-                      >
-                        <Ionicons name={issue.icon as any} size={20} color={dislikeIssue === issue.label ? accentColor : 'rgba(255,255,255,0.6)'} />
-                        <Text style={{ flex: 1, color: dislikeIssue === issue.label ? accentColor : 'rgba(255,255,255,0.85)', fontSize: 15, fontWeight: dislikeIssue === issue.label ? '700' : '400' }}>{issue.label}</Text>
-                        {dislikeIssue === issue.label ? <Ionicons name="checkmark" size={18} color={accentColor} /> : null}
-                      </TouchableOpacity>
-                    ))}
-                    <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.1)', marginVertical: 14 }} />
-                    <Text style={{ color: 'rgba(255,255,255,0.55)', fontSize: 13, marginBottom: 8 }}>Additional details (optional)</Text>
-                    <TextInput
-                      style={{ backgroundColor: 'rgba(255,255,255,0.08)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, color: '#FFF', fontSize: 14, minHeight: 80, textAlignVertical: 'top', marginBottom: 6 }}
-                      placeholder="Describe the issue..."
-                      placeholderTextColor="rgba(255,255,255,0.3)"
-                      value={dislikeCustomText}
-                      onChangeText={txt => { if (txt.length <= 2000) setDislikeCustomText(txt); }}
-                      multiline
-                      maxLength={2000}
-                    />
-                    <Text style={{ color: 'rgba(255,255,255,0.3)', fontSize: 11, textAlign: 'right', marginBottom: 16 }}>{dislikeCustomText.length}/2000</Text>
-                    <TouchableOpacity
-                      style={{ marginBottom: 10 }}
-                      onPress={() => { Linking.openURL('https://help.openai.com/en/articles/6825527-what-feedback-can-i-submit-in-chatgpt'); }}
-                    >
-                      <Text style={{ color: accentColor, fontSize: 13, fontWeight: '600', textAlign: 'center' }}>Learn more about our feedback policy</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={{ backgroundColor: accentColor, borderRadius: 14, paddingVertical: 14, alignItems: 'center', opacity: dislikeIssue ? 1 : 0.45 }}
-                      disabled={!dislikeIssue}
-                      onPress={async () => {
-                        setDislikeFeedbackVisible(false);
-                        showAlert('Feedback submitted', 'Thank you! Your feedback helps us improve.');
-                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                        // Track feedback in activity_logs
-                        if (user?.id) {
-                          try {
-                            await supabase.from('activity_logs').insert({
-                              user_id: user.id,
-                              action: 'dislike',
-                              action_type: 'message_feedback',
-                              details: {
-                                issue_category: dislikeIssue,
-                                additional_text: dislikeCustomText || null,
-                                message_id: dislikeTargetId,
-                                conversation_id: currentConversation?.id || null,
-                              },
-                            });
-                          } catch (_e) {}
-                        }
-                      }}
-                    >
-                      <Text style={{ color: '#FFF', fontSize: 16, fontWeight: '700' }}>Submit feedback</Text>
-                    </TouchableOpacity>
-                  </BlurView>
-                </View>
-              </View>
-            </Modal>
+            {/* Dislike Feedback — navigates to full-page /feedback route */}
 
             <PresetsModal
               visible={presetsModalVisible}
@@ -2736,4 +2658,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-fix error 2 like unlike button yo paret two time remove new lan f function an mache nn ansyen an and the modal must be another page and full modal and select issue like thsi photo:https://files.catbox.moe/qikhuf.png and the select menu modal issiue like this:https://files.catbox.moe/4rx6h8.jpeg read all photo and make all change in real time blur mode even in action modal message the function like unlike must work.
+
