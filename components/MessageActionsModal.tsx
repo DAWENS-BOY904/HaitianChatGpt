@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -14,9 +14,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
-import * as Speech from 'expo-speech';
+import { Audio } from 'expo-av';
 import { useTheme } from '../hooks/useTheme';
-import { useAlert } from '@/template';
+import { useAlert, getSupabaseClient } from '@/template';
 import { useSettings } from '../hooks/useSettings';
 import { Spacing, BorderRadius } from '../constants/theme';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
@@ -54,49 +54,77 @@ export function MessageActionsModal({
   const { colors, isDark } = useTheme();
   const { showAlert } = useAlert();
   const { settings } = useSettings();
+  const supabase = getSupabaseClient();
   const accentColor = settings.accentColor || colors.primary;
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const soundRef = useRef<Audio.Sound | null>(null);
+
+  const stopTTS = useCallback(async () => {
+    if (soundRef.current) {
+      try { await soundRef.current.stopAsync(); } catch (_e) {}
+      try { await soundRef.current.unloadAsync(); } catch (_e) {}
+      soundRef.current = null;
+    }
+    setIsSpeaking(false);
+  }, []);
 
   // Stop TTS when modal closes
   useEffect(() => {
-    if (!visible && isSpeaking) {
-      Speech.stop();
-      setIsSpeaking(false);
-    }
+    if (!visible && isSpeaking) stopTTS();
   }, [visible]);
 
   // Stop TTS when modal opens (in case something is already playing)
   useEffect(() => {
-    if (visible) {
-      Speech.stop();
-      setIsSpeaking(false);
-    }
+    if (visible) stopTTS();
   }, [visible]);
 
-  // TTS
+  // Cleanup on unmount
+  useEffect(() => () => { stopTTS(); }, []);
+
+  // TTS via ElevenLabs generate-tts edge function
   const handleReadAloud = useCallback(async () => {
-    if (isSpeaking) {
-      Speech.stop();
-      setIsSpeaking(false);
-      return;
-    }
+    if (isSpeaking) { await stopTTS(); return; }
+
     setIsSpeaking(true);
     const cleanText = message.content
       .replace(/```[\s\S]*?```/g, 'code block')
       .replace(/[*_`~]/g, '')
-      .replace(/\[.*?\]\(.*?\)/g, 'link');
-    Speech.speak(cleanText, {
-      language: 'en',
-      pitch: 1.0,
-      rate: 0.9,
-      onDone: () => setIsSpeaking(false),
-      onStopped: () => setIsSpeaking(false),
-      onError: () => {
-        setIsSpeaking(false);
-        showAlert('Error', 'Text-to-speech failed');
-      },
-    });
-  }, [message.content, isSpeaking, showAlert]);
+      .replace(/\[.*?\]\(.*?\)/g, 'link')
+      .slice(0, 3000);
+
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-tts', {
+        body: { text: cleanText, voice: 'alloy' },
+      });
+
+      if (error || !data?.audioUrl) throw new Error(error?.message || 'TTS failed');
+
+      await Audio.setAudioModeAsync({
+        playsInSilentModeIOS: true,
+        allowsRecordingIOS: false,
+        staysActiveInBackground: false,
+        shouldDuckAndroid: true,
+        playThroughEarpieceAndroid: false,
+      });
+
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: data.audioUrl },
+        { shouldPlay: true, volume: 1.0 }
+      );
+      soundRef.current = sound;
+
+      sound.setOnPlaybackStatusUpdate((status: any) => {
+        if (status.didJustFinish || status.isCancelled) {
+          sound.unloadAsync().catch(() => {});
+          soundRef.current = null;
+          setIsSpeaking(false);
+        }
+      });
+    } catch (_err) {
+      setIsSpeaking(false);
+      showAlert('TTS Error', 'Could not play audio. Please try again.');
+    }
+  }, [message.content, isSpeaking, stopTTS, supabase, showAlert]);
 
   // Copy
   const handleCopy = useCallback(async () => {
@@ -137,12 +165,9 @@ export function MessageActionsModal({
 
   // Stop TTS on close
   const handleClose = useCallback(() => {
-    if (isSpeaking) {
-      Speech.stop();
-      setIsSpeaking(false);
-    }
+    if (isSpeaking) stopTTS();
     onClose();
-  }, [isSpeaking, onClose]);
+  }, [isSpeaking, stopTTS, onClose]);
 
   return (
     <Modal
@@ -362,4 +387,4 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 });
-replace the native Speech.speak in MessageActionsModal with the generate-tts edge function using ElevenLabs for higher quality text-to-speech playback via expo-av.
+
