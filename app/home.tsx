@@ -1,4 +1,4 @@
-Connect the MessageLimitModal component in home.tsx: show it for free-plan users after 50 messages in a conversation, add an X button to dismiss it, re-show it every 20 messages after dismissal, and wrap it in BlurView background mode import React, { useState, useRef, useEffect, useCallback, useMemo, Component } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo, Component } from 'react';
 import { Image as ExpoImage } from 'expo-image';
 import { 
   View, 
@@ -36,6 +36,7 @@ import { useAlert, useAuth } from '@/template';
 import { Spacing, Typography, BorderRadius } from '../constants/theme';
 import { useSubscription } from '../hooks/useSubscription';
 import { MenuModal } from '../components/MenuModal';
+import { MessageLimitModal } from '../components/MessageLimitModal';
 import { ToolsModal } from '../components/ToolsModal';
 import { QuizModal, QuizView, QuizQuestion, QuizHistoryEntry } from '../components/QuizModal';
 import { PresetsModal } from '../components/PresetsModal';
@@ -635,6 +636,8 @@ export default function HomeScreen() {
   const [selectedDifficulty, setSelectedDifficulty] = useState('Medium');
   const [customTopicInput, setCustomTopicInput] = useState('');
   const [quizHistory, setQuizHistory] = useState<QuizHistoryEntry[]>([]);
+  const [messageLimitModalVisible, setMessageLimitModalVisible] = useState(false);
+  const messageLimitDismissedAtRef = useRef<number>(0);
   const [presetsModalVisible, setPresetsModalVisible] = useState(false);
   const [thinkingMode, setThinkingMode] = useState<'thinking' | 'creating_image' | 'analyzing' | 'editing_image'>('thinking');
   const [showCompletionStatus, setShowCompletionStatus] = useState(false);
@@ -1343,6 +1346,11 @@ export default function HomeScreen() {
       if (user && !isUnlimited && !isAdmin) {
         if (sessionBonusMessages > 0) setSessionBonusMessages(prev => prev - 1);
         else await incrementMessageCount();
+        // MessageLimitModal: show at 50 messages, re-show every 20 after dismissal
+        const convMsgs = (messages || []).length + 1;
+        const dismissed = messageLimitDismissedAtRef.current;
+        const shouldShow = convMsgs >= 50 && (dismissed === 0 || convMsgs - dismissed >= 20);
+        if (shouldShow) setMessageLimitModalVisible(true);
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error: any) {
@@ -2540,6 +2548,18 @@ export default function HomeScreen() {
             <CustomizeAIModal visible={customizeAIVisible} onClose={() => setCustomizeAIVisible(false)} onSave={(instructions, respondAuto) => { setGroupCustomInstructions(instructions); setGroupRespondAuto(respondAuto); }} initialInstructions={groupCustomInstructions} initialRespondAuto={groupRespondAuto} />
             <InviteLinkModal visible={inviteLinkVisible} onClose={() => setInviteLinkVisible(false)} isPlus={isUnlimited} />
             <NotificationPermissionModal visible={notifPermModalVisible} onAllow={handleAllowNotifications} onSkip={() => setNotifPermModalVisible(false)} />
+
+            <MessageLimitModal
+              visible={messageLimitModalVisible}
+              onClose={() => {
+                messageLimitDismissedAtRef.current = (messages || []).length;
+                setMessageLimitModalVisible(false);
+              }}
+              onNewChat={() => {
+                setMessageLimitModalVisible(false);
+                handleNewChat();
+              }}
+            />
 
             {/* Guest mode: 35-message limit modal (Photo 8 style) */}
             <Modal visible={guestLoginModal} transparent animationType="fade" onRequestClose={() => setGuestLoginModal(false)}>
