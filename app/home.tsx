@@ -2662,4 +2662,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-please ai allow even if you internet so slow you can still chat with the ai this for people haiti and other pays internet bad please dont skip make this change fix edg chat to call api even if bad internet.
+

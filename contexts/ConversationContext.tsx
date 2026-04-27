@@ -430,19 +430,49 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
       let streamedContent = '';
       let finalImageUrlFromResponse: string | undefined;
 
-      const response = await fetch(edgeFunctionUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-          'apikey': process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '',
-        },
-        body: JSON.stringify(requestBody),
-        signal: abortController.signal,
-      });
+      // ── Resilient fetch with retry for poor internet connections (Haiti & low-bandwidth areas) ──
+      const MAX_SEND_RETRIES = 3;
+      let response: Response | null = null;
+      let lastFetchError: Error | null = null;
+
+      for (let attempt = 0; attempt <= MAX_SEND_RETRIES; attempt++) {
+        try {
+          response = await fetch(edgeFunctionUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`,
+              'apikey': process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '',
+              // Hint to server about retry attempt for smarter handling
+              'x-retry-attempt': String(attempt),
+            },
+            body: JSON.stringify(requestBody),
+            signal: abortController.signal,
+          });
+
+          // Retry on server errors or rate-limit, not on client errors
+          if ((response.status === 429 || response.status >= 500) && attempt < MAX_SEND_RETRIES) {
+            const delay = 1000 * Math.pow(2, attempt); // 1s, 2s, 4s
+            console.log(`[sendMessage] Server error ${response.status}, retrying in ${delay}ms (attempt ${attempt + 1})...`);
+            await new Promise(r => setTimeout(r, delay));
+            continue;
+          }
+          break; // success or non-retryable error
+        } catch (fetchErr: any) {
+          if (fetchErr?.name === 'AbortError') throw fetchErr; // user cancelled, don't retry
+          lastFetchError = fetchErr;
+          if (attempt < MAX_SEND_RETRIES) {
+            const delay = 1000 * Math.pow(2, attempt);
+            console.log(`[sendMessage] Network error on attempt ${attempt + 1}: ${fetchErr.message}, retrying in ${delay}ms...`);
+            await new Promise(r => setTimeout(r, delay));
+          }
+        }
+      }
+
+      if (!response) throw lastFetchError || new Error('Network error: could not reach the server. Please check your internet connection and try again.');
 
       if (!response.ok) {
-        const errText = await response.text();
+        const errText = await response.text().catch(() => String(response!.status));
         throw new Error(`Chat function error: ${response.status} ${errText}`);
       }
 

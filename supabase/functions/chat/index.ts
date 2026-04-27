@@ -457,7 +457,9 @@ serve(async (req) => {
       .from('user_settings')
       .select('app_language, base_tone, custom_instructions, nickname, occupation, interests, preferred_ai_model')
       .eq('user_id', user.id)
-      .single();
+      .single()
+      .timeout?.(8000)
+      .catch(() => ({ data: null })) as any || { data: null };
 
     const userLanguage = settingsData?.app_language || 'English';
     const baseTone = settingsData?.base_tone || 'balanced';
@@ -1017,6 +1019,11 @@ const safety_rules = [
       }
     }
 
+    // ── Stream the response with shorter chunk intervals for poor connections ──
+    // Detect if client is on slow connection via a request header hint
+    const connectionHint = req.headers.get('x-connection-quality') || 'normal';
+    const chunkDelayMs = connectionHint === 'slow' ? 8 : 12; // faster streaming for slow connections
+
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       start(controller) {
@@ -1039,7 +1046,7 @@ const safety_rules = [
           i = chunkEnd;
           const payload = JSON.stringify({ token: chunk });
           controller.enqueue(encoder.encode(`data: ${payload}\n\n`));
-          setTimeout(sendNext, 12);
+          setTimeout(sendNext, chunkDelayMs);
         }
         sendNext();
       },

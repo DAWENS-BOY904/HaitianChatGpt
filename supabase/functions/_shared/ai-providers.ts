@@ -23,6 +23,45 @@ export function isTextOnlyModel(modelId: string): boolean {
   return TEXT_ONLY_MODELS.some(m => normalized.includes(m));
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// POOR-CONNECTION RESILIENCE HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Fetch with automatic exponential-backoff retry for transient network errors.
+ * Retries on network errors, 429 (rate-limit) and 5xx server errors.
+ */
+async function fetchWithRetry(
+  url: string,
+  init: RequestInit,
+  maxRetries = 3,
+  baseDelayMs = 1000,
+): Promise<Response> {
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const res = await fetch(url, init);
+      // Retry on rate-limit or server errors
+      if ((res.status === 429 || res.status >= 500) && attempt < maxRetries) {
+        const retryAfter = parseInt(res.headers.get('retry-after') || '0', 10);
+        const delay = retryAfter > 0 ? retryAfter * 1000 : baseDelayMs * Math.pow(2, attempt);
+        console.log(`[fetchWithRetry] ${res.status} on attempt ${attempt + 1}, retrying in ${delay}ms...`);
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+      return res;
+    } catch (err: any) {
+      lastError = err;
+      if (attempt < maxRetries) {
+        const delay = baseDelayMs * Math.pow(2, attempt);
+        console.log(`[fetchWithRetry] Network error on attempt ${attempt + 1}: ${err.message}, retrying in ${delay}ms...`);
+        await new Promise(r => setTimeout(r, delay));
+      }
+    }
+  }
+  throw lastError || new Error('Max retries exceeded');
+}
+
 /**
  * OnSpace AI - PRIMARY TEXT GENERATION (uses configured ONSPACE_AI_API_KEY)
  */
@@ -42,7 +81,7 @@ export async function callOnSpaceAI(messages: AIMessage[]): Promise<AIResponse> 
 
   for (const model of models) {
     try {
-      const response = await fetch(`${baseUrl}/chat/completions`, {
+      const response = await fetchWithRetry(`${baseUrl}/chat/completions`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${apiKey}`,
@@ -55,8 +94,8 @@ export async function callOnSpaceAI(messages: AIMessage[]): Promise<AIResponse> 
           max_tokens: 4096,
           stream: false,
         }),
-        signal: AbortSignal.timeout(30000),
-      });
+        signal: AbortSignal.timeout(45000),
+      }, 2);
 
       if (!response.ok) {
         const errText = await response.text().catch(() => response.statusText);
@@ -89,7 +128,7 @@ export async function callOpenAI(messages: AIMessage[]): Promise<AIResponse> {
   if (!apiKey) return { content: '', model: 'openai-gpt4', error: 'FALLBACK_NEEDED' };
 
   try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    const response = await fetchWithRetry('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
@@ -101,8 +140,8 @@ export async function callOpenAI(messages: AIMessage[]): Promise<AIResponse> {
         temperature: 0.7,
         max_tokens: 4096,
       }),
-      signal: AbortSignal.timeout(30000),
-    });
+      signal: AbortSignal.timeout(45000),
+    }, 2);
 
     const data = await response.json();
     if (!response.ok) return { content: '', model: 'openai-gpt4', error: data.error?.message || 'OpenAI Error' };
@@ -124,7 +163,7 @@ export async function callGemini(messages: AIMessage[], modelName: string = 'gem
   }
 
   try {
-    let validModelName = 'gemini-1.5-flash';
+    let validModelName = 'gemini-2.5-flash';
     if (modelName.includes('2.0') || modelName.includes('flash-exp')) {
       validModelName = 'gemini-2.0-flash-exp';
     } else if (modelName.includes('1.5-pro')) {
@@ -151,13 +190,14 @@ export async function callGemini(messages: AIMessage[], modelName: string = 'gem
       };
     }
 
-    const response = await fetch(
+    const response = await fetchWithRetry(
       `https://generativelanguage.googleapis.com/v1beta/models/${validModelName}:generateContent?key=${apiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestBody),
-      }
+        signal: AbortSignal.timeout(45000),
+      }, 2
     );
 
     if (!response.ok) {
@@ -201,7 +241,7 @@ export async function callClaude(messages: AIMessage[]): Promise<AIResponse> {
       return { content: '', model: 'claude-3-5', error: 'No user messages provided' };
     }
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    const response = await fetchWithRetry('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'x-api-key': apiKey,
@@ -214,7 +254,8 @@ export async function callClaude(messages: AIMessage[]): Promise<AIResponse> {
         system: systemMessage,
         messages: conversationMessages,
       }),
-    });
+      signal: AbortSignal.timeout(45000),
+    }, 2);
 
     const data = await response.json();
 
@@ -244,7 +285,7 @@ export async function callGroq(messages: AIMessage[]): Promise<AIResponse> {
   }
 
   try {
-    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    const response = await fetchWithRetry('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
@@ -260,7 +301,8 @@ export async function callGroq(messages: AIMessage[]): Promise<AIResponse> {
         max_completion_tokens: 4000,
         stream: false,
       }),
-    });
+      signal: AbortSignal.timeout(30000),
+    }, 2);
 
     if (!response.ok) {
       return { content: '', model: 'groq-llama-4', error: 'FALLBACK_NEEDED' };
