@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo, Component } from 'react';
+wrap the MessageLimitModal background in BlurView (expo-blur) for a frosted-glass iOS-style overlay effect, matching the rest of the app's modal style inner card in BlurView (expo-blur, intensity 85, tint dark) for a frosted-glass iOS-style overlay effect, matching the rest of the app modal style.import React, { useState, useRef, useEffect, useCallback, useMemo, Component } from 'react';
 import { Image as ExpoImage } from 'expo-image';
 import { 
   View, 
