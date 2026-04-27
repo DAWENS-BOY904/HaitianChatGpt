@@ -1,4 +1,4 @@
-Wrap the MessageLimitModal background in BlurView (expo-blur) for a frosted-glass iOS-style overlay effect, matching the rest of the app's modal style import React, { useState, useRef, useEffect, useCallback, useMemo, Component } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo, Component } from 'react';
 import { Image as ExpoImage } from 'expo-image';
 import { 
   View, 
