@@ -12,8 +12,10 @@ import {
   TouchableOpacity,
   StyleSheet,
   Pressable,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
 import { useTheme } from '../hooks/useTheme';
 import { useRouter } from 'expo-router';
 import { Spacing, Typography, BorderRadius } from '../constants/theme';
@@ -53,7 +55,7 @@ export function MessageLimitModal({
       padding: Spacing.xl,
     },
     modal: {
-      backgroundColor: colors.surface,
+      backgroundColor: Platform.OS === 'ios' ? 'transparent' : colors.surface,
       borderRadius: BorderRadius.xl,
       padding: Spacing.xl,
       width: '100%',
@@ -148,8 +150,12 @@ export function MessageLimitModal({
       onRequestClose={onClose}
     >
       <Pressable style={styles.overlay} onPress={onClose}>
+        {Platform.OS === 'ios' ? (
+          <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} pointerEvents="none" />
+        ) : null}
         <Pressable onPress={(e) => e.stopPropagation()}>
-          <View style={styles.modal}>
+          {Platform.OS === 'ios' ? (
+            <BlurView intensity={85} tint="dark" style={[styles.modal, { overflow: 'hidden' }]}>
             <View style={styles.iconContainer}>
               <Ionicons name="chatbubbles" size={32} color={colors.primary} />
             </View>
@@ -185,15 +191,41 @@ export function MessageLimitModal({
               </TouchableOpacity>
             </View>
 
-            <View style={styles.infoBox}>
-              <Text style={styles.infoText}>
-                💡 With Plus: Unlimited messages, photo uploads, priority access, and advanced features
+              <View style={styles.infoBox}>
+                <Text style={styles.infoText}>
+                  💡 With Plus: Unlimited messages, photo uploads, priority access, and advanced features
+                </Text>
+              </View>
+            </BlurView>
+          ) : (
+            <View style={styles.modal}>
+              <View style={styles.iconContainer}>
+                <Ionicons name="chatbubbles" size={32} color={colors.primary} />
+              </View>
+              <Text style={styles.title}>You have reached the message limit</Text>
+              <Text style={styles.message}>
+                You have used all <Text style={styles.highlight}>45 messages</Text> for this conversation.{"\n\n"}
+                Upgrade now or wait until <Text style={styles.highlight}>{resetTime}</Text> to keep using files, or start a new chat now without files.
               </Text>
+              <View style={styles.buttonsContainer}>
+                <TouchableOpacity style={[styles.button, styles.secondaryButton]} onPress={handleNewChat}>
+                  <Ionicons name="add-circle-outline" size={20} color={colors.text} />
+                  <Text style={[styles.buttonText, styles.secondaryButtonText]}>New chat</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.button, styles.primaryButton]} onPress={handleGetPlus}>
+                  <Ionicons name="flash" size={20} color={colors.background} />
+                  <Text style={[styles.buttonText, styles.primaryButtonText]}>Get Plus</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={styles.infoBox}>
+                <Text style={styles.infoText}>
+                  💡 With Plus: Unlimited messages, photo uploads, priority access, and advanced features
+                </Text>
+              </View>
             </View>
-          </View>
+          )}
         </Pressable>
       </Pressable>
     </Modal>
   );
 }
-hello ai if see this dont skip please connect this in home page for plan free limit messge 50 show this modal and x button they can remove it and if they send 20 messgae ank li re monte and add li in blur mmode.
