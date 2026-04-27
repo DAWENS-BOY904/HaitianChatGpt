@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo, Component } from 'react';
+Connect the MessageLimitModal component in home.tsx: show it for free-plan users after 50 messages in a conversation, add an X button to dismiss it, re-show it every 20 messages after dismissal, and wrap it in BlurView background mode import React, { useState, useRef, useEffect, useCallback, useMemo, Component } from 'react';
 import { Image as ExpoImage } from 'expo-image';
 import { 
   View, 
