@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo, Component } from 'react';
+please fix thinking mode lew ekri ai lan siw in dark mode system wp we dot . color blan lew nn white lap paret in black and lew finn we dot lan le ai lan ap typing reponse baw li soti import React, { useState, useRef, useEffect, useCallback, useMemo, Component } from 'react';
 import { Image as ExpoImage } from 'expo-image';
 import { 
   View, 
