@@ -549,7 +549,7 @@ export function SideMenu({
           {/* TOP HEADER */}
           <View style={styles.topHeader}>
             <Text style={[styles.appTitle, { color: colors.text }]}>
-              {currentProject?.name || 'Haitian AI Chat'}
+              {currentProject?.name || 'Dawinix'}
             </Text>
 
             {/* Search + Profile icons — shared glassmorphism background */}
