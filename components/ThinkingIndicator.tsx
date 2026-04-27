@@ -513,10 +513,11 @@ export function ThinkingIndicator({
   }
 
   // ── Default: message thinking ──
-  const ringColor = isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)';
   const iconColor = isDark ? '#A8A8B3' : '#666';
   const bgColor = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.05)';
   const borderColor = isDark ? 'rgba(16,163,127,0.2)' : 'rgba(16,163,127,0.3)';
+  // Dots are white in dark mode so they're visible on dark backgrounds
+  const dotsColor = isDark ? 'rgba(255,255,255,0.85)' : accentColor;
 
   return (
     <AnimatedEntry>
@@ -529,7 +530,7 @@ export function ThinkingIndicator({
               {cyclingLabel}
             </Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <ThinkingDots color={accentColor} />
+              <ThinkingDots color={dotsColor} />
               {elapsed >= 5 ? (
                 <Text style={{ color: colors.textSecondary, fontSize: 12 }}>{elapsed}s</Text>
               ) : null}
