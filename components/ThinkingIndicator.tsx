@@ -157,41 +157,37 @@ const SpinningBadge = memo(function SpinningBadge({
   );
 });
 
-// ── 3-dot typing animation ─────────────────────────────────────────────────
+// ── Single pulsing round dot ─────────────────────────────────────────────────
 const ThinkingDots = memo(function ThinkingDots({ color }: { color: string }) {
-  const dot1 = useRef(new Animated.Value(0)).current;
-  const dot2 = useRef(new Animated.Value(0)).current;
-  const dot3 = useRef(new Animated.Value(0)).current;
+  const scale = useRef(new Animated.Value(0.5)).current;
+  const opacity = useRef(new Animated.Value(0.4)).current;
 
   useEffect(() => {
-    const dots = [dot1, dot2, dot3];
-    const anims = dots.map((dot, i) =>
-      Animated.loop(
+    const anim = Animated.loop(
+      Animated.parallel([
         Animated.sequence([
-          Animated.delay(i * 160),
-          Animated.timing(dot, { toValue: 1, duration: 300, useNativeDriver: true }),
-          Animated.timing(dot, { toValue: 0.25, duration: 300, useNativeDriver: true }),
-          Animated.delay(500 - i * 160),
-        ])
-      )
+          Animated.timing(scale, { toValue: 1.3, duration: 600, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+          Animated.timing(scale, { toValue: 0.5, duration: 600, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        ]),
+        Animated.sequence([
+          Animated.timing(opacity, { toValue: 1, duration: 600, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+          Animated.timing(opacity, { toValue: 0.4, duration: 600, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        ]),
+      ])
     );
-    anims.forEach(a => a.start());
-    return () => anims.forEach(a => a.stop());
+    anim.start();
+    return () => anim.stop();
   }, []);
-
-  const dots = [dot1, dot2, dot3];
 
   return (
     <View style={dotStyles.row}>
-      {dots.map((dot, i) => (
-        <Animated.View key={i} style={[dotStyles.dot, { backgroundColor: color, opacity: dot }]} />
-      ))}
+      <Animated.View style={[dotStyles.dot, { backgroundColor: color, opacity, transform: [{ scale }] }]} />
     </View>
   );
 });
 const dotStyles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  dot: { width: 7, height: 7, borderRadius: 3.5 },
+  row: { flexDirection: 'row', alignItems: 'center' },
+  dot: { width: 8, height: 8, borderRadius: 4 },
 });
 
 // ── Shimmer label (fading) ─────────────────────────────────────────────────
@@ -576,4 +572,4 @@ const styles = StyleSheet.create({
     padding: 4,
   },
 });
-please thinking must be a dot ron like . and li dwe blan fonse nn dark mode and noir fonse nn white mode.
+
