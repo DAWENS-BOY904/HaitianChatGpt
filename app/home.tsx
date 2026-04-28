@@ -2682,5 +2682,5 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-
+please fix this when you edit a message the fisrt message lan disapear and replace by the new one in sam place and message ai si li t already give response soti and re thinking.
 
