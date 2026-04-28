@@ -735,18 +735,164 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
 
   const updateMessageAndRegenerate = async (messageId: string, newContent: string, aiModel?: string) => {
     if (!currentConversation || !user) return;
+    const conversationId = currentConversation.id;
     const editedMessageIndex = messages.findIndex(m => m.id === messageId);
     if (editedMessageIndex === -1) return;
+
     try {
-      await supabase.from('messages').update({ content: newContent, edited: true, edited_at: new Date().toISOString() }).eq('id', messageId);
-      if (editedMessageIndex + 1 < messages.length && messages[editedMessageIndex + 1].role === 'assistant') {
-        await supabase.from('messages').delete().eq('id', messages[editedMessageIndex + 1].id);
+      // 1. Update the edited user message in the DB
+      await supabase
+        .from('messages')
+        .update({ content: newContent, edited: true, edited_at: new Date().toISOString() })
+        .eq('id', messageId);
+
+      // 2. Delete all messages that came AFTER the edited message (AI responses + any follow-ups)
+      const messagesToDelete = messages.slice(editedMessageIndex + 1);
+      for (const msg of messagesToDelete) {
+        await supabase.from('messages').delete().eq('id', msg.id);
       }
-      const updatedMessages = messages.slice(0, editedMessageIndex).concat({ ...messages[editedMessageIndex], content: newContent });
+
+      // 3. Update UI: keep all messages up to and including the edited one (with new content)
+      const updatedMessages = [
+        ...messages.slice(0, editedMessageIndex),
+        { ...messages[editedMessageIndex], content: newContent, edited: true, edited_at: new Date().toISOString() },
+      ];
       setMessages(updatedMessages);
-      await sendMessage(newContent, undefined, undefined, false, aiModel);
-    } catch (err) {
-      console.error('Error in update and regenerate:', err);
+
+      // 4. Build the prior context for the AI (all messages up to the edited one)
+      const contextMessages = updatedMessages.map(m => ({
+        role: m.role,
+        content: typeof m.content === 'string' ? m.content : String(m.content || ''),
+        ...(m.image_url ? { image_url: m.image_url } : {}),
+      }));
+
+      // 5. Stream AI response — add placeholder AI message
+      const aiMessageId = `streaming-ai-edit-${Date.now()}`;
+      const placeholderAIMessage: Message = {
+        id: aiMessageId, role: 'assistant', content: '', created_at: new Date().toISOString(),
+      };
+      setMessages(prev => [...prev, placeholderAIMessage]);
+      setStreamingMessageId(aiMessageId);
+
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
+      const edgeFunctionUrl = `${supabaseUrl}/functions/v1/chat`;
+
+      const abortController = new AbortController();
+      abortControllerRef.current = abortController;
+
+      const response = await fetch(edgeFunctionUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'apikey': process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '',
+        },
+        body: JSON.stringify({
+          messages: contextMessages,
+          conversationId,
+          aiModel: aiModel || 'google-gemini',
+        }),
+        signal: abortController.signal,
+      });
+
+      if (!response.ok) {
+        const errText = await response.text().catch(() => String(response.status));
+        throw new Error(`Chat function error: ${response.status} ${errText}`);
+      }
+
+      let streamedContent = '';
+      let finalImageUrlFromResponse: string | undefined;
+      const reader = response.body?.getReader();
+
+      const pendingWords: string[] = [];
+      let typewriterRunning = false;
+      function scheduleTypewriter() {
+        if (typewriterRunning) return;
+        typewriterRunning = true;
+        function tick() {
+          if (pendingWords.length === 0) { typewriterRunning = false; return; }
+          const word = pendingWords.shift()!;
+          streamedContent += word;
+          setMessages(prev => prev.map(m => m.id === aiMessageId ? { ...m, content: streamedContent } : m));
+          setTimeout(tick, 12);
+        }
+        tick();
+      }
+
+      if (reader) {
+        const decoder = new TextDecoder();
+        let buffer = '';
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || !trimmed.startsWith('data:')) continue;
+            try {
+              const parsed = JSON.parse(trimmed.slice(5).trim());
+              if (parsed.done) { if (parsed.imageUrl) finalImageUrlFromResponse = parsed.imageUrl; continue; }
+              if (parsed.token !== undefined) {
+                const words = parsed.token.match(/(\S+|\s+)/g) || [parsed.token];
+                pendingWords.push(...words);
+                scheduleTypewriter();
+              }
+            } catch (_e) {}
+          }
+        }
+        const startWait = Date.now();
+        while ((pendingWords.length > 0 || typewriterRunning) && Date.now() - startWait < 30000) {
+          await new Promise(r => setTimeout(r, 50));
+        }
+      } else {
+        const fullText = await response.text();
+        for (const line of fullText.split('\n')) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith('data:')) continue;
+          try {
+            const parsed = JSON.parse(trimmed.slice(5).trim());
+            if (parsed.done && parsed.imageUrl) finalImageUrlFromResponse = parsed.imageUrl;
+            if (parsed.token) streamedContent += parsed.token;
+          } catch (_e) {}
+        }
+        setMessages(prev => prev.map(m => m.id === aiMessageId ? { ...m, content: streamedContent } : m));
+      }
+
+      abortControllerRef.current = null;
+
+      let cleanMessage = streamedContent.replace(/\[Using [^\]]+\]\s*/gi, '').replace(/\[Model:[^\]]+\]\s*/gi, '').trim();
+      if (!cleanMessage && !finalImageUrlFromResponse) cleanMessage = 'I am here to help! What would you like to know?';
+
+      // 6. Save the new AI message to DB
+      const { data: savedAIMessage } = await supabase
+        .from('messages')
+        .insert({ conversation_id: conversationId, role: 'assistant', content: cleanMessage, image_url: finalImageUrlFromResponse || null })
+        .select()
+        .single();
+
+      // 7. Replace streaming placeholder with the saved message
+      setMessages(prev => {
+        const withoutStreaming = prev.filter(m => m.id !== aiMessageId);
+        const finalMsg: Message = savedAIMessage || {
+          id: `ai-edit-${Date.now()}`, role: 'assistant', content: cleanMessage,
+          image_url: finalImageUrlFromResponse, created_at: new Date().toISOString(),
+        };
+        return [...withoutStreaming, finalMsg];
+      });
+
+      setStreamingMessageId(null);
+
+      // Update conversation timestamp
+      await supabase.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id', conversationId);
+
+    } catch (err: any) {
+      abortControllerRef.current = null;
+      setStreamingMessageId(null);
+      if (err?.name !== 'AbortError') console.error('Error in update and regenerate:', err);
     }
   };
 
