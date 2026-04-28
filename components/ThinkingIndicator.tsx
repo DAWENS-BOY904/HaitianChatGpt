@@ -576,3 +576,4 @@ const styles = StyleSheet.create({
     padding: 4,
   },
 });
+hello ai please dont skip read and make change Fix ThinkingDots in ThinkingIndicator so the dots are always clearly visible: white (rgba 255,255,255,0.85) in dark mode and dark gray (#333) in light mode — currently they blend into the background Add a small animated blinking dot at the end of the streaming AI message text in MessageItem while it is still generating — disappears automatically when streaming completes, white in dark mode and dark in light mode.
