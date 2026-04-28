@@ -576,4 +576,3 @@ const styles = StyleSheet.create({
     padding: 4,
   },
 });
-Show a small animated blinking dot at the end of the streaming AI message while it is still generating, so users can see text is actively being received — disappears automatically when streaming completes and i donty see the dot button when ai thinking and fix dot button white in dark mode and black in white mode.
