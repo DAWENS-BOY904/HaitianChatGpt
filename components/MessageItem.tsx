@@ -1,3 +1,4 @@
+
 import React, { useState, memo, useCallback, useMemo, useEffect, useRef } from 'react';
 import {
   View,
@@ -352,13 +353,10 @@ const MarkdownRenderer = memo(function MarkdownRenderer({
 
     // Plain paragraph
     const k = nextKey();
-    const isLastLine = i === lines.length - 1;
+    // const isLastLine = i === lines.length - 1; // This variable was declared but not used for this block, removing for cleanliness
     elements.push(
       <Text key={k} style={{ color: textColor, fontSize: 15, lineHeight: 23, flexWrap: 'wrap', marginBottom: 1 }}>
         {renderInline(trimmed, k)}
-        {isStreaming && isLastLine ? (
-          <Text style={{ color: mutedColor, fontSize: 16 }}>{'▋'}</Text>
-        ) : null}
       </Text>
     );
     i++;
@@ -849,7 +847,7 @@ export const MessageItem = memo(function MessageItem({
     userImagePreview: { width: SCREEN_WIDTH * 0.55, height: SCREEN_WIDTH * 0.4, borderRadius: BorderRadius.md, marginBottom: Spacing.sm },
   }), [colors, message.role]);
 
-  const isStreaming = streaming && isGenerating && message.role === 'assistant';
+  const isStreamingRendered = streaming && isGenerating && message.role === 'assistant';
   const timeLabel = formatMessageTime(message.created_at);
 
   return (
@@ -986,13 +984,17 @@ export const MessageItem = memo(function MessageItem({
                       return <MarkdownTable key={`table-${si}`} tableText={seg.content} colors={colors} />;
                     }
                     return (
-                      <MarkdownRenderer
-                        key={`seg-${si}`}
-                        text={seg.content}
-                        colors={colors}
-                        isUser={false}
-                        isStreaming={isStreaming && isLastPart && si === textSegments.length - 1}
-                      />
+                      <React.Fragment key={`seg-${si}`}>
+                        <MarkdownRenderer
+                          text={seg.content}
+                          colors={colors}
+                          isUser={false}
+                          isStreaming={isStreamingRendered && isLastPart && si === textSegments.length - 1}
+                        />
+                        {isStreamingRendered && isLastPart && si === textSegments.length - 1 ? (
+                          <BlinkingCursor color={isDark ? 'rgba(255,255,255,0.85)' : '#333333'} />
+                        ) : null}
+                      </React.Fragment>
                     );
                   })}
                 </View>
