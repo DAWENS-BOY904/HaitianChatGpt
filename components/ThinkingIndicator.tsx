@@ -576,3 +576,4 @@ const styles = StyleSheet.create({
     padding: 4,
   },
 });
+please thinking must be a dot ron like . and li dwe blan fonse nn dark mode and noir fonse nn white mode.
