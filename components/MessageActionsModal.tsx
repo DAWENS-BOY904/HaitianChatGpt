@@ -439,3 +439,10 @@ const styles = StyleSheet.create({
   translateActionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 14, paddingVertical: 13, borderWidth: 1 },
   translateActionText: { color: 'rgba(255,255,255,0.85)', fontSize: 15, fontWeight: '600' },
 });
+please ai read and make change dont skip fix voice read tts error add real voice transcript from elevenlabs api The generate-tts edge function is returning 401 from ElevenLabs. Please check and update the ELEVENLABS_API_KEY secret in the backend, and ensure the edge function uses the correct ElevenLabs v1 /text-to-speech endpoint with a valid voice ID{
+  "eventMessage": "[TTS] ElevenLabs response: 401\n",
+  "functionId": "generate-tts",
+  "id": "f40a18f4-d30b-4c25-9818-92a916586484",
+  "logLevel": "INFO",
+  "timestamp": 1777477689
+}.
