@@ -982,3 +982,4 @@ const styles = StyleSheet.create({
   bulkActionText: { fontSize: 13, fontWeight: '500' },
   bulkActionDivider: { width: 1, height: 20 },
 });
+fix put all in blur mode and fix espas anba trop espas modal lan olen tro longue kitel knsa men trop espas rete anba.
