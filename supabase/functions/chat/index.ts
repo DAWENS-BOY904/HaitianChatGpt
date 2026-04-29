@@ -75,6 +75,8 @@ function aiResponse(userInput: string, context_tags: string[] = []) {
     return generateCrisisResponse();
   }
 
+	
+
   // The original code had a call to `normalAIResponse` which is not defined.
   // This likely indicates a missing function or an oversight.
   // Given the context of the file, this part of the logic might be handled
@@ -85,7 +87,94 @@ function aiResponse(userInput: string, context_tags: string[] = []) {
   return "I'm here to help. How can I assist you further?";
 }
 
+// chat/index.ts
 
+type Message = {
+  userId: string;
+  text: string;
+  timestamp: number;
+};
+
+// Simple keyword detection (basic layer)
+const dangerKeywords = [
+  "kill myself",
+  "suicide",
+  "i want to die",
+  "end my life",
+  "kill someone",
+  "hurt someone",
+  "murder",
+  "gun",
+  "bomb"
+];
+
+// Check if message is dangerous
+function detectDanger(text: string): boolean {
+  const lowerText = text.toLowerCase();
+
+  return dangerKeywords.some((keyword) =>
+    lowerText.includes(keyword)
+  );
+}
+
+// Admin alert system (replace with DB / email / webhook)
+async function alertAdmin(message: Message, riskLevel: string) {
+  console.log("🚨 ALERT ADMIN:");
+  console.log("User:", message.userId);
+  console.log("Message:", message.text);
+  console.log("Risk:", riskLevel);
+
+  // Example: send to Discord / Slack webhook
+  /*
+  await fetch(process.env.ADMIN_WEBHOOK_URL!, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      content: `🚨 Risk detected: ${riskLevel}\nUser: ${message.userId}\nMessage: ${message.text}`
+    }),
+  });
+  */
+}
+
+// Main chat handler
+export async function handleChatMessage(message: Message) {
+  const isDanger = detectDanger(message.text);
+
+  if (isDanger) {
+    // classify risk level
+    let riskLevel = "LOW";
+
+    if (
+      message.text.toLowerCase().includes("suicide") ||
+      message.text.toLowerCase().includes("kill myself")
+    ) {
+      riskLevel = "HIGH_SELF_HARM";
+    }
+
+    if (
+      message.text.toLowerCase().includes("kill someone") ||
+      message.text.toLowerCase().includes("murder")
+    ) {
+      riskLevel = "HIGH_VIOLENCE";
+    }
+
+    // alert admin
+    await alertAdmin(message, riskLevel);
+
+    // return safe response to user
+    return {
+      reply:
+        "I'm really sorry you're feeling this way. You are not alone. Please consider reaching out to someone you trust or a professional for support.",
+      flagged: true,
+    };
+  }
+
+  // normal AI response (your AI logic here)
+  return {
+    reply: "This is normal AI response...",
+    flagged: false,
+  };
+}
 
 // ==========================================
 // REAL-TIME DATE/TIME HELPER
