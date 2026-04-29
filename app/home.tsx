@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo, Component } from 'react';
+please ai don’t skip make change in components/MessageItem, add selectable={true} to the AI message Text component so users can long-press to select and copy specific text spans natively, without opening any modal Update ConversationMenuModal to remove the full-screen BlurView backdrop so the chat background stays clear, and only the menu card itself has a blurred background with rounded borders (borderRadius 20+). import React, { useState, useRef, useEffect, useCallback, useMemo, Component } from 'react';
 import { Image as ExpoImage } from 'expo-image';
 import { 
   View, 
