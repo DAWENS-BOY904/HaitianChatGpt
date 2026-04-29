@@ -465,3 +465,4 @@ const fpStyles = StyleSheet.create({
   sendBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: THEME.accent, borderRadius: 10, paddingVertical: 10 },
   sendBtnText: { fontSize: 14, fontWeight: '700', color: '#FFF' },
 });
+fix put all in blur mode and fix espas anba trop espas modal lan olen tro longue kitel knsa men trop espas rete anba.
