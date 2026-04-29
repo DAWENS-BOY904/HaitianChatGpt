@@ -81,7 +81,7 @@ const BlinkingCursor = memo(function BlinkingCursor({ color }: { color: string }
   }, []);
   return (
     <Animated.Text style={{ opacity: blink, color, fontSize: 16, fontWeight: '300', lineHeight: 22 }}>
-      {'▋'}
+      {'●'}
     </Animated.Text>
   );
 });
