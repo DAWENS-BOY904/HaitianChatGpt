@@ -2625,4 +2625,3 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-hello ai if you see this make all change please dont skip please fix this issue on the home page When a user long-presses their message, a modal with options like “Copy” and “Edit” appears The problem is that the modal should appear directly under the selected message in a blurred (background blur) mode, instead of appearing in a fixed or incorrect position Also, when the user long-presses a message of ai, it should only copy the selected message text, not the entire conversation or modal Please make sure this is fixed Example reference: https://files.catbox.moe/a0fk2i.jpeg please.
