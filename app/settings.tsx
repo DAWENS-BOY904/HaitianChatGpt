@@ -1185,3 +1185,4 @@ export default function SettingsScreen() {
     </View>
   );
 }
+fix accent color select pouka select color yo.
