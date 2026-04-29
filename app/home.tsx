@@ -2625,5 +2625,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-hello ai please dont skip make the change redesign all The modal should open without blurring the chat background; only the modal background should be blurred (in both light and dark modes), the modal should have rounded borders (not square, like the reference image), and in AI chat a long press should allow copying only selected text (not all text) without opening a modal.
 
