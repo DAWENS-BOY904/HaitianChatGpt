@@ -1,4 +1,4 @@
-please fix this issue on the home page. When a user long-presses their message, a modal with options like “Copy” and “Edit” appears The problem is that the modal should appear directly under the selected message in a blurred (background blur) mode, instead of appearing in a fixed or incorrect position Also, when the user long-presses a message of ai, it should only copy the selected message text, not the entire conversation or modal Please make sure this is fixed Example reference: https://files.catbox.moe/a0fk2i.jpegimport React, { useState, useRef, useEffect, useCallback, useMemo, Component } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo, Component } from 'react';
 import { Image as ExpoImage } from 'expo-image';
 import { 
   View, 
@@ -1029,7 +1029,6 @@ export default function HomeScreen() {
   }, [stopRecordingTimer]);
 
   const startVoiceRecording = async () => {
-    // Request fresh permission
     try {
       const { status } = await Audio.requestPermissionsAsync();
       audioPermissionRef.current = status === 'granted';
@@ -1044,11 +1043,9 @@ export default function HomeScreen() {
     }
 
     try {
-      // Clean up first
       await cleanupRecording();
       await new Promise(r => setTimeout(r, 250));
 
-      // Set audio mode for recording
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
         playsInSilentModeIOS: true,
@@ -1059,7 +1056,6 @@ export default function HomeScreen() {
         interruptionModeAndroid: 1,
       });
 
-      // Extra Android stabilization
       if (Platform.OS === 'android') await new Promise(r => setTimeout(r, 200));
 
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -1098,7 +1094,6 @@ export default function HomeScreen() {
       console.log('[Recording] Failed to start:', error?.message);
       await cleanupRecording();
 
-      // On Android, sometimes the audio session is locked — try resetting
       if (Platform.OS === 'android') {
         try {
           await Audio.setAudioModeAsync({
@@ -1214,7 +1209,6 @@ export default function HomeScreen() {
     }
   };
 
-  // ── handleSend: capture inputs before clearing state ──
   const handleSend = async () => {
     const currentText = inputText.trim();
     const currentMedia = [...selectedMedia];
@@ -1222,7 +1216,6 @@ export default function HomeScreen() {
 
     if ((!currentText && currentMedia.length === 0) || sending) return;
 
-    // ── Quiz keyword interception — route to generate-quiz, never to chat ──
     const QUIZ_KEYWORDS = [
       'quiz', 'quizz', 'make me a quiz', 'give me a quiz', 'create a quiz', 'generate a quiz',
       'test my knowledge', 'trivia', 'make quiz', 'create quiz', 'generate quiz',
@@ -1238,7 +1231,6 @@ export default function HomeScreen() {
       setSelectedMedia([]);
       clearDraft();
       setQuizGenerating(true);
-      // Extract topic from message (everything after quiz keyword)
       let detectedTopic = 'General Knowledge';
       const topicMatch = currentText.match(/(?:quiz|trivia)\s+(?:about|on|sur|sou|sobre)?\s*(.+)/i);
       if (topicMatch && topicMatch[1]?.trim().length > 2) {
@@ -1256,7 +1248,6 @@ export default function HomeScreen() {
       return;
     }
 
-    // Guest: block photo/file uploads
     if (isGuest && currentMedia.length > 0) {
       setGuestLockFeature('file upload');
       setGuestLockModal(true);
@@ -1268,7 +1259,6 @@ export default function HomeScreen() {
         setGuestLoginModal(true);
         return;
       }
-      // Guests CAN send messages (up to 35)
     } else if (!currentEditingId && !canSendMessage() && sessionBonusMessages <= 0) {
       if (!user) {
         showAlert('Sign In Required', 'Sign in to start chatting with AI.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Sign In', onPress: () => router.push('/login') }]);
@@ -1284,12 +1274,10 @@ export default function HomeScreen() {
       if (!conversationId) { showAlert('Error', 'Failed to create conversation'); return; }
     }
 
-    // Clear input immediately + clear draft
     setInputText('');
     setSelectedMedia([]);
     setEditingMessageId(null);
     clearDraft();
-    // Detect intent for thinking indicator
     const lowerText = (currentText || '').toLowerCase();
     const isImageIntent = [
       'create a logo', 'create logo', 'generate logo', 'make a logo', 'design a logo',
@@ -1327,7 +1315,6 @@ export default function HomeScreen() {
         }
       }
 
-      // Image-only: send empty string so AI knows it's a pure image analysis request
       let finalText = currentText || '';
       if (groupChatMode && groupCustomInstructions && groupRespondAuto) {
         finalText = `[System instruction: ${groupCustomInstructions}]\n\n${finalText}`;
@@ -1346,7 +1333,6 @@ export default function HomeScreen() {
       if (user && !isUnlimited && !isAdmin) {
         if (sessionBonusMessages > 0) setSessionBonusMessages(prev => prev - 1);
         else await incrementMessageCount();
-        // MessageLimitModal: show at 50 messages, re-show every 20 after dismissal
         const convMsgs = (messages || []).length + 1;
         const dismissed = messageLimitDismissedAtRef.current;
         const shouldShow = convMsgs >= 50 && (dismissed === 0 || convMsgs - dismissed >= 20);
@@ -1384,11 +1370,10 @@ export default function HomeScreen() {
     { question: 'Who wrote Romeo and Juliet?', options: ['Dickens', 'Hemingway', 'Tolkien', 'Shakespeare'], answer: 3, explanation: 'William Shakespeare wrote this famous play.' },
     { question: 'What gas do plants absorb?', options: ['Oxygen', 'Nitrogen', 'Carbon dioxide', 'Hydrogen'], answer: 2, explanation: 'Plants absorb CO2 during photosynthesis.' },
     { question: 'Largest ocean?', options: ['Atlantic', 'Indian', 'Arctic', 'Pacific'], answer: 3, explanation: 'The Pacific Ocean is the largest and deepest.' },
-    { question: 'Boiling point of water (°C)?', options: ['90°C', '95°C', '100°C', '110°C'], answer: 2, explanation: 'Water boils at 100°C at sea level.' },
+    { question: 'Boiling point of water (celsius)?', options: ['90C', '95C', '100C', '110C'], answer: 2, explanation: 'Water boils at 100C at sea level.' },
     { question: 'Fastest land animal?', options: ['Lion', 'Cheetah', 'Horse', 'Leopard'], answer: 1, explanation: 'The cheetah can run up to 120 km/h.' },
   ];
 
-  // ── Fetch quiz history ──
   const fetchQuizHistory = useCallback(async () => {
     if (!user?.id) return;
     try {
@@ -1406,7 +1391,6 @@ export default function HomeScreen() {
     if (quizMode && user?.id) fetchQuizHistory();
   }, [quizMode, user?.id]);
 
-  // ── AI-powered quiz generation via dedicated edge function (never leaks into chat) ──
   const generateAIQuizQuestions = async (topic: string, difficulty: string = 'Medium'): Promise<QuizQuestion[]> => {
     const topicLabel = topic || 'General Knowledge';
     try {
@@ -1423,7 +1407,6 @@ export default function HomeScreen() {
     }
   };
 
-  // ── Pre-generate next quiz batch in the background after quiz completes ──
   const preGenerateNextQuiz = useCallback(async (topic: string, difficulty: string) => {
     if (preGenRunning.current) return;
     preGenRunning.current = true;
@@ -1442,7 +1425,6 @@ export default function HomeScreen() {
     setQuizTopicVisible(false);
     setQuizConnectDetailVisible(false);
     setQuizGenerating(true);
-    // Close keyboard & scroll to bottom so quiz is fully visible
     Keyboard.dismiss();
     try {
       const questions = await generateAIQuizQuestions(topic, selectedDifficulty);
@@ -1454,7 +1436,6 @@ export default function HomeScreen() {
     }
   };
 
-  // ── Show quiz inline in chat when AI generates one ──
   const [inlineQuizVisible, setInlineQuizVisible] = useState(false);
   const [inlineQuizQuestions, setInlineQuizQuestions] = useState<QuizQuestion[]>([]);
   const [preGeneratedQuestions, setPreGeneratedQuestions] = useState<QuizQuestion[] | null>(null);
@@ -1463,7 +1444,6 @@ export default function HomeScreen() {
   const showInlineQuiz = useCallback((questions: QuizQuestion[]) => {
     setInlineQuizQuestions(questions);
     setInlineQuizVisible(true);
-    // Scroll to bottom so quiz is visible
     setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 200);
   }, []);
 
@@ -1473,7 +1453,6 @@ export default function HomeScreen() {
     const correct = answers.filter(a => a.correct).length;
     const topic = customTopicInput.trim() || selectedQuizTopic || 'General Knowledge';
 
-    // Save score to database
     if (user?.id) {
       try {
         await supabase.from('quiz_scores').insert({
@@ -1487,7 +1466,6 @@ export default function HomeScreen() {
       } catch (_e) {}
     }
 
-    // AI sends the score summary (not the user)
     const resultLines = questions.map((q, i) => {
       const ans = answers.find((a: any) => a.questionIndex === i);
       const chosen = ans ? q.options[ans.chosenIndex] : 'Skipped';
@@ -1496,9 +1474,7 @@ export default function HomeScreen() {
     }).join('\n');
 
     const pct = Math.round((correct / questions.length) * 100);
-    const emoji = pct === 100 ? '\uD83C\uDF89' : pct >= 80 ? '\uD83D�' : pct >= 60 ? '\uD83D\uDC4D' : pct >= 40 ? '\uD83D\uDCDA' : '\uD83D\uDCAA';
     const summaryPrompt = `The user just completed a quiz on ${topic} (${selectedDifficulty} difficulty) and scored ${correct}/${questions.length} (${pct}%). Please present their quiz results clearly and encouragingly. Here are the answers:\n\n${resultLines}\n\nEnd your message by asking if they want to try a harder quiz or a different topic.`;
-    // Send as user message so AI responds with the formatted results
     try {
       let convId = currentConversation?.id;
       if (!convId) { convId = await createConversation() || undefined; }
@@ -1522,19 +1498,19 @@ export default function HomeScreen() {
     setQuizTopicVisible(true);
   };
 
-  // ── Next quiz inline — re-generates with same topic/difficulty, no topic picker ──
   const handleNextQuizInline = useCallback(async () => {
     const topic = customTopicInput.trim() || selectedQuizTopic || 'General Knowledge';
     setQuizGenerating(true);
     try {
       const questions = await generateAIQuizQuestions(topic, selectedDifficulty);
-      setInlineQuizQuestions([...questions]); // new reference forces QuizView reset
+      setInlineQuizQuestions([...questions]);
     } catch (_e) {
       setInlineQuizQuestions([...generateQuizQuestions(topic)]);
     } finally {
       setQuizGenerating(false);
     }
   }, [customTopicInput, selectedQuizTopic, selectedDifficulty]);
+
   const handleEditMessage = useCallback((messageId: string, content: string) => { setEditingMessageId(messageId); setInputText(content); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }, []);
   const handleCancelEdit = useCallback(() => { setEditingMessageId(null); setInputText(''); }, []);
   const handleMediaPicked = useCallback((media: MediaFile[]) => { if (media.length > 5) { showAlert('Limit', 'You can select a maximum of 5 files'); return; } setSelectedMedia(media); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }, [showAlert]);
@@ -1580,29 +1556,22 @@ export default function HomeScreen() {
     catch (e) { showAlert('Error', 'Failed to archive chat'); }
   }, [currentConversation, archiveConversation, createConversation, showAlert]);
 
-  // ── Like / Unlike handlers — mutually exclusive ──
   const [messageLikes, setMessageLikes] = useState<Record<string, 'like' | 'dislike' | null>>({});
 
   const handleLikeMessage = useCallback(async (messageId: string) => {
     const current = messageLikes[messageId];
     const isAlreadyLiked = current === 'like';
-
-    // Optimistic UI update
     setMessageLikes(prev => ({ ...prev, [messageId]: isAlreadyLiked ? null : 'like' }));
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-
     if (!user?.id) return;
     try {
       if (isAlreadyLiked) {
-        // Toggle off like
         await supabase.from('message_likes').delete().eq('message_id', messageId).eq('user_id', user.id).eq('like_type', 'like');
       } else {
-        // Remove any existing dislike first, then insert like
         await supabase.from('message_likes').delete().eq('message_id', messageId).eq('user_id', user.id);
         await supabase.from('message_likes').insert({ message_id: messageId, user_id: user.id, like_type: 'like' });
       }
     } catch (_e) {
-      // Revert optimistic update on error
       setMessageLikes(prev => ({ ...prev, [messageId]: current }));
     }
   }, [messageLikes, user?.id, supabase]);
@@ -1610,21 +1579,15 @@ export default function HomeScreen() {
   const handleUnlikeMessage = useCallback(async (messageId: string) => {
     const current = messageLikes[messageId];
     const isAlreadyDisliked = current === 'dislike';
-
-    // Optimistic UI update
     setMessageLikes(prev => ({ ...prev, [messageId]: isAlreadyDisliked ? null : 'dislike' }));
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-
     if (!user?.id) return;
     try {
       if (isAlreadyDisliked) {
-        // Toggle off dislike
         await supabase.from('message_likes').delete().eq('message_id', messageId).eq('user_id', user.id).eq('like_type', 'dislike');
       } else {
-        // Remove any existing like first, then insert dislike
         await supabase.from('message_likes').delete().eq('message_id', messageId).eq('user_id', user.id);
         await supabase.from('message_likes').insert({ message_id: messageId, user_id: user.id, like_type: 'dislike' });
-        // Navigate to feedback page
         setTimeout(() => {
           router.push({
             pathname: '/feedback',
@@ -1633,7 +1596,6 @@ export default function HomeScreen() {
         }, 150);
       }
     } catch (_e) {
-      // Revert optimistic update on error
       setMessageLikes(prev => ({ ...prev, [messageId]: current }));
     }
   }, [messageLikes, user?.id, supabase, router, currentConversation?.id]);
@@ -1658,7 +1620,6 @@ export default function HomeScreen() {
   const renderMessage = useCallback(({ item }: { item: any }) => {
     const isStreaming = streamingMessageId === item.id;
     const mathData = item.role === 'assistant' ? detectMathExpression(item.content) : null;
-    // Detect if the AI message contains an image URL
     const imageUrlMatch = item.role === 'assistant'
       ? (item.content || '').match(/https?:\/\/[^\s"')]+\.(?:jpg|jpeg|png|webp|gif)/i)
       : null;
@@ -1685,7 +1646,6 @@ export default function HomeScreen() {
             onOpen={() => { setCalcExpression(mathData.expression); setCalcResult(mathData.result); setCalcVisible(true); }}
           />
         ) : null}
-        {/* Save to My Images button — shown on AI messages with image URLs */}
         {item.role === 'assistant' && detectedImageUrl && user?.id ? (
           <View style={{ paddingHorizontal: 16, paddingBottom: 8 }}>
             <TouchableOpacity
@@ -1870,7 +1830,6 @@ export default function HomeScreen() {
               {/* HEADER */}
               {!hasMessages ? (
                 <View style={styles.headerEmpty}>
-                  {/* Left side: hamburger + compact upgrade pill */}
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                     <TouchableOpacity onPress={() => setSideMenuVisible(true)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                       <Ionicons name="menu" size={24} color={colors.text} />
@@ -1908,7 +1867,6 @@ export default function HomeScreen() {
                       </TouchableOpacity>
                     ) : null}
                   </View>
-                  {/* Right side: Group & Temporary chat buttons — logged-in users only */}
                   {!isGuest ? (
                     <View style={styles.headerEmptyRight}>
                       {Platform.OS === 'ios' ? (
@@ -1939,7 +1897,6 @@ export default function HomeScreen() {
                 </View>
               ) : (
                 <View style={styles.headerChat}>
-                  {/* Menu button — blur pill */}
                   {Platform.OS === 'ios' ? (
                     <TouchableOpacity style={styles.headerChatLeft} onPress={() => setSideMenuVisible(true)}>
                       <BlurView intensity={55} tint={isDark ? 'dark' : 'light'} style={{ width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)' }}>
@@ -1957,7 +1914,6 @@ export default function HomeScreen() {
                     {groupChatMode ? 'Group Chat' : (temporaryChatMode ? 'Temporary chat' : (currentConversation?.title || 'Haitian AI'))}
                   </Text>
                   <View style={styles.headerChatRight}>
-                    {/* New chat icon — blur pill */}
                     {Platform.OS === 'ios' ? (
                       <TouchableOpacity onPress={handleNewChat} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                         <BlurView intensity={55} tint={isDark ? 'dark' : 'light'} style={{ width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)' }}>
@@ -1971,7 +1927,6 @@ export default function HomeScreen() {
                         </View>
                       </TouchableOpacity>
                     )}
-                    {/* Three-dots menu — blur pill */}
                     {Platform.OS === 'ios' ? (
                       <TouchableOpacity hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} onPress={() => setConversationMenuVisible(true)}>
                         <BlurView intensity={55} tint={isDark ? 'dark' : 'light'} style={{ width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)' }}>
@@ -2116,16 +2071,16 @@ export default function HomeScreen() {
               {renderMediaPreview()}
 
               {editingMessageId ? (
-                    <View style={[{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingBottom: 6 }]}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#1A1A2A', borderRadius: 18, paddingHorizontal: 14, paddingVertical: 8, gap: 8 }}>
-                        <Ionicons name="pencil" size={16} color="#007AFF" />
-                        <Text style={{ color: '#007AFF', fontSize: 15, fontWeight: '600' }}>Edit</Text>
-                        <TouchableOpacity onPress={handleCancelEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                          <Ionicons name="close" size={16} color="rgba(255,255,255,0.5)" />
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  ) : null}
+                <View style={[{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingBottom: 6 }]}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#1A1A2A', borderRadius: 18, paddingHorizontal: 14, paddingVertical: 8, gap: 8 }}>
+                    <Ionicons name="pencil" size={16} color="#007AFF" />
+                    <Text style={{ color: '#007AFF', fontSize: 15, fontWeight: '600' }}>Edit</Text>
+                    <TouchableOpacity onPress={handleCancelEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                      <Ionicons name="close" size={16} color="rgba(255,255,255,0.5)" />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : null}
 
               {quizMode ? (
                 <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 6 }}>
@@ -2142,10 +2097,9 @@ export default function HomeScreen() {
                 </View>
               ) : null}
 
-              {/* Input Area — reference design: [+] [input...mic] [voice-orb] */}
+              {/* Input Area */}
               <View style={[styles.inputContainer, Platform.OS === 'ios' && { backgroundColor: 'transparent' }]}>
 
-                {/* + button: always outside, left of input */}
                 {!editingMessageId && !isRecording && !isProcessing ? (
                   <TouchableOpacity
                     style={styles.addBtn}
@@ -2163,7 +2117,6 @@ export default function HomeScreen() {
                   </TouchableOpacity>
                 ) : null}
 
-                {/* Main input pill */}
                 <View style={styles.inputWrapper}>
                   {isRecording ? (
                     <View style={styles.recordingContainer}>
@@ -2205,7 +2158,6 @@ export default function HomeScreen() {
                     </View>
                   )}
 
-                  {/* Mic inside pill (only when no text) */}
                   {!showSendButton && !editingMessageId ? (
                     <TouchableOpacity
                       onPress={toggleRecording}
@@ -2224,7 +2176,6 @@ export default function HomeScreen() {
                     </TouchableOpacity>
                   ) : null}
 
-                  {/* Send / Stop inside pill */}
                   {sending ? (
                     <TouchableOpacity
                       style={[styles.sendButton, { backgroundColor: isDark ? '#3A3A3C' : '#E5E5EA' }]}
@@ -2243,14 +2194,12 @@ export default function HomeScreen() {
                   ) : null}
                 </View>
 
-                {/* Cancel edit button */}
                 {editingMessageId ? (
                   <TouchableOpacity style={{ padding: 8 }} onPress={handleCancelEdit}>
                     <Ionicons name="close-circle-outline" size={24} color="#FF3B30" />
                   </TouchableOpacity>
                 ) : null}
 
-                {/* Voice orb button — right of pill, always visible */}
                 {!showSendButton && !sending && !editingMessageId ? (
                   <TouchableOpacity
                     style={[styles.voiceOrbBtn, { backgroundColor: isRecording ? '#FF3B30' : accentColor }]}
@@ -2393,8 +2342,6 @@ export default function HomeScreen() {
               </View>
             </Modal>
 
-            {/* Legacy modal — kept for Connect flow; inline view handles actual quiz display */}
-
             {/* Quiz Topic Picker Sheet */}
             <Modal visible={quizTopicVisible} transparent animationType="slide" onRequestClose={() => setQuizTopicVisible(false)}>
               <View style={{ flex: 1, justifyContent: 'flex-end' }}>
@@ -2412,7 +2359,6 @@ export default function HomeScreen() {
                       </View>
                     ) : (
                       <>
-                        {/* Topic chips */}
                         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'center', marginBottom: 16 }}>
                           {[
                             { label: '\uD83C\uDF0D General Knowledge', value: 'General Knowledge' },
@@ -2442,7 +2388,6 @@ export default function HomeScreen() {
                           ))}
                         </View>
 
-                        {/* Custom topic input */}
                         <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, fontWeight: '600', marginBottom: 8 }}>Custom topic...</Text>
                         <TextInput
                           style={{
@@ -2463,7 +2408,6 @@ export default function HomeScreen() {
                           returnKeyType="done"
                         />
 
-                        {/* Difficulty picker */}
                         <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, fontWeight: '600', marginBottom: 10 }}>Difficulty</Text>
                         <View style={{ flexDirection: 'row', gap: 8, marginBottom: 20 }}>
                           {[
@@ -2494,7 +2438,6 @@ export default function HomeScreen() {
                           })}
                         </View>
 
-                        {/* Start button */}
                         <TouchableOpacity
                           style={{
                             backgroundColor: (selectedQuizTopic || customTopicInput.trim()) ? '#5AC8FA' : 'rgba(255,255,255,0.1)',
@@ -2561,7 +2504,7 @@ export default function HomeScreen() {
               }}
             />
 
-            {/* Guest mode: 35-message limit modal (Photo 8 style) */}
+            {/* Guest mode: 35-message limit modal */}
             <Modal visible={guestLoginModal} transparent animationType="fade" onRequestClose={() => setGuestLoginModal(false)}>
               <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}>
                 <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
@@ -2594,7 +2537,7 @@ export default function HomeScreen() {
               </View>
             </Modal>
 
-            {/* Guest mode: feature lock modal (Photo 8 style) */}
+            {/* Guest mode: feature lock modal */}
             <Modal visible={guestLockModal} transparent animationType="fade" onRequestClose={() => setGuestLockModal(false)}>
               <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}>
                 <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
@@ -2627,7 +2570,7 @@ export default function HomeScreen() {
               </View>
             </Modal>
 
-            {/* Image analyzing overlay — shown when navigating from images page */}
+            {/* Image analyzing overlay */}
             {imageAnalyzingOverlay ? (
               <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.78)', zIndex: 9998, alignItems: 'center', justifyContent: 'center' }}>
                 <BlurView intensity={70} tint="dark" style={StyleSheet.absoluteFill} />
@@ -2682,4 +2625,3 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-
