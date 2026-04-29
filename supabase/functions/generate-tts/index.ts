@@ -456,20 +456,21 @@ Deno.serve(async (req) => {
     console.log(`[TTS] Request: voice=${finalVoice}, speed=${finalSpeed}, len=${finalText.length}, lang=${detectedLanguage || 'auto'}`);
     console.log(`[TTS] Available keys: OpenAI=${!!CONFIG.OPENAI_API_KEY}, ElevenLabs=${!!CONFIG.ELEVENLABS_API_KEY}, OnSpace=${!!CONFIG.ONSPACE_AI_API_KEY}`);
 
-    // ── Provider priority: ElevenLabs → OpenAI → OnSpace AI → Device fallback ──
-    // ElevenLabs is FIRST because it supports real custom voice IDs selected by the user.
-    // OpenAI and OnSpace AI are used as fallbacks and map custom IDs to 'nova'.
+    // ── Provider priority: OpenAI → ElevenLabs → OnSpace AI → Device fallback ──
+    // OpenAI is FIRST — most reliable and never returns 401 with a valid key.
+    // ElevenLabs is second — supports custom voice IDs but may return 401 on free-tier accounts.
+    // OnSpace AI is the last server-side fallback before device TTS.
     let audioBuffer: ArrayBuffer | null = null;
     let usedProvider = '';
 
-    // 1. ElevenLabs — high quality, supports every custom voice ID from voice-settings
-    audioBuffer = await tryElevenLabsTTS(finalText, finalVoice, detectedLanguage);
-    if (audioBuffer) usedProvider = 'elevenlabs';
+    // 1. OpenAI — reliable, great multilingual support
+    audioBuffer = await tryOpenAITTS(finalText, finalVoice, finalSpeed, detectedLanguage);
+    if (audioBuffer) usedProvider = 'openai';
 
-    // 2. OpenAI — great multilingual support, reliable fallback
+    // 2. ElevenLabs — high quality, supports custom voice IDs; may return 401 on free tier
     if (!audioBuffer) {
-      audioBuffer = await tryOpenAITTS(finalText, finalVoice, finalSpeed, detectedLanguage);
-      if (audioBuffer) usedProvider = 'openai';
+      audioBuffer = await tryElevenLabsTTS(finalText, finalVoice, detectedLanguage);
+      if (audioBuffer) usedProvider = 'elevenlabs';
     }
 
     // 3. OnSpace AI /v1/audio/speech
