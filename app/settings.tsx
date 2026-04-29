@@ -273,6 +273,7 @@ export default function SettingsScreen() {
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [photoPickerVisible, setPhotoPickerVisible] = useState(false);
   const [accentPickerVisible, setAccentPickerVisible] = useState(false);
+  const [appearancePickerVisible, setAppearancePickerVisible] = useState(false);
 
   const currentVersion = Constants.expoConfig?.version || '1.0.0';
   const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'update' | 'no-update' | 'version'>('idle');
@@ -705,11 +706,6 @@ export default function SettingsScreen() {
         <SectionLabel text="Account" />
         <Card>
           <Row icon="mail-outline" label="Email" value={(user?.email?.length ?? 0) > 22 ? (user?.email?.slice(0, 20) + '...') : (user?.email || '')} />
-          <Row icon="star-outline" label="Subscription" value={tierLabel()} onPress={() => router.push('/subscription')} />
-          {!isPaidPlan && (
-            <Row icon="arrow-up-circle-outline" label="Upgrade to Plus" onPress={() => router.push('/subscription')} />
-          )}
-          <Row icon="refresh-outline" label="Restore purchases" onPress={() => router.push('/subscription')} />
           <Row icon="receipt-outline" label="Orders" onPress={() => router.push('/orders')} />
           <Row icon="person-circle-outline" label="Personalization" onPress={() => router.push('/personalization')} />
           <Row icon="notifications-outline" label="Notifications" onPress={() => router.push('/notifications')} />
@@ -726,7 +722,7 @@ export default function SettingsScreen() {
         <SectionLabel text="App" />
         <Card>
           <Row icon="globe-outline" label="App language" value={settings.appLanguage || 'English'} onPress={() => router.push('/languages')} />
-          <Row icon="moon-outline" label="Appearance" value={settings.appearance || 'System'} onPress={() => router.push('/appearance')} />
+          <Row icon="moon-outline" label="Appearance" value={settings.appearance || 'System'} onPress={() => setAppearancePickerVisible(true)} />
           <AccentColorRow />
           <SwitchRow icon="phone-portrait-outline" label="Haptic feedback" value={settings.hapticFeedback} onChange={v => updateSetting('hapticFeedback', v)} />
           <SwitchRow icon="text-outline" label="Correct spelling automatically" value={settings.autoSpelling} onChange={v => updateSetting('autoSpelling', v)} isLast />
@@ -796,23 +792,7 @@ export default function SettingsScreen() {
             ═══════════════════════════════════════════════════════════════ */}
         <SectionLabel text="About" />
         <Card>
-          <Row icon="bug-outline" label="Report bug" onPress={() => router.push('/bugreport')} />
-          <Row icon="help-circle-outline" label="Help Center" onPress={() => router.push('/help-center')} />
-          <Row icon="document-text-outline" label="Terms of Use" onPress={() => router.push('https://dawinix.com')} />
-          <Row icon="shield-checkmark-outline" label="Privacy Policy" onPress={() => router.push('https://dawinix.com')} />
-          <Row
-            icon="cloud-download-outline"
-            label="Check for updates"
-            isLast
-            onPress={handleUpdatePress}
-            rightEl={
-              updateStatus === 'checking' ? (
-                <ActivityIndicator size="small" color={secondaryText} />
-              ) : (
-                <Text style={{ fontSize: 15, color: secondaryText }}>{getUpdateLabel()}</Text>
-              )
-            }
-          />
+          <Row icon="bug-outline" label="Report bug" onPress={() => router.push('/bugreport')} isLast />
         </Card>
 
         {/* ═══════════════════════════════════════════════════════════════
@@ -904,6 +884,47 @@ export default function SettingsScreen() {
       </Modal>
 
       {/* ═══════════════════════════════════════════════════════════════
+          APPEARANCE PICKER MODAL
+          ═══════════════════════════════════════════════════════════════ */}
+      <Modal visible={appearancePickerVisible} transparent animationType="fade" onRequestClose={() => setAppearancePickerVisible(false)}>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 40, backgroundColor: isDark ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.3)' }}>
+          <TouchableOpacity style={{ flex: 1, width: '100%' }} activeOpacity={1} onPress={() => setAppearancePickerVisible(false)} />
+          <View style={{ width: '100%', maxWidth: 320, borderRadius: 20, overflow: 'hidden', backgroundColor: cardBg }}>
+            <View style={{ padding: 20, paddingBottom: 8 }}>
+              <Text style={{ fontSize: 17, fontWeight: '600', color: primaryText, textAlign: 'center', marginBottom: 16 }}>Appearance</Text>
+              {(['System', 'Light', 'Dark'] as const).map((option, i, arr) => {
+                const icons: Record<string, string> = { System: 'phone-portrait-outline', Light: 'sunny-outline', Dark: 'moon-outline' };
+                const isSelected = (settings.appearance || 'System') === option;
+                return (
+                  <TouchableOpacity
+                    key={option}
+                    onPress={() => { updateSetting('appearance', option); setAppearancePickerVisible(false); }}
+                    activeOpacity={0.7}
+                    style={{
+                      flexDirection: 'row', alignItems: 'center', paddingVertical: 14,
+                      borderBottomWidth: i < arr.length - 1 ? StyleSheet.hairlineWidth : 0,
+                      borderBottomColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+                    }}
+                  >
+                    <Ionicons name={icons[option] as any} size={20} color={isSelected ? '#10A37F' : secondaryText} style={{ marginRight: 14 }} />
+                    <Text style={{ fontSize: 16, color: isSelected ? '#10A37F' : primaryText, flex: 1, fontWeight: isSelected ? '600' : '400' }}>{option}</Text>
+                    {isSelected ? <Ionicons name="checkmark" size={20} color="#10A37F" /> : null}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            <TouchableOpacity
+              style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)', paddingVertical: 14, alignItems: 'center' }}
+              onPress={() => setAppearancePickerVisible(false)}
+            >
+              <Text style={{ fontSize: 16, fontWeight: '600', color: secondaryText }}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+          <TouchableOpacity style={{ flex: 1, width: '100%' }} activeOpacity={1} onPress={() => setAppearancePickerVisible(false)} />
+        </View>
+      </Modal>
+
+      {/* ═══════════════════════════════════════════════════════════════
           ACCENT COLOR PICKER MODAL
           ═══════════════════════════════════════════════════════════════ */}
       <Modal visible={accentPickerVisible} transparent animationType="fade" onRequestClose={() => setAccentPickerVisible(false)}>
@@ -949,4 +970,4 @@ export default function SettingsScreen() {
     </View>
   );
 }
-fix when select appearance iots show to select light dark and system and remove arrow icon deye upgrade section,subscription restore purchase and all about section.
+
