@@ -1126,7 +1126,7 @@ export const MessageItem = memo(function MessageItem({
             </TouchableOpacity>
           </View>
           <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20, paddingBottom: 60 }} keyboardShouldPersistTaps="always">
-            <Text selectable selectionColor={`${colors.primary}55`} style={{ color: colors.text, fontSize: 16, lineHeight: 26 }}>
+            <Text selectable={true} selectionColor={`${colors.primary}55`} style={{ color: colors.text, fontSize: 16, lineHeight: 26 }}>
               {message.content}
             </Text>
           </ScrollView>

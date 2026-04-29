@@ -59,12 +59,6 @@ export function ConversationMenuModal({
 
   return (
     <Modal visible={visible} transparent animationType="none" statusBarTranslucent onRequestClose={onClose}>
-      {/* Blurred full-screen backdrop */}
-      <BlurView
-        intensity={Platform.OS === 'ios' ? 30 : 50}
-        tint="dark"
-        style={StyleSheet.absoluteFill}
-      />
       <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose}>
         {/* Anchored menu — top-right below the header ... button */}
         <Animated.View
@@ -122,7 +116,7 @@ const styles = StyleSheet.create({
   menuWrap: {
     position: 'absolute',
     width: 252,
-    borderRadius: 16,
+    borderRadius: 20,
     overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },
@@ -130,9 +124,9 @@ const styles = StyleSheet.create({
     shadowRadius: 24,
     elevation: 24,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderColor: 'rgba(255,255,255,0.12)',
   },
-  blurBox: { borderRadius: 16, overflow: 'hidden' },
+  blurBox: { borderRadius: 20, overflow: 'hidden' },
   titleRow: {
     paddingHorizontal: 16,
     paddingTop: 12,
@@ -160,5 +154,3 @@ const styles = StyleSheet.create({
   menuLabel: { fontSize: 16, color: 'rgba(255,255,255,0.92)', fontWeight: '400' },
   destructiveLabel: { color: '#FF453A' },
 });
-
-please ai don’t skip make change in components/MessageItem, add selectable={true} to the AI message Text component so users can long-press to select and copy specific text spans natively, without opening any modal Update ConversationMenuModal to remove the full-screen BlurView backdrop so the chat background stays clear, and only the menu card itself has a blurred background with rounded borders (borderRadius 20+).
