@@ -439,3 +439,4 @@ const styles = StyleSheet.create({
   translateActionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 14, paddingVertical: 13, borderWidth: 1 },
   translateActionText: { color: 'rgba(255,255,255,0.85)', fontSize: 15, fontWeight: '600' },
 });
+in this page add a 'Select Text' button in the Export section that opens a full-screen modal with the message content rendered as a selectable Text component (selectable={true}, selectionColor prop), along with Copy All and Share buttons at the bottom — so users can highlight and copy specific spans.
