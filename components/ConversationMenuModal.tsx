@@ -160,3 +160,5 @@ const styles = StyleSheet.create({
   menuLabel: { fontSize: 16, color: 'rgba(255,255,255,0.92)', fontWeight: '400' },
   destructiveLabel: { color: '#FF453A' },
 });
+
+please ai don’t skip make change in components/MessageItem, add selectable={true} to the AI message Text component so users can long-press to select and copy specific text spans natively, without opening any modal Update ConversationMenuModal to remove the full-screen BlurView backdrop so the chat background stays clear, and only the menu card itself has a blurred background with rounded borders (borderRadius 20+).
