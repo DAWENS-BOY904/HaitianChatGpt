@@ -2625,11 +2625,3 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-fix this add a real tts voice from elevenlabs 
-{
-  "eventMessage": "[TTS] ElevenLabs response: 401\n",
-  "functionId": "generate-tts",
-  "id": "f40a18f4-d30b-4c25-9818-92a916586484",
-  "logLevel": "INFO",
-  "timestamp": 1777477689
-}.
