@@ -1,4 +1,4 @@
-fix button yo in blur mode and pa mete animation but fel pi model import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   View, 
   Text, 
