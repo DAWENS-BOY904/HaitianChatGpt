@@ -362,7 +362,7 @@ function GroupStartModal({ visible, user, profilePhotoUrl, onClose, onStartGroup
           <View style={grpStartStyles.closeXCircle}><Ionicons name="close" size={18} color="#FFF" /></View>
         </TouchableOpacity>
         <View style={grpStartStyles.center}>
-          <Text style={grpStartStyles.title}>Use Haitian AI together</Text>
+          <Text style={grpStartStyles.title}>Use Dawinix together</Text>
           <Text style={grpStartStyles.subtitle}>Add people to your chats to plan, share ideas, and get creative.</Text>
           <TouchableOpacity style={grpStartStyles.startBtn} onPress={() => { onClose(); onStartGroup(); }}>
             <Text style={grpStartStyles.startBtnText}>Start group chat</Text>
@@ -418,7 +418,7 @@ function CustomizeAIModal({ visible, onClose, onSave, initialInstructions, initi
         <View style={customStyles.sheet}>
           <BlurView intensity={90} tint="dark" style={customStyles.sheetBlur}>
             <View style={customStyles.handle} />
-            <Text style={customStyles.title}>Customize Haitian AI</Text>
+            <Text style={customStyles.title}>Customize Dawinix</Text>
             <Text style={customStyles.sectionLabel}>Custom instructions</Text>
             <TextInput style={customStyles.textArea} value={instructions} onChangeText={setInstructions} placeholder="Get tailored responses by adding details about your group." placeholderTextColor="rgba(255,255,255,0.35)" multiline numberOfLines={4} />
             <View style={customStyles.toggleRow}>
@@ -428,7 +428,7 @@ function CustomizeAIModal({ visible, onClose, onSave, initialInstructions, initi
               </View>
               <Switch value={respondAuto} onValueChange={setRespondAuto} trackColor={{ true: '#34C759', false: 'rgba(255,255,255,0.2)' }} thumbColor="#FFF" />
             </View>
-            <Text style={customStyles.note}>Group chat custom instructions are separate from your personal Haitian AI instructions.</Text>
+            <Text style={customStyles.note}>Group chat custom instructions are separate from your personal Dawinix instructions.</Text>
             <TouchableOpacity style={customStyles.saveBtn} onPress={() => { onSave(instructions, respondAuto); onClose(); }}>
               <Text style={customStyles.saveBtnText}>Save</Text>
             </TouchableOpacity>
@@ -456,7 +456,7 @@ const customStyles = StyleSheet.create({
 
 function InviteLinkModal({ visible, onClose, isPlus }: { visible: boolean; onClose: () => void; isPlus: boolean }) {
   const link = 'https://dawinix.com/invite';
-  const handleShare = async () => { try { await Share.share({ message: `Join my Haitian AI group chat!\n\n${link}`, url: link }); } catch (e) {} onClose(); };
+  const handleShare = async () => { try { await Share.share({ message: `Join my Dawinix group chat!\n\n${link}`, url: link }); } catch (e) {} onClose(); };
   const handleCopy = () => { Clipboard.setString(link); onClose(); };
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -486,7 +486,7 @@ function TemporaryChatBanner() {
     <View style={tmpStyles.banner}>
       <Ionicons name="time-outline" size={18} color="rgba(255,255,255,0.6)" style={{ marginBottom: 8 }} />
       <Text style={tmpStyles.title}>Temporary chat</Text>
-      <Text style={tmpStyles.body}>This chat will not appear in history, use or update Haitian AI memory, or be used to train our models.{'\n\n'}For safety purposes, we may keep a copy of this chat for up to 30 days.</Text>
+      <Text style={tmpStyles.body}>This chat will not appear in history, use or update Dawinix memory, or be used to train our models.{'\n\n'}For safety purposes, we may keep a copy of this chat for up to 30 days.</Text>
     </View>
   );
 }
@@ -544,7 +544,7 @@ function NotificationPermissionModal({ visible, onAllow, onSkip }: { visible: bo
           <BlurView intensity={95} tint="dark" style={notifStyles.blurCard}>
             <View style={notifStyles.iconWrap}><Ionicons name="notifications" size={32} color="#FFFFFF" /></View>
             <Text style={notifStyles.title}>Stay informed</Text>
-            <Text style={notifStyles.body}>Haitian AI can notify you when your AI response is ready.</Text>
+            <Text style={notifStyles.body}>Dawinix can notify you when your AI response is ready.</Text>
             <View style={notifStyles.benefitRow}><Ionicons name="checkmark-circle" size={16} color="#34C759" /><Text style={notifStyles.benefitText}>Know when AI finishes responding</Text></View>
             <View style={notifStyles.benefitRow}><Ionicons name="checkmark-circle" size={16} color="#34C759" /><Text style={notifStyles.benefitText}>Get alerts for long research tasks</Text></View>
             <View style={notifStyles.benefitRow}><Ionicons name="checkmark-circle" size={16} color="#34C759" /><Text style={notifStyles.benefitText}>No spam — only task completions</Text></View>
@@ -806,7 +806,7 @@ export default function HomeScreen() {
         const lastAI = [...msgs].reverse().find(m => m.role === 'assistant');
         if (lastAI) {
           const preview = lastAI.content.replace(/[#*`]/g, '').slice(0, 60);
-          const ttl = currentConversation?.title || 'Haitian AI';
+          const ttl = currentConversation?.title || 'Dawinix';
           sendLocalNotification(ttl, preview + (lastAI.content.length > 60 ? '...' : ''));
         }
       }
@@ -1911,7 +1911,7 @@ export default function HomeScreen() {
                     </TouchableOpacity>
                   )}
                   <Text style={styles.headerChatTitle} numberOfLines={1}>
-                    {groupChatMode ? 'Group Chat' : (temporaryChatMode ? 'Temporary chat' : (currentConversation?.title || 'Haitian AI'))}
+                    {groupChatMode ? 'Group Chat' : (temporaryChatMode ? 'Temporary chat' : (currentConversation?.title || 'Dawinix'))}
                   </Text>
                   <View style={styles.headerChatRight}>
                     {Platform.OS === 'ios' ? (
@@ -1968,10 +1968,10 @@ export default function HomeScreen() {
                         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 }}>
                           <Text style={{ color: colors.textSecondary, fontSize: 14, textAlign: 'center', marginBottom: 20 }}>
                             <Text style={{ color: colors.text, fontWeight: '700' }}>{userName}</Text>
-                            {' created the group chat.\nYour personal Haitian AI memory is never used in group chats.'}
+                            {' created the group chat.\nYour personal Dawinix memory is never used in group chats.'}
                           </Text>
                           <TouchableOpacity style={styles.groupActionBtn} onPress={() => setCustomizeAIVisible(true)}>
-                            <Text style={styles.groupActionBtnText}>Customize Haitian AI</Text>
+                            <Text style={styles.groupActionBtnText}>Customize Dawinix</Text>
                           </TouchableOpacity>
                           <View style={{ height: 12 }} />
                           <TouchableOpacity style={styles.groupActionBtn} onPress={() => setInviteLinkVisible(true)}>
@@ -2016,7 +2016,7 @@ export default function HomeScreen() {
                           </Text>
                           <View style={{ flexDirection: 'row', gap: 10 }}>
                             <TouchableOpacity style={styles.groupActionBtn} onPress={() => setCustomizeAIVisible(true)}>
-                              <Text style={styles.groupActionBtnText}>Customize Haitian AI</Text>
+                              <Text style={styles.groupActionBtnText}>Customize Dawinix</Text>
                             </TouchableOpacity>
                             <TouchableOpacity style={styles.groupActionBtn} onPress={() => setInviteLinkVisible(true)}>
                               <Text style={styles.groupActionBtnText}>Invite with link</Text>
@@ -2264,9 +2264,9 @@ export default function HomeScreen() {
               }}
             />
 
-            <ConversationMenuModal visible={conversationMenuVisible} onClose={() => setConversationMenuVisible(false)} onShare={handleShareConversation} onRename={() => { setConversationMenuVisible(false); setRenameModalVisible(true); }} onReport={() => router.push('/bugreport')} onArchive={() => { setConversationMenuVisible(false); setArchiveConfirmVisible(true); }} onDelete={() => { setConversationMenuVisible(false); handleDeleteConversation(); }} onAddPeople={handleAddPeople} conversationTitle={currentConversation?.title} />
+            <ConversationMenuModal visible={conversationMenuVisible} onClose={() => setConversationMenuVisible(false)} onShare={handleShareConversation} onRename={() => { setConversationMenuVisible(false); setRenameModalVisible(true); }} onReport={() => router.push('/bugreport')} onArchive={() => { setConversationMenuVisible(false); setArchiveConfirmVisible(true); }} onDelete={() => { setConversationMenuVisible(false); handleDeleteConversation(); }} onAddPeople={handleAddPeople} conversationTitle={currentConversation?.title} topOffset={insets.top + 58} />
 
-            <SideMenu visible={sideMenuVisible} onClose={() => setSideMenuVisible(false)} currentProject={{ name: 'Haitian AI Chat' }} currentAIMode={currentAIMode} onSelectAIMode={handleSelectAIMode} onNewChat={handleNewChat} onChatHistory={() => { setSideMenuVisible(false); setChatHistoryVisible(true); }} onSettings={() => { setSideMenuVisible(false); router.push('/settings'); }} onProfile={() => { setSideMenuVisible(false); router.push('/profile'); }} userCoins={coins} isUnlimited={isUnlimited} isAdmin={isAdmin} isGuest={isGuest} />
+            <SideMenu visible={sideMenuVisible} onClose={() => setSideMenuVisible(false)} currentProject={{ name: 'Dawinix Chat' }} currentAIMode={currentAIMode} onSelectAIMode={handleSelectAIMode} onNewChat={handleNewChat} onChatHistory={() => { setSideMenuVisible(false); setChatHistoryVisible(true); }} onSettings={() => { setSideMenuVisible(false); router.push('/settings'); }} onProfile={() => { setSideMenuVisible(false); router.push('/profile'); }} userCoins={coins} isUnlimited={isUnlimited} isAdmin={isAdmin} isGuest={isGuest} />
 
             <ChatHistoryModal visible={chatHistoryVisible} onClose={() => setChatHistoryVisible(false)} onSelectChat={() => { setChatHistoryVisible(false); }} onNewChat={() => { handleNewChat(); setChatHistoryVisible(false); }} currentChatId={currentConversation?.id} />
 
@@ -2287,7 +2287,7 @@ export default function HomeScreen() {
                         <Ionicons name="albums-outline" size={26} color="#5AC8FA" />
                       </View>
                     </View>
-                    <Text style={{ color: '#FFF', fontSize: 17, fontWeight: '700', textAlign: 'center', marginBottom: 8 }}>Haitian AI wants to connect to Quizzes</Text>
+                    <Text style={{ color: '#FFF', fontSize: 17, fontWeight: '700', textAlign: 'center', marginBottom: 8 }}>Dawinix wants to connect to Quizzes</Text>
                     <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14, textAlign: 'center', marginBottom: 28 }}>Create quizzes to test your knowledge</Text>
                     <View style={{ flexDirection: 'row', gap: 12, width: '100%' }}>
                       <TouchableOpacity style={{ flex: 1, borderRadius: 50, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)', paddingVertical: 14, alignItems: 'center' }}
@@ -2322,7 +2322,7 @@ export default function HomeScreen() {
                   <View style={{ backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 14, padding: 16, marginBottom: 20 }}>
                     {[
                       { bold: 'Built by Dawinix', text: ' This app is developed and maintained by Dawinix.' },
-                      { bold: 'Works automatically', text: ' Haitian AI may use this app in chats when it is helpful.' },
+                      { bold: 'Works automatically', text: ' Dawinix may use this app in chats when it is helpful.' },
                       { bold: 'Manage anytime', text: ' Review or turn off this app in Settings, under Apps.' },
                     ].map((item, i) => (
                       <Text key={i} style={{ color: 'rgba(255,255,255,0.7)', fontSize: 14, lineHeight: 22, marginBottom: 8 }}>
@@ -2587,7 +2587,7 @@ export default function HomeScreen() {
                 <BlurView intensity={80} tint={isDark ? 'dark' : 'light'} style={styles.blurView}>
                   <View style={styles.blurContent}>
                     <Ionicons name="lock-closed" size={40} color="rgba(255,255,255,0.8)" />
-                    <Text style={styles.blurText}>Haitian AI Chat</Text>
+                    <Text style={styles.blurText}>Dawinix Chat</Text>
                     <TouchableOpacity style={{ marginTop: Spacing.lg, backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md, borderRadius: BorderRadius.lg }} onPress={() => { setShowBlurOverlay(false); setIsAppActive(true); }}>
                       <Text style={{ color: 'white', fontWeight: '600' }}>Unlock</Text>
                     </TouchableOpacity>
@@ -2625,4 +2625,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-in home page top right ... button when click the modal must have dark/light blur system and when click its the kodal must not open nn mitan page li dwe sou ... yo pou modal la open in blur mode like this:https://files.catbox.moe/7jhs8f.jpeg please fix all dont skip remove all haitian chatgpt replace by Dawinix only.
+
