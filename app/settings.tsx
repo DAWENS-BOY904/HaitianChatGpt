@@ -339,23 +339,29 @@ const ACCENT_COLORS = [
   '#FF6B00', // orange
 ];
 
-function AccentColorRow({ isDark, dividerColor, iconColor, primaryText, current, onChange }: {
+function AccentColorRow({ isDark, dividerColor, iconColor, primaryText, current, onOpen }: {
   isDark: boolean;
   dividerColor: string;
   iconColor: string;
   primaryText: string;
-  secondaryText: string;
   current: string;
-  onChange: (color: string) => void;
+  onOpen: () => void;
 }) {
   return (
-    <View style={{
-      paddingVertical: 13,
-      paddingHorizontal: 16,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: dividerColor,
-    }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+    <TouchableOpacity
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingVertical: 13,
+        paddingHorizontal: 16,
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        borderBottomColor: dividerColor,
+      }}
+      onPress={onOpen}
+      activeOpacity={0.6}
+    >
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
         <View style={{
           width: 30, height: 30, borderRadius: 8,
           backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.07)',
@@ -364,37 +370,17 @@ function AccentColorRow({ isDark, dividerColor, iconColor, primaryText, current,
           <Ionicons name="color-palette-outline" size={17} color={iconColor} />
         </View>
         <Text style={{ fontSize: 16, color: primaryText, fontWeight: '400', flex: 1 }}>Accent color</Text>
-        <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: current, borderWidth: 2, borderColor: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.15)' }} />
       </View>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, paddingLeft: 42 }}>
-        {ACCENT_COLORS.map(color => {
-          const isSelected = current === color;
-          return (
-            <TouchableOpacity
-              key={color}
-              onPress={() => onChange(color)}
-              activeOpacity={0.75}
-              style={{
-                width: 32, height: 32, borderRadius: 16,
-                backgroundColor: color,
-                alignItems: 'center', justifyContent: 'center',
-                borderWidth: isSelected ? 3 : 2,
-                borderColor: isSelected
-                  ? (isDark ? '#FFF' : '#000')
-                  : 'transparent',
-                shadowColor: color,
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: isSelected ? 0.6 : 0.3,
-                shadowRadius: 4,
-                elevation: isSelected ? 6 : 2,
-              }}
-            >
-              {isSelected ? <Ionicons name="checkmark" size={16} color="#FFF" /> : null}
-            </TouchableOpacity>
-          );
-        })}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <View style={{
+          width: 20, height: 20, borderRadius: 10,
+          backgroundColor: current,
+          borderWidth: 2,
+          borderColor: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.15)',
+        }} />
+        <Ionicons name="chevron-forward" size={17} color={isDark ? 'rgba(200,200,215,0.72)' : 'rgba(50,50,75,0.62)'} />
       </View>
-    </View>
+    </TouchableOpacity>
   );
 }
 
@@ -424,6 +410,7 @@ export default function SettingsScreen() {
   const [usernameLastChanged, setUsernameLastChanged] = useState<string | null>(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [photoPickerVisible, setPhotoPickerVisible] = useState(false);
+  const [accentPickerVisible, setAccentPickerVisible] = useState(false);
 
   const currentVersion = Constants.expoConfig?.version || '1.0.0';
   const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'update' | 'no-update' | 'version'>('idle');
@@ -1006,9 +993,8 @@ export default function SettingsScreen() {
               dividerColor={dividerColor}
               iconColor={iconColor}
               primaryText={primaryText}
-              secondaryText={secondaryText}
               current={settings.accentColor || '#10A37F'}
-              onChange={v => updateSetting('accentColor', v)}
+              onOpen={() => setAccentPickerVisible(true)}
             />
             <SwitchRow icon="phone-portrait-outline" label="Haptic feedback"
               value={settings.hapticFeedback} onChange={v => updateSetting('hapticFeedback', v)} />
@@ -1258,6 +1244,103 @@ export default function SettingsScreen() {
               )}
             </TouchableOpacity>
           </View>
+        </View>
+      </Modal>
+
+      {/* ═══════════════════════════════════════════════════════════════
+          ACCENT COLOR PICKER MINI MODAL — Context-menu style palette
+          ═══════════════════════════════════════════════════════════════ */}
+      <Modal visible={accentPickerVisible} transparent animationType="fade" onRequestClose={() => setAccentPickerVisible(false)}>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 40 }}>
+          <BlurView intensity={isDark ? 55 : 40} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? 'rgba(0,0,0,0.45)' : 'rgba(0,0,0,0.22)' }]} />
+          <TouchableOpacity style={{ flex: 1, width: '100%' }} activeOpacity={1} onPress={() => setAccentPickerVisible(false)} />
+          <View style={{
+            width: '100%',
+            maxWidth: 320,
+            borderRadius: 20,
+            overflow: 'hidden',
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 12 },
+            shadowOpacity: 0.35,
+            shadowRadius: 28,
+            elevation: 24,
+          }}>
+            {Platform.OS === 'ios' ? (
+              <BlurView intensity={isDark ? 90 : 80} tint={isDark ? 'dark' : 'light'} style={{ borderRadius: 20, overflow: 'hidden' }}>
+                <View style={{ padding: 20, paddingBottom: insets.bottom > 0 ? insets.bottom + 12 : 20 }}>
+                  <Text style={{ fontSize: 17, fontWeight: '600', color: primaryText, textAlign: 'center', marginBottom: 16 }}>
+                    Choose Accent Color
+                  </Text>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 14 }}>
+                    {ACCENT_COLORS.map(color => {
+                      const isSelected = (settings.accentColor || '#10A37F') === color;
+                      return (
+                        <TouchableOpacity
+                          key={color}
+                          onPress={() => { updateSetting('accentColor', color); setAccentPickerVisible(false); }}
+                          activeOpacity={0.75}
+                          style={{
+                            width: 44, height: 44, borderRadius: 22,
+                            backgroundColor: color,
+                            alignItems: 'center', justifyContent: 'center',
+                            borderWidth: isSelected ? 3.5 : 2.5,
+                            borderColor: isSelected
+                              ? (isDark ? '#FFF' : '#000')
+                              : 'transparent',
+                            shadowColor: color,
+                            shadowOffset: { width: 0, height: 3 },
+                            shadowOpacity: isSelected ? 0.5 : 0.25,
+                            shadowRadius: 6,
+                            elevation: isSelected ? 8 : 3,
+                          }}
+                        >
+                          {isSelected ? <Ionicons name="checkmark" size={20} color="#FFF" /> : null}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+              </BlurView>
+            ) : (
+              <View style={{ backgroundColor: isDark ? 'rgba(36,36,52,0.96)' : 'rgba(255,255,255,0.96)', borderRadius: 20, overflow: 'hidden' }}>
+                <View style={{ padding: 20, paddingBottom: insets.bottom > 0 ? insets.bottom + 12 : 20 }}>
+                  <Text style={{ fontSize: 17, fontWeight: '600', color: primaryText, textAlign: 'center', marginBottom: 16 }}>
+                    Choose Accent Color
+                  </Text>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 14 }}>
+                    {ACCENT_COLORS.map(color => {
+                      const isSelected = (settings.accentColor || '#10A37F') === color;
+                      return (
+                        <TouchableOpacity
+                          key={color}
+                          onPress={() => { updateSetting('accentColor', color); setAccentPickerVisible(false); }}
+                          activeOpacity={0.75}
+                          style={{
+                            width: 44, height: 44, borderRadius: 22,
+                            backgroundColor: color,
+                            alignItems: 'center', justifyContent: 'center',
+                            borderWidth: isSelected ? 3.5 : 2.5,
+                            borderColor: isSelected
+                              ? (isDark ? '#FFF' : '#000')
+                              : 'transparent',
+                            shadowColor: color,
+                            shadowOffset: { width: 0, height: 3 },
+                            shadowOpacity: isSelected ? 0.5 : 0.25,
+                            shadowRadius: 6,
+                            elevation: isSelected ? 8 : 3,
+                          }}
+                        >
+                          {isSelected ? <Ionicons name="checkmark" size={20} color="#FFF" /> : null}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+              </View>
+            )}
+          </View>
+          <TouchableOpacity style={{ flex: 1, width: '100%' }} activeOpacity={1} onPress={() => setAccentPickerVisible(false)} />
         </View>
       </Modal>
     </View>
