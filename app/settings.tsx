@@ -949,3 +949,4 @@ export default function SettingsScreen() {
     </View>
   );
 }
+fix when select appearance iots show to select light dark and system and remove arrow icon deye upgrade section,subscription restore purchase and all about section.
