@@ -1,4 +1,4 @@
-fix this no zip allowed please import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -649,4 +649,3 @@ const fpStyles = StyleSheet.create({
   sendBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: THEME.accent, borderRadius: 10, paddingVertical: 10, marginTop: 8 },
   sendBtnText: { fontSize: 14, fontWeight: '700', color: '#FFF' },
 });
-
