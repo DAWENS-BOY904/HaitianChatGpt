@@ -30,6 +30,49 @@ interface UploadedFile {
   created_at: string;
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// BLOCKED FILE TYPES - these are NOT allowed to upload
+// ═══════════════════════════════════════════════════════════════════════
+const BLOCKED_EXTENSIONS = [
+  // Archives
+  'zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'xz', 'lz', 'lzma', 'zst',
+  'cab', 'jar', 'war', 'ear',
+  // Executables
+  'exe', 'msi', 'bat', 'cmd', 'com', 'scr', 'app', 'out', 'bin', 'elf',
+  'so', 'dll', 'dylib', 'deb', 'rpm', 'pkg', 'dmg',
+  // Scripts
+  'sh', 'bash', 'zsh', 'ps1', 'vbs', 'js', 'jar',
+  // Disk images
+  'iso', 'img', 'vmdk', 'vhd', 'qcow2',
+  // Other dangerous
+  'apk', 'ipa', 'xap', 'sis', 'sisx',
+];
+
+const BLOCKED_MIME_TYPES = [
+  'application/x-msdownload',
+  'application/x-executable',
+  'application/x-dosexec',
+  'application/x-sh',
+  'application/x-bat',
+  'application/x-msdos-program',
+  'application/vnd.android.package-archive',
+];
+
+// Check if file is allowed
+function isFileAllowed(fileName: string, mimeType?: string): { allowed: boolean; reason?: string } {
+  const ext = (fileName || '').split('.').pop()?.toLowerCase() || '';
+  
+  if (BLOCKED_EXTENSIONS.includes(ext)) {
+    return { allowed: false, reason: `.${ext.toUpperCase()} files are not allowed for security reasons.` };
+  }
+  
+  if (mimeType && BLOCKED_MIME_TYPES.some(blocked => mimeType.toLowerCase().includes(blocked))) {
+    return { allowed: false, reason: 'This file type is not allowed for security reasons.' };
+  }
+  
+  return { allowed: true };
+}
+
 export default function UploadManagerScreen() {
   const { colors } = useTheme();
   const { user } = useAuth();
@@ -74,12 +117,22 @@ export default function UploadManagerScreen() {
 
     if (!result.canceled && result.assets.length > 0) {
       setUploading(true);
+      let uploadedCount = 0;
+      let blockedCount = 0;
 
       for (const asset of result.assets) {
         try {
           const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${
             asset.type === 'video' ? 'mp4' : 'jpg'
           }`;
+          
+          // Check if allowed (images/videos should always pass, but safety check)
+          const check = isFileAllowed(fileName, asset.mimeType || undefined);
+          if (!check.allowed) {
+            blockedCount++;
+            continue;
+          }
+
           const filePath = `${user?.id}/${fileName}`;
           const bucket = asset.type === 'video' ? 'media-files' : 'chat-images';
 
@@ -102,6 +155,7 @@ export default function UploadManagerScreen() {
             file_name: fileName,
             file_size: asset.fileSize || 0,
           });
+          uploadedCount++;
         } catch (error) {
           console.error('Upload error:', error);
         }
@@ -109,7 +163,12 @@ export default function UploadManagerScreen() {
 
       setUploading(false);
       loadFiles();
-      showAlert('Success', `Uploaded ${result.assets.length} file(s)`);
+      
+      if (blockedCount > 0) {
+        showAlert('Notice', `${uploadedCount} file(s) uploaded. ${blockedCount} file(s) blocked for security.`);
+      } else {
+        showAlert('Success', `Uploaded ${uploadedCount} file(s)`);
+      }
     }
   };
 
@@ -120,8 +179,18 @@ export default function UploadManagerScreen() {
     });
 
     if (!result.canceled && result.assets[0]) {
-      setUploading(true);
       const asset = result.assets[0];
+      
+      // ═══════════════════════════════════════════════════════════════
+      // SECURITY CHECK - Block dangerous file types
+      // ═══════════════════════════════════════════════════════════════
+      const check = isFileAllowed(asset.name, asset.mimeType || undefined);
+      if (!check.allowed) {
+        showAlert('File Not Allowed', check.reason || 'This file type is not permitted.');
+        return;
+      }
+
+      setUploading(true);
 
       try {
         const fileName = asset.name;
@@ -324,6 +393,20 @@ export default function UploadManagerScreen() {
       flex: 1,
       alignItems: 'center',
       justifyContent: 'center',
+    },
+    blockedBadge: {
+      position: 'absolute',
+      top: 8,
+      right: 8,
+      backgroundColor: '#FF3B30',
+      borderRadius: 4,
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+    },
+    blockedBadgeText: {
+      color: '#FFF',
+      fontSize: 10,
+      fontWeight: '700',
     },
   });
 
