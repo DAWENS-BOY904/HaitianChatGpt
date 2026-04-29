@@ -2625,3 +2625,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
+in home page top right ... button when click the modal must have dark/light blur system and when click its the kodal must not open nn mitan page li dwe sou ... yo pou modal la open in blur mode like this:https://files.catbox.moe/7jhs8f.jpeg please fix all dont skip remove all haitian chatgpt replace by Dawinix only.
