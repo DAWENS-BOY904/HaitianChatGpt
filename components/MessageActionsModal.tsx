@@ -439,4 +439,3 @@ const styles = StyleSheet.create({
   translateActionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 14, paddingVertical: 13, borderWidth: 1 },
   translateActionText: { color: 'rgba(255,255,255,0.85)', fontSize: 15, fontWeight: '600' },
 });
-please add another function that call select for select tex if you dont want copy all if sou want to copy a spesific and also add it in home page ai messge remove old that show a modal when press long its must allow you to select the tex you want instead of all code.
