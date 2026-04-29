@@ -324,6 +324,81 @@ function GlassCard({ children, isDark, style = {} }: { children: React.ReactNode
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// ACCENT COLOR PICKER ROW — Inline palette inside settings card
+// ═══════════════════════════════════════════════════════════════════════════════
+const ACCENT_COLORS = [
+  '#10A37F', // ChatGPT green (default)
+  '#0A84FF', // iOS blue
+  '#FF9F0A', // amber
+  '#FF453A', // red
+  '#BF5AF2', // purple
+  '#FF375F', // pink
+  '#30D158', // mint green
+  '#5AC8FA', // sky blue
+  '#FFD60A', // yellow
+  '#FF6B00', // orange
+];
+
+function AccentColorRow({ isDark, dividerColor, iconColor, primaryText, current, onChange }: {
+  isDark: boolean;
+  dividerColor: string;
+  iconColor: string;
+  primaryText: string;
+  secondaryText: string;
+  current: string;
+  onChange: (color: string) => void;
+}) {
+  return (
+    <View style={{
+      paddingVertical: 13,
+      paddingHorizontal: 16,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: dividerColor,
+    }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+        <View style={{
+          width: 30, height: 30, borderRadius: 8,
+          backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.07)',
+          alignItems: 'center', justifyContent: 'center',
+        }}>
+          <Ionicons name="color-palette-outline" size={17} color={iconColor} />
+        </View>
+        <Text style={{ fontSize: 16, color: primaryText, fontWeight: '400', flex: 1 }}>Accent color</Text>
+        <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: current, borderWidth: 2, borderColor: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.15)' }} />
+      </View>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, paddingLeft: 42 }}>
+        {ACCENT_COLORS.map(color => {
+          const isSelected = current === color;
+          return (
+            <TouchableOpacity
+              key={color}
+              onPress={() => onChange(color)}
+              activeOpacity={0.75}
+              style={{
+                width: 32, height: 32, borderRadius: 16,
+                backgroundColor: color,
+                alignItems: 'center', justifyContent: 'center',
+                borderWidth: isSelected ? 3 : 2,
+                borderColor: isSelected
+                  ? (isDark ? '#FFF' : '#000')
+                  : 'transparent',
+                shadowColor: color,
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: isSelected ? 0.6 : 0.3,
+                shadowRadius: 4,
+                elevation: isSelected ? 6 : 2,
+              }}
+            >
+              {isSelected ? <Ionicons name="checkmark" size={16} color="#FFF" /> : null}
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // MAIN SETTINGS SCREEN
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function SettingsScreen() {
@@ -926,12 +1001,15 @@ export default function SettingsScreen() {
                 })}
               </View>
             </InlineRow>
-            <Row icon="color-palette-outline" label="Accent color" onPress={() => router.push('/accent-color')} rightEl={
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <View style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: settings.accentColor || '#10A37F', marginRight: 6, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' }} />
-                <Ionicons name="chevron-forward" size={17} color={secondaryText} />
-              </View>
-            } />
+            <AccentColorRow
+              isDark={isDark}
+              dividerColor={dividerColor}
+              iconColor={iconColor}
+              primaryText={primaryText}
+              secondaryText={secondaryText}
+              current={settings.accentColor || '#10A37F'}
+              onChange={v => updateSetting('accentColor', v)}
+            />
             <SwitchRow icon="phone-portrait-outline" label="Haptic feedback"
               value={settings.hapticFeedback} onChange={v => updateSetting('hapticFeedback', v)} />
             <SwitchRow icon="text-outline" label="Correct spelling automatically"
@@ -1185,4 +1263,3 @@ export default function SettingsScreen() {
     </View>
   );
 }
-fix accent color select pouka select color yo.
