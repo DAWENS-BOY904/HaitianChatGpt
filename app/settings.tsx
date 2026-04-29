@@ -1263,3 +1263,4 @@ export default function SettingsScreen() {
     </View>
   );
 }
+fe accent color select tanku janl te ye an olye de choose fel select and li bay mini menu modal for selected.
