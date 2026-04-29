@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+im fucking tell you no zip allowed no .12 allowed allow video upload ai can read video. import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
