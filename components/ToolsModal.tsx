@@ -198,23 +198,22 @@ export function ToolsModal({
         const asset = result.assets[0];
         const ext = (asset.name || '').split('.').pop()?.toLowerCase() || '';
         const mime = (asset.mimeType || '').toLowerCase();
-        
-        // Block: video, audio, zip, rar, 7z, tar, gz, folders
+
         const blockedMimePrefixes = ['video/', 'audio/'];
         const blockedMimeIncludes = ['zip', 'x-rar', '7z', 'tar', 'gzip', 'bzip', 'x-7z'];
         const blockedExts = ['zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'xz', 'tgz'];
-        
-        const isBlocked = 
+
+        const isBlocked =
           blockedMimePrefixes.some(prefix => mime.startsWith(prefix)) ||
           blockedMimeIncludes.some(keyword => mime.includes(keyword)) ||
           blockedExts.includes(ext) ||
-          mime === ''; // empty mime = likely a folder
-        
+          mime === '';
+
         if (isBlocked) {
           alert('File type not supported. Please upload documents, images, or code files.');
           return;
         }
-        
+
         const isImage = mime.startsWith('image/');
         setSelectedFilePreview({ name: asset.name || 'file', size: asset.size || 0, mimeType: mime, uri: asset.uri, isImage });
       }
@@ -244,145 +243,71 @@ export function ToolsModal({
 
   if (!visible && !rendered) return null;
 
+  // Bottom safe area padding
+  const bottomPad = Math.max(insets.bottom, 8);
+
   return (
     <Modal visible={visible} transparent animationType="none" statusBarTranslucent onRequestClose={onClose}>
       <View style={{ flex: 1, justifyContent: 'flex-end' }}>
-        {/* Stronger blur backdrop */}
+
+        {/* Blurred backdrop */}
         <Animated.View style={[StyleSheet.absoluteFill, backdropStyle]}>
-          <BlurView intensity={60} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
-          <View style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.15)' }]} />
+          {Platform.OS === 'ios' ? (
+            <BlurView intensity={50} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
+          ) : null}
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0.25)' }]} />
           <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onClose} />
         </Animated.View>
 
         <GestureDetector gesture={pan}>
-          <Animated.View style={[
-            styles.sheet,
-            {
-              backgroundColor: isDark ? '#1C1C1E' : THEME.bg,
-              shadowColor: '#000',
-            },
-            modalStyle,
-          ]}>
-            <View style={styles.handleWrap}><View style={styles.handle} /></View>
-
-            <ScrollView showsVerticalScrollIndicator={false} bounces={false} contentContainerStyle={styles.scrollContent}>
-
-              {/* 3×2 Icon Grid */}
-              <View style={styles.grid}>
-                {tools.map((tool, i) => {
-                  const isLoading = loading === tool.id;
-                  return (
-                    <Animated.View
-                      key={tool.id}
-                      entering={FadeInUp.delay(i * 45).duration(300).springify()}
-                      style={styles.cellWrap}
-                    >
-                      <TouchableOpacity
-                        style={[
-                          styles.cell,
-                          { backgroundColor: isDark ? '#2C2C2E' : THEME.surface },
-                        ]}
-                        activeOpacity={0.7}
-                        onPress={tool.action}
-                        disabled={!!loading}
-                      >
-                        {isLoading ? (
-                          <ActivityIndicator color="#555" />
-                        ) : (
-                          <>
-                            <View style={styles.iconWrap}>
-                              <Ionicons name={tool.icon as any} size={30} color={isDark ? '#FFFFFF' : THEME.text} />
-                            </View>
-                            <Text style={[styles.cellLabel, { color: isDark ? '#FFFFFF' : THEME.text }]}>{tool.label}</Text>
-                          </>
-                        )}
-                      </TouchableOpacity>
-                    </Animated.View>
-                  );
-                })}
-              </View>
-
-              {/* File Preview Card */}
-              {selectedFilePreview && (
-                <Animated.View entering={FadeInUp.duration(300)} style={fpStyles.previewCard}>
-                  <View style={fpStyles.previewHeader}>
-                    <Text style={fpStyles.previewTitle}>Ready to send</Text>
-                    <TouchableOpacity onPress={() => setSelectedFilePreview(null)}>
-                      <Ionicons name="close" size={18} color={THEME.sub} />
-                    </TouchableOpacity>
-                  </View>
-                  <View style={fpStyles.previewBody}>
-                    {selectedFilePreview.isImage ? (
-                      <Image source={{ uri: selectedFilePreview.uri }} style={fpStyles.previewThumb} contentFit="cover" />
-                    ) : (
-                      <View style={[fpStyles.previewIconBox, { backgroundColor: getMimeIcon(selectedFilePreview.mimeType, selectedFilePreview.name.split('.').pop() || '').color + '18' }]}>
-                        <Ionicons name={getMimeIcon(selectedFilePreview.mimeType, selectedFilePreview.name.split('.').pop() || '').icon} size={36} color={getMimeIcon(selectedFilePreview.mimeType, selectedFilePreview.name.split('.').pop() || '').color} />
-                      </View>
-                    )}
-                    <View style={fpStyles.previewMeta}>
-                      <Text style={fpStyles.previewName} numberOfLines={2}>{selectedFilePreview.name}</Text>
-                      <Text style={fpStyles.previewSize}>{formatBytes(selectedFilePreview.size)}</Text>
-                      <Text style={fpStyles.previewMime}>{selectedFilePreview.mimeType.split('/')[1]?.toUpperCase() || 'FILE'}</Text>
-                    </View>
-                  </View>
-                  <TouchableOpacity style={fpStyles.sendBtn} onPress={confirmSendFile}>
-                    <Ionicons name="arrow-up-circle" size={18} color="#FFF" />
-                    <Text style={fpStyles.sendBtnText}>Attach to message</Text>
-                  </TouchableOpacity>
-                </Animated.View>
-              )}
-
-              {/* Rows container (Web search + Professional data) */}
-              <Animated.View entering={FadeInUp.delay(200).duration(300)} style={[
-                styles.rowsContainer,
-                { backgroundColor: isDark ? '#2C2C2E' : THEME.surface },
+          {/* Sheet is a BlurView on iOS, plain View on Android */}
+          <Animated.View style={[styles.sheetOuter, modalStyle]}>
+            {Platform.OS === 'ios' ? (
+              <BlurView
+                intensity={isDark ? 80 : 70}
+                tint={isDark ? 'dark' : 'extraLight'}
+                style={[styles.sheetInner, { paddingBottom: bottomPad }]}
+              >
+                <SheetContents
+                  isDark={isDark}
+                  tools={tools}
+                  loading={loading}
+                  selectedFilePreview={selectedFilePreview}
+                  setSelectedFilePreview={setSelectedFilePreview}
+                  showWebOptions={showWebOptions}
+                  setShowWebOptions={setShowWebOptions}
+                  webMode={webMode}
+                  setWebMode={setWebMode}
+                  confirmSendFile={confirmSendFile}
+                  getMimeIcon={getMimeIcon}
+                  formatBytes={formatBytes}
+                  router={router}
+                  onClose={onClose}
+                />
+              </BlurView>
+            ) : (
+              <View style={[
+                styles.sheetInner,
+                { backgroundColor: isDark ? '#1C1C1E' : '#F2F2F7', paddingBottom: bottomPad },
               ]}>
-                {/* Web search */}
-                <TouchableOpacity style={styles.rowItem} activeOpacity={0.7} onPress={() => setShowWebOptions(!showWebOptions)}>
-                  <View style={styles.rowLeft}>
-                    <View style={[styles.rowIconWrap, { backgroundColor: isDark ? '#3A3A3C' : '#F2F2F7' }]}>
-                      <Ionicons name="globe-outline" size={20} color={isDark ? '#FFFFFF' : THEME.text} />
-                    </View>
-                    <Text style={[styles.rowItemLabel, { color: isDark ? '#FFFFFF' : THEME.text }]}>Web search</Text>
-                  </View>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                    <Text style={styles.rowItemRight}>{webMode === 'auto' ? 'Auto' : 'Off'}</Text>
-                    <Ionicons name="chevron-forward" size={16} color="#C7C7CC" />
-                  </View>
-                </TouchableOpacity>
-
-                {showWebOptions && (
-                  <View style={styles.webOptions}>
-                    {(['auto', 'off'] as const).map((mode) => (
-                      <TouchableOpacity key={mode} style={[styles.webOption, webMode === mode && styles.webOptionActive]}
-                        onPress={() => { setWebMode(mode); setTimeout(() => setShowWebOptions(false), 250); }}>
-                        <View>
-                          <Text style={styles.webOptTitle}>{mode === 'auto' ? 'Auto' : 'Off'}</Text>
-                          <Text style={styles.webOptSub}>{mode === 'auto' ? 'Browses the web when needed' : 'No web access'}</Text>
-                        </View>
-                        {webMode === mode && <Ionicons name="checkmark" size={20} color={THEME.accent} />}
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                )}
-
-                {/* Separator */}
-                <View style={styles.rowDivider} />
-
-                {/* Professional Data */}
-                <TouchableOpacity style={styles.rowItem} activeOpacity={0.7}
-                  onPress={() => { router.push('/data-controls'); onClose(); }}>
-                  <View style={styles.rowLeft}>
-                    <View style={[styles.rowIconWrap, { backgroundColor: isDark ? '#3A3A3C' : '#F2F2F7' }]}>
-                      <Ionicons name="server-outline" size={20} color={isDark ? '#FFFFFF' : THEME.text} />
-                    </View>
-                    <Text style={[styles.rowItemLabel, { color: isDark ? '#FFFFFF' : THEME.text }]}>Professional Data</Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={16} color="#C7C7CC" />
-                </TouchableOpacity>
-              </Animated.View>
-
-            </ScrollView>
+                <SheetContents
+                  isDark={isDark}
+                  tools={tools}
+                  loading={loading}
+                  selectedFilePreview={selectedFilePreview}
+                  setSelectedFilePreview={setSelectedFilePreview}
+                  showWebOptions={showWebOptions}
+                  setShowWebOptions={setShowWebOptions}
+                  webMode={webMode}
+                  setWebMode={setWebMode}
+                  confirmSendFile={confirmSendFile}
+                  getMimeIcon={getMimeIcon}
+                  formatBytes={formatBytes}
+                  router={router}
+                  onClose={onClose}
+                />
+              </View>
+            )}
           </Animated.View>
         </GestureDetector>
       </View>
@@ -390,56 +315,233 @@ export function ToolsModal({
   );
 }
 
+// ── Inner sheet content extracted to avoid duplication ──────────────────────
+function SheetContents({
+  isDark, tools, loading, selectedFilePreview, setSelectedFilePreview,
+  showWebOptions, setShowWebOptions, webMode, setWebMode,
+  confirmSendFile, getMimeIcon, formatBytes, router, onClose,
+}: any) {
+  return (
+    <>
+      {/* Drag handle */}
+      <View style={styles.handleWrap}>
+        <View style={[styles.handle, { backgroundColor: isDark ? 'rgba(255,255,255,0.3)' : '#C7C7CC' }]} />
+      </View>
+
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        bounces={false}
+        contentContainerStyle={styles.scrollContent}
+      >
+        {/* 3×2 Icon Grid */}
+        <View style={styles.grid}>
+          {tools.map((tool: any, i: number) => {
+            const isLoading = loading === tool.id;
+            return (
+              <Animated.View
+                key={tool.id}
+                entering={FadeInUp.delay(i * 45).duration(300).springify()}
+                style={styles.cellWrap}
+              >
+                <TouchableOpacity
+                  style={[
+                    styles.cell,
+                    {
+                      backgroundColor: isDark
+                        ? 'rgba(60,60,67,0.6)'
+                        : 'rgba(255,255,255,0.85)',
+                    },
+                  ]}
+                  activeOpacity={0.7}
+                  onPress={tool.action}
+                  disabled={!!loading}
+                >
+                  {isLoading ? (
+                    <ActivityIndicator color={isDark ? '#FFF' : '#555'} />
+                  ) : (
+                    <>
+                      <View style={styles.iconWrap}>
+                        <Ionicons
+                          name={tool.icon as any}
+                          size={28}
+                          color={isDark ? '#FFFFFF' : THEME.text}
+                        />
+                      </View>
+                      <Text style={[styles.cellLabel, { color: isDark ? '#FFFFFF' : THEME.text }]}>
+                        {tool.label}
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </Animated.View>
+            );
+          })}
+        </View>
+
+        {/* File Preview Card */}
+        {selectedFilePreview && (
+          <Animated.View entering={FadeInUp.duration(300)} style={[
+            fpStyles.previewCard,
+            { backgroundColor: isDark ? 'rgba(60,60,67,0.6)' : 'rgba(255,255,255,0.85)' },
+          ]}>
+            <View style={fpStyles.previewHeader}>
+              <Text style={[fpStyles.previewTitle, { color: isDark ? '#FFF' : THEME.text }]}>
+                Ready to send
+              </Text>
+              <TouchableOpacity onPress={() => setSelectedFilePreview(null)}>
+                <Ionicons name="close" size={18} color={THEME.sub} />
+              </TouchableOpacity>
+            </View>
+            <View style={fpStyles.previewBody}>
+              {selectedFilePreview.isImage ? (
+                <Image source={{ uri: selectedFilePreview.uri }} style={fpStyles.previewThumb} contentFit="cover" />
+              ) : (
+                <View style={[fpStyles.previewIconBox, {
+                  backgroundColor: getMimeIcon(selectedFilePreview.mimeType, selectedFilePreview.name.split('.').pop() || '').color + '18',
+                }]}>
+                  <Ionicons
+                    name={getMimeIcon(selectedFilePreview.mimeType, selectedFilePreview.name.split('.').pop() || '').icon}
+                    size={36}
+                    color={getMimeIcon(selectedFilePreview.mimeType, selectedFilePreview.name.split('.').pop() || '').color}
+                  />
+                </View>
+              )}
+              <View style={fpStyles.previewMeta}>
+                <Text style={[fpStyles.previewName, { color: isDark ? '#FFF' : THEME.text }]} numberOfLines={2}>
+                  {selectedFilePreview.name}
+                </Text>
+                <Text style={fpStyles.previewSize}>{formatBytes(selectedFilePreview.size)}</Text>
+                <Text style={fpStyles.previewMime}>
+                  {selectedFilePreview.mimeType.split('/')[1]?.toUpperCase() || 'FILE'}
+                </Text>
+              </View>
+            </View>
+            <TouchableOpacity style={fpStyles.sendBtn} onPress={confirmSendFile}>
+              <Ionicons name="arrow-up-circle" size={18} color="#FFF" />
+              <Text style={fpStyles.sendBtnText}>Attach to message</Text>
+            </TouchableOpacity>
+          </Animated.View>
+        )}
+
+        {/* Rows container */}
+        <Animated.View
+          entering={FadeInUp.delay(200).duration(300)}
+          style={[
+            styles.rowsContainer,
+            { backgroundColor: isDark ? 'rgba(60,60,67,0.6)' : 'rgba(255,255,255,0.85)' },
+          ]}
+        >
+          {/* Web search */}
+          <TouchableOpacity
+            style={styles.rowItem}
+            activeOpacity={0.7}
+            onPress={() => setShowWebOptions(!showWebOptions)}
+          >
+            <View style={styles.rowLeft}>
+              <View style={[styles.rowIconWrap, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : '#F2F2F7' }]}>
+                <Ionicons name="globe-outline" size={20} color={isDark ? '#FFFFFF' : THEME.text} />
+              </View>
+              <Text style={[styles.rowItemLabel, { color: isDark ? '#FFFFFF' : THEME.text }]}>Web search</Text>
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <Text style={styles.rowItemRight}>{webMode === 'auto' ? 'Auto' : 'Off'}</Text>
+              <Ionicons name="chevron-forward" size={16} color="#C7C7CC" />
+            </View>
+          </TouchableOpacity>
+
+          {showWebOptions && (
+            <View style={[styles.webOptions, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]}>
+              {(['auto', 'off'] as const).map((mode) => (
+                <TouchableOpacity
+                  key={mode}
+                  style={[styles.webOption, webMode === mode && styles.webOptionActive]}
+                  onPress={() => { setWebMode(mode); setTimeout(() => setShowWebOptions(false), 250); }}
+                >
+                  <View>
+                    <Text style={[styles.webOptTitle, { color: isDark ? '#FFF' : THEME.text }]}>
+                      {mode === 'auto' ? 'Auto' : 'Off'}
+                    </Text>
+                    <Text style={styles.webOptSub}>
+                      {mode === 'auto' ? 'Browses the web when needed' : 'No web access'}
+                    </Text>
+                  </View>
+                  {webMode === mode && <Ionicons name="checkmark" size={20} color={THEME.accent} />}
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+
+          {/* Separator */}
+          <View style={[styles.rowDivider, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : THEME.border }]} />
+
+          {/* Professional Data */}
+          <TouchableOpacity
+            style={styles.rowItem}
+            activeOpacity={0.7}
+            onPress={() => { router.push('/data-controls'); onClose(); }}
+          >
+            <View style={styles.rowLeft}>
+              <View style={[styles.rowIconWrap, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : '#F2F2F7' }]}>
+                <Ionicons name="server-outline" size={20} color={isDark ? '#FFFFFF' : THEME.text} />
+              </View>
+              <Text style={[styles.rowItemLabel, { color: isDark ? '#FFFFFF' : THEME.text }]}>Professional Data</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color="#C7C7CC" />
+          </TouchableOpacity>
+        </Animated.View>
+      </ScrollView>
+    </>
+  );
+}
+
 const styles = StyleSheet.create({
-  sheet: {
-    backgroundColor: THEME.bg,
+  sheetOuter: {
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    minHeight: SCREEN_HEIGHT * 0.44,
-    maxHeight: SCREEN_HEIGHT * 0.88,
-    paddingBottom: Platform.OS === 'ios' ? 44 : 24,
+    overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 16,
-    elevation: 20,
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 24,
+  },
+  sheetInner: {
+    // No explicit minHeight/maxHeight — let content drive the size naturally
   },
   handleWrap: { alignItems: 'center', paddingTop: 10, paddingBottom: 6 },
-  handle: { width: 36, height: 5, borderRadius: 3, backgroundColor: '#C7C7CC' },
-  scrollContent: { paddingHorizontal: 14, paddingTop: 6, paddingBottom: 32 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 10, marginBottom: 14 },
+  handle: { width: 36, height: 5, borderRadius: 3 },
+  // Compact vertical padding — no extra bottom space
+  scrollContent: { paddingHorizontal: 14, paddingTop: 4, paddingBottom: 16 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 10, marginBottom: 12 },
   cellWrap: { width: (SCREEN_WIDTH - 48) / 3 },
   cell: {
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 18,
+    paddingVertical: 16,
     paddingHorizontal: 4,
-    minHeight: 98,
-    backgroundColor: THEME.surface,
+    minHeight: 92,
   },
-  iconWrap: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', marginBottom: 6 },
-  cellLabel: { fontSize: 13, fontWeight: '500', color: THEME.text, textAlign: 'center' },
+  iconWrap: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', marginBottom: 5 },
+  cellLabel: { fontSize: 13, fontWeight: '500', textAlign: 'center' },
   rowsContainer: {
-    backgroundColor: THEME.surface,
     borderRadius: 14,
     overflow: 'hidden',
-    marginBottom: 14,
+    marginBottom: 0,
   },
   rowItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 14,
+    paddingVertical: 13,
     paddingHorizontal: 16,
   },
   rowLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  rowIconWrap: { width: 32, height: 32, borderRadius: 8, backgroundColor: '#F2F2F7', alignItems: 'center', justifyContent: 'center' },
-  rowItemLabel: { fontSize: 16, fontWeight: '400', color: THEME.text },
+  rowIconWrap: { width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  rowItemLabel: { fontSize: 16, fontWeight: '400' },
   rowItemRight: { fontSize: 15, color: THEME.sub },
-  rowDivider: { height: StyleSheet.hairlineWidth, backgroundColor: THEME.border, marginLeft: 60 },
+  rowDivider: { height: StyleSheet.hairlineWidth, marginLeft: 60 },
   webOptions: {
-    backgroundColor: 'rgba(0,0,0,0.04)',
     marginHorizontal: 8,
     marginBottom: 8,
     borderRadius: 12,
@@ -447,22 +549,21 @@ const styles = StyleSheet.create({
   },
   webOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 12, borderRadius: 8 },
   webOptionActive: { backgroundColor: 'rgba(0,122,255,0.08)' },
-  webOptTitle: { fontSize: 15, fontWeight: '600', color: THEME.text, marginBottom: 2 },
+  webOptTitle: { fontSize: 15, fontWeight: '600', marginBottom: 2 },
   webOptSub: { fontSize: 13, color: THEME.sub },
 });
 
 const fpStyles = StyleSheet.create({
-  previewCard: { backgroundColor: THEME.surface, borderRadius: 14, padding: 14, marginBottom: 14 },
+  previewCard: { borderRadius: 14, padding: 14, marginBottom: 12 },
   previewHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  previewTitle: { fontSize: 13, fontWeight: '700', color: THEME.text },
+  previewTitle: { fontSize: 13, fontWeight: '700' },
   previewBody: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
   previewThumb: { width: 64, height: 64, borderRadius: 10 },
   previewIconBox: { width: 64, height: 64, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   previewMeta: { flex: 1, gap: 3 },
-  previewName: { fontSize: 14, fontWeight: '600', color: THEME.text },
+  previewName: { fontSize: 14, fontWeight: '600' },
   previewSize: { fontSize: 12, color: THEME.sub },
   previewMime: { fontSize: 11, color: THEME.sub, fontWeight: '500' },
   sendBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: THEME.accent, borderRadius: 10, paddingVertical: 10 },
   sendBtnText: { fontSize: 14, fontWeight: '700', color: '#FFF' },
 });
-fix put all in blur mode and fix espas anba trop espas modal lan olen tro longue kitel knsa men trop espas rete anba.
