@@ -73,13 +73,13 @@ export function ToolsModal({
   const [webMode, setWebMode] = useState<'auto' | 'off'>('auto');
   const [loading, setLoading] = useState<string | null>(null);
   const [rendered, setRendered] = useState(false);
-  const [selectedFilePreview, setSelectedFilePreview] = useState<{
+  const [selectedFilesPreview, setSelectedFilesPreview] = useState<{
     name: string;
     size: number;
     mimeType: string;
     uri: string;
     isImage: boolean;
-  } | null>(null);
+  }[]>([]);
 
   const translateY = useSharedValue(SCREEN_HEIGHT);
   const opacity = useSharedValue(0);
@@ -92,7 +92,7 @@ export function ToolsModal({
     } else {
       translateY.value = withSpring(SCREEN_HEIGHT, { damping: 26, stiffness: 300 });
       opacity.value = withTiming(0, { duration: 180 });
-      const t = setTimeout(() => { setRendered(false); setShowWebOptions(false); setSelectedFilePreview(null); }, 280);
+      const t = setTimeout(() => { setRendered(false); setShowWebOptions(false); setSelectedFilesPreview([]); }, 280);
       return () => clearTimeout(t);
     }
   }, [visible]);
@@ -178,47 +178,129 @@ export function ToolsModal({
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
-  const getMimeIcon = (mime: string, ext: string) => {
-    if (mime.startsWith('image/')) return { icon: 'image-outline' as const, color: '#FF2D55' };
-    if (mime.startsWith('video/')) return { icon: 'videocam-outline' as const, color: '#FF9500' };
-    if (mime.startsWith('audio/')) return { icon: 'musical-notes-outline' as const, color: '#AF52DE' };
-    if (mime.includes('pdf')) return { icon: 'document-text-outline' as const, color: '#FF3B30' };
-    if (mime.includes('word') || ext === 'docx' || ext === 'doc') return { icon: 'document-outline' as const, color: '#2B5CE6' };
-    if (mime.includes('excel') || mime.includes('spreadsheet') || ext === 'xlsx') return { icon: 'grid-outline' as const, color: '#217346' };
-    if (mime.includes('json') || mime.includes('xml')) return { icon: 'code-slash-outline' as const, color: '#CB7700' };
-    if (['js','ts','tsx','jsx','py','rb','go','rs','java','kt','swift','sh','css','html'].includes(ext)) return { icon: 'code-outline' as const, color: '#007AFF' };
-    if (mime.startsWith('text/') || ext === 'txt' || ext === 'md') return { icon: 'document-text-outline' as const, color: '#8E8E93' };
-    if (['zip','rar','7z','tar','gz','bz2'].includes(ext)) return { icon: 'archive-outline' as const, color: '#FF9F0A' };
-    return { icon: 'attach-outline' as const, color: '#636366' };
+  // ═══════════════════════════════════════════════════════════════════════
+  // EXPANDED getMimeIcon — supports 60+ file types, NO restrictions
+  // ═══════════════════════════════════════════════════════════════════════
+  const getMimeIcon = (mime: string, ext: string): { icon: any; color: string } => {
+    const e = ext.toLowerCase();
+
+    // Images
+    if (mime.startsWith('image/') || ['jpg','jpeg','png','gif','webp','bmp','svg','ico','tiff','tif','raw','cr2','nef','heic','heif','avif'].includes(e))
+      return { icon: 'image-outline', color: '#FF2D55' };
+
+    // Videos
+    if (mime.startsWith('video/') || ['mp4','mov','avi','mkv','wmv','flv','webm','m4v','3gp','mpg','mpeg','ts','m2ts'].includes(e))
+      return { icon: 'videocam-outline', color: '#FF9500' };
+
+    // Audio
+    if (mime.startsWith('audio/') || ['mp3','wav','aac','flac','ogg','m4a','wma','aiff','opus','mid','midi'].includes(e))
+      return { icon: 'musical-notes-outline', color: '#AF52DE' };
+
+    // PDF
+    if (mime.includes('pdf') || e === 'pdf')
+      return { icon: 'document-text-outline', color: '#FF3B30' };
+
+    // Microsoft Word
+    if (mime.includes('word') || ['doc','docx','docm','dot','dotx','odt','rtf'].includes(e))
+      return { icon: 'document-outline', color: '#2B5CE6' };
+
+    // Microsoft Excel
+    if (mime.includes('excel') || mime.includes('spreadsheet') || ['xls','xlsx','xlsm','xlsb','csv','ods','tsv'].includes(e))
+      return { icon: 'grid-outline', color: '#217346' };
+
+    // Microsoft PowerPoint
+    if (mime.includes('powerpoint') || mime.includes('presentation') || ['ppt','pptx','pptm','pps','ppsx','odp'].includes(e))
+      return { icon: 'easel-outline', color: '#D24726' };
+
+    // Code / Text files
+    if (['js','ts','tsx','jsx','py','rb','go','rs','java','kt','swift','sh','bash','zsh','css','scss','sass','html','htm','xml','json','yaml','yml','toml','ini','cfg','conf','sql','php','c','cpp','h','hpp','cs','r','pl','lua','dart','scala','groovy','vue','svelte'].includes(e))
+      return { icon: 'code-outline', color: '#007AFF' };
+
+    // Data / Config
+    if (['json','xml','yaml','yml','toml','ini','cfg','conf','sql','graphql','prisma'].includes(e))
+      return { icon: 'code-slash-outline', color: '#CB7700' };
+
+    // Plain text / Markdown
+    if (mime.startsWith('text/') || ['txt','md','markdown','rst','log'].includes(e))
+      return { icon: 'document-text-outline', color: '#8E8E93' };
+
+    // Archives / Compressed
+    if (['zip','rar','7z','tar','gz','bz2','xz','lz','lzma','zst','cab','jar','war','ear','apk','ipa','dmg','pkg','deb','rpm','iso','img','vmdk'].includes(e))
+      return { icon: 'archive-outline', color: '#FF9F0A' };
+
+    // Executables / Binaries
+    if (['exe','msi','bat','cmd','com','scr','app','out','bin','elf','so','dll','dylib'].includes(e))
+      return { icon: 'hardware-chip-outline', color: '#636366' };
+
+    // 3D / CAD / Design
+    if (['stl','obj','fbx','dae','3ds','blend','dwg','dxf','step','stp','iges','igs','skp','max','ma','mb','c4d'].includes(e))
+      return { icon: 'cube-outline', color: '#5856D6' };
+
+    // Fonts
+    if (['ttf','otf','woff','woff2','eot'].includes(e))
+      return { icon: 'text-outline', color: '#FF3B30' };
+
+    // Ebooks
+    if (['epub','mobi','azw','azw3','djvu','cbz','cbr'].includes(e))
+      return { icon: 'book-outline', color: '#8E8E93' };
+
+    // Database
+    if (['db','sqlite','sqlite3','mdb','accdb','fdb'].includes(e))
+      return { icon: 'server-outline', color: '#636366' };
+
+    // Disk images
+    if (['iso','img','dmg','vmdk','vhd','qcow2'].includes(e))
+      return { icon: 'disc-outline', color: '#8E8E93' };
+
+    // Default fallback — ANY file type allowed
+    return { icon: 'attach-outline', color: '#636366' };
   };
 
-  // ── FILES — all types allowed (video, audio, zip, etc.) ──────────────────
+  // ── FILES — ALL types allowed, multiple files supported ──────────────────
   const handleFiles = async () => {
     setLoading('files');
     try {
-      const result = await DocumentPicker.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true, multiple: false });
-      if (!result.canceled && result.assets?.[0]) {
-        const asset = result.assets[0];
-        const ext = (asset.name || '').split('.').pop()?.toLowerCase() || '';
-        const mime = (asset.mimeType || 'application/octet-stream').toLowerCase();
-        const isImage = mime.startsWith('image/');
-        setSelectedFilePreview({ name: asset.name || 'file', size: asset.size || 0, mimeType: mime, uri: asset.uri, isImage });
+      const result = await DocumentPicker.getDocumentAsync({
+        type: '*/*',              // ALL file types allowed — no restrictions
+        copyToCacheDirectory: true,
+        multiple: true,           // Allow multiple file selection
+      });
+
+      if (!result.canceled && result.assets?.length > 0) {
+        const files = result.assets.map((asset) => {
+          const ext = (asset.name || '').split('.').pop()?.toLowerCase() || '';
+          const mime = (asset.mimeType || 'application/octet-stream').toLowerCase();
+          const isImage = mime.startsWith('image/');
+          return {
+            name: asset.name || 'file',
+            size: asset.size || 0,
+            mimeType: mime,
+            uri: asset.uri,
+            isImage,
+          };
+        });
+        setSelectedFilesPreview(files);
       }
     } catch (e) { console.error('File picker error:', e); }
     finally { setLoading(null); }
   };
 
-  const confirmSendFile = () => {
-    if (!selectedFilePreview) return;
-    onPickMedia([{
-      type: selectedFilePreview.isImage ? 'image' : 'document',
-      uri: selectedFilePreview.uri,
-      name: selectedFilePreview.name,
-      mimeType: selectedFilePreview.mimeType,
-      size: selectedFilePreview.size,
-    }]);
-    setSelectedFilePreview(null);
+  const confirmSendFiles = () => {
+    if (selectedFilesPreview.length === 0) return;
+    const media = selectedFilesPreview.map((f) => ({
+      type: f.isImage ? 'image' : 'document',
+      uri: f.uri,
+      name: f.name,
+      mimeType: f.mimeType,
+      size: f.size,
+    }));
+    onPickMedia(media);
+    setSelectedFilesPreview([]);
     onClose();
+  };
+
+  const removeFile = (index: number) => {
+    setSelectedFilesPreview((prev) => prev.filter((_, i) => i !== index));
   };
 
   // ── Tools grid ──
@@ -263,13 +345,14 @@ export function ToolsModal({
                   isDark={isDark}
                   tools={tools}
                   loading={loading}
-                  selectedFilePreview={selectedFilePreview}
-                  setSelectedFilePreview={setSelectedFilePreview}
+                  selectedFilesPreview={selectedFilesPreview}
+                  setSelectedFilesPreview={setSelectedFilesPreview}
                   showWebOptions={showWebOptions}
                   setShowWebOptions={setShowWebOptions}
                   webMode={webMode}
                   setWebMode={setWebMode}
-                  confirmSendFile={confirmSendFile}
+                  confirmSendFiles={confirmSendFiles}
+                  removeFile={removeFile}
                   getMimeIcon={getMimeIcon}
                   formatBytes={formatBytes}
                   router={router}
@@ -285,13 +368,14 @@ export function ToolsModal({
                   isDark={isDark}
                   tools={tools}
                   loading={loading}
-                  selectedFilePreview={selectedFilePreview}
-                  setSelectedFilePreview={setSelectedFilePreview}
+                  selectedFilesPreview={selectedFilesPreview}
+                  setSelectedFilesPreview={setSelectedFilesPreview}
                   showWebOptions={showWebOptions}
                   setShowWebOptions={setShowWebOptions}
                   webMode={webMode}
                   setWebMode={setWebMode}
-                  confirmSendFile={confirmSendFile}
+                  confirmSendFiles={confirmSendFiles}
+                  removeFile={removeFile}
                   getMimeIcon={getMimeIcon}
                   formatBytes={formatBytes}
                   router={router}
@@ -308,9 +392,9 @@ export function ToolsModal({
 
 // ── Inner sheet content ──────────────────────────────────────────────────────
 function SheetContents({
-  isDark, tools, loading, selectedFilePreview, setSelectedFilePreview,
+  isDark, tools, loading, selectedFilesPreview, setSelectedFilesPreview,
   showWebOptions, setShowWebOptions, webMode, setWebMode,
-  confirmSendFile, getMimeIcon, formatBytes, router, onClose,
+  confirmSendFiles, removeFile, getMimeIcon, formatBytes, router, onClose,
 }: any) {
   return (
     <>
@@ -369,47 +453,55 @@ function SheetContents({
           })}
         </View>
 
-        {/* File Preview Card */}
-        {selectedFilePreview && (
+        {/* Multiple Files Preview Card */}
+        {selectedFilesPreview.length > 0 && (
           <Animated.View entering={FadeInUp.duration(300)} style={[
             fpStyles.previewCard,
             { backgroundColor: isDark ? 'rgba(60,60,67,0.6)' : 'rgba(255,255,255,0.85)' },
           ]}>
             <View style={fpStyles.previewHeader}>
               <Text style={[fpStyles.previewTitle, { color: isDark ? '#FFF' : THEME.text }]}>
-                Ready to send
+                {selectedFilesPreview.length} file{selectedFilesPreview.length > 1 ? 's' : ''} ready
               </Text>
-              <TouchableOpacity onPress={() => setSelectedFilePreview(null)}>
+              <TouchableOpacity onPress={() => setSelectedFilesPreview([])}>
                 <Ionicons name="close" size={18} color={THEME.sub} />
               </TouchableOpacity>
             </View>
-            <View style={fpStyles.previewBody}>
-              {selectedFilePreview.isImage ? (
-                <Image source={{ uri: selectedFilePreview.uri }} style={fpStyles.previewThumb} contentFit="cover" />
-              ) : (
-                <View style={[fpStyles.previewIconBox, {
-                  backgroundColor: getMimeIcon(selectedFilePreview.mimeType, selectedFilePreview.name.split('.').pop() || '').color + '18',
-                }]}>
-                  <Ionicons
-                    name={getMimeIcon(selectedFilePreview.mimeType, selectedFilePreview.name.split('.').pop() || '').icon}
-                    size={36}
-                    color={getMimeIcon(selectedFilePreview.mimeType, selectedFilePreview.name.split('.').pop() || '').color}
-                  />
-                </View>
-              )}
-              <View style={fpStyles.previewMeta}>
-                <Text style={[fpStyles.previewName, { color: isDark ? '#FFF' : THEME.text }]} numberOfLines={2}>
-                  {selectedFilePreview.name}
-                </Text>
-                <Text style={fpStyles.previewSize}>{formatBytes(selectedFilePreview.size)}</Text>
-                <Text style={fpStyles.previewMime}>
-                  {selectedFilePreview.mimeType.split('/')[1]?.toUpperCase() || 'FILE'}
-                </Text>
-              </View>
-            </View>
-            <TouchableOpacity style={fpStyles.sendBtn} onPress={confirmSendFile}>
+
+            <ScrollView
+              style={{ maxHeight: 220 }}
+              showsVerticalScrollIndicator={true}
+              nestedScrollEnabled={true}
+            >
+              {selectedFilesPreview.map((file: any, idx: number) => {
+                const ext = (file.name || '').split('.').pop()?.toLowerCase() || '';
+                const { icon, color } = getMimeIcon(file.mimeType, ext);
+                return (
+                  <View key={idx} style={fpStyles.fileRow}>
+                    {file.isImage ? (
+                      <Image source={{ uri: file.uri }} style={fpStyles.fileThumb} contentFit="cover" />
+                    ) : (
+                      <View style={[fpStyles.fileIconBox, { backgroundColor: color + '18' }]}>
+                        <Ionicons name={icon} size={24} color={color} />
+                      </View>
+                    )}
+                    <View style={fpStyles.fileMeta}>
+                      <Text style={[fpStyles.fileName, { color: isDark ? '#FFF' : THEME.text }]} numberOfLines={1}>
+                        {file.name}
+                      </Text>
+                      <Text style={fpStyles.fileSize}>{formatBytes(file.size)}</Text>
+                    </View>
+                    <TouchableOpacity onPress={() => removeFile(idx)} style={fpStyles.removeBtn}>
+                      <Ionicons name="close-circle" size={20} color={THEME.sub} />
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
+            </ScrollView>
+
+            <TouchableOpacity style={fpStyles.sendBtn} onPress={confirmSendFiles}>
               <Ionicons name="arrow-up-circle" size={18} color="#FFF" />
-              <Text style={fpStyles.sendBtnText}>Attach to message</Text>
+              <Text style={fpStyles.sendBtnText}>Attach {selectedFilesPreview.length} file{selectedFilesPreview.length > 1 ? 's' : ''}</Text>
             </TouchableOpacity>
           </Animated.View>
         )}
@@ -547,13 +639,14 @@ const fpStyles = StyleSheet.create({
   previewCard: { borderRadius: 14, padding: 14, marginBottom: 12 },
   previewHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   previewTitle: { fontSize: 13, fontWeight: '700' },
-  previewBody: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
-  previewThumb: { width: 64, height: 64, borderRadius: 10 },
-  previewIconBox: { width: 64, height: 64, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  previewMeta: { flex: 1, gap: 3 },
-  previewName: { fontSize: 14, fontWeight: '600' },
-  previewSize: { fontSize: 12, color: THEME.sub },
-  previewMime: { fontSize: 11, color: THEME.sub, fontWeight: '500' },
-  sendBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: THEME.accent, borderRadius: 10, paddingVertical: 10 },
+  fileRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
+  fileThumb: { width: 40, height: 40, borderRadius: 8 },
+  fileIconBox: { width: 40, height: 40, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  fileMeta: { flex: 1, gap: 2 },
+  fileName: { fontSize: 13, fontWeight: '600' },
+  fileSize: { fontSize: 11, color: THEME.sub },
+  removeBtn: { padding: 4 },
+  sendBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: THEME.accent, borderRadius: 10, paddingVertical: 10, marginTop: 8 },
   sendBtnText: { fontSize: 14, fontWeight: '700', color: '#FFF' },
 });
+
