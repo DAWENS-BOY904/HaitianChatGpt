@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   View, 
   Text, 
@@ -6,7 +6,6 @@ import {
   StyleSheet, 
   StatusBar, 
   Platform, 
-  Animated, 
   ActivityIndicator,
   Image 
 } from 'react-native';
@@ -14,7 +13,6 @@ import { useRouter, Redirect } from 'expo-router';
 import { useAuth, useAlert, getSupabaseClient } from '@/template';
 import { useTheme } from '../hooks/useTheme';
 import { Ionicons } from '@expo/vector-icons';
-import { Spacing, Typography, BorderRadius } from '../constants/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { createClient } from '@supabase/supabase-js';
 
@@ -46,7 +44,7 @@ async function sendLoginConfirmationEmail(userId: string, email: string) {
   }
 }
 
-// ── Helper: get Apple-specific Supabase client (uses MY_SUPABASE_URL) ──
+// ── Helper: get Apple-specific Supabase client ──
 function getAppleSupabaseClient() {
   const supabaseUrl = process.env.MY_SUPABASE_URL || process.env.EXPO_PUBLIC_MY_SUPABASE_URL;
   const supabaseKey = process.env.MY_SUPABASE_ANON_KEY || process.env.EXPO_PUBLIC_MY_SUPABASE_ANON_KEY;
@@ -65,7 +63,7 @@ function getAppleSupabaseClient() {
   });
 }
 
-// ── Apple Sign-In (native only) ──
+// ── Apple Sign-In ──
 async function performAppleSignIn(
   showAlert: (title: string, msg?: string) => void
 ): Promise<{ user: any; error?: string }> {
@@ -120,106 +118,17 @@ async function performAppleSignIn(
   }
 }
 
-// ── Module-level styles for AILogo (must be outside component) ──
-const logoStyles = StyleSheet.create({
-  logoContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    position: 'relative',
-  },
-  glowRing: {
-    position: 'absolute',
-    backgroundColor: 'rgba(0, 150, 255, 0.3)',
-  },
-  logoWrapper: {
-    overflow: 'hidden',
-    borderWidth: 3,
-    borderColor: 'rgba(0, 150, 255, 0.5)',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#0096FF',
-        shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 0.5,
-        shadowRadius: 10,
-      },
-      android: {
-        elevation: 8,
-      },
-    }),
-  },
-});
-
-// ── Animated AI Logo Component ──
-function AILogo({ size = 80 }: { size?: number }) {
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-  const glowAnim = useRef(new Animated.Value(0.5)).current;
-
-  useEffect(() => {
-    // Pulse animation
-    const pulse = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue: 1.1,
-          duration: 1500,
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulseAnim, {
-          toValue: 1,
-          duration: 1500,
-          useNativeDriver: true,
-        }),
-      ])
-    );
-
-    // Glow animation
-    const glow = Animated.loop(
-      Animated.sequence([
-        Animated.timing(glowAnim, {
-          toValue: 1,
-          duration: 1000,
-          useNativeDriver: true,
-        }),
-        Animated.timing(glowAnim, {
-          toValue: 0.5,
-          duration: 1000,
-          useNativeDriver: true,
-        }),
-      ])
-    );
-
-    pulse.start();
-    glow.start();
-
-    return () => {
-      pulse.stop();
-      glow.stop();
-    };
-  }, []);
-
+// ── Static AI Logo (no animation) ──
+function AILogo({ size = 100 }: { size?: number }) {
   return (
-    <View style={[logoStyles.logoContainer, { width: size + 20, height: size + 20 }]}>
-      {/* Glow effect */}
-      <Animated.View 
-        style={[
-          logoStyles.glowRing,
-          {
-            width: size + 20,
-            height: size + 20,
-            borderRadius: (size + 20) / 2,
-            opacity: glowAnim,
-            transform: [{ scale: pulseAnim }],
-          }
-        ]} 
-      />
-      {/* Main Logo */}
-      <Animated.View 
+    <View style={[logoStyles.logoContainer, { width: size, height: size }]}>
+      <View 
         style={[
           logoStyles.logoWrapper,
           {
             width: size,
             height: size,
             borderRadius: size / 2,
-            transform: [{ scale: pulseAnim }],
           }
         ]}
       >
@@ -232,10 +141,22 @@ function AILogo({ size = 80 }: { size?: number }) {
           }}
           resizeMode="cover"
         />
-      </Animated.View>
+      </View>
     </View>
   );
 }
+
+const logoStyles = StyleSheet.create({
+  logoContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  logoWrapper: {
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: 'rgba(0, 150, 255, 0.3)',
+  },
+});
 
 function WelcomeScreen() {
   const { colors } = useTheme();
@@ -245,31 +166,10 @@ function WelcomeScreen() {
   const insets = useSafeAreaInsets();
   const [phraseIndex, setPhraseIndex] = useState(0);
   const [loading, setLoading] = useState<'apple' | 'google' | null>(null);
-  const fadeTitle = useRef(new Animated.Value(1)).current;
-  const slideUp = useRef(new Animated.Value(50)).current;
-  const fadeIn = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    // Entry animation
-    Animated.parallel([
-      Animated.timing(slideUp, {
-        toValue: 0,
-        duration: 800,
-        useNativeDriver: true,
-      }),
-      Animated.timing(fadeIn, {
-        toValue: 1,
-        duration: 800,
-        useNativeDriver: true,
-      }),
-    ]).start();
-
-    // Phrase rotation
     const interval = setInterval(() => {
-      Animated.timing(fadeTitle, { toValue: 0, duration: 300, useNativeDriver: true }).start(() => {
-        setPhraseIndex(prev => (prev + 1) % WELCOME_PHRASES.length);
-        Animated.timing(fadeTitle, { toValue: 1, duration: 300, useNativeDriver: true }).start();
-      });
+      setPhraseIndex(prev => (prev + 1) % WELCOME_PHRASES.length);
     }, 3000);
     return () => clearInterval(interval);
   }, []);
@@ -307,153 +207,30 @@ function WelcomeScreen() {
     }
   };
 
-  const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: colors.background },
-    content: {
-      flex: 1,
-      justifyContent: 'center',
-      alignItems: 'center',
-      paddingHorizontal: Spacing.xl,
-      paddingTop: Platform.select({ ios: insets.top + 40, android: insets.top + 40, default: 40 }),
-    },
-    logoSection: {
-      alignItems: 'center',
-      marginBottom: Spacing.xl,
-    },
-    title: { 
-      fontSize: 42, 
-      fontWeight: '700', 
-      color: colors.text, 
-      marginTop: Spacing.lg,
-      marginBottom: Spacing.md, 
-      textAlign: 'center' 
-    },
-    subtitle: {
-      fontSize: 16,
-      color: colors.textSecondary || '#666',
-      textAlign: 'center',
-      marginBottom: Spacing.lg,
-    },
-    buttonContainer: {
-      width: '100%',
-      gap: Spacing.md,
-      paddingHorizontal: Spacing.xl,
-      paddingBottom: Platform.select({ ios: insets.bottom + Spacing.xxl, android: Spacing.xxl, default: Spacing.xxl }),
-    },
-    appleButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: '#FFFFFF',
-      borderRadius: BorderRadius.full,
-      padding: Spacing.md,
-      gap: Spacing.sm,
-      ...Platform.select({
-        ios: {
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.1,
-          shadowRadius: 4,
-        },
-        android: {
-          elevation: 3,
-        },
-      }),
-    },
-    appleButtonText: { color: '#000000', fontWeight: '600', fontSize: 16 },
-    googleButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: '#4A4A4A',
-      borderRadius: BorderRadius.full,
-      padding: Spacing.md,
-      gap: Spacing.sm,
-      ...Platform.select({
-        ios: {
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.1,
-          shadowRadius: 4,
-        },
-        android: {
-          elevation: 3,
-        },
-      }),
-    },
-    googleButtonText: { color: '#FFFFFF', fontWeight: '600', fontSize: 16 },
-    signupButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: colors.primary || '#007AFF',
-      borderRadius: BorderRadius.full,
-      padding: Spacing.md,
-      ...Platform.select({
-        ios: {
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.15,
-          shadowRadius: 4,
-        },
-        android: {
-          elevation: 4,
-        },
-      }),
-    },
-    signupButtonText: { color: '#FFFFFF', fontWeight: '600', fontSize: 16 },
-    loginButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: 'transparent',
-      borderRadius: BorderRadius.full,
-      padding: Spacing.md,
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    loginButtonText: { color: colors.text, fontWeight: '600', fontSize: 16 },
-  });
-
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar barStyle={colors.text === '#FFFFFF' ? 'light-content' : 'dark-content'} />
-      <View style={styles.content}>
-        {/* AI Logo Header / Avatar */}
-        <Animated.View 
-          style={[
-            styles.logoSection,
-            {
-              opacity: fadeIn,
-              transform: [{ translateY: slideUp }],
-            }
-          ]}
-        >
-          <AILogo size={100} />
-          <Animated.Text style={[styles.title, { opacity: fadeTitle }]}>
-            {WELCOME_PHRASES[phraseIndex]}
-          </Animated.Text>
-          <Text style={styles.subtitle}>
-            Your AI Assistant
-          </Text>
-        </Animated.View>
+      
+      {/* Top Section - Logo + Title */}
+      <View style={styles.topSection}>
+        <AILogo size={100} />
+        <Text style={[styles.title, { color: colors.text }]}>
+          {WELCOME_PHRASES[phraseIndex]}
+        </Text>
+        <Text style={[styles.subtitle, { color: colors.textSecondary || '#666' }]}>
+          Your AI Assistant
+        </Text>
       </View>
       
-      <Animated.View 
-        style={[
-          styles.buttonContainer,
-          {
-            opacity: fadeIn,
-            transform: [{ translateY: slideUp }],
-          }
-        ]}
-      >
+      {/* Bottom Section - Buttons */}
+      <View style={[styles.bottomSection, { paddingBottom: Math.max(insets.bottom, 20) + 20 }]}>
         {/* Apple Sign-In */}
         {Platform.OS === 'ios' ? (
           <TouchableOpacity
             style={styles.appleButton}
             onPress={handleApple}
             disabled={loading !== null}
+            activeOpacity={0.8}
           >
             {loading === 'apple' ? (
               <ActivityIndicator size="small" color="#000" />
@@ -471,6 +248,7 @@ function WelcomeScreen() {
           style={styles.googleButton}
           onPress={handleGoogle}
           disabled={loading !== null}
+          activeOpacity={0.8}
         >
           {loading === 'google' ? (
             <ActivityIndicator size="small" color="#FFF" />
@@ -483,18 +261,108 @@ function WelcomeScreen() {
         </TouchableOpacity>
 
         {/* Email sign-up */}
-        <TouchableOpacity style={styles.signupButton} onPress={() => router.push('/login')}>
-          <Text style={styles.signupButtonText}>Continue with Email</Text>
+        <TouchableOpacity 
+          style={[styles.emailButton, { backgroundColor: colors.primary || '#007AFF' }]} 
+          onPress={() => router.push('/login')}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.emailButtonText}>Continue with Email</Text>
         </TouchableOpacity>
 
         {/* Log in */}
-        <TouchableOpacity style={styles.loginButton} onPress={() => router.push('/login')}>
-          <Text style={styles.loginButtonText}>Log in</Text>
+        <TouchableOpacity 
+          style={[styles.loginButton, { borderColor: colors.border }]} 
+          onPress={() => router.push('/login')}
+          activeOpacity={0.8}
+        >
+          <Text style={[styles.loginButtonText, { color: colors.text }]}>Log in</Text>
         </TouchableOpacity>
-      </Animated.View>
+      </View>
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  topSection: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+    paddingTop: 60,
+  },
+  title: {
+    fontSize: 32,
+    fontWeight: '700',
+    marginTop: 24,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  subtitle: {
+    fontSize: 16,
+    textAlign: 'center',
+  },
+  bottomSection: {
+    width: '100%',
+    paddingHorizontal: 24,
+    paddingTop: 20,
+    gap: 12,
+  },
+  appleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    paddingVertical: 14,
+    gap: 10,
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+  },
+  appleButtonText: {
+    color: '#000000',
+    fontWeight: '600',
+    fontSize: 16,
+  },
+  googleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#4A4A4A',
+    borderRadius: 12,
+    paddingVertical: 14,
+    gap: 10,
+  },
+  googleButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 16,
+  },
+  emailButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+    paddingVertical: 14,
+  },
+  emailButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 16,
+  },
+  loginButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+    paddingVertical: 14,
+    borderWidth: 1,
+  },
+  loginButtonText: {
+    fontWeight: '600',
+    fontSize: 16,
+  },
+});
 
 export default function RootScreen() {
   const { user } = useAuth();
