@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+fix when open file to uplosd a file you never see video,zip,audio please and background toolmodal lan dwe blur kare modal lan menm. import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
