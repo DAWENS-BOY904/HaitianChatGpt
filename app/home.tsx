@@ -1,4 +1,4 @@
-please le modal la open li pa dwe background blur chat se background modal lan dwe blur and siw light system background modal dwe blur in light to if dark same things and background modal lan dwe border li pa dwe kare regade photo an model and when u press long in ai chat allow to copy sleected tex not all tex no modal to:https://files.catbox.moe/7jhs8f.jpeg import React, { useState, useRef, useEffect, useCallback, useMemo, Component } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo, Component } from 'react';
 import { Image as ExpoImage } from 'expo-image';
 import { 
   View, 
