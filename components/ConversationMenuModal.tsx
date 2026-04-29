@@ -1,5 +1,6 @@
+
 import React, { useRef, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Modal, Animated, Platform, Dimensions } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Modal, Animated, Platform, Dimensions, useColorScheme } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 
@@ -32,6 +33,8 @@ export function ConversationMenuModal({
   topOffset = 100,
 }: ConversationMenuModalProps) {
 
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.82)).current;
 
@@ -75,7 +78,7 @@ export function ConversationMenuModal({
             },
           ]}
         >
-          <BlurView intensity={Platform.OS === 'ios' ? 92 : 98} tint="dark" style={styles.blurBox}>
+          <BlurView intensity={Platform.OS === 'ios' ? 92 : 98} tint={isDark ? 'dark' : 'light'} style={styles.blurBox}>
             {conversationTitle ? (
               <View style={styles.titleRow}>
                 <Text style={styles.titleText} numberOfLines={1}>{conversationTitle}</Text>
@@ -92,13 +95,13 @@ export function ConversationMenuModal({
                   setTimeout(item.onPress, 60);
                 }}
               >
-                <Text style={[styles.menuLabel, item.destructive && styles.destructiveLabel]}>
+                <Text style={[styles.menuLabel, { color: item.destructive ? '#FF453A' : (isDark ? 'rgba(255,255,255,0.92)' : 'rgba(0,0,0,0.88)') }, item.destructive && styles.destructiveLabel]}>
                   {item.label}
                 </Text>
                 <Ionicons
                   name={item.icon as any}
                   size={20}
-                  color={item.destructive ? '#FF453A' : 'rgba(255,255,255,0.85)'}
+                  color={item.destructive ? '#FF453A' : (isDark ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.75)')} // The missing ')' was here
                 />
               </TouchableOpacity>
             ))}
@@ -135,7 +138,7 @@ const styles = StyleSheet.create({
     borderBottomColor: 'rgba(255,255,255,0.1)',
   },
   titleText: {
-    color: 'rgba(255,255,255,0.45)',
+    color: 'rgba(128,128,128,0.8)',
     fontSize: 12,
     textAlign: 'center',
     fontWeight: '500',
@@ -151,6 +154,6 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: 'rgba(255,255,255,0.08)',
   },
-  menuLabel: { fontSize: 16, color: 'rgba(255,255,255,0.92)', fontWeight: '400' },
+  menuLabel: { fontSize: 16, fontWeight: '400' },
   destructiveLabel: { color: '#FF453A' },
 });

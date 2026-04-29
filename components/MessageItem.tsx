@@ -355,9 +355,13 @@ const MarkdownRenderer = memo(function MarkdownRenderer({
 
     // Plain paragraph
     const k = nextKey();
-    // const isLastLine = i === lines.length - 1; // This variable was declared but not used for this block, removing for cleanliness
     elements.push(
-      <Text key={k} style={{ color: textColor, fontSize: 15, lineHeight: 23, flexWrap: 'wrap', marginBottom: 1 }}>
+      <Text
+        key={k}
+        selectable={!isUser}
+        selectionColor={!isUser ? 'rgba(16,163,127,0.35)' : undefined}
+        style={{ color: textColor, fontSize: 15, lineHeight: 23, flexWrap: 'wrap', marginBottom: 1 }}
+      >
         {renderInline(trimmed, k)}
       </Text>
     );
@@ -1153,4 +1157,4 @@ export const MessageItem = memo(function MessageItem({
   );
 });
 
-please ai make change In components/MessageItem, add native text selection to AI assistant message text by adding selectable={true} and selectionColor prop directly to the Text nodes inside MarkdownRenderer paragraphs (the plain paragraph elements), so users can long-press to highlight and copy specific spans without any modal and in conversation menu modal add dark/light sustem.
+
