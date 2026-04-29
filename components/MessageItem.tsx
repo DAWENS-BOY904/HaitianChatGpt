@@ -15,6 +15,8 @@ import {
   Platform,
   Animated,
   TextInput,
+  findNodeHandle,
+  UIManager,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -533,15 +535,17 @@ function formatMessageTime(dateStr: string): string {
 
 // ── Blur Context Menu ──
 const BlurContextMenu = memo(function BlurContextMenu({
-  visible, timeLabel, items, onClose,
+  visible, timeLabel, items, onClose, anchorY,
 }: {
   visible: boolean;
   timeLabel: string;
   items: Array<{ icon: string; label: string; onPress: () => void; destructive?: boolean }>;
   onClose: () => void;
+  anchorY?: number;
 }) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const scaleAnim = useRef(new Animated.Value(0.85)).current;
+  const scaleAnim = useRef(new Animated.Value(0.9)).current;
+  const screenH = Dimensions.get('window').height;
 
   useEffect(() => {
     if (visible) {
@@ -552,17 +556,30 @@ const BlurContextMenu = memo(function BlurContextMenu({
     } else {
       Animated.parallel([
         Animated.timing(fadeAnim, { toValue: 0, duration: 120, useNativeDriver: true }),
-        Animated.timing(scaleAnim, { toValue: 0.85, duration: 120, useNativeDriver: true }),
+        Animated.timing(scaleAnim, { toValue: 0.9, duration: 120, useNativeDriver: true }),
       ]).start();
     }
   }, [visible]);
 
   if (!visible) return null;
 
+  // Position menu just below the message; flip above if too close to bottom
+  const menuH = (items.length * 52) + (timeLabel ? 48 : 0) + 16;
+  const spaceBelow = screenH - (anchorY ?? screenH / 2);
+  const top = spaceBelow > menuH + 24
+    ? (anchorY ?? screenH / 2) + 8
+    : (anchorY ?? screenH / 2) - menuH - 8;
+
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
       <Pressable style={ctxStyles.backdrop} onPress={onClose}>
-        <Animated.View style={[ctxStyles.menuWrap, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}>
+        <Animated.View
+          style={[
+            ctxStyles.menuWrap,
+            { position: 'absolute', top: Math.max(60, Math.min(top, screenH - menuH - 20)) },
+            { opacity: fadeAnim, transform: [{ scale: scaleAnim }] },
+          ]}
+        >
           <BlurView intensity={85} tint="dark" style={ctxStyles.blurBox}>
             {timeLabel ? (
               <View style={ctxStyles.timeRow}><Text style={ctxStyles.timeText}>{timeLabel}</Text></View>
@@ -613,8 +630,8 @@ const aiImgMenuStyles = StyleSheet.create({
 });
 
 const ctxStyles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' },
-  menuWrap: { width: 260, borderRadius: 18, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.45, shadowRadius: 24, elevation: 24 },
+  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' },
+  menuWrap: { width: 260, alignSelf: 'center', borderRadius: 18, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.45, shadowRadius: 24, elevation: 24 },
   blurBox: { borderRadius: 18, overflow: 'hidden' },
   timeRow: { paddingHorizontal: 18, paddingTop: 14, paddingBottom: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(255,255,255,0.1)' },
   timeText: { color: 'rgba(255,255,255,0.5)', fontSize: 13, textAlign: 'center', fontWeight: '500' },
@@ -641,6 +658,10 @@ export const MessageItem = memo(function MessageItem({
   const supabase = getSupabaseClient();
 
   const [showContextMenu, setShowContextMenu] = useState(false);
+  const [menuAnchorY, setMenuAnchorY] = useState(0);
+  const messageRef = useRef<View>(null);
+  const animatedViewRef = useRef<View>(null);
+  const pressableRef = useRef<View>(null);
   const [showActionsModal, setShowActionsModal] = useState(false);
   const [showSelectTextModal, setShowSelectTextModal] = useState(false);
   const [liked, setLiked] = useState<'like' | 'dislike' | null>(null);
@@ -688,8 +709,17 @@ export const MessageItem = memo(function MessageItem({
   const hasOnlyImage = message.role === 'user' && !!message.image_url && !message.content.trim();
   const hasBothTextAndImage = message.role === 'user' && !!message.image_url && !!message.content.trim();
   const handleLongPress = useCallback(() => {
-    if (hasOnlyImage) return; // no context menu for image-only uploads
-    setShowContextMenu(true);
+    if (hasOnlyImage) return;
+    const node = findNodeHandle(pressableRef.current);
+    if (node) {
+      UIManager.measure(node, (_x, _y, _w, h, _px, py) => {
+        setMenuAnchorY(py + h);
+        setShowContextMenu(true);
+      });
+    } else {
+      setMenuAnchorY(Dimensions.get('window').height / 2);
+      setShowContextMenu(true);
+    }
   }, [hasOnlyImage]);
 
   const handleAIImageLongPress = useCallback((imageUrl: string) => {
@@ -881,6 +911,7 @@ export const MessageItem = memo(function MessageItem({
           </View>
         ) : (
         <Pressable
+          ref={pressableRef}
           onLongPress={handleLongPress}
           delayLongPress={350}
           style={[styles.container, message.role === 'user' ? (hasOnlyImage ? styles.userMessageImageOnly : styles.userMessage) : styles.assistantMessage]}
@@ -1080,7 +1111,7 @@ export const MessageItem = memo(function MessageItem({
         <AnalysisModal visible={analysisVisible} onClose={() => setAnalysisVisible(false)} entries={analysisEntries} title="Analysis" />
       )}
 
-      <BlurContextMenu visible={showContextMenu} timeLabel={timeLabel} items={contextMenuItems} onClose={() => setShowContextMenu(false)} />
+      <BlurContextMenu visible={showContextMenu} timeLabel={timeLabel} items={contextMenuItems} onClose={() => setShowContextMenu(false)} anchorY={menuAnchorY} />
 
       {/* Select Text Modal */}
       <Modal visible={showSelectTextModal} transparent={false} animationType="slide" onRequestClose={() => setShowSelectTextModal(false)}>
