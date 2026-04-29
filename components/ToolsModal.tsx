@@ -1,4 +1,4 @@
-fix when open file to uplosd a file you never see video,zip,audio please and background toolmodal lan dwe blur kare modal lan menm. import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -180,16 +180,19 @@ export function ToolsModal({
 
   const getMimeIcon = (mime: string, ext: string) => {
     if (mime.startsWith('image/')) return { icon: 'image-outline' as const, color: '#FF2D55' };
+    if (mime.startsWith('video/')) return { icon: 'videocam-outline' as const, color: '#FF9500' };
+    if (mime.startsWith('audio/')) return { icon: 'musical-notes-outline' as const, color: '#AF52DE' };
     if (mime.includes('pdf')) return { icon: 'document-text-outline' as const, color: '#FF3B30' };
     if (mime.includes('word') || ext === 'docx' || ext === 'doc') return { icon: 'document-outline' as const, color: '#2B5CE6' };
     if (mime.includes('excel') || mime.includes('spreadsheet') || ext === 'xlsx') return { icon: 'grid-outline' as const, color: '#217346' };
     if (mime.includes('json') || mime.includes('xml')) return { icon: 'code-slash-outline' as const, color: '#CB7700' };
     if (['js','ts','tsx','jsx','py','rb','go','rs','java','kt','swift','sh','css','html'].includes(ext)) return { icon: 'code-outline' as const, color: '#007AFF' };
     if (mime.startsWith('text/') || ext === 'txt' || ext === 'md') return { icon: 'document-text-outline' as const, color: '#8E8E93' };
+    if (['zip','rar','7z','tar','gz','bz2'].includes(ext)) return { icon: 'archive-outline' as const, color: '#FF9F0A' };
     return { icon: 'attach-outline' as const, color: '#636366' };
   };
 
-  // ── FILES ────────────────────────────────────────────────────────────────
+  // ── FILES — all types allowed (video, audio, zip, etc.) ──────────────────
   const handleFiles = async () => {
     setLoading('files');
     try {
@@ -197,23 +200,7 @@ export function ToolsModal({
       if (!result.canceled && result.assets?.[0]) {
         const asset = result.assets[0];
         const ext = (asset.name || '').split('.').pop()?.toLowerCase() || '';
-        const mime = (asset.mimeType || '').toLowerCase();
-
-        const blockedMimePrefixes = ['video/', 'audio/'];
-        const blockedMimeIncludes = ['zip', 'x-rar', '7z', 'tar', 'gzip', 'bzip', 'x-7z'];
-        const blockedExts = ['zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'xz', 'tgz'];
-
-        const isBlocked =
-          blockedMimePrefixes.some(prefix => mime.startsWith(prefix)) ||
-          blockedMimeIncludes.some(keyword => mime.includes(keyword)) ||
-          blockedExts.includes(ext) ||
-          mime === '';
-
-        if (isBlocked) {
-          alert('File type not supported. Please upload documents, images, or code files.');
-          return;
-        }
-
+        const mime = (asset.mimeType || 'application/octet-stream').toLowerCase();
         const isImage = mime.startsWith('image/');
         setSelectedFilePreview({ name: asset.name || 'file', size: asset.size || 0, mimeType: mime, uri: asset.uri, isImage });
       }
@@ -223,7 +210,13 @@ export function ToolsModal({
 
   const confirmSendFile = () => {
     if (!selectedFilePreview) return;
-    onPickMedia([{ type: selectedFilePreview.isImage ? 'image' : 'document', uri: selectedFilePreview.uri, name: selectedFilePreview.name, mimeType: selectedFilePreview.mimeType, size: selectedFilePreview.size }]);
+    onPickMedia([{
+      type: selectedFilePreview.isImage ? 'image' : 'document',
+      uri: selectedFilePreview.uri,
+      name: selectedFilePreview.name,
+      mimeType: selectedFilePreview.mimeType,
+      size: selectedFilePreview.size,
+    }]);
     setSelectedFilePreview(null);
     onClose();
   };
@@ -243,7 +236,6 @@ export function ToolsModal({
 
   if (!visible && !rendered) return null;
 
-  // Bottom safe area padding
   const bottomPad = Math.max(insets.bottom, 8);
 
   return (
@@ -260,7 +252,6 @@ export function ToolsModal({
         </Animated.View>
 
         <GestureDetector gesture={pan}>
-          {/* Sheet is a BlurView on iOS, plain View on Android */}
           <Animated.View style={[styles.sheetOuter, modalStyle]}>
             {Platform.OS === 'ios' ? (
               <BlurView
@@ -315,7 +306,7 @@ export function ToolsModal({
   );
 }
 
-// ── Inner sheet content extracted to avoid duplication ──────────────────────
+// ── Inner sheet content ──────────────────────────────────────────────────────
 function SheetContents({
   isDark, tools, loading, selectedFilePreview, setSelectedFilePreview,
   showWebOptions, setShowWebOptions, webMode, setWebMode,
@@ -510,7 +501,6 @@ const styles = StyleSheet.create({
   },
   handleWrap: { alignItems: 'center', paddingTop: 10, paddingBottom: 6 },
   handle: { width: 36, height: 5, borderRadius: 3 },
-  // Compact vertical padding — no extra bottom space
   scrollContent: { paddingHorizontal: 14, paddingTop: 4, paddingBottom: 16 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 10, marginBottom: 12 },
   cellWrap: { width: (SCREEN_WIDTH - 48) / 3 },
