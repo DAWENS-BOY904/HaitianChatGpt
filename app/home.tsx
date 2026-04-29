@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo, Component } from 'react';
+pleaze ai fix this in home page when the user press long in his messge the modal that have copy and edit must apear anba message li t click press long lan in blur mode please dont skip example photo sa:https://files.catbox.moe/a0fk2i.jpeg please maks sure fix it import React, { useState, useRef, useEffect, useCallback, useMemo, Component } from 'react';
 import { Image as ExpoImage } from 'expo-image';
 import { 
   View, 
