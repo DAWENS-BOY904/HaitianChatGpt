@@ -184,7 +184,7 @@ function GuestSettings() {
         {/* Account */}
         <View style={{ marginTop: 8, paddingHorizontal: 16 }}>
           <Text style={{ fontSize: 13, fontWeight: '600', color: secondaryText, marginBottom: 8, marginLeft: 4, textTransform: 'uppercase' }}>Account</Text>
-          <View style={{ backgroundColor: cardBg, borderRadius: 12, overflow: 'hidden' }}>
+          <View style={{ backgroundColor: cardBg, borderRadius: 16, overflow: 'hidden' }}>
             {[
               { icon: 'megaphone-outline', label: 'Ads controls', route: '/ads-controls' },
               { icon: 'document-lock-outline', label: 'Data controls', route: '/data-controls' },
@@ -212,7 +212,7 @@ function GuestSettings() {
 
         {/* Sign up CTA */}
         <View style={{ marginHorizontal: 16, marginTop: 24 }}>
-          <View style={{ backgroundColor: cardBg, borderRadius: 12, overflow: 'hidden' }}>
+          <View style={{ backgroundColor: cardBg, borderRadius: 16, overflow: 'hidden' }}>
             <View style={{ padding: 24, alignItems: 'center' }}>
               <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: '#10A37F22', alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
                 <Ionicons name="lock-open-outline" size={28} color="#10A37F" />
@@ -247,7 +247,7 @@ const ACCENT_COLORS = [
 ];
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// MAIN SETTINGS SCREEN — ChatGPT Style Redesign
+// MAIN SETTINGS SCREEN — ChatGPT Style (Fixed)
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function SettingsScreen() {
   const { colors, isDark } = useTheme();
@@ -273,6 +273,7 @@ export default function SettingsScreen() {
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [photoPickerVisible, setPhotoPickerVisible] = useState(false);
   const [accentPickerVisible, setAccentPickerVisible] = useState(false);
+  const [appearancePickerVisible, setAppearancePickerVisible] = useState(false);
 
   const currentVersion = Constants.expoConfig?.version || '1.0.0';
   const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'update' | 'no-update' | 'version'>('idle');
@@ -514,7 +515,7 @@ export default function SettingsScreen() {
   const Card = ({ children }: { children: React.ReactNode }) => (
     <View style={{
       backgroundColor: cardBg,
-      borderRadius: 12,
+      borderRadius: 16,
       overflow: 'hidden',
       marginHorizontal: 16,
     }}>
@@ -537,9 +538,9 @@ export default function SettingsScreen() {
     </Text>
   );
 
-  // ── Row Component ────────────────────────────────────────────────────
-  const Row = ({ icon, label, value, onPress, isLast, rightEl }: {
-    icon: string; label: string; value?: string; onPress?: () => void; isLast?: boolean; rightEl?: React.ReactNode;
+  // ── Row Component (with optional chevron) ────────────────────────────
+  const Row = ({ icon, label, value, onPress, isLast, showChevron = true, rightEl }: {
+    icon: string; label: string; value?: string; onPress?: () => void; isLast?: boolean; showChevron?: boolean; rightEl?: React.ReactNode;
   }) => (
     <TouchableOpacity
       style={{
@@ -562,7 +563,7 @@ export default function SettingsScreen() {
       {rightEl ? rightEl : (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
           {value ? <Text style={{ fontSize: 15, color: secondaryText }}>{value}</Text> : null}
-          {onPress ? <Ionicons name="chevron-forward" size={16} color={secondaryText} /> : null}
+          {onPress && showChevron ? <Ionicons name="chevron-forward" size={16} color={secondaryText} /> : null}
         </View>
       )}
     </TouchableOpacity>
@@ -629,6 +630,67 @@ export default function SettingsScreen() {
     );
   };
 
+  // ── Appearance Row with inline dropdown ──────────────────────────────
+  const AppearanceRow = () => {
+    const [showDropdown, setShowDropdown] = useState(false);
+    const current = settings.appearance || 'System';
+    const options = ['System', 'Light', 'Dark'];
+
+    return (
+      <>
+        <TouchableOpacity
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            paddingVertical: 14,
+            paddingHorizontal: 16,
+            borderBottomWidth: showDropdown ? 0 : StyleSheet.hairlineWidth,
+            borderBottomColor: divider,
+          }}
+          onPress={() => setShowDropdown(!showDropdown)}
+          activeOpacity={0.6}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
+            <Ionicons name="moon-outline" size={20} color={secondaryText} />
+            <Text style={{ fontSize: 16, color: primaryText, fontWeight: '400' }}>Appearance</Text>
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <Text style={{ fontSize: 15, color: secondaryText }}>{current}</Text>
+            <Ionicons name={showDropdown ? "chevron-up" : "chevron-down"} size={16} color={secondaryText} />
+          </View>
+        </TouchableOpacity>
+
+        {showDropdown && (
+          <View style={{ backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7', marginHorizontal: 16, marginBottom: 8, borderRadius: 12, overflow: 'hidden' }}>
+            {options.map((opt, i) => {
+              const isSelected = current === opt;
+              return (
+                <TouchableOpacity
+                  key={opt}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    paddingVertical: 12,
+                    paddingHorizontal: 16,
+                    borderBottomWidth: i < options.length - 1 ? StyleSheet.hairlineWidth : 0,
+                    borderBottomColor: divider,
+                  }}
+                  onPress={() => { updateSetting('appearance', opt); setShowDropdown(false); }}
+                  activeOpacity={0.6}
+                >
+                  <Text style={{ fontSize: 16, color: primaryText }}>{opt}</Text>
+                  {isSelected && <Ionicons name="checkmark" size={20} color="#34C759" />}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
+      </>
+    );
+  };
+
   return (
     <View style={{ flex: 1, backgroundColor: bg }}>
       {/* ═══════════════════════════════════════════════════════════════
@@ -663,7 +725,7 @@ export default function SettingsScreen() {
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}>
         {/* ═══════════════════════════════════════════════════════════════
-            PROFILE SECTION — Centered avatar, name, username, edit button
+            PROFILE SECTION
             ═══════════════════════════════════════════════════════════════ */}
         <View style={{ alignItems: 'center', paddingVertical: 20 }}>
           <View style={{
@@ -700,16 +762,20 @@ export default function SettingsScreen() {
         </View>
 
         {/* ═══════════════════════════════════════════════════════════════
-            ACCOUNT SECTION
+            ACCOUNT SECTION — NO chevron for Subscription, Restore, Upgrade
             ═══════════════════════════════════════════════════════════════ */}
         <SectionLabel text="Account" />
         <Card>
           <Row icon="mail-outline" label="Email" value={(user?.email?.length ?? 0) > 22 ? (user?.email?.slice(0, 20) + '...') : (user?.email || '')} />
-          <Row icon="star-outline" label="Subscription" value={tierLabel()} onPress={() => router.push('/subscription')} />
+          {/* Subscription — NO chevron, just value */}
+          <Row icon="star-outline" label="Subscription" value={tierLabel()} showChevron={false} />
           {!isPaidPlan && (
-            <Row icon="arrow-up-circle-outline" label="Upgrade to Plus" onPress={() => router.push('/subscription')} />
+            /* Upgrade — NO chevron */
+            <Row icon="arrow-up-circle-outline" label="Upgrade to Plus" showChevron={false} />
           )}
-          <Row icon="refresh-outline" label="Restore purchases" onPress={() => router.push('/subscription')} />
+          {/* Restore purchases — NO chevron */}
+          <Row icon="refresh-outline" label="Restore purchases" showChevron={false} />
+          {/* These have chevrons because they navigate */}
           <Row icon="receipt-outline" label="Orders" onPress={() => router.push('/orders')} />
           <Row icon="person-circle-outline" label="Personalization" onPress={() => router.push('/personalization')} />
           <Row icon="notifications-outline" label="Notifications" onPress={() => router.push('/notifications')} />
@@ -721,12 +787,13 @@ export default function SettingsScreen() {
         </Card>
 
         {/* ═══════════════════════════════════════════════════════════════
-            APP SECTION
+            APP SECTION — Appearance with inline dropdown
             ═══════════════════════════════════════════════════════════════ */}
         <SectionLabel text="App" />
         <Card>
           <Row icon="globe-outline" label="App language" value={settings.appLanguage || 'English'} onPress={() => router.push('/languages')} />
-          <Row icon="moon-outline" label="Appearance" value={settings.appearance || 'System'} onPress={() => router.push('/appearance')} />
+          {/* Appearance — inline dropdown, no navigation */}
+          <AppearanceRow />
           <AccentColorRow />
           <SwitchRow icon="phone-portrait-outline" label="Haptic feedback" value={settings.hapticFeedback} onChange={v => updateSetting('hapticFeedback', v)} />
           <SwitchRow icon="text-outline" label="Correct spelling automatically" value={settings.autoSpelling} onChange={v => updateSetting('autoSpelling', v)} isLast />
@@ -792,18 +859,20 @@ export default function SettingsScreen() {
         )}
 
         {/* ═══════════════════════════════════════════════════════════════
-            ABOUT SECTION
+            ABOUT SECTION — NO chevrons at all
             ═══════════════════════════════════════════════════════════════ */}
         <SectionLabel text="About" />
         <Card>
-          <Row icon="bug-outline" label="Report bug" onPress={() => router.push('/bugreport')} />
-          <Row icon="help-circle-outline" label="Help Center" onPress={() => router.push('/help-center')} />
-          <Row icon="document-text-outline" label="Terms of Use" onPress={() => router.push('https://dawinix.com')} />
-          <Row icon="shield-checkmark-outline" label="Privacy Policy" onPress={() => router.push('https://dawinix.com')} />
+          {/* All About rows — NO chevrons */}
+          <Row icon="bug-outline" label="Report bug" showChevron={false} />
+          <Row icon="help-circle-outline" label="Help Center" showChevron={false} />
+          <Row icon="document-text-outline" label="Terms of Use" showChevron={false} />
+          <Row icon="shield-checkmark-outline" label="Privacy Policy" showChevron={false} />
           <Row
             icon="cloud-download-outline"
             label="Check for updates"
             isLast
+            showChevron={false}
             onPress={handleUpdatePress}
             rightEl={
               updateStatus === 'checking' ? (
