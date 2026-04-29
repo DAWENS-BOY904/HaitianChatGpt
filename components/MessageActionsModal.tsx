@@ -1,4 +1,4 @@
-please dont skip In components/MessageActionsModal., add a 'Select Text' button in the Export section that opens a full-screen modal with the message content rendered as a selectable Text component (selectable={true}, selectionColor prop), along with Copy All and Share buttons at the bottom — so users can highlight and copy specific spans. import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
