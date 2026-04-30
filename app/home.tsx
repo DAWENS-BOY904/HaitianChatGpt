@@ -38,6 +38,8 @@ import { useSubscription } from '../hooks/useSubscription';
 import { MenuModal } from '../components/MenuModal';
 import { MessageLimitModal } from '../components/MessageLimitModal';
 import { ToolsModal } from '../components/ToolsModal';
+import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
 import { QuizModal, QuizView, QuizQuestion, QuizHistoryEntry } from '../components/QuizModal';
 import { PresetsModal } from '../components/PresetsModal';
 import { StreamingText } from '../components/StreamingText';
@@ -757,8 +759,13 @@ export default function HomeScreen() {
   const handleInputChange = useCallback(async (txt: string) => {
     const safeTxt = txt ?? '';
     const byteLength = new Blob([safeTxt]).size;
-    const looksLikeCode = /```|function |const |import |class |def |<\w+>|\{[\s\S]{40,}\}/.test(safeTxt);
-    if (byteLength > 4000 && looksLikeCode) {
+
+    // Detect if text is ONLY code (no natural language)
+    const codePatterns = /^(\s*(import|from|const|let|var|function|class|interface|type|export|async|await|if|for|while|return|try|catch|\{|\}|\(|\)|\[|\]|=>|:|;|,|\.|\+|\-|\*|\/|=|!|&|\||<|>|\d+|\s+|\/\/|\/\*|\*|#).*)+$/s;
+    const hasNaturalLanguage = /(the|and|is|are|was|were|be|been|have|has|had|do|does|did|will|would|could|should|may|might|can|shall|this|that|these|those|with|for|from|about|into|through|during|before|after|above|below|between|under|again|further|then|once|here|there|when|where|why|how|all|each|few|more|most|other|some|such|no|nor|not|only|own|same|so|than|too|very|just|now|also|back|down|off|over|out|up|any|both|each|few|more|most|other|some|such|what|which|who|whom|whose|why|how|where|when)/gi.test(safeTxt);
+    const looksLikeCodeOnly = codePatterns.test(safeTxt) && !hasNaturalLanguage && safeTxt.length > 50;
+
+    if (byteLength > 4000 && looksLikeCodeOnly) {
       try {
         const fileName = `code_${Date.now()}.txt`;
         const filePath = (FileSystem.cacheDirectory || '') + fileName;
@@ -766,10 +773,14 @@ export default function HomeScreen() {
         const newFile: MediaFile = { type: 'document', uri: filePath, name: fileName, mimeType: 'text/plain' };
         setSelectedMedia(prev => [...prev, newFile]);
         setInputText('');
-        showAlert('Code file created', `Pasted code saved as "${fileName}" and attached.`);
-      } catch (e) { setInputText(safeTxt); }
+        showAlert('Code file created', `Code saved as "${fileName}" and attached. You can now send it.`);
+      } catch (e) { 
+        console.error('Failed to create code file:', e);
+        setInputText(safeTxt); 
+      }
       return;
     }
+
     setInputText(safeTxt);
     // Debounce draft save (300ms)
     if (draftSaveTimer.current) clearTimeout(draftSaveTimer.current);
@@ -1708,30 +1719,40 @@ export default function HomeScreen() {
   const renderMediaPreview = useCallback(() => {
     if (selectedMedia.length === 0) return null;
     return (
-      <View style={{ paddingHorizontal: 16, paddingBottom: 8, paddingTop: 6 }}>
+      <ScrollView 
+        horizontal 
+        showsHorizontalScrollIndicator={false} 
+        style={{ maxHeight: 100, marginBottom: 8 }}
+        contentContainerStyle={{ paddingHorizontal: 16, gap: 10, alignItems: 'center' }}
+      >
         {selectedMedia.map((media, index) => (
-          <View key={`${media.uri}-${index}`} style={{ position: 'relative', marginBottom: 6, alignSelf: 'flex-start' }}>
+          <View key={`${media.uri}-${index}`} style={{ position: 'relative', alignSelf: 'center' }}>
             {media.type === 'image' ? (
-              <View style={{ width: 160, height: 160, borderRadius: 16, overflow: 'hidden', backgroundColor: '#222' }}>
-                <ExpoImage source={{ uri: media.uri }} style={{ width: 160, height: 160 }} contentFit="cover" />
+              <View style={{ width: 80, height: 80, borderRadius: 12, overflow: 'hidden', backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA' }}>
+                <ExpoImage source={{ uri: media.uri }} style={{ width: 80, height: 80 }} contentFit="cover" />
+              </View>
+            ) : media.type === 'video' ? (
+              <View style={{ width: 80, height: 80, borderRadius: 12, overflow: 'hidden', backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA', alignItems: 'center', justifyContent: 'center' }}>
+                <Ionicons name="videocam" size={28} color={colors.textSecondary} />
+                <Text style={{ fontSize: 9, color: colors.textSecondary, marginTop: 2 }} numberOfLines={1}>Video</Text>
               </View>
             ) : (
-              <View style={[styles.documentPreview, { width: 160 }]}>
-                <Ionicons name="document-text" size={24} color={colors.textSecondary} />
-                <Text style={styles.documentName} numberOfLines={1}>{media.name || 'Document'}</Text>
+              <View style={{ width: 80, height: 80, borderRadius: 12, backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA', alignItems: 'center', justifyContent: 'center', padding: 4 }}>
+                <Ionicons name="document-text" size={28} color={colors.textSecondary} />
+                <Text style={{ fontSize: 9, color: colors.textSecondary, marginTop: 2 }} numberOfLines={1}>{media.name || 'File'}</Text>
               </View>
             )}
             <TouchableOpacity
-              style={{ position: 'absolute', top: -6, right: -6, backgroundColor: '#111', borderRadius: 16, width: 28, height: 28, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#222' }}
+              style={{ position: 'absolute', top: -4, right: -4, backgroundColor: isDark ? '#000' : '#FFF', borderRadius: 10, width: 20, height: 20, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: isDark ? '#333' : '#DDD' }}
               onPress={() => removeMedia(index)}
             >
-              <Ionicons name="close" size={16} color="#FFFFFF" />
+              <Ionicons name="close" size={12} color={isDark ? '#FFF' : '#333'} />
             </TouchableOpacity>
           </View>
         ))}
-      </View>
+      </ScrollView>
     );
-  }, [selectedMedia, removeMedia, colors]);
+  }, [selectedMedia, removeMedia, colors, isDark]);
 
   const styles = useMemo(() => StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background, paddingTop: Platform.select({ ios: insets.top, android: StatusBar.currentHeight || 0, default: 0 }) },
@@ -2094,8 +2115,6 @@ export default function HomeScreen() {
                 </ScrollView>
               ) : null}
 
-              {renderMediaPreview()}
-
               {editingMessageId ? (
                 <View style={[{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingBottom: 6 }]}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#1A1A2A', borderRadius: 18, paddingHorizontal: 14, paddingVertical: 8, gap: 8 }}>
@@ -2122,6 +2141,9 @@ export default function HomeScreen() {
                   </TouchableOpacity>
                 </View>
               ) : null}
+
+              {/* Media Preview */}
+              {renderMediaPreview()}
 
               {/* Input Area */}
               <View style={[styles.inputContainer, Platform.OS === 'ios' && { backgroundColor: 'transparent' }]}>
@@ -2263,13 +2285,13 @@ export default function HomeScreen() {
             <ToolsModal
               visible={toolsVisible}
               onClose={() => setToolsVisible(false)}
-              onSelectTool={(tool) => {
-                if (isGuest) { setToolsVisible(false); setGuestLockFeature(tool); setGuestLockModal(true); return; }
-                setInputText(prev => `${prev}[${tool}] `);
-              }}
               onPickMedia={(media) => {
                 if (isGuest) { setToolsVisible(false); setGuestLockFeature('file upload'); setGuestLockModal(true); return; }
                 handleMediaPicked(media);
+              }}
+              onSelectTool={(toolId) => {
+                if (isGuest) { setToolsVisible(false); setGuestLockFeature(toolId); setGuestLockModal(true); return; }
+                setInputText(prev => `${prev}[${toolId}] `);
               }}
               onSelectAIModel={(model) => {
                 if (isGuest) { setToolsVisible(false); setGuestLockFeature('AI model selection'); setGuestLockModal(true); return; }
