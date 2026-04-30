@@ -172,3 +172,4 @@ export function LinkSafetyModal({ visible, url, onClose, onOpenLink }: LinkSafet
     </Modal>
   );
 }
+hello ai when i put a tex you read it dont fucking remove make change first please don’t skip make change this page add all this page in blur mode and when the user leaves home while the AI is generating, keep the conversation alive using a background task or AppState listener so the AI finishes responding then send a local push notification with the first 60 chars of the AI reply so users can tap to return and see the full response.
