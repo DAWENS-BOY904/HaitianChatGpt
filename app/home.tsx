@@ -61,6 +61,18 @@ import { runOnJS } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { WebView } from 'react-native-webview';
+
+const MyWeb = () => {
+
+  return (
+
+    <WebView source={{ uri: 'https://example.com' }} />
+
+  );
+
+};
+
 
 // Input persistence helpers (8-minute TTL)
 const INPUT_PERSIST_KEY = 'home_input_draft';
