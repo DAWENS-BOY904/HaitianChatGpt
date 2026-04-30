@@ -2625,4 +2625,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-please fix home page when you talk to the ai and you left the page allow the chat conversation still create and ai still give you response dont stop still thinking and when the ai finish its send you puch notification to go see you response in real time and fix edg function le moun pa santi yo bien pou ai lan help poze kesyon and bayo num support 911 auto search for moun lan lika mande address moun lan and search lopital pi prel etc.
+
