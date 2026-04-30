@@ -2625,4 +2625,3 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-fix link click when ai send link allow click its and ooen linsafety and also When the user leaves home while the AI is still generating a response, keep the conversation alive using AppState listener so the AI finishes in the background, then send a local push notification with the first 60 chars of the AI reply so users can tap to return and see the full response.
