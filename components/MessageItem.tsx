@@ -1,4 +1,5 @@
 
+
 import React, { useState, memo, useCallback, useMemo, useEffect, useRef } from 'react';
 import {
   View,
@@ -1263,6 +1264,3 @@ export const MessageItem = memo(function MessageItem({
     </>
   );
 });
-
-
-
