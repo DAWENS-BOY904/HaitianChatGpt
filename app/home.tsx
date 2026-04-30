@@ -63,6 +63,22 @@ import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { WebView } from 'react-native-webview';
 
+// Custom base64 validator for React Native (atob not available)
+function isValidBase64(str: string): boolean {
+  try {
+    const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
+    if (!base64Regex.test(str)) return false;
+    const padded = str.length % 4 === 0 ? str : str + '='.repeat(4 - (str.length % 4));
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+    for (let i = 0; i < padded.length; i++) {
+      if (chars.indexOf(padded[i]) === -1 && padded[i] !== '=') return false;
+    }
+    return true;
+  } catch (_e) {
+    return false;
+  }
+}
+
 const MyWeb = () => {
 
   return (
@@ -610,7 +626,7 @@ export default function HomeScreen() {
   const [isAppActive, setIsAppActive] = useState(true);
   const [showBlurOverlay, setShowBlurOverlay] = useState(false);
   const [inputText, setInputText] = useState('');
-  const draftSaveTimer = useRef<NodeJS.Timeout | null>(null);
+  const draftSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [toolsVisible, setToolsVisible] = useState(false);
   const [conversationMenuVisible, setConversationMenuVisible] = useState(false);
   const [sideMenuVisible, setSideMenuVisible] = useState(false);
@@ -678,7 +694,6 @@ export default function HomeScreen() {
     setTemporaryChatModeLocal(val);
     if (ctxSetTempMode) ctxSetTempMode(val);
   };
-  useEffect(() => { if (ctxSetTempMode) ctxSetTempMode(temporaryChatMode); }, [temporaryChatMode]);
   const [customizeAIVisible, setCustomizeAIVisible] = useState(false);
   const [inviteLinkVisible, setInviteLinkVisible] = useState(false);
   const [groupCustomInstructions, setGroupCustomInstructions] = useState('');
@@ -741,7 +756,7 @@ export default function HomeScreen() {
 
   const handleInputChange = useCallback(async (txt: string) => {
     const safeTxt = txt ?? '';
-    const byteLength = new TextEncoder().encode(safeTxt).length;
+    const byteLength = new Blob([safeTxt]).size;
     const looksLikeCode = /```|function |const |import |class |def |<\w+>|\{[\s\S]{40,}\}/.test(safeTxt);
     if (byteLength > 4000 && looksLikeCode) {
       try {
@@ -769,8 +784,6 @@ export default function HomeScreen() {
 
   const wasGeneratingRef = useRef(false);
   const appStateForNotifRef = useRef(AppState.currentState);
-  const runOnJS_setSideMenu = useCallback((val: boolean) => setSideMenuVisible(val), []);
-
   useEffect(() => {
     if (user?.id) {
       supabase.from('user_profiles').select('profile_photo_url').eq('id', user.id).single().then(({ data }) => {
@@ -887,7 +900,7 @@ export default function HomeScreen() {
     .failOffsetY([-10, 10])
     .onEnd((e) => {
       if (e.translationX > 60 && e.velocityX > 100 && !sideMenuVisible) {
-        runOnJS(runOnJS_setSideMenu)(true);
+        runOnJS(setSideMenuVisible)(true);
       }
     });
 
@@ -896,13 +909,13 @@ export default function HomeScreen() {
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const flatListRef = useRef<FlatList>(null);
   const recordingRef = useRef<Audio.Recording | null>(null);
-  const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const recordingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const audioPermissionRef = useRef<boolean>(false);
   const isRecordingRef = useRef<boolean>(false);
-  const stopTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const stopTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const appStateRef = useRef(AppState.currentState);
-  const autoLockTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const processingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const autoLockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const processingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     checkAudioPermissions();
@@ -942,7 +955,7 @@ export default function HomeScreen() {
         Animated.timing(slideAnim, { toValue: 0, duration: 300, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
       ]).start();
       return () => { slideAnim.setValue(100); };
-    }, [fadeAnim, slideAnim])
+    }, [])
   );
 
   const handleScrollEvent = useCallback((event: any) => {
@@ -1149,7 +1162,7 @@ export default function HomeScreen() {
       if (fileSize < 500) throw new Error('Recording too short or empty');
       const base64Audio = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
       if (!base64Audio || base64Audio.length < 100) throw new Error('Audio encoding failed. Please try again.');
-      try { atob(base64Audio.slice(0, 100)); } catch (_e) { throw new Error('Audio format error. Please try again.'); }
+      if (!isValidBase64(base64Audio.slice(0, 100))) { throw new Error('Audio format error. Please try again.'); }
       await transcribeAudio(base64Audio);
     } catch (error: any) {
       Alert.alert('Processing Failed', error.message || 'Failed to process recording.', [
@@ -2014,6 +2027,7 @@ export default function HomeScreen() {
                       data={displayMessages}
                       renderItem={renderMessage}
                       keyExtractor={item => item.id}
+                      key={currentConversation?.id || 'empty'}
                       contentContainerStyle={{ paddingVertical: Spacing.md, paddingBottom: 8 }}
                       onScroll={handleScrollEvent}
                       scrollEventThrottle={16}
