@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo, Component } from 'react';
+In MessageItem.tsx, detect image URLs in AI responses and render them as inline expo-image components instead of plain text URLs, with tap-to-open support using Linking.openURL for external links.import React, { useState, useRef, useEffect, useCallback, useMemo, Component } from 'react';
 import { Image as ExpoImage } from 'expo-image';
 import { 
   View, 
