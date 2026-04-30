@@ -27,6 +27,7 @@ import {
   ScrollView,
   Switch,
 } from 'react-native';
+import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
 import { useConversation } from '../hooks/useConversation';
