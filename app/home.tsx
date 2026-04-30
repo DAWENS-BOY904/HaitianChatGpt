@@ -1,4 +1,4 @@
-Implement background AI response notifications: when the user leaves home while the AI is generating, keep the conversation alive using AppState listener so the AI finishes in the background, then send a local push notification with the first 60 chars of the AI reply so users can tap to return and see the full response.import React, { useState, useRef, useEffect, useCallback, useMemo, Component } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo, Component } from 'react';
 import { Image as ExpoImage } from 'expo-image';
 import { 
   View, 
