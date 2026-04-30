@@ -2673,4 +2673,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-fiz image logo display must be in the home page chT onstead of url and if its url allow real click url to open the link or the file link.
+
