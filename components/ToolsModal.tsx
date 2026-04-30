@@ -136,27 +136,64 @@ export function ToolsModal({
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') { alert('Camera permission is required.'); return; }
+
+      // On Android, can't select both images and videos in camera
+      if (Platform.OS === 'android') {
+        Alert.alert('Select Media Type', 'What would you like to capture?', [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Photo', onPress: async () => {
+            const result = await ImagePicker.launchCameraAsync({
+              mediaTypes: ImagePicker.MediaTypeOptions.Images,
+              quality: 0.85,
+              base64: true,
+            });
+            if (!result.canceled && result.assets[0]) {
+              onPickMedia([{ type: 'image', uri: result.assets[0].uri, base64: result.assets[0].base64, mimeType: 'image/jpeg' }]);
+              onClose();
+            }
+          }},
+          { text: 'Video', onPress: async () => {
+            const result = await ImagePicker.launchCameraAsync({
+              mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+              quality: 0.85,
+            });
+            if (!result.canceled && result.assets[0]) {
+              onPickMedia([{ type: 'video', uri: result.assets[0].uri, mimeType: 'video/mp4' }]);
+              onClose();
+            }
+          }},
+        ]);
+        setLoading(null);
+        return;
+      }
+
       const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ImagePicker.MediaTypeOptions.All,
         quality: 0.85,
         base64: true,
       });
       if (!result.canceled && result.assets[0]) {
-        onPickMedia([{ type: 'image', uri: result.assets[0].uri, base64: result.assets[0].base64, mimeType: 'image/jpeg' }]);
+        const isVideo = result.assets[0].mimeType?.startsWith('video/');
+        onPickMedia([{ 
+          type: isVideo ? 'video' : 'image', 
+          uri: result.assets[0].uri, 
+          base64: result.assets[0].base64, 
+          mimeType: result.assets[0].mimeType || 'image/jpeg' 
+        }]);
         onClose();
       }
     } catch (e) { console.error('Camera error:', e); }
     finally { setLoading(null); }
   };
 
-  // ── REAL PHOTOS ──────────────────────────────────────────────────────────
+  // ── REAL PHOTOS & VIDEOS ──────────────────────────────────────────────────────────
   const handlePhotos = async () => {
     setLoading('photos');
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') { alert('Photo library permission is required.'); return; }
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ImagePicker.MediaTypeOptions.All,
         allowsMultipleSelection: true,
         quality: 0.85,
         base64: true,
@@ -164,7 +201,11 @@ export function ToolsModal({
       });
       if (!result.canceled && result.assets.length > 0) {
         onPickMedia(result.assets.map((a) => ({
-          type: 'image', uri: a.uri, base64: a.base64, mimeType: a.mimeType || 'image/jpeg', name: a.fileName,
+          type: a.mimeType?.startsWith('video/') ? 'video' : 'image', 
+          uri: a.uri, 
+          base64: a.base64, 
+          mimeType: a.mimeType || 'image/jpeg', 
+          name: a.fileName,
         })));
         onClose();
       }
@@ -271,12 +312,14 @@ export function ToolsModal({
           const ext = (asset.name || '').split('.').pop()?.toLowerCase() || '';
           const mime = (asset.mimeType || 'application/octet-stream').toLowerCase();
           const isImage = mime.startsWith('image/');
+          const isVideo = mime.startsWith('video/') || ['mp4', 'mov', 'avi', 'mkv', 'wmv', 'flv', 'webm', 'm4v', '3gp', 'mpg', 'mpeg'].includes(ext);
           return {
             name: asset.name || 'file',
             size: asset.size || 0,
             mimeType: mime,
             uri: asset.uri,
             isImage,
+            isVideo,
           };
         });
         setSelectedFilesPreview(files);
@@ -288,7 +331,7 @@ export function ToolsModal({
   const confirmSendFiles = () => {
     if (selectedFilesPreview.length === 0) return;
     const media = selectedFilesPreview.map((f) => ({
-      type: f.isImage ? 'image' : 'document',
+      type: f.isImage ? 'image' : f.isVideo ? 'video' : 'document',
       uri: f.uri,
       name: f.name,
       mimeType: f.mimeType,
