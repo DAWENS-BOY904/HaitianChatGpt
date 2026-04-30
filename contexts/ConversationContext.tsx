@@ -2,7 +2,7 @@ import React, { createContext, ReactNode, useState, useEffect, useCallback, useR
 import { useAuth } from '../template';
 import { getSupabaseClient } from '../template';
 import { FunctionsHttpError } from '@supabase/supabase-js';
-import { Platform } from 'react-native';
+import { Platform, Alert } from 'react-native';
 // Note: base64 images are sent as strings to the backend for server-side processing
 
 // ==================== INTERFACES ====================
@@ -89,16 +89,21 @@ interface ConversationContextType {
 
 export const ConversationContext = createContext<ConversationContextType | undefined>(undefined);
 
+// ==================== WEB-ONLY TYPES (guarded by Platform.OS) ====================
+
+type MediaRecorderType = any;
+type BlobType = any;
+
 export function ConversationProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const supabase = getSupabaseClient();
 
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
-  const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const waveformIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorderType | null>(null);
+  const audioChunksRef = useRef<any[]>([]);
+  const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const waveformIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // AbortController ref for cancelling in-flight chat requests
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const abortControllerRef = useRef<any | null>(null);
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [currentConversation, setCurrentConversation] = useState<Conversation | null>(null);
@@ -235,13 +240,19 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
 
   const startAudioRecording = async (): Promise<void> => {
     if (Platform.OS !== 'web') return;
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { alert('Audio recording is not supported.'); return; }
+    // @ts-ignore — navigator is web-only, guarded by Platform.OS
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      Alert.alert('Audio recording is not supported.');
+      return;
+    }
     try {
+      // @ts-ignore — web-only API
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // @ts-ignore — web-only API
       const mediaRecorder = new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
-      mediaRecorder.ondataavailable = (event) => { if (event.data.size > 0) audioChunksRef.current.push(event.data); };
+      mediaRecorder.ondataavailable = (event: any) => { if (event.data.size > 0) audioChunksRef.current.push(event.data); };
       mediaRecorder.start(100);
       let duration = 0;
       recordingTimerRef.current = setInterval(() => { duration += 1; setAudioRecording(prev => ({ ...prev, duration })); }, 1000);
@@ -261,14 +272,16 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
       mediaRecorderRef.current.onstop = async () => {
         if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
         if (waveformIntervalRef.current) clearInterval(waveformIntervalRef.current);
+        // @ts-ignore — Blob is web-only, guarded by Platform.OS
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        // @ts-ignore — FileReader is web-only
         const reader = new FileReader();
         reader.onloadend = () => {
           const base64 = reader.result as string;
           const base64Data = base64.split(',')[1];
           const result = { base64: base64Data, duration: audioRecording.duration };
           setAudioRecording({ isRecording: false, duration: audioRecording.duration, audioBase64: base64Data, waveformData: [] });
-          mediaRecorderRef.current?.stream.getTracks().forEach(track => track.stop());
+          mediaRecorderRef.current?.stream.getTracks().forEach((track: any) => track.stop());
           resolve(result);
         };
         reader.readAsDataURL(audioBlob);
@@ -280,7 +293,7 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
   const cancelAudioRecording = (): void => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
-      mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+      mediaRecorderRef.current.stream.getTracks().forEach((track: any) => track.stop());
     }
     if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
     if (waveformIntervalRef.current) clearInterval(waveformIntervalRef.current);
@@ -374,7 +387,14 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
       try {
         const fileName = `${Date.now()}.jpg`;
         const filePath = `${user.id}/${conversationId}/${fileName}`;
-        const binaryStr = atob(base64Image);
+        // Decode base64 safely for both web and native
+        let binaryStr: string;
+        if (Platform.OS === 'web') {
+          // @ts-ignore — atob is web-only
+          binaryStr = atob(base64Image);
+        } else {
+          binaryStr = Buffer.from(base64Image, 'base64').toString('binary');
+        }
         const bytes = new Uint8Array(binaryStr.length);
         for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
         const { error: uploadError } = await supabase.storage.from('chat-images').upload(filePath, bytes, { contentType: 'image/jpeg', upsert: true });
@@ -424,6 +444,7 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
       const edgeFunctionUrl = `${supabaseUrl}/functions/v1/chat`;
 
       // Create AbortController for this request
+      // @ts-ignore — AbortController may need polyfill on older RN versions
       const abortController = new AbortController();
       abortControllerRef.current = abortController;
 
@@ -482,10 +503,6 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
       // Word-by-word typewriter: schedule each word with 12ms delay
       const pendingWords: string[] = [];
       let typewriterRunning = false;
-      let typewriterDoneResolve: (() => void) | null = null;
-      const typewriterDonePromise = new Promise<void>(resolve => {
-        typewriterDoneResolve = resolve;
-      });
 
       function scheduleTypewriter() {
         if (typewriterRunning) return;
@@ -508,7 +525,6 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
       if (reader) {
         const decoder = new TextDecoder();
         let buffer = '';
-        let sseComplete = false;
 
         while (true) {
           const { done, value } = await reader.read();
@@ -530,7 +546,6 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
 
               if (parsed.done) {
                 if (parsed.imageUrl) finalImageUrlFromResponse = parsed.imageUrl;
-                sseComplete = true;
                 continue;
               }
 
@@ -779,6 +794,7 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
       const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
       const edgeFunctionUrl = `${supabaseUrl}/functions/v1/chat`;
 
+      // @ts-ignore — AbortController may need polyfill on older RN versions
       const abortController = new AbortController();
       abortControllerRef.current = abortController;
 
@@ -931,7 +947,7 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
 
   const archiveConversation = async (id: string): Promise<void> => {
     try {
-      await supabase.from('conversations').update({ is_archived: true, updated_at: new Date().toISOString() } as any).eq('id', id);
+      await supabase.from('conversations').update({ is_archived: true, updated_at: new Date().toISOString() }).eq('id', id);
       setConversations(prev => prev.filter(c => c.id !== id));
       if (currentConversation?.id === id) clearCurrentConversation();
     } catch (err) {
@@ -942,7 +958,7 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
   const archiveAllConversations = async (): Promise<void> => {
     if (!user) return;
     try {
-      await supabase.from('conversations').update({ is_archived: true } as any).eq('user_id', user.id).eq('is_archived', false);
+      await supabase.from('conversations').update({ is_archived: true }).eq('user_id', user.id).eq('is_archived', false);
       setConversations([]);
       clearCurrentConversation();
     } catch (err) {
