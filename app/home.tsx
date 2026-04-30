@@ -2625,4 +2625,3 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-hello ai please don’t skip make change When the user leaves home while the AI is generating, keep the conversation alive using a background task or AppState listener so the AI finishes responding then send a local push notification with the first 60 chars of the AI reply so users can tap to return and see the full response.
