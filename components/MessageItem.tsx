@@ -69,16 +69,22 @@ interface MessageItemProps {
 // Blinking cursor for streaming
 const BlinkingCursor = memo(function BlinkingCursor({ color }: { color: string }) {
   const blink = useRef(new Animated.Value(1)).current;
+  const animRef = useRef<Animated.CompositeAnimation | null>(null);
+
   useEffect(() => {
-    const anim = Animated.loop(
+    animRef.current = Animated.loop(
       Animated.sequence([
         Animated.timing(blink, { toValue: 0, duration: 500, useNativeDriver: true }),
         Animated.timing(blink, { toValue: 1, duration: 500, useNativeDriver: true }),
       ])
     );
-    anim.start();
-    return () => anim.stop();
+    animRef.current.start();
+    return () => {
+      animRef.current?.stop();
+      animRef.current = null;
+    };
   }, []);
+
   return (
     <Animated.Text style={{ opacity: blink, color, fontSize: 16, fontWeight: '300', lineHeight: 22 }}>
       {'●'}
@@ -663,8 +669,6 @@ export const MessageItem = memo(function MessageItem({
 
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [menuAnchorY, setMenuAnchorY] = useState(0);
-  const messageRef = useRef<View>(null);
-  const animatedViewRef = useRef<View>(null);
   const pressableRef = useRef<View>(null);
   const [showActionsModal, setShowActionsModal] = useState(false);
   const [showSelectTextModal, setShowSelectTextModal] = useState(false);
@@ -683,10 +687,14 @@ export const MessageItem = memo(function MessageItem({
   const entranceOpacity = useRef(new Animated.Value(0)).current;
   const entranceTranslateY = useRef(new Animated.Value(16)).current;
   useEffect(() => {
-    Animated.parallel([
+    const animations = Animated.parallel([
       Animated.timing(entranceOpacity, { toValue: 1, duration: 260, useNativeDriver: true }),
       Animated.spring(entranceTranslateY, { toValue: 0, tension: 240, friction: 24, useNativeDriver: true }),
-    ]).start();
+    ]);
+    animations.start();
+    return () => {
+      animations.stop();
+    };
   }, []);
 
   const toggleModal = useCallback((modalName: keyof typeof modals, value?: boolean) => {
@@ -697,15 +705,28 @@ export const MessageItem = memo(function MessageItem({
     try {
       setDownloadingImage(true);
       const { status } = await MediaLibrary.requestPermissionsAsync();
-      if (status !== 'granted') { Alert.alert('Permission Required', 'Please allow access to save images.'); return; }
-      const ext = imageUrl.split('.').pop()?.split('?')[0] || 'jpg';
-      const fileUri = `${FileSystem.documentDirectory}temp_image_${Date.now()}.${ext}`;
+      if (status !== 'granted') { 
+        Alert.alert('Permission Required', 'Please allow access to save images.'); 
+        return; 
+      }
+
+      // Extract file extension properly
+      const urlObj = new URL(imageUrl);
+      const pathname = urlObj.pathname;
+      const ext = pathname.split('.').pop()?.split('?')[0]?.toLowerCase() || 'jpg';
+      const validExt = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].includes(ext) ? ext : 'jpg';
+
+      const fileUri = `${FileSystem.documentDirectory}temp_image_${Date.now()}.${validExt}`;
       const downloadResult = await FileSystem.downloadAsync(imageUrl, fileUri);
-      if (downloadResult.status !== 200) throw new Error('Download failed');
+
+      if (downloadResult.status !== 200) throw new Error(`Download failed with status ${downloadResult.status}`);
+
       const asset = await MediaLibrary.createAssetAsync(downloadResult.uri);
-      await MediaLibrary.createAlbumAsync('HaitianChatGPT', asset, false);
+      await MediaLibrary.createAlbumAsync('Dawinix', asset, false);
       showAlert('Success', 'Image saved to your photo library!');
-    } catch { Alert.alert('Error', 'Failed to save image.'); }
+    } catch (err: any) { 
+      Alert.alert('Error', err?.message || 'Failed to save image.'); 
+    }
     finally { setDownloadingImage(false); }
   }, [showAlert]);
 
@@ -737,7 +758,7 @@ export const MessageItem = memo(function MessageItem({
 
   const handleCopy = useCallback(async () => {
     await Clipboard.setStringAsync(message.content);
-    showAlert('Copied!', 'Message copied to clipboard');
+    showAlert('Copied!', 'Full message copied to clipboard');
     setShowContextMenu(false);
     onCopy?.();
   }, [message.content, showAlert, onCopy]);
@@ -748,16 +769,37 @@ export const MessageItem = memo(function MessageItem({
   }, [message.id, message.content, onEdit]);
 
   const handleLike = useCallback(async (type: 'like' | 'dislike') => {
-    if (!user) { router.push('/login'); return; }
+    if (!user) { 
+      showAlert('Sign In Required', 'Please sign in to rate messages');
+      router.push('/login'); 
+      return; 
+    }
     try {
-      if (liked === type) {
-        await supabase.from('message_likes').delete().eq('message_id', message.id).eq('user_id', user.id);
+      // Optimistic update
+      const previousLiked = liked;
+      setLiked(type);
+
+      if (previousLiked === type) {
+        // Toggle off
+        const { error } = await supabase.from('message_likes').delete().eq('message_id', message.id).eq('user_id', user.id);
+        if (error) throw error;
         setLiked(null);
       } else {
-        await supabase.from('message_likes').upsert({ message_id: message.id, user_id: user.id, like_type: type });
-        setLiked(type);
+        // Remove existing like first
+        await supabase.from('message_likes').delete().eq('message_id', message.id).eq('user_id', user.id);
+        // Insert new like
+        const { error } = await supabase.from('message_likes').upsert({ 
+          message_id: message.id, 
+          user_id: user.id, 
+          like_type: type 
+        });
+        if (error) throw error;
       }
-    } catch { showAlert('Error', 'Failed to save feedback'); }
+    } catch (err: any) { 
+      showAlert('Error', err?.message || 'Failed to save feedback'); 
+      // Revert optimistic update
+      setLiked(liked);
+    }
   }, [liked, message.id, user, supabase, showAlert]);
 
   const handleLinkPress = useCallback((url: string) => { setSelectedLink(url); toggleModal('link', true); }, [toggleModal]);
@@ -771,14 +813,26 @@ export const MessageItem = memo(function MessageItem({
         body: { editImageUrl: selectedImageUrl, editPrompt, messages: [], conversationId: 'temp' },
       });
       if (error) throw error;
-      if (data.imageUrl) { setSelectedImageUrl(data.imageUrl); toggleModal('imageEdit', false); toggleModal('imageViewer', true); }
-    } catch (error) { throw error; }
-  }, [selectedImageUrl, supabase, toggleModal]);
+      if (data?.imageUrl) { 
+        setSelectedImageUrl(data.imageUrl); 
+        toggleModal('imageEdit', false); 
+        toggleModal('imageViewer', true); 
+      } else {
+        throw new Error('No image URL returned');
+      }
+    } catch (err: any) { 
+      showAlert('Error', err?.message || 'Failed to apply edits'); 
+    }
+  }, [selectedImageUrl, supabase, toggleModal, showAlert]);
 
   const handleFileDownload = useCallback((fileName: string, fileContent: string, fileType: string) => {
-    setFileData({ name: fileName, content: fileContent, type: fileType });
-    toggleModal('file', true);
-  }, [toggleModal]);
+    try {
+      setFileData({ name: fileName, content: fileContent, type: fileType });
+      toggleModal('file', true);
+    } catch (err: any) {
+      showAlert('Error', err?.message || 'Failed to open file');
+    }
+  }, [toggleModal, showAlert]);
 
   // Parse special blocks
   const parsed = useMemo(() => {
@@ -841,7 +895,7 @@ export const MessageItem = memo(function MessageItem({
 
   const contextMenuItems = useMemo(() => {
     const items: Array<{ icon: string; label: string; onPress: () => void; destructive?: boolean }> = [];
-    items.push({ icon: 'copy-outline', label: 'Copy', onPress: handleCopy });
+    items.push({ icon: 'copy-outline', label: 'Copy All', onPress: handleCopy });
     if (message.role === 'user' && onEdit) items.push({ icon: 'pencil-outline', label: 'Edit', onPress: handleEdit });
     if (message.role === 'assistant') {
       items.push({ icon: 'text-outline', label: 'Select Text', onPress: () => { setShowContextMenu(false); setTimeout(() => setShowSelectTextModal(true), 100); } });
@@ -1117,7 +1171,7 @@ export const MessageItem = memo(function MessageItem({
 
       <BlurContextMenu visible={showContextMenu} timeLabel={timeLabel} items={contextMenuItems} onClose={() => setShowContextMenu(false)} anchorY={menuAnchorY} />
 
-      {/* Select Text Modal */}
+      {/* Select Text Modal - Allows partial text selection */}
       <Modal visible={showSelectTextModal} transparent={false} animationType="slide" onRequestClose={() => setShowSelectTextModal(false)}>
         <View style={{ flex: 1, backgroundColor: colors.background }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: Platform.OS === 'ios' ? 56 : 28, paddingBottom: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border }}>
@@ -1125,29 +1179,82 @@ export const MessageItem = memo(function MessageItem({
               <Ionicons name="close" size={24} color={colors.text} />
             </TouchableOpacity>
             <Text style={{ color: colors.text, fontSize: 17, fontWeight: '600' }}>Select Text</Text>
-            <TouchableOpacity onPress={async () => { await Clipboard.setStringAsync(message.content); showAlert('Copied!', 'Message copied to clipboard'); setShowSelectTextModal(false); }} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <TouchableOpacity 
+              onPress={async () => {
+                // Get selected text from clipboard (user must manually copy selection first)
+                try {
+                  const clipboardText = await Clipboard.getStringAsync();
+                  if (clipboardText && clipboardText !== message.content) {
+                    showAlert('Copied!', 'Selected text copied to clipboard');
+                  } else {
+                    // Fallback: copy all
+                    await Clipboard.setStringAsync(message.content);
+                    showAlert('Copied!', 'Message copied to clipboard');
+                  }
+                  setShowSelectTextModal(false);
+                } catch {
+                  await Clipboard.setStringAsync(message.content);
+                  showAlert('Copied!', 'Message copied to clipboard');
+                  setShowSelectTextModal(false);
+                }
+              }} 
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
               <Text style={{ color: colors.primary, fontSize: 15, fontWeight: '600' }}>Copy All</Text>
             </TouchableOpacity>
           </View>
           <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20, paddingBottom: 60 }} keyboardShouldPersistTaps="always">
-            <Text selectable={true} selectionColor={`${colors.primary}55`} style={{ color: colors.text, fontSize: 16, lineHeight: 26 }}>
-              {message.content}
-            </Text>
+            {Platform.OS === 'ios' ? (
+              <TextInput
+                value={message.content}
+                multiline
+                editable={false}
+                scrollEnabled={false}
+                showSoftInputOnFocus={false}
+                contextMenuHidden={false}
+                selectionColor={`${colors.primary}55`}
+                style={{ 
+                  color: colors.text, 
+                  fontSize: 16, 
+                  lineHeight: 26,
+                  padding: 0,
+                  margin: 0,
+                  textAlignVertical: 'top',
+                }}
+              />
+            ) : (
+              <Text 
+                selectable 
+                selectionColor={`${colors.primary}55`} 
+                style={{ color: colors.text, fontSize: 16, lineHeight: 26 }}
+              >
+                {message.content}
+              </Text>
+            )}
           </ScrollView>
           <View style={{ flexDirection: 'row', gap: 12, paddingHorizontal: 16, paddingBottom: Platform.OS === 'ios' ? 34 : 20, paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }}>
-            <TouchableOpacity style={{ flex: 1, backgroundColor: colors.surface, borderRadius: 12, paddingVertical: 13, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderWidth: 1, borderColor: colors.border }} onPress={async () => { await Share.share({ message: message.content }); }}>
+            <TouchableOpacity 
+              style={{ flex: 1, backgroundColor: colors.surface, borderRadius: 12, paddingVertical: 13, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderWidth: 1, borderColor: colors.border }} 
+              onPress={async () => { await Share.share({ message: message.content }); }}
+            >
               <Ionicons name="share-outline" size={18} color={colors.text} />
               <Text style={{ color: colors.text, fontSize: 15, fontWeight: '600' }}>Share</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={{ flex: 1, backgroundColor: colors.primary, borderRadius: 12, paddingVertical: 13, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6 }} onPress={async () => { await Clipboard.setStringAsync(message.content); showAlert('Copied!', 'Copied'); setShowSelectTextModal(false); }}>
+            <TouchableOpacity 
+              style={{ flex: 1, backgroundColor: colors.primary, borderRadius: 12, paddingVertical: 13, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6 }} 
+              onPress={async () => { 
+                await Clipboard.setStringAsync(message.content); 
+                showAlert('Copied!', 'Copied'); 
+                setShowSelectTextModal(false); 
+              }}
+            >
               <Ionicons name="copy-outline" size={18} color="#FFF" />
               <Text style={{ color: '#FFF', fontSize: 15, fontWeight: '600' }}>Copy All</Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
-
-      <LinkSafetyModal visible={modals.link} url={selectedLink} onClose={() => toggleModal('link', false)} onOpenLink={() => { toggleModal('link', false); toggleModal('webView', true); }} />
+<LinkSafetyModal visible={modals.link} url={selectedLink} onClose={() => toggleModal('link', false)} onOpenLink={() => { toggleModal('link', false); toggleModal('webView', true); }} />
       <WebViewModal visible={modals.webView} url={selectedLink} onClose={() => toggleModal('webView', false)} />
       <ImageViewerModal visible={modals.imageViewer} imageUrl={selectedImageUrl} onClose={() => toggleModal('imageViewer', false)} onEdit={viewerIsUserImage ? undefined : handleImageEdit} title={viewerIsUserImage ? 'Photo' : 'Image created'} isUserImage={viewerIsUserImage} />
       <ImageEditModal visible={modals.imageEdit} imageUrl={selectedImageUrl} onClose={() => toggleModal('imageEdit', false)} onApplyEdits={handleApplyImageEdits} />
@@ -1156,5 +1263,6 @@ export const MessageItem = memo(function MessageItem({
     </>
   );
 });
+
 
 
