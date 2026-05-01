@@ -950,14 +950,7 @@ export default function HomeScreen() {
   useEffect(() => {
     registerForPushNotifications().then(token => { pushTokenRef.current = token; });
     const sub = AppState.addEventListener('change', s => { appStateForNotifRef.current = s; });
-    // Handle notification tap — navigate to specific conversation
-    const notifSub = Notifications.addNotificationResponseReceivedListener(response => {
-      const data = response.notification.request.content.data as any;
-      if (data?.conversationId) {
-        selectConversation(data.conversationId).catch(() => {});
-      }
-    });
-    return () => { sub.remove(); notifSub.remove(); };
+    return () => sub.remove();
   }, []);
 
   useEffect(() => {
@@ -1102,12 +1095,10 @@ export default function HomeScreen() {
         if (autoLockTimerRef.current) { clearTimeout(autoLockTimerRef.current); autoLockTimerRef.current = null; }
         Animated.timing(fadeAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start(() => setShowBlurOverlay(false));
         if (currentConversation?.id) selectConversation(currentConversation.id);
-        // Refresh conversation list when returning to foreground
-        // Conversations are re-loaded via selectConversation above
       }
     });
     return () => subscription.remove();
-  }, [currentConversation?.id, selectConversation, fadeAnim, user]);
+  }, [currentConversation?.id, selectConversation, fadeAnim]);
 
   useFocusEffect(
     useCallback(() => {
@@ -1468,29 +1459,6 @@ export default function HomeScreen() {
     setEditingMessageId(null);
     clearDraft();
     const lowerText = (currentText || '').toLowerCase();
-    // ── IMAGE EDIT MODE: user uploaded image + edit prompt ──
-    const hasUploadedImage = currentMedia.length > 0 && currentMedia[0].type === 'image';
-    if (hasUploadedImage && currentText && detectImageEditIntent(currentText) && !currentEditingId) {
-      setThinkingMode('editing_image');
-      setSending(true); setGenerating(true);
-      try {
-        let convId = currentConversation?.id;
-        if (!convId) { convId = await createConversation(); if (!convId) { showAlert('Error', 'Failed to create conversation'); return; } }
-        let imgBase64 = currentMedia[0].base64;
-        if (!imgBase64 && currentMedia[0].uri) {
-          try { imgBase64 = await FileSystem.readAsStringAsync(currentMedia[0].uri, { encoding: FileSystem.EncodingType.Base64 }); } catch (_e) {}
-        }
-        setInputText('');
-        setSelectedMedia([]);
-        clearDraft();
-        // Send with image edit context
-        await sendMessage(currentText, undefined, imgBase64, false, currentAIModel);
-        setShowCompletionStatus(true); setTimeout(() => setShowCompletionStatus(false), 2000);
-      } catch (err: any) {
-        if (err?.name !== 'AbortError') showAlert('Error', err?.message || 'Failed to edit image');
-      } finally { setSending(false); setGenerating(false); }
-      return;
-    }
     const isImageIntent = [
       'create a logo', 'create logo', 'generate logo', 'make a logo', 'design a logo',
       'generate a logo', 'make me a logo', 'design me a logo',
@@ -1734,101 +1702,6 @@ export default function HomeScreen() {
     setCurrentAIModel(modelMap[mode]);
   }, []);
 
-  // ── Quick photo picker directly from input bar ──
-  const handleQuickPhotoPick = useCallback(async () => {
-    try {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') { showAlert('Permission required', 'Please allow photo access in Settings.'); return; }
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsMultipleSelection: true,
-        quality: 0.85,
-        base64: true,
-        selectionLimit: 5,
-      });
-      if (!result.canceled && result.assets.length > 0) {
-        const media = result.assets.map(a => ({
-          type: 'image' as const,
-          uri: a.uri,
-          base64: a.base64 || undefined,
-          mimeType: a.mimeType || 'image/jpeg',
-          name: a.fileName || `photo_${Date.now()}.jpg`,
-        }));
-        handleMediaPicked(media);
-      }
-    } catch (e) { console.error('Quick photo pick error:', e); }
-  }, [handleMediaPicked, showAlert]);
-
-  // ── Detect image edit intent from user message ──
-  const detectImageEditIntent = useCallback((text: string): boolean => {
-    const editKeywords = [
-      'change background', 'remove background', 'make it brighter', 'make it darker',
-      'add text', 'add a text', 'edit image', 'edit the image', 'modify image',
-      'edit photo', 'modify photo', 'crop it', 'rotate it', 'flip it',
-      'make the background', 'replace background', 'change the color', 'remove the',
-      'add filter', 'make it look', 'stylize it', 'enhance it',
-      'chanje background', 'retire background', 'fe li', 'modifye imaj',
-      'chanje koule', 'ajoute teks', 'retire fon', 'chanje fon',
-    ];
-    const lower = text.toLowerCase();
-    return editKeywords.some(kw => lower.includes(kw));
-  }, []);
-
-  // ── Image edit via Gemini edge function ──
-  const handleImageEdit = useCallback(async (imageBase64: string, editPrompt: string) => {
-    try {
-      const supabaseClient = getSupabaseClient();
-      const { data: sessionData } = await supabaseClient.auth.getSession();
-      const token = sessionData?.session?.access_token;
-      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
-      const resp = await fetch(`${supabaseUrl}/functions/v1/chat`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-          'apikey': process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '',
-        },
-        body: JSON.stringify({
-          messages: [{
-            role: 'user',
-            content: `Please edit this image according to the following instructions: ${editPrompt}. Return only the edited image.`,
-          }],
-          conversationId: currentConversation?.id || 'edit-temp',
-          aiModel: 'google-gemini',
-          base64Image: imageBase64,
-          editMode: true,
-          editPrompt,
-        }),
-      });
-      if (!resp.ok) throw new Error('Image edit failed');
-      // Response is streamed SSE — parse it
-      const reader = resp.body?.getReader();
-      let imageUrl: string | undefined;
-      if (reader) {
-        const decoder = new TextDecoder();
-        let buf = '';
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buf += decoder.decode(value, { stream: true });
-          for (const line of buf.split('\n')) {
-            const trimmed = line.trim();
-            if (!trimmed.startsWith('data:')) continue;
-            try {
-              const parsed = JSON.parse(trimmed.slice(5).trim());
-              if (parsed.done && parsed.imageUrl) imageUrl = parsed.imageUrl;
-            } catch (_e) {}
-          }
-          buf = buf.split('\n').pop() || '';
-        }
-      }
-      return imageUrl || null;
-    } catch (e) {
-      console.error('[ImageEdit]', e);
-      return null;
-    }
-  }, [currentConversation?.id]);
-
   const handleNewChat = useCallback(async () => {
     if ((messages || []).length > 0) await createConversation();
     setInputText(''); setSelectedMedia([]); setEditingMessageId(null);
@@ -1926,7 +1799,6 @@ export default function HomeScreen() {
 
   const renderMessage = useCallback(({ item }: { item: any }) => {
     const isStreaming = streamingMessageId === item.id;
-    const isCurrentImageTask = isStreaming && thinkingMode === 'creating_image';
     const mathData = item.role === 'assistant' ? detectMathExpression(item.content) : null;
     const imageUrlMatch = item.role === 'assistant'
       ? (item.content || '').match(/https?:\/\/[^\s"')]+\.(?:jpg|jpeg|png|webp|gif)/i)
@@ -1945,7 +1817,6 @@ export default function HomeScreen() {
           streaming={isStreaming}
           streamingSpeed={isStreaming ? 18 : 0}
           isOffline={isOffline}
-          isImageTask={isCurrentImageTask}
           onChunkRendered={() => { if (isAtBottom) flatListRef.current?.scrollToEnd({ animated: false }); }}
         />
         {mathData ? (
@@ -2366,14 +2237,12 @@ export default function HomeScreen() {
                             />
                           ) : null}
                           {streamingMessageId ? null : generating ? (
-                            thinkingMode === 'creating_image' ? null : (
                             <ThinkingIndicator
                               userMessage={(messages || []).length > 0 ? (messages || [])[(messages || []).length - 1].content : inputText}
                               completed={showCompletionStatus}
                               mode={thinkingMode}
                               onCancel={handleStopGeneration}
                             />
-                            )
                           ) : null}
                         </>
                       }
@@ -2448,18 +2317,7 @@ export default function HomeScreen() {
                 ) : null}
 
                 <View style={styles.inputWrapper}>
-                {/* ── Inline photo upload button inside input area ── */}
-                {!isRecording && !isProcessing && !editingMessageId ? (
-                  <TouchableOpacity
-                    onPress={() => isGuest ? (setGuestLockFeature('photo upload'), setGuestLockModal(true)) : handleQuickPhotoPick()}
-                    style={{ paddingHorizontal: 2, paddingVertical: 4 }}
-                    hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
-                  >
-                    <Ionicons name="image-outline" size={20} color={selectedMedia.length > 0 ? accentColor : colors.textSecondary} />
-                  </TouchableOpacity>
-                ) : null}
-
-                {isRecording ? (
+                  {isRecording ? (
                     <View style={styles.recordingContainer}>
                       <Text style={styles.recordingDuration}>{formatDuration(recordingDuration)}</Text>
                       <WaveformAnimation isRecording={isRecording} />
@@ -2911,8 +2769,10 @@ export default function HomeScreen() {
               </View>
             </Modal>
 
-            {/* ── IMAGE CREATION: inline dot-grid is shown inside MessageItem now ──
-               No full-screen overlay needed — the placeholder shows in the AI bubble */}
+            {/* ── IMAGE CREATION BLUR OVERLAY (shown when AI is generating an image) ── */}
+            {generating && thinkingMode === 'creating_image' ? (
+              <ImageCreatingOverlay />
+            ) : null}
 
             {/* Image analyzing overlay */}
             {imageAnalyzingOverlay ? (
