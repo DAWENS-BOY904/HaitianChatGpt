@@ -564,7 +564,7 @@ export default function VoiceControlScreen() {
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
-    const supabaseUrl = (process.env.EXPO_PUBLIC_SUPABASE_URL || '').replace(/\\/$/, '');
+    const supabaseUrl = (process.env.EXPO_PUBLIC_SUPABASE_URL || '').replace(/\/$/, '');
     const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
 
     if (!supabaseUrl || !supabaseAnonKey) {
