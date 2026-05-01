@@ -23,6 +23,7 @@ interface ThinkingIndicatorProps {
   style?: ViewStyle;
   mode?: string;
   onCancel?: () => void;
+  isGroupMode?: boolean;
 }
 
 const INTENT_KEYWORDS: Record<IntentType, string[]> = {
@@ -403,6 +404,7 @@ export function ThinkingIndicator({
   style,
   mode,
   onCancel,
+  isGroupMode = false,
 }: ThinkingIndicatorProps) {
   const { colors, isDark } = useTheme();
   const intent = detectIntent(userMessage, mode);
@@ -515,6 +517,15 @@ export function ThinkingIndicator({
   // Dots are white in dark mode, dark gray in light mode — always visible against the background
   const dotsColor = isDark ? 'rgba(255,255,255,0.85)' : '#333333';
 
+  // Group mode — ChatGPT-style inline text indicator
+  if (isGroupMode) {
+    return (
+      <AnimatedEntry>
+        <GroupThinkingIndicator isDark={isDark} colors={colors} onCancel={onCancel} showCancel={showCancel} elapsed={elapsed} />
+      </AnimatedEntry>
+    );
+  }
+
   return (
     <AnimatedEntry>
       <View style={[styles.containerCard, { borderColor }, style]}>
@@ -542,6 +553,51 @@ export function ThinkingIndicator({
     </AnimatedEntry>
   );
 }
+
+// ── Group chat "Dawinix is taking a look" indicator ──────────────────────
+const GroupThinkingIndicator = memo(function GroupThinkingIndicator({
+  isDark, colors, onCancel, showCancel, elapsed,
+}: { isDark: boolean; colors: any; onCancel?: () => void; showCancel: boolean; elapsed: number }) {
+  const dot1 = useRef(new Animated.Value(0.3)).current;
+  const dot2 = useRef(new Animated.Value(0.3)).current;
+  const dot3 = useRef(new Animated.Value(0.3)).current;
+
+  useEffect(() => {
+    const makeDot = (anim: Animated.Value, delay: number) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(delay),
+          Animated.timing(anim, { toValue: 1, duration: 300, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+          Animated.timing(anim, { toValue: 0.3, duration: 300, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+          Animated.delay(600 - delay),
+        ])
+      );
+    const a1 = makeDot(dot1, 0);
+    const a2 = makeDot(dot2, 200);
+    const a3 = makeDot(dot3, 400);
+    a1.start(); a2.start(); a3.start();
+    return () => { a1.stop(); a2.stop(); a3.stop(); };
+  }, []);
+
+  const dotColor = isDark ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.45)';
+  const textColor = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.45)';
+
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, gap: 6 }}>
+      <Text style={{ color: textColor, fontSize: 14, fontWeight: '400' }}>Dawinix is taking a look</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, marginLeft: 2 }}>
+        {[dot1, dot2, dot3].map((dot, i) => (
+          <Animated.View key={i} style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: dotColor, opacity: dot }} />
+        ))}
+      </View>
+      {showCancel && onCancel ? (
+        <TouchableOpacity onPress={onCancel} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ marginLeft: 8 }}>
+          <Ionicons name="stop-circle-outline" size={18} color={textColor} />
+        </TouchableOpacity>
+      ) : null}
+    </View>
+  );
+});
 
 const styles = StyleSheet.create({
   wrapper: {
