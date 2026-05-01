@@ -1189,12 +1189,3 @@ const styles = StyleSheet.create({
   textInput: { flex: 1, backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 28, paddingHorizontal: 18, paddingVertical: 13, fontSize: 16, color: '#FFF', maxHeight: 100 },
   sendBtn: { width: 46, height: 46, borderRadius: 23, backgroundColor: '#007AFF', alignItems: 'center', justifyContent: 'center' },
 });
-fix {
-  "eventMessage": "POST | 401 | http://njpuoozygqtpvlzhnjpu.backend.onspace.ai/functions/v1/chat | Unauthorized",
-  "functionId": "chat",
-  "id": "75376395-d4ed-401a-a0e3-6ec8a5711adc",
-  "logLevel": "ERROR",
-  "method": "POST",
-  "statusCode": 401,
-  "timestamp": 1777640354
-}.
