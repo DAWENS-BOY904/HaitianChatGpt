@@ -1450,8 +1450,6 @@ export default function HomeScreen() {
     }
   }, [groupChatMode, showAlert]);
 
-  const wasGeneratingRef = useRef(false);
-  const appStateForNotifRef = useRef(AppState.currentState);
   useEffect(() => {
     if (user?.id) {
       supabase.from('user_profiles').select('profile_photo_url').eq('id', user.id).single().then(({ data }) => {
@@ -1598,19 +1596,6 @@ export default function HomeScreen() {
         runOnJS(setSideMenuVisible)(true);
       }
     });
-
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(100)).current;
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-  const flatListRef = useRef<FlatList>(null);
-  const recordingRef = useRef<Audio.Recording | null>(null);
-  const recordingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const audioPermissionRef = useRef<boolean>(false);
-  const isRecordingRef = useRef<boolean>(false);
-  const stopTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const appStateRef = useRef(AppState.currentState);
-  const autoLockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const processingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     checkAudioPermissions();
@@ -2270,11 +2255,6 @@ Be thorough and cite specific facts.`;
     }
   };
 
-  const [inlineQuizVisible, setInlineQuizVisible] = useState(false);
-  const [inlineQuizQuestions, setInlineQuizQuestions] = useState<QuizQuestion[]>([]);
-  const [preGeneratedQuestions, setPreGeneratedQuestions] = useState<QuizQuestion[] | null>(null);
-  const preGenRunning = useRef(false);
-
   const showInlineQuiz = useCallback((questions: QuizQuestion[]) => {
     setInlineQuizQuestions(questions);
     setInlineQuizVisible(true);
@@ -2389,8 +2369,6 @@ Be thorough and cite specific facts.`;
     try { await archiveConversation(currentConversation.id); await createConversation(); showAlert('Archived', 'Chat archived. View it in Settings > Archived Chats'); }
     catch (e) { showAlert('Error', 'Failed to archive chat'); }
   }, [currentConversation, archiveConversation, createConversation, showAlert]);
-
-  const [messageLikes, setMessageLikes] = useState<Record<string, 'like' | 'dislike' | null>>({});
 
   const handleLikeMessage = useCallback(async (messageId: string) => {
     const current = messageLikes[messageId];
