@@ -65,7 +65,7 @@ interface ConversationContextType {
   checkAccountStatus: () => Promise<void>;
   createConversation: () => Promise<string | null>;
   selectConversation: (id: string) => Promise<void>;
-  sendMessage: (content: string, imageUrl?: string, base64Image?: string, isImageGeneration?: boolean, aiModel?: string) => Promise<void>;
+  sendMessage: (content: string, fileContents?: Array<{name: string; type: string; content: string}> | string, base64Image?: string, isImageGeneration?: boolean, aiModel?: string) => Promise<void>;
   sendAudioMessage: (audioBase64: string, duration: number, transcription?: string) => Promise<void>;
   updateMessage: (messageId: string, newContent: string) => Promise<void>;
   updateMessageAndRegenerate: (messageId: string, newContent: string, aiModel?: string) => Promise<void>;
@@ -303,19 +303,42 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
   const loadConversations = async () => {
     if (!user) return;
     try {
-      const { data: conversationsWithMessages, error } = await supabase
+      // Load all non-archived conversations, including empty ones (for new group chats)
+      const { data: allConvs, error } = await supabase
         .from('conversations')
-        .select('id, title, created_at, updated_at, is_archived, messages!inner (id)')
+        .select('id, title, created_at, updated_at, is_archived')
         .eq('user_id', user.id)
         .or('is_archived.is.null,is_archived.eq.false')
-        .order('updated_at', { ascending: false });
+        .order('updated_at', { ascending: false })
+        .limit(100);
 
-      if (!error && conversationsWithMessages) {
-        const validConversations = conversationsWithMessages
-          .filter((c: any) => Array.isArray(c.messages) && c.messages.length > 0)
-          .map((c: any) => ({ id: c.id, title: c.title, createdAt: c.created_at, updatedAt: c.updated_at }));
-        setConversations(validConversations);
+      if (error || !allConvs) return;
+
+      // Show conversations that either have messages OR were created within the last 10 minutes (new group chats)
+      const tenMinAgo = Date.now() - 10 * 60 * 1000;
+      const validConversations = allConvs.filter((c: any) => {
+        const isNew = new Date(c.created_at).getTime() > tenMinAgo;
+        return isNew || true; // show all — filtering by messages happens lazily
+      });
+
+      // Separately check which ones actually have messages
+      const convIds = allConvs.map((c: any) => c.id);
+      let convIdsWithMessages = new Set<string>();
+      if (convIds.length > 0) {
+        const { data: msgCheck } = await supabase
+          .from('messages')
+          .select('conversation_id')
+          .in('conversation_id', convIds);
+        if (msgCheck) {
+          msgCheck.forEach((m: any) => convIdsWithMessages.add(m.conversation_id));
+        }
       }
+
+      const mapped = allConvs
+        .filter((c: any) => convIdsWithMessages.has(c.id) || new Date(c.created_at).getTime() > tenMinAgo)
+        .map((c: any) => ({ id: c.id, title: c.title || 'New Chat', createdAt: c.created_at, updatedAt: c.updated_at }));
+
+      setConversations(mapped);
     } catch (err) {
       console.error('Failed to load conversations:', err);
     }
@@ -364,11 +387,13 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
   // ==================== FIXED SEND MESSAGE WITH REAL SSE STREAMING ====================
   const sendMessage = async (
     content: string,
-    imageUrl?: string,
+    fileContents?: Array<{name: string; type: string; content: string}> | string,
     base64Image?: string,
     isImageGeneration: boolean = false,
     aiModel?: string
   ) => {
+    const imageUrl = typeof fileContents === 'string' ? fileContents : undefined;
+    const filePayload = Array.isArray(fileContents) ? fileContents : undefined;
     if (!user) return;
     if (accountStatus.isSuspended) throw new Error(`Account suspended: ${accountStatus.reason || 'Contact support'}`);
 
@@ -435,6 +460,7 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
         userImageUrl: finalImageUrl,
       };
       if (base64Image) requestBody.base64Image = base64Image;
+      if (filePayload && filePayload.length > 0) requestBody.fileContents = filePayload;
 
       // ── Get session token for Authorization header ──
       const { data: sessionData } = await supabase.auth.getSession();
