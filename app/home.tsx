@@ -2673,4 +2673,23 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
+Hello,
 
+Please proceed with integrating the following AI image generation APIs into our system for photo and logo creation. These tools are selected based on quality, speed, and cost efficiency:
+
+* FLUX 2 Pro (Black Forest Labs)
+    Cost: ~$0.04 per image
+    Strengths: অত্য highly realistic photos, near-perfect detail, accurate anatomy
+* Gemini (Nano Banana 2 – Google)
+    Cost: Free (~20 images/day)
+    Strengths: very fast (1–3 seconds), good for high-volume generation, excellent text rendering in images
+* Imagen 4 Ultra (Google DeepMind)
+    Cost: ~$0.04 per 1M tokens
+    Strengths: fast generation (1–3 seconds), superior text clarity, ideal for banners and social media posts
+
+👉 Please ensure:
+
+* API endpoints are properly secured also add prompt for image creation to let the ai know to create beatifull photo
+* Image quality is set to high or ultra where available
+* Support for both photo-style and logo-style generation
+* Scalable handling for bulk requests.
