@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo, Component, memo } from 'react';
+reply system must work only in group chat mode and also fix inputtex lan fel large plen espss pou tex.import React, { useState, useRef, useEffect, useCallback, useMemo, Component, memo } from 'react';
 import { Image as ExpoImage } from 'expo-image';
 import { 
   View, 
