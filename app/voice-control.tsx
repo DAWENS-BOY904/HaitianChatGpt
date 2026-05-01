@@ -102,7 +102,7 @@ CORE RULES (MANDATORY):
 
 function buildSystemPrompt(voiceId: string, langHint = ''): string {
   const persona = getVoicePersona(voiceId);
-  return `${BASE_VOICE_PROMPT}\\n\\nYOUR VOICE PERSONA:\\n${persona}${langHint}`;
+  return `${BASE_VOICE_PROMPT}\n\nYOUR VOICE PERSONA:\n${persona}${langHint}`;
 }
 
 // ─── Language display names ──────────────────────────────────────────────────
@@ -352,16 +352,16 @@ function speakWithDevice(text: string, rate: number, lang: string | null, onDone
 // ─── Strip markdown for voice ─────────────────────────────────────────────────
 function stripMarkdownForVoice(text: string): string {
   return text
-    .replace(/```[\\s\\S]*?```/g, 'Here is the code.')
-    .replace(/\\*\\*(.*?)\\*\\*/g, '$1')
-    .replace(/\\*(.*?)\\*/g, '$1')
-    .replace(/#{1,6}\\s/g, '')
-    .replace(/\\[([^\\]]+)\\]\\([^)]+\\)/g, '$1')
-    .replace(/\\[MESSAGE_CARD\\][\\s\\S]*?\\[\\/MESSAGE_CARD\\]/g, '')
-    .replace(/\\[SOURCES\\][\\s\\S]*?\\[\\/SOURCES\\]/g, '')
-    .replace(/\\[DOWNLOAD_CARD\\][\\s\\S]*?\\[\\/DOWNLOAD_CARD\\]/g, '')
-    .replace(/\\[ANALYSIS\\][\\s\\S]*?\\[\\/ANALYSIS\\]/g, '')
-    .replace(/\\n{3,}/g, '\\n\\n')
+    .replace(/```[\s\S]*?```/g, 'Here is the code.')
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/\*(.*?)\*/g, '$1')
+    .replace(/#{1,6}\s/g, '')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/\[MESSAGE_CARD\][\s\S]*?\[\/MESSAGE_CARD\]/g, '')
+    .replace(/\[SOURCES\][\s\S]*?\[\/SOURCES\]/g, '')
+    .replace(/\[DOWNLOAD_CARD\][\s\S]*?\[\/DOWNLOAD_CARD\]/g, '')
+    .replace(/\[ANALYSIS\][\s\S]*?\[\/ANALYSIS\]/g, '')
+    .replace(/\n{3,}/g, '\n\n')
     .trim()
     .slice(0, 500);
 }
@@ -619,7 +619,7 @@ export default function VoiceControlScreen() {
             const { done, value } = await reader.read();
             if (done) break;
             buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split('\\n');
+            const lines = buffer.split('\n');
             buffer = lines.pop() || '';
             for (const line of lines) {
               if (!line.startsWith('data: ')) continue;
@@ -823,7 +823,7 @@ export default function VoiceControlScreen() {
 
       const langName = detectedLangRef.current ? getLangDisplay(detectedLangRef.current) : null;
       const langHint = langName
-        ? `\\n\\nCRITICAL: The user is speaking ${langName}. You MUST respond ONLY in ${langName}. Do not switch languages.`
+        ? `\n\nCRITICAL: The user is speaking ${langName}. You MUST respond ONLY in ${langName}. Do not switch languages.`
         : '';
 
       const contextMsgs = updatedMsgs.slice(-8).map(m => ({ role: m.role, content: m.content }));
@@ -977,7 +977,7 @@ export default function VoiceControlScreen() {
 
     const langName = detectedLangRef.current ? getLangDisplay(detectedLangRef.current) : null;
     const langHint = langName
-      ? `\\n\\nCRITICAL: The user is speaking ${langName}. You MUST respond ONLY in ${langName}.`
+      ? `\n\nCRITICAL: The user is speaking ${langName}. You MUST respond ONLY in ${langName}.`
       : '';
     const contextMsgs = updatedMsgs.slice(-8).map(m => ({ role: m.role, content: m.content }));
     const allMsgs = [

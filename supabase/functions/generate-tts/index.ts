@@ -1,9 +1,10 @@
+
 import { corsHeaders } from '../_shared/cors.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 const CONFIG = {
   ONSPACE_AI_API_KEY: Deno.env.get('ONSPACE_AI_API_KEY'),
-  ONSPACE_AI_BASE_URL: (Deno.env.get('ONSPACE_AI_BASE_URL') || 'https://ai.gateway.onspace.ai').replace(/\\/v1\\/?$/, ''),
+  ONSPACE_AI_BASE_URL: (Deno.env.get('ONSPACE_AI_BASE_URL') || 'https://ai.gateway.onspace.ai').replace(/\/v1\/?$/, ''),
   OPENAI_API_KEY: Deno.env.get('OPENAI_API_KEY'),
   ELEVENLABS_API_KEY: Deno.env.get('ELEVENLABS_API_KEY'),
   SUPABASE_URL: Deno.env.get('SUPABASE_URL'),
@@ -244,7 +245,7 @@ async function tryOnSpaceAISpeech(text: string, voice: string, speed: number): P
       const b64 = json.audio || json.data || json.audio_data;
       if (b64 && typeof b64 === 'string') {
         try {
-          const decoded = atob(b64.replace(/^data:audio\\/[^;]+;base64,/, ''));
+          const decoded = atob(b64.replace(/^data:audio\/[^;]+;base64,/, ''));
           const bytes = Uint8Array.from(decoded, c => c.charCodeAt(0));
           if (bytes.length > 100) {
             console.log(`[TTS] OnSpace AI audio from JSON: ${bytes.length} bytes`);
