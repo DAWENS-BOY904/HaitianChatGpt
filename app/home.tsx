@@ -26,6 +26,7 @@ import {
   Modal,
   ScrollView,
   Switch,
+  Pressable,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
@@ -394,37 +395,118 @@ const archStyles = StyleSheet.create({
   archBtnText: { color: '#FF453A', fontSize: 17, fontWeight: '600' },
 });
 
-function GroupStartModal({ visible, user, profilePhotoUrl, onClose, onStartGroup }: {
-  visible: boolean; user: any; profilePhotoUrl: string | null; onClose: () => void; onStartGroup: () => void;
+// ── Profile Edit Modal (Photo 2) ──
+function ProfileEditModal({ visible, user, profilePhotoUrl, onClose, onSave, isDark }: {
+  visible: boolean; user: any; profilePhotoUrl: string | null; onClose: () => void;
+  onSave: (name: string, username: string, photo?: string) => void; isDark: boolean;
 }) {
+  const [name, setName] = useState(user?.username || '');
+  const [username, setUsername] = useState(user?.email?.split('@')[0] || '');
+  const [photoUri, setPhotoUri] = useState<string | null>(profilePhotoUrl);
+  useEffect(() => {
+    if (visible) {
+      setName(user?.username || user?.email?.split('@')[0] || '');
+      setUsername(user?.email?.split('@')[0] || '');
+      setPhotoUri(profilePhotoUrl);
+    }
+  }, [visible]);
+  const pickPhoto = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.85, allowsEditing: true, aspect: [1, 1] });
+      if (!result.canceled && result.assets[0]) setPhotoUri(result.assets[0].uri);
+    } catch (_e) {}
+  };
+  const bg = isDark ? 'rgba(28,28,30,0.98)' : 'rgba(255,255,255,0.98)';
+  const textC = isDark ? '#FFFFFF' : '#000000';
+  const inputBg = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)';
+  const subC = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.45)';
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={{ flex: 1, backgroundColor: '#000' }}>
-        <TouchableOpacity style={grpStartStyles.closeX} onPress={onClose}>
-          <View style={grpStartStyles.closeXCircle}><Ionicons name="close" size={18} color="#FFF" /></View>
-        </TouchableOpacity>
-        <View style={grpStartStyles.center}>
-          <Text style={grpStartStyles.title}>Use Dawinix together</Text>
-          <Text style={grpStartStyles.subtitle}>Add people to your chats to plan, share ideas, and get creative.</Text>
-          <TouchableOpacity style={grpStartStyles.startBtn} onPress={() => { onClose(); onStartGroup(); }}>
-            <Text style={grpStartStyles.startBtnText}>Start group chat</Text>
+      <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' }}>
+        {Platform.OS === 'ios' ? <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} /> : null}
+        <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onClose} />
+        <View style={{ backgroundColor: bg, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 28, paddingBottom: 40 }}>
+          <View style={{ alignItems: 'center', marginBottom: 24 }}>
+            <TouchableOpacity onPress={pickPhoto} activeOpacity={0.8} style={{ position: 'relative' }}>
+              {photoUri ? (
+                <ExpoImage source={{ uri: photoUri }} style={{ width: 90, height: 90, borderRadius: 45 }} contentFit="cover" />
+              ) : (
+                <View style={{ width: 90, height: 90, borderRadius: 45, backgroundColor: isDark ? '#3A3A3C' : '#E5E5EA', alignItems: 'center', justifyContent: 'center' }}>
+                  <Ionicons name="person" size={40} color={isDark ? '#666' : '#999'} />
+                </View>
+              )}
+              <View style={{ position: 'absolute', bottom: 0, right: 0, width: 28, height: 28, borderRadius: 14, backgroundColor: isDark ? '#3A3A3C' : '#E5E5EA', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: isDark ? '#1C1C1E' : '#FFF' }}>
+                <Ionicons name="camera" size={14} color={textC} />
+              </View>
+            </TouchableOpacity>
+          </View>
+          <Text style={{ color: subC, fontSize: 13, fontWeight: '600', marginBottom: 6 }}>Name</Text>
+          <View style={{ backgroundColor: inputBg, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 13, marginBottom: 16 }}>
+            <TextInput style={{ color: textC, fontSize: 16 }} value={name} onChangeText={setName} placeholderTextColor={subC} />
+          </View>
+          <Text style={{ color: subC, fontSize: 13, fontWeight: '600', marginBottom: 6 }}>Username</Text>
+          <View style={{ backgroundColor: inputBg, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 13, marginBottom: 20 }}>
+            <TextInput style={{ color: textC, fontSize: 16 }} value={username} onChangeText={setUsername} placeholderTextColor={subC} autoCapitalize="none" />
+          </View>
+          <Text style={{ color: subC, fontSize: 12, textAlign: 'center', lineHeight: 18, marginBottom: 24 }}>{'Your profile helps people recognize you. Your name and username are also used in the Dawinix app.'}</Text>
+          <TouchableOpacity style={{ backgroundColor: textC, borderRadius: 30, paddingVertical: 15, alignItems: 'center', marginBottom: 12 }} onPress={() => { onSave(name, username, photoUri || undefined); onClose(); }}>
+            <Text style={{ color: isDark ? '#000' : '#FFF', fontSize: 17, fontWeight: '700' }}>Save profile</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={onClose} style={{ alignItems: 'center', paddingVertical: 10 }}>
+            <Text style={{ color: textC, fontSize: 16 }}>Cancel</Text>
           </TouchableOpacity>
         </View>
-        <View style={grpStartStyles.profileRow}>
-          <View style={grpStartStyles.profileAvatar}>
+      </View>
+    </Modal>
+  );
+}
+
+// ── Group Start Modal (Photo 1) with dark/light + blur ──
+function GroupStartModal({ visible, user, profilePhotoUrl, onClose, onStartGroup, isDark, onSetupProfile }: {
+  visible: boolean; user: any; profilePhotoUrl: string | null; onClose: () => void; onStartGroup: () => void;
+  isDark?: boolean; onSetupProfile?: () => void;
+}) {
+  const bg = isDark ? 'rgba(28,28,30,0.97)' : 'rgba(255,255,255,0.97)';
+  const textC = isDark ? '#FFFFFF' : '#000000';
+  const subC = isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.5)';
+  const profileRowBg = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.04)';
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={{ flex: 1, justifyContent: 'flex-end' }}>
+        {Platform.OS === 'ios' ? <BlurView intensity={isDark ? 60 : 50} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} /> : <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.5)' }]} />}
+        <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onClose} />
+        <View style={{ backgroundColor: bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingTop: 16, paddingBottom: 40, paddingHorizontal: 20, minHeight: '55%' }}>
+          <TouchableOpacity style={{ position: 'absolute', top: 16, right: 16, width: 36, height: 36, borderRadius: 18, backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.07)', alignItems: 'center', justifyContent: 'center', zIndex: 10 }} onPress={onClose}>
+            <Ionicons name="close" size={18} color={textC} />
+          </TouchableOpacity>
+          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20, paddingVertical: 40 }}>
+            <Text style={{ color: textC, fontSize: 26, fontWeight: '700', textAlign: 'center', marginBottom: 12 }}>Use Dawinix together</Text>
+            <Text style={{ color: subC, fontSize: 15, textAlign: 'center', lineHeight: 22, marginBottom: 36 }}>Add people to your chats to plan, share ideas, and get creative.</Text>
+            <TouchableOpacity
+              style={{ backgroundColor: textC, borderRadius: 30, paddingHorizontal: 48, paddingVertical: 17, width: '100%', alignItems: 'center' }}
+              onPress={() => { onClose(); onStartGroup(); }}
+            >
+              <Text style={{ color: isDark ? '#000' : '#FFF', fontSize: 17, fontWeight: '700' }}>Start group chat</Text>
+            </TouchableOpacity>
+          </View>
+          <TouchableOpacity
+            style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: profileRowBg, borderRadius: 18, padding: 14, gap: 12 }}
+            onPress={() => { onClose(); setTimeout(() => onSetupProfile?.(), 200); }}
+            activeOpacity={0.75}
+          >
             {profilePhotoUrl ? (
-              <Image source={{ uri: profilePhotoUrl }} style={{ width: 44, height: 44, borderRadius: 22 }} />
+              <ExpoImage source={{ uri: profilePhotoUrl }} style={{ width: 44, height: 44, borderRadius: 22 }} contentFit="cover" />
             ) : (
-              <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: '#333', alignItems: 'center', justifyContent: 'center' }}>
-                <Ionicons name="person" size={22} color="#888" />
+              <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: isDark ? '#3A3A3C' : '#E5E5EA', alignItems: 'center', justifyContent: 'center' }}>
+                <Ionicons name="person" size={22} color={isDark ? '#888' : '#999'} />
               </View>
             )}
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={grpStartStyles.profileTitle}>Set up your profile</Text>
-            <Text style={grpStartStyles.profileSub}>Choose a username and photo</Text>
-          </View>
-          <Ionicons name="pencil-outline" size={20} color="rgba(255,255,255,0.5)" />
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: textC, fontSize: 16, fontWeight: '600' }}>Set up your profile</Text>
+              <Text style={{ color: subC, fontSize: 13, marginTop: 2 }}>Choose a username and photo</Text>
+            </View>
+            <Ionicons name="pencil-outline" size={20} color={subC} />
+          </TouchableOpacity>
         </View>
       </View>
     </Modal>
@@ -444,6 +526,249 @@ const grpStartStyles = StyleSheet.create({
   profileTitle: { color: '#FFF', fontSize: 16, fontWeight: '600' },
   profileSub: { color: 'rgba(255,255,255,0.5)', fontSize: 13, marginTop: 2 },
 });
+
+// ── Group Chat Actions Dropdown (Photo 4) ──
+function GroupChatActionsMenu({ visible, onClose, onPeople, onAddPeople, onManageLink, onRenameGroup, onCustomize, onMute, onReport, onDeleteGroup, isDark }: {
+  visible: boolean; onClose: () => void; onPeople: () => void; onAddPeople: () => void;
+  onManageLink: () => void; onRenameGroup: () => void; onCustomize: () => void;
+  onMute: () => void; onReport: () => void; onDeleteGroup: () => void; isDark: boolean;
+}) {
+  const textC = isDark ? '#FFF' : '#000';
+  const subC = isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.4)';
+  const borderC = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)';
+  const items = [
+    { sub: true, label: 'New group chat' },
+    { icon: 'people-outline', label: 'People', onPress: () => { onClose(); onPeople(); } },
+    { icon: 'person-add-outline', label: 'Add people', onPress: () => { onClose(); onAddPeople(); } },
+    { icon: 'link-outline', label: 'Manage group link', onPress: () => { onClose(); onManageLink(); } },
+    { icon: 'pencil-outline', label: 'Rename group', onPress: () => { onClose(); onRenameGroup(); } },
+    { icon: 'settings-outline', label: 'Customize Dawinix', onPress: () => { onClose(); onCustomize(); } },
+    { icon: 'notifications-off-outline', label: 'Mute notifications', onPress: () => { onClose(); onMute(); } },
+    { icon: 'flag-outline', label: 'Report', onPress: () => { onClose(); onReport(); }, destructive: true },
+    { icon: 'trash-outline', label: 'Delete group', onPress: () => { onClose(); onDeleteGroup(); }, destructive: true },
+  ];
+  if (!visible) return null;
+  const bgCard = isDark ? 'rgba(40,40,44,0.97)' : 'rgba(255,255,255,0.97)';
+  return (
+    <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
+      <Pressable style={{ flex: 1 }} onPress={onClose}>
+        <View style={{ position: 'absolute', top: 80, right: 16, width: 250, borderRadius: 18, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 20, elevation: 20 }}>
+          {Platform.OS === 'ios' ? (
+            <BlurView intensity={isDark ? 80 : 70} tint={isDark ? 'dark' : 'extraLight'} style={{ borderRadius: 18, overflow: 'hidden', paddingVertical: 4 }}>
+              {items.map((item: any, i) => (
+                item.sub ? (
+                  <Text key={`sub-${i}`} style={{ color: subC, fontSize: 12, fontWeight: '600', paddingHorizontal: 16, paddingTop: 10, paddingBottom: 4 }}>{item.label}</Text>
+                ) : (
+                  <TouchableOpacity key={item.label} style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13, gap: 12, borderTopWidth: i > 1 ? StyleSheet.hairlineWidth : 0, borderTopColor: borderC }} onPress={item.onPress} activeOpacity={0.7}>
+                    <Ionicons name={item.icon} size={20} color={item.destructive ? '#FF453A' : textC} />
+                    <Text style={{ color: item.destructive ? '#FF453A' : textC, fontSize: 16 }}>{item.label}</Text>
+                  </TouchableOpacity>
+                )
+              ))}
+            </BlurView>
+          ) : (
+            <View style={{ backgroundColor: bgCard, borderRadius: 18, paddingVertical: 4 }}>
+              {items.map((item: any, i) => (
+                item.sub ? (
+                  <Text key={`sub-${i}`} style={{ color: subC, fontSize: 12, fontWeight: '600', paddingHorizontal: 16, paddingTop: 10, paddingBottom: 4 }}>{item.label}</Text>
+                ) : (
+                  <TouchableOpacity key={item.label} style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13, gap: 12, borderTopWidth: i > 1 ? StyleSheet.hairlineWidth : 0, borderTopColor: borderC }} onPress={item.onPress} activeOpacity={0.7}>
+                    <Ionicons name={item.icon} size={20} color={item.destructive ? '#FF453A' : textC} />
+                    <Text style={{ color: item.destructive ? '#FF453A' : textC, fontSize: 16 }}>{item.label}</Text>
+                  </TouchableOpacity>
+                )
+              ))}
+            </View>
+          )}
+        </View>
+      </Pressable>
+    </Modal>
+  );
+}
+
+// ── People Modal (Photo 6) ──
+function PeopleModal({ visible, onClose, groupName, userName, profilePhotoUrl, isDark, isAdmin }: {
+  visible: boolean; onClose: () => void; groupName: string; userName: string;
+  profilePhotoUrl: string | null; isDark: boolean; isAdmin: boolean;
+}) {
+  const textC = isDark ? '#FFF' : '#000';
+  const subC = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.45)';
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={{ flex: 1, justifyContent: 'flex-end' }}>
+        {Platform.OS === 'ios' ? <BlurView intensity={40} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} /> : <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.4)' }]} />}
+        <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onClose} />
+        <View style={{ borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: 'hidden', minHeight: '55%' }}>
+          {Platform.OS === 'ios' ? (
+            <BlurView intensity={isDark ? 80 : 70} tint={isDark ? 'dark' : 'extraLight'} style={{ paddingBottom: 40, minHeight: '100%' }}>
+              <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(128,128,128,0.4)', alignSelf: 'center', marginTop: 10, marginBottom: 16 }} />
+              <Text style={{ color: textC, fontSize: 18, fontWeight: '700', textAlign: 'center', marginBottom: 16 }}>People</Text>
+              <View style={{ paddingHorizontal: 16 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12, gap: 12 }}>
+                  {profilePhotoUrl ? (
+                    <ExpoImage source={{ uri: profilePhotoUrl }} style={{ width: 44, height: 44, borderRadius: 22 }} contentFit="cover" />
+                  ) : (
+                    <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: isDark ? '#3A3A3C' : '#E5E5EA', alignItems: 'center', justifyContent: 'center' }}>
+                      <Ionicons name="person" size={22} color={isDark ? '#888' : '#999'} />
+                    </View>
+                  )}
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: textC, fontSize: 16, fontWeight: '600' }}>{userName}</Text>
+                    <Text style={{ color: subC, fontSize: 13, marginTop: 2 }}>{userName.toLowerCase().replace(/\s/g, '')} {String.fromCharCode(183)} you{isAdmin ? ` ${String.fromCharCode(183)} admin` : ''}</Text>
+                  </View>
+                </View>
+              </View>
+            </BlurView>
+          ) : (
+            <View style={{ backgroundColor: isDark ? '#1C1C1E' : '#F2F2F7', paddingBottom: 40, minHeight: '100%' }}>
+              <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(128,128,128,0.4)', alignSelf: 'center', marginTop: 10, marginBottom: 16 }} />
+              <Text style={{ color: textC, fontSize: 18, fontWeight: '700', textAlign: 'center', marginBottom: 16 }}>People</Text>
+              <View style={{ paddingHorizontal: 16 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12, gap: 12 }}>
+                  {profilePhotoUrl ? (
+                    <ExpoImage source={{ uri: profilePhotoUrl }} style={{ width: 44, height: 44, borderRadius: 22 }} contentFit="cover" />
+                  ) : (
+                    <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: isDark ? '#3A3A3C' : '#E5E5EA', alignItems: 'center', justifyContent: 'center' }}>
+                      <Ionicons name="person" size={22} color={isDark ? '#888' : '#999'} />
+                    </View>
+                  )}
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: textC, fontSize: 16, fontWeight: '600' }}>{userName}</Text>
+                    <Text style={{ color: subC, fontSize: 13, marginTop: 2 }}>{userName.toLowerCase().replace(/\s/g, '')} {String.fromCharCode(183)} you{isAdmin ? ` ${String.fromCharCode(183)} admin` : ''}</Text>
+                  </View>
+                </View>
+              </View>
+            </View>
+          )}
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+// ── Report Group Modal (Photo 7, 8, 9) ──
+const GROUP_REPORT_CATEGORIES = [
+  { label: 'Violence & self-harm', subs: ['Threats or incitement to violence', 'Gender-based violence', 'Sexual violence', 'Weapons', 'Suicide & self-harm', 'Eating disorders', 'Human trafficking', 'Terrorism'] },
+  { label: 'Sexual exploitation & abuse', subs: ['Child sexual abuse material', 'Non-consensual intimate images', 'Sexual extortion'] },
+  { label: 'Child/teen exploitation', subs: ['Child grooming', 'Minor solicitation'] },
+  { label: 'Bullying & harassment', subs: ['Targeted harassment', 'Hate speech', 'Doxxing'] },
+  { label: 'Spam, fraud & deception', subs: ['Phishing', 'Scams', 'Misinformation'] },
+  { label: 'Privacy violation', subs: ['Sharing personal info', 'Non-consensual recording'] },
+  { label: 'Intellectual property', subs: ['Copyright infringement', 'Trademark violation'] },
+  { label: 'Age-inappropriate content', subs: ['Adult content to minors'] },
+  { label: 'Something else', subs: ['Other concern'] },
+];
+
+function ReportGroupModal({ visible, onClose, isDark }: { visible: boolean; onClose: () => void; isDark: boolean }) {
+  const [step, setStep] = useState<'main' | 'sub' | 'detail'>('main');
+  const [selCategory, setSelCategory] = useState<typeof GROUP_REPORT_CATEGORIES[0] | null>(null);
+  const [selSub, setSelSub] = useState('');
+  const [detail, setDetail] = useState('');
+  useEffect(() => { if (!visible) { setStep('main'); setSelCategory(null); setSelSub(''); setDetail(''); } }, [visible]);
+  const bg = isDark ? '#111113' : '#F2F2F7';
+  const cardBg = isDark ? '#1C1C1E' : '#FFFFFF';
+  const textC = isDark ? '#FFF' : '#000';
+  const subC = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.45)';
+  const borderC = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)';
+  if (!visible) return null;
+  return (
+    <Modal visible={visible} transparent={false} animationType="slide" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: bg }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', paddingTop: Platform.OS === 'ios' ? 56 : 28, paddingHorizontal: 16, paddingBottom: 16 }}>
+          {step !== 'main' ? (
+            <TouchableOpacity onPress={() => setStep(step === 'detail' ? 'sub' : 'main')} style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+              <Ionicons name="chevron-back" size={20} color={textC} />
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity onPress={onClose} style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)', borderRadius: 18, paddingHorizontal: 14, paddingVertical: 8, marginRight: 12 }}>
+              <Text style={{ color: textC, fontSize: 15, fontWeight: '500' }}>Cancel</Text>
+            </TouchableOpacity>
+          )}
+          <Text style={{ flex: 1, fontSize: 17, fontWeight: '700', color: textC, textAlign: 'center', marginRight: step === 'detail' ? 0 : 48 }}>Report conversation</Text>
+          {step === 'detail' ? (
+            <TouchableOpacity onPress={() => onClose()} style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)', borderRadius: 18, paddingHorizontal: 14, paddingVertical: 8 }}>
+              <Text style={{ color: textC, fontSize: 15, fontWeight: '600' }}>Submit</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+        {step === 'main' && (
+          <>
+            <Text style={{ color: subC, fontSize: 15, textAlign: 'center', marginBottom: 24, paddingHorizontal: 24 }}>Why are you reporting this conversation?</Text>
+            <View style={{ marginHorizontal: 16, borderRadius: 18, overflow: 'hidden', backgroundColor: cardBg }}>
+              {GROUP_REPORT_CATEGORIES.map((cat, i) => (
+                <TouchableOpacity key={cat.label} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingVertical: 16, borderTopWidth: i > 0 ? StyleSheet.hairlineWidth : 0, borderTopColor: borderC }} onPress={() => { setSelCategory(cat); setStep('sub'); }}>
+                  <Text style={{ color: textC, fontSize: 16 }}>{cat.label}</Text>
+                  <Ionicons name="chevron-forward" size={18} color={subC} />
+                </TouchableOpacity>
+              ))}
+            </View>
+          </>
+        )}
+        {step === 'sub' && selCategory && (
+          <>
+            <Text style={{ color: textC, fontSize: 17, fontWeight: '600', textAlign: 'center', marginBottom: 4 }}>{selCategory.label}</Text>
+            <Text style={{ color: subC, fontSize: 14, textAlign: 'center', marginBottom: 20 }}>Please provide more details</Text>
+            <View style={{ marginHorizontal: 16, borderRadius: 18, overflow: 'hidden', backgroundColor: cardBg }}>
+              {selCategory.subs.map((sub, i) => (
+                <TouchableOpacity key={sub} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingVertical: 16, borderTopWidth: i > 0 ? StyleSheet.hairlineWidth : 0, borderTopColor: borderC }} onPress={() => { setSelSub(sub); setStep('detail'); }}>
+                  <Text style={{ color: textC, fontSize: 16 }}>{sub}</Text>
+                  <Ionicons name="chevron-forward" size={18} color={subC} />
+                </TouchableOpacity>
+              ))}
+            </View>
+          </>
+        )}
+        {step === 'detail' && (
+          <>
+            <Text style={{ color: textC, fontSize: 17, fontWeight: '600', textAlign: 'center', marginBottom: 20, paddingHorizontal: 24 }}>{selSub}</Text>
+            <View style={{ marginHorizontal: 16, borderRadius: 18, overflow: 'hidden', backgroundColor: cardBg, padding: 16 }}>
+              <TextInput style={{ color: textC, fontSize: 16, minHeight: 120, textAlignVertical: 'top' }} placeholder="Please provide more details" placeholderTextColor={subC} value={detail} onChangeText={setDetail} multiline autoFocus />
+            </View>
+          </>
+        )}
+      </View>
+    </Modal>
+  );
+}
+
+// ── Rename Group Box (blur modal, Photo 5) ──
+function RenameGroupBox({ isDark, currentName, onSave, onCancel }: { isDark: boolean; currentName: string; onSave: (n: string) => void; onCancel: () => void }) {
+  const [text, setText] = useState(currentName);
+  useEffect(() => { setText(currentName); }, [currentName]);
+  const textC = isDark ? '#FFF' : '#000';
+  const inputBg = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)';
+  const subC = isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.4)';
+  return (
+    <View style={{ width: '82%', borderRadius: 22, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.35, shadowRadius: 22, elevation: 22 }}>
+      {Platform.OS === 'ios' ? (
+        <BlurView intensity={92} tint={isDark ? 'dark' : 'extraLight'} style={{ padding: 22 }}>
+          <Text style={{ color: textC, fontSize: 18, fontWeight: '700', marginBottom: 4 }}>Rename group</Text>
+          <Text style={{ color: subC, fontSize: 13, marginBottom: 16 }}>Enter a new name for the group.</Text>
+          <View style={{ backgroundColor: inputBg, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 16 }}>
+            <TextInput style={{ color: textC, fontSize: 16 }} value={text} onChangeText={setText} autoFocus selectTextOnFocus />
+          </View>
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            <TouchableOpacity style={{ flex: 1, backgroundColor: inputBg, borderRadius: 14, paddingVertical: 13, alignItems: 'center' }} onPress={onCancel}><Text style={{ color: textC, fontSize: 16, fontWeight: '600' }}>Cancel</Text></TouchableOpacity>
+            <TouchableOpacity style={{ flex: 1, backgroundColor: inputBg, borderRadius: 14, paddingVertical: 13, alignItems: 'center' }} onPress={() => onSave(text.trim())}><Text style={{ color: textC, fontSize: 16, fontWeight: '600' }}>Save</Text></TouchableOpacity>
+          </View>
+        </BlurView>
+      ) : (
+        <View style={{ backgroundColor: isDark ? '#2C2C2E' : '#FFF', padding: 22, borderRadius: 22 }}>
+          <Text style={{ color: textC, fontSize: 18, fontWeight: '700', marginBottom: 4 }}>Rename group</Text>
+          <Text style={{ color: subC, fontSize: 13, marginBottom: 16 }}>Enter a new name for the group.</Text>
+          <View style={{ backgroundColor: inputBg, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 16 }}>
+            <TextInput style={{ color: textC, fontSize: 16 }} value={text} onChangeText={setText} autoFocus selectTextOnFocus />
+          </View>
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            <TouchableOpacity style={{ flex: 1, backgroundColor: inputBg, borderRadius: 14, paddingVertical: 13, alignItems: 'center' }} onPress={onCancel}><Text style={{ color: textC, fontSize: 16, fontWeight: '600' }}>Cancel</Text></TouchableOpacity>
+            <TouchableOpacity style={{ flex: 1, backgroundColor: inputBg, borderRadius: 14, paddingVertical: 13, alignItems: 'center' }} onPress={() => onSave(text.trim())}><Text style={{ color: textC, fontSize: 16, fontWeight: '600' }}>Save</Text></TouchableOpacity>
+          </View>
+        </View>
+      )}
+    </View>
+  );
+}
 
 function CustomizeAIModal({ visible, onClose, onSave, initialInstructions, initialRespondAuto }: {
   visible: boolean; onClose: () => void; onSave: (instructions: string, respondAuto: boolean) => void; initialInstructions?: string; initialRespondAuto?: boolean;
@@ -496,25 +821,28 @@ const customStyles = StyleSheet.create({
   saveBtnText: { color: '#000', fontSize: 17, fontWeight: '600' },
 });
 
-function InviteLinkModal({ visible, onClose, isPlus }: { visible: boolean; onClose: () => void; isPlus: boolean }) {
-  const link = 'https://dawinix.com/invite';
+function InviteLinkModal({ visible, onClose, isPlus, isDark }: { visible: boolean; onClose: () => void; isPlus: boolean; isDark?: boolean }) {
+  const token = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 8);
+  const id = Math.random().toString(36).substring(2, 14);
+  const link = `https://dawinix.com/gg/v/${id}?token=${token}`;
+  const textC = isDark !== false ? '#FFF' : '#000';
   const handleShare = async () => { try { await Share.share({ message: `Join my Dawinix group chat!\n\n${link}`, url: link }); } catch (e) {} onClose(); };
   const handleCopy = () => { Clipboard.setString(link); onClose(); };
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onClose} />
       <View style={{ borderTopLeftRadius: 20, borderTopRightRadius: 20, overflow: 'hidden' }}>
-        <BlurView intensity={90} tint="dark" style={{ padding: 24 }}>
-          <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.3)', alignSelf: 'center', marginBottom: 16 }} />
-          <Text style={{ color: '#FFF', fontSize: 18, fontWeight: '700', marginBottom: 6 }}>Group link</Text>
+        <BlurView intensity={isDark !== false ? 90 : 75} tint={isDark !== false ? 'dark' : 'extraLight'} style={{ padding: 24 }}>
+          <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: isDark !== false ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.2)', alignSelf: 'center', marginBottom: 16 }} />
+          <Text style={{ color: textC, fontSize: 18, fontWeight: '700', marginBottom: 6 }}>Group link</Text>
           <Text style={{ color: '#007AFF', fontSize: 13, marginBottom: 20 }} numberOfLines={1}>{link}</Text>
           {[
             { icon: 'copy-outline', label: 'Copy link', onPress: handleCopy },
             { icon: 'share-outline', label: 'Share link', onPress: handleShare },
           ].map((item, i) => (
-            <TouchableOpacity key={item.label} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 16, gap: 16, borderTopWidth: i > 0 ? StyleSheet.hairlineWidth : 0, borderTopColor: 'rgba(255,255,255,0.1)' }} onPress={item.onPress}>
-              <Ionicons name={item.icon as any} size={22} color="#FFF" />
-              <Text style={{ color: '#FFF', fontSize: 17 }}>{item.label}</Text>
+            <TouchableOpacity key={item.label} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 16, gap: 16, borderTopWidth: i > 0 ? StyleSheet.hairlineWidth : 0, borderTopColor: isDark !== false ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)' }} onPress={item.onPress}>
+              <Ionicons name={item.icon as any} size={22} color={textC} />
+              <Text style={{ color: textC, fontSize: 17 }}>{item.label}</Text>
             </TouchableOpacity>
           ))}
         </BlurView>
@@ -861,6 +1189,14 @@ export default function HomeScreen() {
   const [groupCustomInstructions, setGroupCustomInstructions] = useState('');
   const [groupRespondAuto, setGroupRespondAuto] = useState(true);
   const [groupMembers, setGroupMembers] = useState<GroupMember[]>([]);
+  const [groupName, setGroupName] = useState('New group chat');
+  const [groupChatActionsVisible, setGroupChatActionsVisible] = useState(false);
+  const [renameGroupVisible, setRenameGroupVisible] = useState(false);
+  const [peopleModalVisible, setPeopleModalVisible] = useState(false);
+  const [reportGroupVisible, setReportGroupVisible] = useState(false);
+  const [profileEditModalVisible, setProfileEditModalVisible] = useState(false);
+  const [deleteGroupConfirm, setDeleteGroupConfirm] = useState(false);
+  const [replyingTo, setReplyingTo] = useState<any>(null);
   const [expandInputVisible, setExpandInputVisible] = useState(false);
   const [expandedText, setExpandedText] = useState('');
   const [mentionQuery, setMentionQuery] = useState('');
@@ -1906,8 +2242,21 @@ Be thorough and cite specific facts.`;
     setGroupStartModalVisible(false);
     setGroupChatMode(true);
     setTemporaryChatMode(false);
+    setGroupName('New group chat');
     handleNewChat();
   }, [handleNewChat]);
+
+  const handleSaveGroupName = useCallback((newName: string) => {
+    if (newName.trim()) setGroupName(newName.trim());
+    setRenameGroupVisible(false);
+  }, []);
+
+  const handleDeleteGroup = useCallback(() => { setDeleteGroupConfirm(true); }, []);
+
+  const handleReplyToMessage = useCallback((msg: any) => {
+    setReplyingTo(msg);
+    setTimeout(() => inputRef.current?.focus(), 100);
+  }, []);
 
   const renderMessage = useCallback(({ item }: { item: any }) => {
     const isStreaming = streamingMessageId === item.id;
@@ -1930,6 +2279,9 @@ Be thorough and cite specific facts.`;
           streamingSpeed={isStreaming ? 18 : 0}
           isOffline={isOffline}
           isImageTask={thinkingMode === 'creating_image' && (generating || isStreaming)}
+          isAdmin={isAdmin}
+          onReply={(msg) => setReplyingTo(msg)}
+          onDelete={(msgId) => {}}
           onChunkRendered={() => { if (isAtBottom) flatListRef.current?.scrollToEnd({ animated: false }); }}
         />
         {mathData ? (
@@ -2224,7 +2576,7 @@ Be thorough and cite specific facts.`;
                     </TouchableOpacity>
                   )}
                   <Text style={styles.headerChatTitle} numberOfLines={1}>
-                    {groupChatMode ? 'Group Chat' : (temporaryChatMode ? 'Temporary chat' : (currentConversation?.title || 'Dawinix'))}
+                    {groupChatMode ? groupName : (temporaryChatMode ? 'Temporary chat' : (currentConversation?.title || 'Dawinix'))}
                   </Text>
                   <View style={styles.headerChatRight}>
                     {Platform.OS === 'ios' ? (
@@ -2240,7 +2592,18 @@ Be thorough and cite specific facts.`;
                         </View>
                       </TouchableOpacity>
                     )}
-                    {Platform.OS === 'ios' ? (
+                    {groupChatMode ? (
+                      // Group chat: show profile avatar icon that opens actions dropdown (Photo 4)
+                      <TouchableOpacity hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} onPress={() => setGroupChatActionsVisible(true)}>
+                        {userProfilePhoto ? (
+                          <ExpoImage source={{ uri: userProfilePhoto }} style={{ width: 36, height: 36, borderRadius: 18 }} contentFit="cover" />
+                        ) : (
+                          <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: isDark ? 'rgba(44,44,46,0.85)' : 'rgba(242,242,247,0.85)', alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)' }}>
+                            <Ionicons name="person" size={18} color={colors.text} />
+                          </View>
+                        )}
+                      </TouchableOpacity>
+                    ) : Platform.OS === 'ios' ? (
                       <TouchableOpacity hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} onPress={() => setConversationMenuVisible(true)}>
                         <BlurView intensity={55} tint={isDark ? 'dark' : 'light'} style={{ width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)' }}>
                           <Ionicons name="ellipsis-horizontal" size={19} color={colors.text} />
@@ -2916,9 +3279,57 @@ Be thorough and cite specific facts.`;
 
             <RenameModal visible={renameModalVisible} currentTitle={currentConversation?.title || ''} onConfirm={async (title) => { setRenameModalVisible(false); await handleRenameConversation(title); }} onCancel={() => setRenameModalVisible(false)} />
             <ArchiveConfirmModal visible={archiveConfirmVisible} onConfirm={() => { setArchiveConfirmVisible(false); handleArchiveConversation(); }} onCancel={() => setArchiveConfirmVisible(false)} />
-            <GroupStartModal visible={groupStartModalVisible} user={user} profilePhotoUrl={userProfilePhoto} onClose={() => setGroupStartModalVisible(false)} onStartGroup={handleStartGroupChat} />
+            <GroupStartModal visible={groupStartModalVisible} user={user} profilePhotoUrl={userProfilePhoto} onClose={() => setGroupStartModalVisible(false)} onStartGroup={handleStartGroupChat} isDark={isDark} onSetupProfile={() => { setGroupStartModalVisible(false); setTimeout(() => setProfileEditModalVisible(true), 200); }} />
+
+            <ProfileEditModal visible={profileEditModalVisible} user={user} profilePhotoUrl={userProfilePhoto} onClose={() => setProfileEditModalVisible(false)} isDark={isDark} onSave={(name, username, photo) => { if (photo) setUserProfilePhoto(photo); }} />
+
+            <GroupChatActionsMenu visible={groupChatActionsVisible} onClose={() => setGroupChatActionsVisible(false)} onPeople={() => setPeopleModalVisible(true)} onAddPeople={handleAddPeople} onManageLink={() => setInviteLinkVisible(true)} onRenameGroup={() => setRenameGroupVisible(true)} onCustomize={() => setCustomizeAIVisible(true)} onMute={() => showAlert('Muted', 'Notifications muted for this group')} onReport={() => setReportGroupVisible(true)} onDeleteGroup={handleDeleteGroup} isDark={isDark} />
+
+            <PeopleModal visible={peopleModalVisible} onClose={() => setPeopleModalVisible(false)} groupName={groupName} userName={userName} profilePhotoUrl={userProfilePhoto} isDark={isDark} isAdmin={isAdmin} />
+
+            <ReportGroupModal visible={reportGroupVisible} onClose={() => setReportGroupVisible(false)} isDark={isDark} />
+
+            {/* Rename group blur modal (Photo 5) */}
+            <Modal visible={renameGroupVisible} transparent animationType="fade" onRequestClose={() => setRenameGroupVisible(false)}>
+              <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.45)' }}>
+                {Platform.OS === 'ios' ? <BlurView intensity={60} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} /> : null}
+                <RenameGroupBox isDark={isDark} currentName={groupName} onSave={handleSaveGroupName} onCancel={() => setRenameGroupVisible(false)} />
+              </View>
+            </Modal>
+
+            {/* Delete group confirm blur modal */}
+            <Modal visible={deleteGroupConfirm} transparent animationType="fade" onRequestClose={() => setDeleteGroupConfirm(false)}>
+              <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                {Platform.OS === 'ios' ? <BlurView intensity={65} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} /> : <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.5)' }]} />}
+                <View style={{ width: '80%', borderRadius: 22, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.4, shadowRadius: 22, elevation: 22 }}>
+                  {Platform.OS === 'ios' ? (
+                    <BlurView intensity={92} tint={isDark ? 'dark' : 'extraLight'} style={{ padding: 26, alignItems: 'center' }}>
+                      <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 19, fontWeight: '700', marginBottom: 10 }}>Delete group chat?</Text>
+                      <Text style={{ color: isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.5)', fontSize: 14, textAlign: 'center', lineHeight: 21, marginBottom: 24 }}>This will permanently delete the group chat and all messages.</Text>
+                      <TouchableOpacity style={{ width: '100%', backgroundColor: '#FF453A', borderRadius: 14, paddingVertical: 13, alignItems: 'center', marginBottom: 10 }} onPress={() => { setDeleteGroupConfirm(false); setGroupChatMode(false); handleNewChat(); }}>
+                        <Text style={{ color: '#FFF', fontSize: 16, fontWeight: '700' }}>Delete group</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={{ paddingVertical: 10 }} onPress={() => setDeleteGroupConfirm(false)}>
+                        <Text style={{ color: isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.5)', fontSize: 15 }}>Cancel</Text>
+                      </TouchableOpacity>
+                    </BlurView>
+                  ) : (
+                    <View style={{ backgroundColor: isDark ? '#2C2C2E' : '#FFF', padding: 26, alignItems: 'center', borderRadius: 22 }}>
+                      <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 19, fontWeight: '700', marginBottom: 10 }}>Delete group chat?</Text>
+                      <Text style={{ color: isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.5)', fontSize: 14, textAlign: 'center', lineHeight: 21, marginBottom: 24 }}>This will permanently delete the group chat and all messages.</Text>
+                      <TouchableOpacity style={{ width: '100%', backgroundColor: '#FF453A', borderRadius: 14, paddingVertical: 13, alignItems: 'center', marginBottom: 10 }} onPress={() => { setDeleteGroupConfirm(false); setGroupChatMode(false); handleNewChat(); }}>
+                        <Text style={{ color: '#FFF', fontSize: 16, fontWeight: '700' }}>Delete group</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={{ paddingVertical: 10 }} onPress={() => setDeleteGroupConfirm(false)}>
+                        <Text style={{ color: isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.5)', fontSize: 15 }}>Cancel</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
+              </View>
+            </Modal>
             <CustomizeAIModal visible={customizeAIVisible} onClose={() => setCustomizeAIVisible(false)} onSave={(instructions, respondAuto) => { setGroupCustomInstructions(instructions); setGroupRespondAuto(respondAuto); }} initialInstructions={groupCustomInstructions} initialRespondAuto={groupRespondAuto} />
-            <InviteLinkModal visible={inviteLinkVisible} onClose={() => setInviteLinkVisible(false)} isPlus={isUnlimited} />
+            <InviteLinkModal visible={inviteLinkVisible} onClose={() => setInviteLinkVisible(false)} isPlus={isUnlimited} isDark={isDark} />
             <NotificationPermissionModal visible={notifPermModalVisible} onAllow={handleAllowNotifications} onSkip={() => setNotifPermModalVisible(false)} />
 
             <MessageLimitModal

@@ -1,5 +1,4 @@
 
-
 import React, { useState, memo, useCallback, useMemo, useEffect, useRef } from 'react';
 import {
   View,
@@ -66,6 +65,9 @@ interface MessageItemProps {
   streamingSpeed?: number;
   isOffline?: boolean;
   isImageTask?: boolean;
+  isAdmin?: boolean;
+  onDelete?: (messageId: string) => void;
+  onReply?: (message: any) => void;
 }
 
 // Blinking cursor for streaming
@@ -179,7 +181,6 @@ const MarkdownRenderer = memo(function MarkdownRenderer({
   const textColor = isUser ? '#FFFFFF' : colors.text;
   const mutedColor = isUser ? 'rgba(255,255,255,0.65)' : colors.textSecondary;
 
-  // Inline token renderer (bold, italic, inline-code)
   const renderInline = (lineText: string, keyPfx: string): React.ReactNode[] => {
     const parts: React.ReactNode[] = [];
     const re = /(\*\*\*([^*]+)\*\*\*|\*\*([^*]+)\*\*|\*([^*]+)\*|`([^`]+)`|__([^_]+)__)/g;
@@ -191,16 +192,12 @@ const MarkdownRenderer = memo(function MarkdownRenderer({
         parts.push(<Text key={`${keyPfx}-il-${ki++}`} style={{ color: textColor }}>{lineText.slice(last, m.index)}</Text>);
       }
       if (m[2]) {
-        // bold italic
         parts.push(<Text key={`${keyPfx}-il-${ki++}`} style={{ fontWeight: '700', fontStyle: 'italic', color: textColor }}>{m[2]}</Text>);
       } else if (m[3]) {
-        // bold
         parts.push(<Text key={`${keyPfx}-il-${ki++}`} style={{ fontWeight: '700', color: textColor }}>{m[3]}</Text>);
       } else if (m[4]) {
-        // italic
         parts.push(<Text key={`${keyPfx}-il-${ki++}`} style={{ fontStyle: 'italic', color: textColor }}>{m[4]}</Text>);
       } else if (m[5]) {
-        // inline code
         parts.push(
           <Text key={`${keyPfx}-il-${ki++}`} style={{
             fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
@@ -212,7 +209,6 @@ const MarkdownRenderer = memo(function MarkdownRenderer({
           }}>{m[5]}</Text>
         );
       } else if (m[6]) {
-        // __bold__
         parts.push(<Text key={`${keyPfx}-il-${ki++}`} style={{ fontWeight: '700', color: textColor }}>{m[6]}</Text>);
       }
       last = m.index + m[0].length;
@@ -233,14 +229,12 @@ const MarkdownRenderer = memo(function MarkdownRenderer({
     const line = lines[i];
     const trimmed = line.trim();
 
-    // Empty line
     if (!trimmed) {
       elements.push(<View key={nextKey()} style={{ height: 5 }} />);
       i++;
       continue;
     }
 
-    // Horizontal rule
     if (/^(-{3,}|\*{3,}|_{3,})$/.test(trimmed)) {
       elements.push(
         <View key={nextKey()} style={{
@@ -253,7 +247,6 @@ const MarkdownRenderer = memo(function MarkdownRenderer({
       continue;
     }
 
-    // H1
     if (/^# /.test(trimmed)) {
       const k = nextKey();
       elements.push(
@@ -264,7 +257,6 @@ const MarkdownRenderer = memo(function MarkdownRenderer({
       i++; continue;
     }
 
-    // H2
     if (/^## /.test(trimmed)) {
       const k = nextKey();
       elements.push(
@@ -275,7 +267,6 @@ const MarkdownRenderer = memo(function MarkdownRenderer({
       i++; continue;
     }
 
-    // H3
     if (/^### /.test(trimmed)) {
       const k = nextKey();
       elements.push(
@@ -286,7 +277,6 @@ const MarkdownRenderer = memo(function MarkdownRenderer({
       i++; continue;
     }
 
-    // H4-H6
     if (/^#{4,6} /.test(trimmed)) {
       const k = nextKey();
       elements.push(
@@ -297,7 +287,6 @@ const MarkdownRenderer = memo(function MarkdownRenderer({
       i++; continue;
     }
 
-    // Numbered list
     if (/^\d+\. /.test(trimmed)) {
       const num = trimmed.match(/^(\d+)\. /)?.[1] || '1';
       const itemText = trimmed.replace(/^\d+\. /, '');
@@ -313,7 +302,6 @@ const MarkdownRenderer = memo(function MarkdownRenderer({
       i++; continue;
     }
 
-    // Bullet list (-, *, •)
     if (/^[-*•] /.test(trimmed)) {
       const itemText = trimmed.replace(/^[-*•] /, '');
       const k = nextKey();
@@ -328,7 +316,6 @@ const MarkdownRenderer = memo(function MarkdownRenderer({
       i++; continue;
     }
 
-    // Indented bullet
     if (/^ {2,}[-*•] /.test(line)) {
       const itemText = line.replace(/^ {2,}[-*•] /, '');
       const k = nextKey();
@@ -343,7 +330,6 @@ const MarkdownRenderer = memo(function MarkdownRenderer({
       i++; continue;
     }
 
-    // Blockquote
     if (/^> /.test(trimmed)) {
       const qText = trimmed.replace(/^> /, '');
       const k = nextKey();
@@ -361,7 +347,6 @@ const MarkdownRenderer = memo(function MarkdownRenderer({
       i++; continue;
     }
 
-    // Plain paragraph
     const k = nextKey();
     elements.push(
       <Text
@@ -530,7 +515,6 @@ function parseDownloadCard(content: string): { text: string; downloadLabel?: str
   return { text: [before, after].filter(Boolean).join('\n\n'), downloadLabel: label };
 }
 
-// ── Format timestamp ──
 function formatMessageTime(dateStr: string): string {
   try {
     const d = new Date(dateStr);
@@ -545,159 +529,197 @@ function formatMessageTime(dateStr: string): string {
   } catch { return ''; }
 }
 
-// ── Blur Context Menu ──
-const BlurContextMenu = memo(function BlurContextMenu({
-  visible, timeLabel, items, onClose, anchorY,
+// ── Reaction + Action bottom sheet (Photo 11 style) ──
+const QUICK_REACTIONS = ['❤️', '👍', '👎', '😆', '😮', '😐'];
+
+const MessageReactionSheet = memo(function MessageReactionSheet({
+  visible,
+  onClose,
+  message,
+  onCopy,
+  onReply,
+  onDelete,
+  onReport,
+  isAdmin,
+  isDark,
+  colors,
 }: {
   visible: boolean;
-  timeLabel: string;
-  items: Array<{ icon: string; label: string; onPress: () => void; destructive?: boolean }>;
   onClose: () => void;
-  anchorY?: number;
+  message: any;
+  onCopy: () => void;
+  onReply?: () => void;
+  onDelete?: () => void;
+  onReport?: () => void;
+  isAdmin?: boolean;
+  isDark: boolean;
+  colors: any;
 }) {
+  const slideAnim = useRef(new Animated.Value(300)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const scaleAnim = useRef(new Animated.Value(0.9)).current;
-  const screenH = Dimensions.get('window').height;
+  const [selectedReaction, setSelectedReaction] = useState<string | null>(null);
 
   useEffect(() => {
     if (visible) {
       Animated.parallel([
-        Animated.timing(fadeAnim, { toValue: 1, duration: 180, useNativeDriver: true }),
-        Animated.spring(scaleAnim, { toValue: 1, tension: 280, friction: 22, useNativeDriver: true }),
+        Animated.timing(fadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
+        Animated.spring(slideAnim, { toValue: 0, tension: 260, friction: 24, useNativeDriver: true }),
       ]).start();
     } else {
       Animated.parallel([
-        Animated.timing(fadeAnim, { toValue: 0, duration: 120, useNativeDriver: true }),
-        Animated.timing(scaleAnim, { toValue: 0.9, duration: 120, useNativeDriver: true }),
+        Animated.timing(fadeAnim, { toValue: 0, duration: 150, useNativeDriver: true }),
+        Animated.timing(slideAnim, { toValue: 300, duration: 150, useNativeDriver: true }),
       ]).start();
     }
   }, [visible]);
 
   if (!visible) return null;
 
-  // Position menu just below the message; flip above if too close to bottom
-  const menuH = (items.length * 52) + (timeLabel ? 48 : 0) + 16;
-  const spaceBelow = screenH - (anchorY ?? screenH / 2);
-  const top = spaceBelow > menuH + 24
-    ? (anchorY ?? screenH / 2) + 8
-    : (anchorY ?? screenH / 2) - menuH - 8;
+  const modelName = 'GPT-5.3';
+
+  const menuItems = [
+    { icon: 'copy-outline', label: 'Copy', onPress: () => { onClose(); setTimeout(onCopy, 60); } },
+    { icon: 'arrow-undo-outline', label: 'Reply', onPress: () => { onClose(); setTimeout(() => onReply?.(), 60); }, show: true },
+    ...(isAdmin || message.role === 'assistant' ? [{ icon: 'trash-outline', label: 'Delete', onPress: () => { onClose(); setTimeout(() => onDelete?.(), 60); }, destructive: true }] : []),
+    ...(message.role === 'assistant' ? [{ icon: 'flag-outline', label: 'Report', onPress: () => { onClose(); setTimeout(() => onReport?.(), 60); }, destructive: true }] : []),
+  ];
 
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
-      <Pressable style={ctxStyles.backdrop} onPress={onClose}>
-        <Animated.View
-          style={[
-            ctxStyles.menuWrap,
-            { position: 'absolute', top: Math.max(60, Math.min(top, screenH - menuH - 20)) },
-            { opacity: fadeAnim, transform: [{ scale: scaleAnim }] },
-          ]}
-        >
-          <BlurView intensity={85} tint="dark" style={ctxStyles.blurBox}>
-            {timeLabel ? (
-              <View style={ctxStyles.timeRow}><Text style={ctxStyles.timeText}>{timeLabel}</Text></View>
-            ) : null}
-            {items.map((item, i) => (
-              <TouchableOpacity
-                key={item.label}
-                style={[ctxStyles.menuItem, i > 0 && ctxStyles.menuItemBorder]}
-                activeOpacity={0.65}
-                onPress={() => { onClose(); setTimeout(item.onPress, 60); }}
-              >
-                <Text style={[ctxStyles.menuLabel, item.destructive && ctxStyles.destructiveLabel]}>{item.label}</Text>
-                <Ionicons name={item.icon as any} size={22} color={item.destructive ? '#FF453A' : 'rgba(255,255,255,0.85)'} />
-              </TouchableOpacity>
-            ))}
-          </BlurView>
+      <Animated.View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.42)', opacity: fadeAnim }}>
+        <Pressable style={{ flex: 1 }} onPress={onClose} />
+        <Animated.View style={{ transform: [{ translateY: slideAnim }] }}>
+          {Platform.OS === 'ios' ? (
+            <BlurView intensity={85} tint={isDark ? 'dark' : 'extraLight'} style={rsStyles.sheet}>
+              <View style={rsStyles.handle} />
+              {/* Model label */}
+              <Text style={[rsStyles.modelLabel, { color: colors.textSecondary }]}>{modelName}</Text>
+              {/* Reaction row */}
+              <View style={rsStyles.reactionRow}>
+                {QUICK_REACTIONS.map((emoji) => (
+                  <TouchableOpacity
+                    key={emoji}
+                    style={[rsStyles.emojiBtn, selectedReaction === emoji && { backgroundColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)', borderRadius: 20 }]}
+                    onPress={() => setSelectedReaction(selectedReaction === emoji ? null : emoji)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={rsStyles.emoji}>{emoji}</Text>
+                  </TouchableOpacity>
+                ))}
+                <TouchableOpacity style={rsStyles.emojiBtn} activeOpacity={0.7}>
+                  <View style={[rsStyles.plusCircle, { backgroundColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.08)' }]}>
+                    <Ionicons name="add" size={18} color={colors.text} />
+                  </View>
+                </TouchableOpacity>
+              </View>
+              <View style={[rsStyles.divider, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)' }]} />
+              {/* Action items */}
+              {menuItems.map((item, i) => (
+                <TouchableOpacity
+                  key={item.label}
+                  style={[rsStyles.actionRow, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }]}
+                  onPress={item.onPress}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name={item.icon as any} size={22} color={item.destructive ? '#FF453A' : colors.text} />
+                  <Text style={[rsStyles.actionLabel, item.destructive && { color: '#FF453A' }]}>{item.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </BlurView>
+          ) : (
+            <View style={[rsStyles.sheet, { backgroundColor: isDark ? '#1C1C1E' : '#F2F2F7' }]}>
+              <View style={rsStyles.handle} />
+              <Text style={[rsStyles.modelLabel, { color: colors.textSecondary }]}>{modelName}</Text>
+              <View style={rsStyles.reactionRow}>
+                {QUICK_REACTIONS.map((emoji) => (
+                  <TouchableOpacity
+                    key={emoji}
+                    style={[rsStyles.emojiBtn, selectedReaction === emoji && { backgroundColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)', borderRadius: 20 }]}
+                    onPress={() => setSelectedReaction(selectedReaction === emoji ? null : emoji)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={rsStyles.emoji}>{emoji}</Text>
+                  </TouchableOpacity>
+                ))}
+                <TouchableOpacity style={rsStyles.emojiBtn} activeOpacity={0.7}>
+                  <View style={[rsStyles.plusCircle, { backgroundColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.08)' }]}>
+                    <Ionicons name="add" size={18} color={colors.text} />
+                  </View>
+                </TouchableOpacity>
+              </View>
+              <View style={[rsStyles.divider, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)' }]} />
+              {menuItems.map((item, i) => (
+                <TouchableOpacity
+                  key={item.label}
+                  style={[rsStyles.actionRow, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }]}
+                  onPress={item.onPress}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name={item.icon as any} size={22} color={item.destructive ? '#FF453A' : colors.text} />
+                  <Text style={[rsStyles.actionLabel, { color: item.destructive ? '#FF453A' : colors.text }]}>{item.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
         </Animated.View>
-      </Pressable>
+      </Animated.View>
     </Modal>
   );
 });
 
-const aiImgMenuStyles = StyleSheet.create({
-  bar: {
+const rsStyles = StyleSheet.create({
+  sheet: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingBottom: 34,
+    overflow: 'hidden',
+  },
+  handle: {
+    width: 36, height: 4, borderRadius: 2,
+    backgroundColor: 'rgba(128,128,128,0.4)',
+    alignSelf: 'center',
+    marginTop: 10, marginBottom: 6,
+  },
+  modelLabel: {
+    fontSize: 13, fontWeight: '500',
+    paddingHorizontal: 18, paddingTop: 4, paddingBottom: 10,
+  },
+  reactionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 16,
-    overflow: 'hidden',
-    marginTop: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    gap: 2,
   },
-  btn: {
-    flex: 1,
+  emojiBtn: {
+    width: 44, height: 44,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 10,
-    gap: 3,
   },
-  btnLabel: {
-    color: 'rgba(255,255,255,0.85)',
-    fontSize: 11,
-    fontWeight: '600',
+  emoji: { fontSize: 28 },
+  plusCircle: {
+    width: 34, height: 34, borderRadius: 17,
+    alignItems: 'center', justifyContent: 'center',
   },
   divider: {
-    width: StyleSheet.hairlineWidth,
-    height: 36,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    height: StyleSheet.hairlineWidth,
+    marginHorizontal: 0,
+    marginBottom: 4,
   },
-});
-
-const inlinePlaceholderStyles = StyleSheet.create({
-  card: {
-    borderRadius: 20,
-    backgroundColor: '#111113',
-    overflow: 'hidden',
-    justifyContent: 'flex-end',
-    padding: 16,
-    marginVertical: 4,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.07)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4,
-    shadowRadius: 16,
-    elevation: 16,
-  },
-  dotGrid: {
-    position: 'absolute',
-    top: 14, left: 14, right: 14, bottom: 52,
+  actionRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 7,
+    gap: 14,
+    paddingHorizontal: 20,
+    paddingVertical: 15,
   },
-  dot: {
-    width: 5, height: 5, borderRadius: 2.5,
-    backgroundColor: 'rgba(255,255,255,0.75)',
-  },
-  shimmer: {
-    position: 'absolute', top: 0, bottom: 0, width: 60,
-    backgroundColor: 'rgba(255,255,255,0.04)',
-  },
-  textRow: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingTop: 10,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(255,255,255,0.08)',
-  },
-  label: {
-    color: 'rgba(255,255,255,0.78)', fontSize: 14, fontWeight: '500', letterSpacing: 0.2,
+  actionLabel: {
+    fontSize: 17,
+    fontWeight: '400',
   },
 });
 
-const ctxStyles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' },
-  menuWrap: { width: 260, alignSelf: 'center', borderRadius: 18, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.45, shadowRadius: 24, elevation: 24 },
-  blurBox: { borderRadius: 18, overflow: 'hidden' },
-  timeRow: { paddingHorizontal: 18, paddingTop: 14, paddingBottom: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(255,255,255,0.1)' },
-  timeText: { color: 'rgba(255,255,255,0.5)', fontSize: 13, textAlign: 'center', fontWeight: '500' },
-  menuItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingVertical: 15 },
-  menuItemBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.08)' },
-  menuLabel: { fontSize: 17, color: 'rgba(255,255,255,0.92)', fontWeight: '400' },
-  destructiveLabel: { color: '#FF453A' },
-});
-
-// ── Inline dot-grid image creation placeholder (LEFT side, inside AI message bubble) ──
+// ── Inline dot-grid image creation placeholder ──
 const InlineImageCreatingPlaceholder = memo(function InlineImageCreatingPlaceholder() {
   const dotCount = 48;
   const dotAnims = useRef(Array.from({ length: dotCount }, () => new Animated.Value(0))).current;
@@ -728,11 +750,11 @@ const InlineImageCreatingPlaceholder = memo(function InlineImageCreatingPlacehol
   const cardH = cardW * 1.05;
   return (
     <Animated.View style={{ opacity: mountAnim, marginVertical: 4 }}>
-      <View style={[inlinePlaceholderStyles.card, { width: cardW, height: cardH }]}>
-        <View style={inlinePlaceholderStyles.dotGrid}>
+      <View style={[inlinePH.card, { width: cardW, height: cardH }]}>
+        <View style={inlinePH.dotGrid}>
           {dotAnims.map((anim, i) => (
             <Animated.View key={i} style={[
-              inlinePlaceholderStyles.dot,
+              inlinePH.dot,
               {
                 opacity: anim.interpolate({ inputRange: [0, 1], outputRange: [0.1, 0.6] }),
                 transform: [{ scale: anim.interpolate({ inputRange: [0, 1], outputRange: [0.5, 1.2] }) }],
@@ -740,13 +762,132 @@ const InlineImageCreatingPlaceholder = memo(function InlineImageCreatingPlacehol
             ]} />
           ))}
         </View>
-        <Animated.View style={[inlinePlaceholderStyles.shimmer, { transform: [{ translateX: shimmerX }] }]} />
-        <View style={inlinePlaceholderStyles.textRow}>
+        <Animated.View style={[inlinePH.shimmer, { transform: [{ translateX: shimmerX }] }]} />
+        <View style={inlinePH.textRow}>
           <ActivityIndicator size="small" color="rgba(255,255,255,0.65)" style={{ marginRight: 7 }} />
-          <Text style={inlinePlaceholderStyles.label}>Creating image…</Text>
+          <Text style={inlinePH.label}>Creating image…</Text>
         </View>
       </View>
     </Animated.View>
+  );
+});
+
+const inlinePH = StyleSheet.create({
+  card: { borderRadius: 20, backgroundColor: '#111113', overflow: 'hidden', justifyContent: 'flex-end', padding: 16, marginVertical: 4, borderWidth: 1, borderColor: 'rgba(255,255,255,0.07)', shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.4, shadowRadius: 16, elevation: 16 },
+  dotGrid: { position: 'absolute', top: 14, left: 14, right: 14, bottom: 52, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: 7 },
+  dot: { width: 5, height: 5, borderRadius: 2.5, backgroundColor: 'rgba(255,255,255,0.75)' },
+  shimmer: { position: 'absolute', top: 0, bottom: 0, width: 60, backgroundColor: 'rgba(255,255,255,0.04)' },
+  textRow: { flexDirection: 'row', alignItems: 'center', paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.08)' },
+  label: { color: 'rgba(255,255,255,0.78)', fontSize: 14, fontWeight: '500', letterSpacing: 0.2 },
+});
+
+const ctxStyles = StyleSheet.create({
+  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' },
+  menuWrap: { width: 260, alignSelf: 'center', borderRadius: 18, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.45, shadowRadius: 24, elevation: 24 },
+  blurBox: { borderRadius: 18, overflow: 'hidden' },
+  timeRow: { paddingHorizontal: 18, paddingTop: 14, paddingBottom: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(255,255,255,0.1)' },
+  timeText: { color: 'rgba(255,255,255,0.5)', fontSize: 13, textAlign: 'center', fontWeight: '500' },
+  menuItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingVertical: 15 },
+  menuItemBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.08)' },
+  menuLabel: { fontSize: 17, color: 'rgba(255,255,255,0.92)', fontWeight: '400' },
+  destructiveLabel: { color: '#FF453A' },
+});
+
+const aiImgMenuStyles = StyleSheet.create({
+  bar: { flexDirection: 'row', alignItems: 'center', borderRadius: 16, overflow: 'hidden', marginTop: 8 },
+  btn: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 10, gap: 3 },
+  btnLabel: { color: 'rgba(255,255,255,0.85)', fontSize: 11, fontWeight: '600' },
+  divider: { width: StyleSheet.hairlineWidth, height: 36, backgroundColor: 'rgba(255,255,255,0.15)' },
+});
+
+// ── Report AI Message Modal ──
+const REPORT_CATEGORIES = [
+  'Violence & self-harm',
+  'Sexual exploitation & abuse',
+  'Child/teen exploitation',
+  'Bullying & harassment',
+  'Spam, fraud & deception',
+  'Privacy violation',
+  'Intellectual property',
+  'Age-inappropriate content',
+  'Something else',
+];
+
+const ReportMessageModal = memo(function ReportMessageModal({ visible, onClose, onSubmit, isDark, colors }: {
+  visible: boolean; onClose: () => void; onSubmit: (category: string, detail: string) => void; isDark: boolean; colors: any;
+}) {
+  const [step, setStep] = useState<'category' | 'detail'>('category');
+  const [selectedCategory, setSelectedCategory] = useState('');
+  const [detail, setDetail] = useState('');
+
+  useEffect(() => {
+    if (!visible) { setStep('category'); setSelectedCategory(''); setDetail(''); }
+  }, [visible]);
+
+  if (!visible) return null;
+  const bg = isDark ? '#1C1C1E' : '#F2F2F7';
+  const cardBg = isDark ? '#2C2C2E' : '#FFFFFF';
+  const textC = isDark ? '#FFFFFF' : '#000000';
+  const subC = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)';
+  const borderC = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)';
+
+  return (
+    <Modal visible={visible} transparent={false} animationType="slide" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: bg }}>
+        {/* Header */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', paddingTop: Platform.OS === 'ios' ? 56 : 28, paddingHorizontal: 16, paddingBottom: 16 }}>
+          {step === 'detail' ? (
+            <TouchableOpacity onPress={() => setStep('category')} style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.06)', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+              <Ionicons name="chevron-back" size={20} color={textC} />
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity onPress={onClose} style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.06)', borderRadius: 18, paddingHorizontal: 14, paddingVertical: 8, marginRight: 12 }}>
+              <Text style={{ color: textC, fontSize: 15, fontWeight: '500' }}>Cancel</Text>
+            </TouchableOpacity>
+          )}
+          <Text style={{ flex: 1, fontSize: 17, fontWeight: '700', color: textC, textAlign: 'center', marginRight: step === 'detail' ? 48 : 0 }}>Report conversation</Text>
+          {step === 'detail' ? (
+            <TouchableOpacity onPress={() => { onSubmit(selectedCategory, detail); onClose(); }} style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.06)', borderRadius: 18, paddingHorizontal: 14, paddingVertical: 8 }}>
+              <Text style={{ color: textC, fontSize: 15, fontWeight: '600' }}>Submit</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+
+        {step === 'category' ? (
+          <>
+            <Text style={{ color: subC, fontSize: 15, textAlign: 'center', marginBottom: 20, paddingHorizontal: 24 }}>Why are you reporting this conversation?</Text>
+            <View style={{ marginHorizontal: 16, borderRadius: 16, overflow: 'hidden', backgroundColor: cardBg }}>
+              {REPORT_CATEGORIES.map((cat, i) => (
+                <TouchableOpacity
+                  key={cat}
+                  style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingVertical: 16, borderTopWidth: i > 0 ? StyleSheet.hairlineWidth : 0, borderTopColor: borderC }}
+                  onPress={() => { setSelectedCategory(cat); setStep('detail'); }}
+                >
+                  <Text style={{ color: textC, fontSize: 16 }}>{cat}</Text>
+                  <Ionicons name="chevron-forward" size={18} color={subC} />
+                </TouchableOpacity>
+              ))}
+            </View>
+          </>
+        ) : (
+          <>
+            <Text style={{ color: textC, fontSize: 17, fontWeight: '600', textAlign: 'center', marginBottom: 4, paddingHorizontal: 24 }}>{selectedCategory}</Text>
+            <Text style={{ color: subC, fontSize: 14, textAlign: 'center', marginBottom: 24 }}>Please provide more details</Text>
+            <View style={{ marginHorizontal: 16, borderRadius: 16, overflow: 'hidden', backgroundColor: cardBg, padding: 16 }}>
+              <TextInput
+                style={{ color: textC, fontSize: 16, minHeight: 120, textAlignVertical: 'top' }}
+                placeholder="Please provide more details"
+                placeholderTextColor={subC}
+                value={detail}
+                onChangeText={setDetail}
+                multiline
+                autoFocus
+              />
+            </View>
+          </>
+        )}
+      </View>
+    </Modal>
   );
 });
 
@@ -761,29 +902,29 @@ export const MessageItem = memo(function MessageItem({
   streamingSpeed = 50,
   isOffline = false,
   isImageTask = false,
+  isAdmin = false,
+  onDelete,
+  onReply,
 }: MessageItemProps) {
   const { colors, isDark } = useTheme();
   const { user } = useAuth();
   const { showAlert } = useAlert();
   const supabase = getSupabaseClient();
 
-  const [showContextMenu, setShowContextMenu] = useState(false);
-  const [menuAnchorY, setMenuAnchorY] = useState(0);
-  const pressableRef = useRef<View>(null);
+  const [showReactionSheet, setShowReactionSheet] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
   const [showActionsModal, setShowActionsModal] = useState(false);
   const [showSelectTextModal, setShowSelectTextModal] = useState(false);
   const [liked, setLiked] = useState<'like' | 'dislike' | null>(null);
+  const [messageReactions, setMessageReactions] = useState<Record<string, number>>({});
   const [analysisVisible, setAnalysisVisible] = useState(false);
   const [selectedLink, setSelectedLink] = useState('');
   const [selectedImageUrl, setSelectedImageUrl] = useState('');
   const [fileData, setFileData] = useState({ name: '', content: '', type: '' });
   const [modals, setModals] = useState({ link: false, webView: false, imageViewer: false, imageEdit: false, file: false });
   const [downloadingImage, setDownloadingImage] = useState(false);
-  // AI image action menu
-  const [showImageMenu, setShowImageMenu] = useState(false);
   const [menuImageUrl, setMenuImageUrl] = useState('');
 
-  // Entrance animation
   const entranceOpacity = useRef(new Animated.Value(0)).current;
   const entranceTranslateY = useRef(new Animated.Value(16)).current;
   useEffect(() => {
@@ -792,9 +933,7 @@ export const MessageItem = memo(function MessageItem({
       Animated.spring(entranceTranslateY, { toValue: 0, tension: 240, friction: 24, useNativeDriver: true }),
     ]);
     animations.start();
-    return () => {
-      animations.stop();
-    };
+    return () => animations.stop();
   }, []);
 
   const toggleModal = useCallback((modalName: keyof typeof modals, value?: boolean) => {
@@ -805,51 +944,32 @@ export const MessageItem = memo(function MessageItem({
     try {
       setDownloadingImage(true);
       const { status } = await MediaLibrary.requestPermissionsAsync();
-      if (status !== 'granted') { 
-        Alert.alert('Permission Required', 'Please allow access to save images.'); 
-        return; 
-      }
-
-      // Extract file extension properly
+      if (status !== 'granted') { Alert.alert('Permission Required', 'Please allow access to save images.'); return; }
       const urlObj = new URL(imageUrl);
       const pathname = urlObj.pathname;
       const ext = pathname.split('.').pop()?.split('?')[0]?.toLowerCase() || 'jpg';
       const validExt = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].includes(ext) ? ext : 'jpg';
-
       const fileUri = `${FileSystem.documentDirectory}temp_image_${Date.now()}.${validExt}`;
       const downloadResult = await FileSystem.downloadAsync(imageUrl, fileUri);
-
       if (downloadResult.status !== 200) throw new Error(`Download failed with status ${downloadResult.status}`);
-
       const asset = await MediaLibrary.createAssetAsync(downloadResult.uri);
       await MediaLibrary.createAlbumAsync('Dawinix', asset, false);
       showAlert('Success', 'Image saved to your photo library!');
-    } catch (err: any) { 
-      Alert.alert('Error', err?.message || 'Failed to save image.'); 
-    }
+    } catch (err: any) { Alert.alert('Error', err?.message || 'Failed to save image.'); }
     finally { setDownloadingImage(false); }
   }, [showAlert]);
 
-  // Only allow long-press on text messages — not on image-only uploads
   const hasOnlyImage = message.role === 'user' && !!message.image_url && !message.content.trim();
   const hasBothTextAndImage = message.role === 'user' && !!message.image_url && !!message.content.trim();
+
   const handleLongPress = useCallback(() => {
     if (hasOnlyImage) return;
-    const node = findNodeHandle(pressableRef.current);
-    if (node) {
-      UIManager.measure(node, (_x, _y, _w, h, _px, py) => {
-        setMenuAnchorY(py + h);
-        setShowContextMenu(true);
-      });
-    } else {
-      setMenuAnchorY(Dimensions.get('window').height / 2);
-      setShowContextMenu(true);
-    }
+    setShowReactionSheet(true);
   }, [hasOnlyImage]);
 
   const handleAIImageLongPress = useCallback((imageUrl: string) => {
     setMenuImageUrl(imageUrl);
-    setShowImageMenu(true);
+    setShowReactionSheet(true);
   }, []);
 
   const handleShareImage = useCallback(async (imageUrl: string) => {
@@ -859,47 +979,26 @@ export const MessageItem = memo(function MessageItem({
   const handleCopy = useCallback(async () => {
     await Clipboard.setStringAsync(message.content);
     showAlert('Copied!', 'Full message copied to clipboard');
-    setShowContextMenu(false);
     onCopy?.();
   }, [message.content, showAlert, onCopy]);
 
   const handleEdit = useCallback(() => {
     onEdit?.(message.id, message.content);
-    setShowContextMenu(false);
   }, [message.id, message.content, onEdit]);
 
   const handleLike = useCallback(async (type: 'like' | 'dislike') => {
-    if (!user) { 
-      showAlert('Sign In Required', 'Please sign in to rate messages');
-      router.push('/login'); 
-      return; 
-    }
+    if (!user) { showAlert('Sign In Required', 'Please sign in to rate messages'); router.push('/login'); return; }
     try {
-      // Optimistic update
       const previousLiked = liked;
       setLiked(type);
-
       if (previousLiked === type) {
-        // Toggle off
-        const { error } = await supabase.from('message_likes').delete().eq('message_id', message.id).eq('user_id', user.id);
-        if (error) throw error;
+        await supabase.from('message_likes').delete().eq('message_id', message.id).eq('user_id', user.id);
         setLiked(null);
       } else {
-        // Remove existing like first
         await supabase.from('message_likes').delete().eq('message_id', message.id).eq('user_id', user.id);
-        // Insert new like
-        const { error } = await supabase.from('message_likes').upsert({ 
-          message_id: message.id, 
-          user_id: user.id, 
-          like_type: type 
-        });
-        if (error) throw error;
+        await supabase.from('message_likes').upsert({ message_id: message.id, user_id: user.id, like_type: type });
       }
-    } catch (err: any) { 
-      showAlert('Error', err?.message || 'Failed to save feedback'); 
-      // Revert optimistic update
-      setLiked(liked);
-    }
+    } catch (err: any) { showAlert('Error', err?.message || 'Failed to save feedback'); setLiked(liked); }
   }, [liked, message.id, user, supabase, showAlert]);
 
   const handleLinkPress = useCallback((url: string) => { setSelectedLink(url); toggleModal('link', true); }, [toggleModal]);
@@ -909,32 +1008,44 @@ export const MessageItem = memo(function MessageItem({
 
   const handleApplyImageEdits = useCallback(async (editPrompt: string) => {
     try {
-      const { data, error } = await supabase.functions.invoke('chat', {
-        body: { editImageUrl: selectedImageUrl, editPrompt, messages: [], conversationId: 'temp' },
-      });
+      const { data, error } = await supabase.functions.invoke('chat', { body: { editImageUrl: selectedImageUrl, editPrompt, messages: [], conversationId: 'temp' } });
       if (error) throw error;
-      if (data?.imageUrl) { 
-        setSelectedImageUrl(data.imageUrl); 
-        toggleModal('imageEdit', false); 
-        toggleModal('imageViewer', true); 
-      } else {
-        throw new Error('No image URL returned');
-      }
-    } catch (err: any) { 
-      showAlert('Error', err?.message || 'Failed to apply edits'); 
-    }
+      if (data?.imageUrl) { setSelectedImageUrl(data.imageUrl); toggleModal('imageEdit', false); toggleModal('imageViewer', true); }
+      else throw new Error('No image URL returned');
+    } catch (err: any) { showAlert('Error', err?.message || 'Failed to apply edits'); }
   }, [selectedImageUrl, supabase, toggleModal, showAlert]);
 
   const handleFileDownload = useCallback((fileName: string, fileContent: string, fileType: string) => {
-    try {
-      setFileData({ name: fileName, content: fileContent, type: fileType });
-      toggleModal('file', true);
-    } catch (err: any) {
-      showAlert('Error', err?.message || 'Failed to open file');
-    }
+    try { setFileData({ name: fileName, content: fileContent, type: fileType }); toggleModal('file', true); }
+    catch (err: any) { showAlert('Error', err?.message || 'Failed to open file'); }
   }, [toggleModal, showAlert]);
 
-  // Parse special blocks
+  const handleDeleteMessage = useCallback(() => {
+    Alert.alert(
+      'Delete message?',
+      'This message will be permanently deleted.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: () => onDelete?.(message.id) },
+      ]
+    );
+  }, [message.id, onDelete]);
+
+  const handleReportSubmit = useCallback(async (category: string, detail: string) => {
+    try {
+      if (user?.id) {
+        await supabase.from('bug_reports').insert({
+          user_id: user.id,
+          description: `Report message - Category: ${category}\nDetail: ${detail}\nMessage ID: ${message.id}`,
+          status: 'pending',
+        });
+      }
+      showAlert('Reported', 'Thank you for your report. We will review it.');
+    } catch (_e) {
+      showAlert('Reported', 'Thank you for your report.');
+    }
+  }, [user?.id, supabase, showAlert, message.id]);
+
   const parsed = useMemo(() => {
     const { text: t1, sources } = parseSources(message.content);
     const { text: t2, entries: analysisEntries } = parseAnalysis(t1);
@@ -951,24 +1062,18 @@ export const MessageItem = memo(function MessageItem({
     return { inlineImages: images, cleanedBeforeCard: text };
   }, [message.role, beforeCard]);
 
-  // Split content into text/code parts
   const contentParts = useMemo(() => {
     const textToProcess = cleanedBeforeCard;
     const parts: Array<{ type: 'text' | 'code'; content: string; language?: string }> = [];
-    // Support both ```lang\ncode``` and ```lang code``` patterns
     const codeBlockRegex = /```(\w+)?\n([\s\S]*?)```/g;
     let lastIndex = 0;
     let match;
     while ((match = codeBlockRegex.exec(textToProcess)) !== null) {
-      if (match.index > lastIndex) {
-        parts.push({ type: 'text', content: textToProcess.substring(lastIndex, match.index) });
-      }
+      if (match.index > lastIndex) { parts.push({ type: 'text', content: textToProcess.substring(lastIndex, match.index) }); }
       parts.push({ type: 'code', language: match[1] || 'text', content: match[2].trim() });
       lastIndex = match.index + match[0].length;
     }
-    if (lastIndex < textToProcess.length) {
-      parts.push({ type: 'text', content: textToProcess.substring(lastIndex) });
-    }
+    if (lastIndex < textToProcess.length) { parts.push({ type: 'text', content: textToProcess.substring(lastIndex) }); }
     return parts.length > 0 ? parts : [{ type: 'text' as const, content: textToProcess }];
   }, [cleanedBeforeCard]);
 
@@ -987,21 +1092,7 @@ export const MessageItem = memo(function MessageItem({
   }, []);
 
   const hasGeneratedImage = useMemo(() => Boolean(message.image_url && isImageUrl(message.image_url)), [message.image_url]);
-
-  const shouldStreamPart = useCallback(
-    (isLastPart: boolean) => streaming && isGenerating && message.role === 'assistant' && isLastPart,
-    [streaming, isGenerating, message.role]
-  );
-
-  const contextMenuItems = useMemo(() => {
-    const items: Array<{ icon: string; label: string; onPress: () => void; destructive?: boolean }> = [];
-    items.push({ icon: 'copy-outline', label: 'Copy All', onPress: handleCopy });
-    if (message.role === 'user' && onEdit) items.push({ icon: 'pencil-outline', label: 'Edit', onPress: handleEdit });
-    if (message.role === 'assistant') {
-      items.push({ icon: 'text-outline', label: 'Select Text', onPress: () => { setShowContextMenu(false); setTimeout(() => setShowSelectTextModal(true), 100); } });
-    }
-    return items;
-  }, [message.role, onEdit, handleCopy, handleEdit]);
+  const shouldStreamPart = useCallback((isLastPart: boolean) => streaming && isGenerating && message.role === 'assistant' && isLastPart, [streaming, isGenerating, message.role]);
 
   const imgCardStyles = useMemo(() => StyleSheet.create({
     cardWrap: { marginTop: 4, marginBottom: 4 },
@@ -1017,7 +1108,6 @@ export const MessageItem = memo(function MessageItem({
     userMessageTextOnly: { alignSelf: 'flex-end', backgroundColor: colors.primary, borderRadius: 18, borderTopRightRadius: 4, borderBottomRightRadius: 4, marginRight: Spacing.sm, paddingHorizontal: Spacing.md, paddingVertical: 10 },
     assistantMessage: { alignSelf: 'flex-start', backgroundColor: 'transparent', borderRadius: 0, marginLeft: Spacing.sm, maxWidth: '92%' },
     messageImage: { width: '100%', height: 220, borderRadius: BorderRadius.md, marginBottom: Spacing.sm },
-    downloadOverlay: { ...StyleSheet.absoluteFillObject, borderRadius: BorderRadius.md, justifyContent: 'center', alignItems: 'center', backgroundColor: 'transparent' },
     downloadButton: { position: 'absolute', bottom: 12, right: 12, backgroundColor: 'rgba(0,0,0,0.75)', borderRadius: BorderRadius.full, width: 44, height: 44, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#fff' },
     fileAttachment: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.background, borderRadius: BorderRadius.md, padding: Spacing.md, marginBottom: Spacing.sm, borderWidth: 1, borderColor: colors.border, gap: Spacing.md },
     fileIcon: { width: 48, height: 48, borderRadius: BorderRadius.md, backgroundColor: `${colors.primary}15`, alignItems: 'center', justifyContent: 'center' },
@@ -1036,24 +1126,18 @@ export const MessageItem = memo(function MessageItem({
   }), [colors, message.role]);
 
   const isStreamingRendered = streaming && isGenerating && message.role === 'assistant';
-  const timeLabel = formatMessageTime(message.created_at);
 
   return (
     <>
       <Animated.View style={{ opacity: entranceOpacity, transform: [{ translateY: entranceTranslateY }] }}>
-        {/* ── User message with BOTH image + text: split layout ── */}
         {hasBothTextAndImage ? (
           <View style={{ alignSelf: 'flex-end', marginRight: Spacing.sm, maxWidth: '78%', gap: 6 }}>
-            {/* Image floats cleanly above — no colored container */}
             <TouchableOpacity onPress={() => handleImagePress(message.image_url!, true)} style={{ borderRadius: 18, overflow: 'hidden', alignSelf: 'flex-end' }} activeOpacity={0.9}>
               <Image source={{ uri: message.image_url }} style={styles.userImagePreview} contentFit="cover" transition={200} />
             </TouchableOpacity>
-            {/* Text bubble with accent color */}
             <Pressable onLongPress={handleLongPress} delayLongPress={350} style={styles.userMessageTextOnly}>
               {contentParts.map((part, index) => {
-                if (part.type === 'code') {
-                  return <CodeBlock key={`code-${index}`} code={part.content} language={part.language || 'code'} streaming={false} speed={streamingSpeed} />;
-                }
+                if (part.type === 'code') return <CodeBlock key={`code-${index}`} code={part.content} language={part.language || 'code'} streaming={false} speed={streamingSpeed} />;
                 const textParts = parseTextWithLinks(part.content);
                 return (
                   <Text key={`seg-${index}`} style={[styles.messageText, styles.userMessageText]}>
@@ -1069,34 +1153,25 @@ export const MessageItem = memo(function MessageItem({
           </View>
         ) : (
         <Pressable
-          ref={pressableRef}
           onLongPress={handleLongPress}
           delayLongPress={350}
           style={[styles.container, message.role === 'user' ? (hasOnlyImage ? styles.userMessageImageOnly : styles.userMessage) : styles.assistantMessage]}
         >
-          {/* User uploaded image — no background, no long-press context menu (image-only case) */}
           {message.role === 'user' && message.image_url && !hasBothTextAndImage && (
             <TouchableOpacity onPress={() => handleImagePress(message.image_url!, true)} style={{ borderRadius: 18, overflow: 'hidden', marginBottom: message.content.trim() ? Spacing.sm : 0 }} activeOpacity={0.9}>
               <Image source={{ uri: message.image_url }} style={styles.userImagePreview} contentFit="cover" transition={200} />
             </TouchableOpacity>
           )}
 
-          {/* ── Inline image creation placeholder (shown by parent when streaming & image task) ── */}
           {message.role === 'assistant' && !hasGeneratedImage && isGenerating && isImageTask ? (
             <InlineImageCreatingPlaceholder />
           ) : null}
 
-          {/* AI Generated Image — clean display, long-press action menu */}
           {hasGeneratedImage && message.role === 'assistant' && (
             <View style={imgCardStyles.cardWrap}>
               <Text style={imgCardStyles.label}>Image created</Text>
               <View style={imgCardStyles.imageContainer}>
-                <Pressable
-                  onPress={() => handleImagePress(message.image_url!)}
-                  onLongPress={() => handleAIImageLongPress(message.image_url!)}
-                  delayLongPress={350}
-                  disabled={downloadingImage}
-                >
+                <Pressable onPress={() => handleImagePress(message.image_url!)} onLongPress={() => handleAIImageLongPress(message.image_url!)} delayLongPress={350} disabled={downloadingImage}>
                   <Image source={{ uri: message.image_url }} style={imgCardStyles.image} contentFit="cover" transition={400} />
                 </Pressable>
                 {downloadingImage ? (
@@ -1105,15 +1180,10 @@ export const MessageItem = memo(function MessageItem({
                     <Text style={{ color: '#fff', marginTop: 8, fontSize: 13 }}>Saving...</Text>
                   </View>
                 ) : null}
-                <TouchableOpacity
-                  style={styles.downloadButton}
-                  onPress={() => handleDownloadImage(message.image_url!)}
-                  disabled={downloadingImage}
-                >
+                <TouchableOpacity style={styles.downloadButton} onPress={() => handleDownloadImage(message.image_url!)} disabled={downloadingImage}>
                   <Ionicons name="download" size={22} color="#fff" />
                 </TouchableOpacity>
               </View>
-              {/* ── Blur action bar below image ── */}
               <BlurView intensity={75} tint="dark" style={aiImgMenuStyles.bar}>
                 <TouchableOpacity style={aiImgMenuStyles.btn} onPress={() => handleDownloadImage(message.image_url!)}>
                   <Ionicons name="arrow-down-circle-outline" size={22} color="#FFF" />
@@ -1138,7 +1208,6 @@ export const MessageItem = memo(function MessageItem({
             </View>
           )}
 
-          {/* File Attachment */}
           {message.file_url && message.file_name && (
             <TouchableOpacity style={styles.fileAttachment} onPress={() => handleFileDownload(message.file_name!, '', message.file_type || 'txt')}>
               <View style={styles.fileIcon}><Ionicons name={getFileIcon(message.file_type)} size={26} color={colors.primary} /></View>
@@ -1150,7 +1219,6 @@ export const MessageItem = memo(function MessageItem({
             </TouchableOpacity>
           )}
 
-          {/* Message Content — text + code blocks */}
           {contentParts.map((part, index) => {
             const isLastPart = index === contentParts.length - 1 && !hasCard;
             const shouldStream = shouldStreamPart(isLastPart);
@@ -1158,33 +1226,20 @@ export const MessageItem = memo(function MessageItem({
             if (part.type === 'code') {
               return (
                 <View key={`code-${index}`}>
-                  <CodeBlock
-                    code={part.content}
-                    language={part.language || 'code'}
-                    streaming={shouldStream}
-                    speed={streamingSpeed}
-                  />
+                  <CodeBlock code={part.content} language={part.language || 'code'} streaming={shouldStream} speed={streamingSpeed} />
                 </View>
               );
             }
 
-            // Assistant messages: full markdown renderer
             if (message.role === 'assistant') {
               const textSegments = splitTablesFromText(part.content);
               return (
                 <View key={`text-${index}`}>
                   {textSegments.map((seg, si) => {
-                    if (seg.type === 'table') {
-                      return <MarkdownTable key={`table-${si}`} tableText={seg.content} colors={colors} />;
-                    }
+                    if (seg.type === 'table') return <MarkdownTable key={`table-${si}`} tableText={seg.content} colors={colors} />;
                     return (
                       <React.Fragment key={`seg-${si}`}>
-                        <MarkdownRenderer
-                          text={seg.content}
-                          colors={colors}
-                          isUser={false}
-                          isStreaming={isStreamingRendered && isLastPart && si === textSegments.length - 1}
-                        />
+                        <MarkdownRenderer text={seg.content} colors={colors} isUser={false} isStreaming={isStreamingRendered && isLastPart && si === textSegments.length - 1} />
                         {isStreamingRendered && isLastPart && si === textSegments.length - 1 ? (
                           <BlinkingCursor color={isDark ? 'rgba(255,255,255,0.85)' : '#333333'} />
                         ) : null}
@@ -1195,25 +1250,16 @@ export const MessageItem = memo(function MessageItem({
               );
             }
 
-            // User messages: simple text with link detection
             const textSegments = splitTablesFromText(part.content);
             return (
               <View key={`text-${index}`}>
                 {textSegments.map((seg, si) => {
-                  if (seg.type === 'table') {
-                    return <MarkdownTable key={`table-${si}`} tableText={seg.content} colors={colors} />;
-                  }
+                  if (seg.type === 'table') return <MarkdownTable key={`table-${si}`} tableText={seg.content} colors={colors} />;
                   const textParts = parseTextWithLinks(seg.content);
                   return (
                     <Text key={`seg-${si}`} style={[styles.messageText, styles.userMessageText]}>
                       {textParts.map((textPart, textIndex) => {
-                        if (textPart.type === 'link') {
-                          return (
-                            <Text key={`link-${textIndex}`} style={styles.linkText} onPress={() => handleLinkPress(textPart.url)}>
-                              {textPart.content}
-                            </Text>
-                          );
-                        }
+                        if (textPart.type === 'link') return <Text key={`link-${textIndex}`} style={styles.linkText} onPress={() => handleLinkPress(textPart.url)}>{textPart.content}</Text>;
                         return <Text key={`txt-${textIndex}`}>{textPart.content}</Text>;
                       })}
                     </Text>
@@ -1223,7 +1269,6 @@ export const MessageItem = memo(function MessageItem({
             );
           })}
 
-          {/* Inline AI-generated images from text */}
           {inlineImages.length > 0 && inlineImages.map((imgUrl, i) => (
             <TouchableOpacity key={`inline-img-${i}`} onPress={() => handleImagePress(imgUrl)} activeOpacity={0.9} style={{ borderRadius: BorderRadius.md, overflow: 'hidden', marginVertical: Spacing.sm }}>
               <Image source={{ uri: imgUrl }} style={styles.messageImage} contentFit="cover" transition={200} />
@@ -1233,21 +1278,14 @@ export const MessageItem = memo(function MessageItem({
             </TouchableOpacity>
           ))}
 
-          {/* Download card */}
           {downloadLabel && message.role === 'assistant' && <DownloadLinkCard label={downloadLabel} colors={colors} />}
-
-          {/* Styled Message Card */}
           {hasCard && message.role === 'assistant' && <MessageCard content={cardContent} colors={colors} />}
-
-          {/* Sources */}
           {message.role === 'assistant' && sources.length > 0 && <SourcesButton sources={sources} />}
 
-          {/* Edited */}
           {message.edited && (
             <Text style={styles.editedLabel}>(edited {message.edited_at ? new Date(message.edited_at).toLocaleTimeString() : ''})</Text>
           )}
 
-          {/* Action buttons */}
           {message.role === 'assistant' && !isGenerating && !hasGeneratedImage && (
             <View style={styles.actionsContainer}>
               <TouchableOpacity style={styles.actionButton} onPress={handleCopy}>
@@ -1269,14 +1307,31 @@ export const MessageItem = memo(function MessageItem({
         )}
       </Animated.View>
 
-      {/* Analysis Modal */}
       {analysisEntries.length > 0 && (
         <AnalysisModal visible={analysisVisible} onClose={() => setAnalysisVisible(false)} entries={analysisEntries} title="Analysis" />
       )}
 
-      <BlurContextMenu visible={showContextMenu} timeLabel={timeLabel} items={contextMenuItems} onClose={() => setShowContextMenu(false)} anchorY={menuAnchorY} />
+      <MessageReactionSheet
+        visible={showReactionSheet}
+        onClose={() => setShowReactionSheet(false)}
+        message={message}
+        onCopy={handleCopy}
+        onReply={() => onReply?.(message)}
+        onDelete={isAdmin ? handleDeleteMessage : undefined}
+        onReport={message.role === 'assistant' ? () => setShowReportModal(true) : undefined}
+        isAdmin={isAdmin}
+        isDark={isDark}
+        colors={colors}
+      />
 
-      {/* Select Text Modal - Allows partial text selection */}
+      <ReportMessageModal
+        visible={showReportModal}
+        onClose={() => setShowReportModal(false)}
+        onSubmit={handleReportSubmit}
+        isDark={isDark}
+        colors={colors}
+      />
+
       <Modal visible={showSelectTextModal} transparent={false} animationType="slide" onRequestClose={() => setShowSelectTextModal(false)}>
         <View style={{ flex: 1, backgroundColor: colors.background }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: Platform.OS === 'ios' ? 56 : 28, paddingBottom: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border }}>
@@ -1284,25 +1339,16 @@ export const MessageItem = memo(function MessageItem({
               <Ionicons name="close" size={24} color={colors.text} />
             </TouchableOpacity>
             <Text style={{ color: colors.text, fontSize: 17, fontWeight: '600' }}>Select Text</Text>
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={async () => {
-                // Get selected text from clipboard (user must manually copy selection first)
                 try {
-                  const clipboardText = await Clipboard.getStringAsync();
-                  if (clipboardText && clipboardText !== message.content) {
-                    showAlert('Copied!', 'Selected text copied to clipboard');
-                  } else {
-                    // Fallback: copy all
-                    await Clipboard.setStringAsync(message.content);
-                    showAlert('Copied!', 'Message copied to clipboard');
-                  }
-                  setShowSelectTextModal(false);
-                } catch {
                   await Clipboard.setStringAsync(message.content);
                   showAlert('Copied!', 'Message copied to clipboard');
                   setShowSelectTextModal(false);
+                } catch {
+                  setShowSelectTextModal(false);
                 }
-              }} 
+              }}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
               <Text style={{ color: colors.primary, fontSize: 15, fontWeight: '600' }}>Copy All</Text>
@@ -1318,48 +1364,28 @@ export const MessageItem = memo(function MessageItem({
                 showSoftInputOnFocus={false}
                 contextMenuHidden={false}
                 selectionColor={`${colors.primary}55`}
-                style={{ 
-                  color: colors.text, 
-                  fontSize: 16, 
-                  lineHeight: 26,
-                  padding: 0,
-                  margin: 0,
-                  textAlignVertical: 'top',
-                }}
+                style={{ color: colors.text, fontSize: 16, lineHeight: 26, padding: 0, margin: 0, textAlignVertical: 'top' }}
               />
             ) : (
-              <Text 
-                selectable 
-                selectionColor={`${colors.primary}55`} 
-                style={{ color: colors.text, fontSize: 16, lineHeight: 26 }}
-              >
+              <Text selectable selectionColor={`${colors.primary}55`} style={{ color: colors.text, fontSize: 16, lineHeight: 26 }}>
                 {message.content}
               </Text>
             )}
           </ScrollView>
           <View style={{ flexDirection: 'row', gap: 12, paddingHorizontal: 16, paddingBottom: Platform.OS === 'ios' ? 34 : 20, paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }}>
-            <TouchableOpacity 
-              style={{ flex: 1, backgroundColor: colors.surface, borderRadius: 12, paddingVertical: 13, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderWidth: 1, borderColor: colors.border }} 
-              onPress={async () => { await Share.share({ message: message.content }); }}
-            >
+            <TouchableOpacity style={{ flex: 1, backgroundColor: colors.surface, borderRadius: 12, paddingVertical: 13, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6, borderWidth: 1, borderColor: colors.border }} onPress={async () => { await Share.share({ message: message.content }); }}>
               <Ionicons name="share-outline" size={18} color={colors.text} />
               <Text style={{ color: colors.text, fontSize: 15, fontWeight: '600' }}>Share</Text>
             </TouchableOpacity>
-            <TouchableOpacity 
-              style={{ flex: 1, backgroundColor: colors.primary, borderRadius: 12, paddingVertical: 13, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6 }} 
-              onPress={async () => { 
-                await Clipboard.setStringAsync(message.content); 
-                showAlert('Copied!', 'Copied'); 
-                setShowSelectTextModal(false); 
-              }}
-            >
+            <TouchableOpacity style={{ flex: 1, backgroundColor: colors.primary, borderRadius: 12, paddingVertical: 13, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6 }} onPress={async () => { await Clipboard.setStringAsync(message.content); showAlert('Copied!', 'Copied'); setShowSelectTextModal(false); }}>
               <Ionicons name="copy-outline" size={18} color="#FFF" />
               <Text style={{ color: '#FFF', fontSize: 15, fontWeight: '600' }}>Copy All</Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
-<LinkSafetyModal visible={modals.link} url={selectedLink} onClose={() => toggleModal('link', false)} onOpenLink={() => { toggleModal('link', false); toggleModal('webView', true); }} />
+
+      <LinkSafetyModal visible={modals.link} url={selectedLink} onClose={() => toggleModal('link', false)} onOpenLink={() => { toggleModal('link', false); toggleModal('webView', true); }} />
       <WebViewModal visible={modals.webView} url={selectedLink} onClose={() => toggleModal('webView', false)} />
       <ImageViewerModal visible={modals.imageViewer} imageUrl={selectedImageUrl} onClose={() => toggleModal('imageViewer', false)} onEdit={viewerIsUserImage ? undefined : handleImageEdit} title={viewerIsUserImage ? 'Photo' : 'Image created'} isUserImage={viewerIsUserImage} />
       <ImageEditModal visible={modals.imageEdit} imageUrl={selectedImageUrl} onClose={() => toggleModal('imageEdit', false)} onApplyEdits={handleApplyImageEdits} />
