@@ -1935,15 +1935,34 @@ Be thorough and cite specific facts.`;
       }
 
       let base64Image: string | undefined;
-      if (currentMedia.length > 0 && currentMedia[0].type === 'image') {
-        if (currentMedia[0].base64) {
-          base64Image = currentMedia[0].base64;
-        } else if (currentMedia[0].uri) {
-          try { base64Image = await FileSystem.readAsStringAsync(currentMedia[0].uri, { encoding: FileSystem.EncodingType.Base64 }); } catch (e) {}
+      let fileContextStr = '';
+      let filePayloadArr: Array<{name: string; type: string; content: string}> = [];
+      for (const media of currentMedia) {
+        if (media.type === 'image') {
+          if (!base64Image) {
+            if (media.base64) {
+              base64Image = media.base64;
+            } else if (media.uri) {
+              try { base64Image = await FileSystem.readAsStringAsync(media.uri, { encoding: FileSystem.EncodingType.Base64 }); } catch (e) {}
+            }
+          }
+        } else if (media.type === 'document') {
+          // Try reading text content of the file so AI can analyze it
+          try {
+            const rawContent = await FileSystem.readAsStringAsync(media.uri, { encoding: FileSystem.EncodingType.UTF8 });
+            const preview = rawContent.slice(0, 12000);
+            const fileEntry = { name: media.name || 'document', type: media.mimeType || 'text/plain', content: preview + (rawContent.length > 12000 ? '\n...(truncated)' : '') };
+            filePayloadArr.push(fileEntry);
+            fileContextStr += `\n\n[File: ${media.name || 'document'}]\n${preview}`;
+          } catch (e) {
+            fileContextStr += `\n\n[Attached file: ${media.name || 'document'} (${media.mimeType || 'binary'})]`;
+          }
+        } else if (media.type === 'video') {
+          fileContextStr += `\n\n[Video attached: ${media.name || 'video.mp4'} — please describe/analyze this video content]`;
         }
       }
 
-      let finalText = currentText || '';
+      let finalText = (currentText || '') + fileContextStr;
       if (groupChatMode && groupCustomInstructions && groupRespondAuto) {
         finalText = `[System instruction: ${groupCustomInstructions}]\n\n${finalText}`;
       }
@@ -1974,7 +1993,14 @@ Be thorough and cite specific facts.`;
       }
 
       const prefixedText = systemPrefixForGroup + replyContext + finalText;
-      await sendMessage(prefixedText, undefined, base64Image, false, currentAIModel);
+      // Pass fileContents for document/video so edge function can analyse them
+      await sendMessage(
+        prefixedText,
+        filePayloadArr.length > 0 ? filePayloadArr : undefined,
+        base64Image,
+        false,
+        currentAIModel
+      );
       setShowCompletionStatus(true);
       setTimeout(() => setShowCompletionStatus(false), 2000);
       if (user && !isUnlimited && !isAdmin) {
@@ -2261,22 +2287,34 @@ Be thorough and cite specific facts.`;
     setGroupStartModalVisible(false);
     setGroupChatMode(true);
     setTemporaryChatMode(false);
-    setGroupName('New group chat');
-    // Create a real conversation so the group chat is persisted
-    const convId = await createConversation();
-    if (convId) {
-      await updateConversationTitle(convId, 'New group chat');
+    const newGroupName = 'New group chat';
+    setGroupName(newGroupName);
+    // Always create a new conversation so it persists in side menu
+    try {
+      const convId = await createConversation();
+      if (convId) {
+        await updateConversationTitle(convId, newGroupName);
+        // Force select so it becomes current
+        selectConversation(convId);
+      }
+    } catch (e) {
+      console.log('[GroupChat] Failed to create conversation:', e);
     }
     setInputText('');
     setSelectedMedia([]);
     setEditingMessageId(null);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-  }, [createConversation, updateConversationTitle]);
+  }, [createConversation, updateConversationTitle, selectConversation]);
 
-  const handleSaveGroupName = useCallback((newName: string) => {
-    if (newName.trim()) setGroupName(newName.trim());
+  const handleSaveGroupName = useCallback(async (newName: string) => {
+    if (!newName.trim()) { setRenameGroupVisible(false); return; }
+    setGroupName(newName.trim());
     setRenameGroupVisible(false);
-  }, []);
+    // Also persist the new name in the conversation
+    if (currentConversation?.id) {
+      await updateConversationTitle(currentConversation.id, newName.trim());
+    }
+  }, [currentConversation, updateConversationTitle]);
 
   const handleDeleteGroup = useCallback(() => { setDeleteGroupConfirm(true); }, []);
 
@@ -2355,47 +2393,60 @@ Be thorough and cite specific facts.`;
   // ── Inline media previews inside input wrapper (large cards with divider) ──
   const renderInlineMediaPreviews = useCallback(() => {
     if (selectedMedia.length === 0) return null;
+    // Use flat wrap for ≤2 items, horizontal scroll for 3+
+    const useScroll = selectedMedia.length > 2;
+    const items = selectedMedia.map((media, index) => (
+      <View key={`${media.uri}-${index}`} style={{ position: 'relative' }}>
+        {media.type === 'image' ? (
+          // Large 80x80 image thumbnail — ChatGPT style
+          <View style={{ width: 80, height: 80, borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.1)' }}>
+            <ExpoImage source={{ uri: media.uri }} style={{ width: 80, height: 80 }} contentFit="cover" />
+          </View>
+        ) : media.type === 'video' ? (
+          // Video pill
+          <View style={{ width: 80, height: 80, borderRadius: 16, backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)' }}>
+            <Ionicons name="videocam" size={30} color={colors.textSecondary} />
+            <Text style={{ fontSize: 9, color: colors.textSecondary, marginTop: 4, fontWeight: '700' }}>VIDEO</Text>
+          </View>
+        ) : (
+          // Compact document pill
+          <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? '#2A2A2E' : '#EBEBF0', borderRadius: 14, paddingHorizontal: 10, paddingVertical: 10, gap: 8, maxWidth: 200, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.07)' }}>
+            <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: isDark ? '#3A3A3C' : '#D1D1D6', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <Ionicons name="document-text" size={20} color={colors.primary} />
+            </View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={{ fontSize: 12, color: colors.text, fontWeight: '600' }} numberOfLines={1}>{media.name || 'File'}</Text>
+              <Text style={{ fontSize: 10, color: colors.textSecondary, marginTop: 2 }}>{(media.mimeType || '').split('/')[1]?.toUpperCase() || 'FILE'}</Text>
+            </View>
+          </View>
+        )}
+        <TouchableOpacity
+          style={{ position: 'absolute', top: -6, right: -6, backgroundColor: isDark ? '#636366' : '#8E8E93', borderRadius: 12, width: 24, height: 24, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: isDark ? '#1C1C1E' : '#F2F2F7', zIndex: 5 }}
+          onPress={() => removeMedia(index)}
+          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+        >
+          <Ionicons name="close" size={12} color="#FFF" />
+        </TouchableOpacity>
+      </View>
+    ));
     return (
       <View>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={{ marginBottom: 0, marginTop: 4 }}
-          contentContainerStyle={{ gap: 8, alignItems: 'flex-start', paddingHorizontal: 2, paddingBottom: 6 }}
-        >
-          {selectedMedia.map((media, index) => (
-            <View key={`${media.uri}-${index}`} style={{ position: 'relative' }}>
-              {media.type === 'image' ? (
-                <View style={{ width: 72, height: 72, borderRadius: 14, overflow: 'hidden', borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.1)' }}>
-                  <ExpoImage source={{ uri: media.uri }} style={{ width: 72, height: 72 }} contentFit="cover" />
-                </View>
-              ) : media.type === 'video' ? (
-                <View style={{ width: 72, height: 72, borderRadius: 14, backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)' }}>
-                  <Ionicons name="videocam" size={26} color={colors.textSecondary} />
-                  <Text style={{ fontSize: 9, color: colors.textSecondary, marginTop: 3, fontWeight: '700' }}>VIDEO</Text>
-                </View>
-              ) : (
-                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? '#2A2A2E' : '#EBEBF0', borderRadius: 14, paddingHorizontal: 10, paddingVertical: 10, gap: 8, minWidth: 140, maxWidth: 210, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.07)' }}>
-                  <View style={{ width: 38, height: 38, borderRadius: 10, backgroundColor: isDark ? '#3A3A3C' : '#D1D1D6', alignItems: 'center', justifyContent: 'center' }}>
-                    <Ionicons name="document-text" size={21} color={colors.primary} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 12, color: colors.text, fontWeight: '600' }} numberOfLines={1}>{media.name || 'File'}</Text>
-                    <Text style={{ fontSize: 10, color: colors.textSecondary, marginTop: 2 }}>{(media.mimeType || '').split('/')[1]?.toUpperCase() || 'FILE'}</Text>
-                  </View>
-                </View>
-              )}
-              <TouchableOpacity
-                style={{ position: 'absolute', top: -6, right: -6, backgroundColor: isDark ? '#48484A' : '#8E8E93', borderRadius: 12, width: 24, height: 24, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: isDark ? '#1C1C1E' : '#F2F2F7' }}
-                onPress={() => removeMedia(index)}
-              >
-                <Ionicons name="close" size={12} color="#FFF" />
-              </TouchableOpacity>
-            </View>
-          ))}
-        </ScrollView>
-        {/* Divider between media and text input */}
-        <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)', marginHorizontal: 2, marginBottom: 6 }} />
+        {useScroll ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={{ marginTop: 6 }}
+            contentContainerStyle={{ gap: 10, alignItems: 'flex-start', paddingHorizontal: 2, paddingBottom: 8 }}
+          >
+            {items}
+          </ScrollView>
+        ) : (
+          <View style={{ flexDirection: 'row', gap: 10, marginTop: 6, paddingHorizontal: 2, paddingBottom: 8, flexWrap: 'nowrap' }}>
+            {items}
+          </View>
+        )}
+        {/* Hairline divider between media and text input */}
+        <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.14)', marginHorizontal: 0, marginBottom: 4 }} />
       </View>
     );
   }, [selectedMedia, removeMedia, colors, isDark]);
