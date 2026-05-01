@@ -1,4 +1,4 @@
-reply system must work only in group chat mode and also fix inputtex lan fel large plen espss pou tex.import React, { useState, useRef, useEffect, useCallback, useMemo, Component, memo } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo, Component, memo } from 'react';
 import { Image as ExpoImage } from 'expo-image';
 import { 
   View, 
@@ -2299,7 +2299,7 @@ Be thorough and cite specific facts.`;
           isOffline={isOffline}
           isImageTask={thinkingMode === 'creating_image' && (generating || isStreaming)}
           isAdmin={isAdmin}
-          onReply={(msg) => setReplyingTo(msg)}
+          onReply={groupChatMode ? (msg) => setReplyingTo(msg) : undefined}
           onDelete={(msgId) => {}}
           onChunkRendered={() => { if (isAtBottom) flatListRef.current?.scrollToEnd({ animated: false }); }}
         />
@@ -2410,8 +2410,8 @@ Be thorough and cite specific facts.`;
     blurText: { fontSize: 24, fontWeight: 'bold', color: 'white', marginTop: 16 },
     messagesContainer: { flex: 1 },
     inputContainer: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 10, paddingBottom: Platform.select({ ios: insets.bottom + 8, android: insets.bottom + 8, default: 8 }), paddingTop: 8, gap: 8, backgroundColor: Platform.OS === 'ios' ? 'transparent' : colors.background },
-    inputWrapper: { flex: 1, backgroundColor: isDark ? '#1C1C1E' : '#F0F0F5', borderRadius: 28, paddingHorizontal: 14, paddingVertical: 4, minHeight: 48, maxHeight: 160, gap: 4 },
-    input: { flex: 1, fontSize: 16, color: colors.text, paddingVertical: 8, maxHeight: 100 },
+    inputWrapper: { flex: 1, backgroundColor: isDark ? '#1C1C1E' : '#F0F0F5', borderRadius: 28, paddingHorizontal: 14, paddingVertical: 4, minHeight: 48, maxHeight: 130, gap: 4 },
+    input: { fontSize: 16, color: colors.text, paddingVertical: 8, maxHeight: 72 },
     recordingContainer: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8 },
     recordingDuration: { color: '#FF3B30', fontSize: 13, fontWeight: '600', minWidth: 36 },
     addBtn: { width: 42, height: 42, borderRadius: 21, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', marginBottom: 2 },
@@ -3028,8 +3028,7 @@ Be thorough and cite specific facts.`;
                   </View>
                 )}
 
-                {/* Reply preview bar */}
-              {replyingTo ? (
+                {groupChatMode && replyingTo ? (
                 <View style={{
                   flexDirection: 'row', alignItems: 'center',
                   paddingHorizontal: 10, paddingBottom: 6, gap: 8,
