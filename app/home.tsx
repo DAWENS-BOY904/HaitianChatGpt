@@ -1973,41 +1973,51 @@ Be thorough and cite specific facts.`;
     );
   }, [streamingMessageId, handleCancelGeneration, handleEditMessage, handleCopyMessage, isOffline, isAtBottom, savedImageUrls, savingImageId, handleSaveToMyImages, user?.id, isDark, colors]);
 
-  // ── Compact inline media preview inside input wrapper ──────────────────
+  // ── Inline media previews inside input wrapper (large cards with divider) ──
   const renderInlineMediaPreviews = useCallback(() => {
     if (selectedMedia.length === 0) return null;
     return (
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={{ marginBottom: 4, marginTop: 2 }}
-        contentContainerStyle={{ gap: 6, alignItems: 'center', paddingHorizontal: 2 }}
-      >
-        {selectedMedia.map((media, index) => (
-          <View key={`${media.uri}-${index}`} style={{ position: 'relative' }}>
-            {media.type === 'image' ? (
-              <View style={{ width: 52, height: 52, borderRadius: 10, overflow: 'hidden', borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)' }}>
-                <ExpoImage source={{ uri: media.uri }} style={{ width: 52, height: 52 }} contentFit="cover" />
-              </View>
-            ) : media.type === 'video' ? (
-              <View style={{ width: 52, height: 52, borderRadius: 10, backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)' }}>
-                <Ionicons name="videocam" size={20} color={colors.textSecondary} />
-              </View>
-            ) : (
-              <View style={{ width: 52, height: 52, borderRadius: 10, backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)' }}>
-                <Ionicons name="document-text" size={18} color={colors.textSecondary} />
-                <Text style={{ fontSize: 7, color: colors.textSecondary, marginTop: 2, textAlign: 'center' }} numberOfLines={1}>{(media.name || 'File').slice(0,8)}</Text>
-              </View>
-            )}
-            <TouchableOpacity
-              style={{ position: 'absolute', top: -4, right: -4, backgroundColor: isDark ? '#3A3A3C' : '#C7C7CC', borderRadius: 9, width: 18, height: 18, alignItems: 'center', justifyContent: 'center' }}
-              onPress={() => removeMedia(index)}
-            >
-              <Ionicons name="close" size={10} color="#FFF" />
-            </TouchableOpacity>
-          </View>
-        ))}
-      </ScrollView>
+      <View>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={{ marginBottom: 0, marginTop: 4 }}
+          contentContainerStyle={{ gap: 8, alignItems: 'flex-start', paddingHorizontal: 2, paddingBottom: 6 }}
+        >
+          {selectedMedia.map((media, index) => (
+            <View key={`${media.uri}-${index}`} style={{ position: 'relative' }}>
+              {media.type === 'image' ? (
+                <View style={{ width: 72, height: 72, borderRadius: 14, overflow: 'hidden', borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.1)' }}>
+                  <ExpoImage source={{ uri: media.uri }} style={{ width: 72, height: 72 }} contentFit="cover" />
+                </View>
+              ) : media.type === 'video' ? (
+                <View style={{ width: 72, height: 72, borderRadius: 14, backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)' }}>
+                  <Ionicons name="videocam" size={26} color={colors.textSecondary} />
+                  <Text style={{ fontSize: 9, color: colors.textSecondary, marginTop: 3, fontWeight: '700' }}>VIDEO</Text>
+                </View>
+              ) : (
+                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? '#2A2A2E' : '#EBEBF0', borderRadius: 14, paddingHorizontal: 10, paddingVertical: 10, gap: 8, minWidth: 140, maxWidth: 210, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.07)' }}>
+                  <View style={{ width: 38, height: 38, borderRadius: 10, backgroundColor: isDark ? '#3A3A3C' : '#D1D1D6', alignItems: 'center', justifyContent: 'center' }}>
+                    <Ionicons name="document-text" size={21} color={colors.primary} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 12, color: colors.text, fontWeight: '600' }} numberOfLines={1}>{media.name || 'File'}</Text>
+                    <Text style={{ fontSize: 10, color: colors.textSecondary, marginTop: 2 }}>{(media.mimeType || '').split('/')[1]?.toUpperCase() || 'FILE'}</Text>
+                  </View>
+                </View>
+              )}
+              <TouchableOpacity
+                style={{ position: 'absolute', top: -6, right: -6, backgroundColor: isDark ? '#48484A' : '#8E8E93', borderRadius: 12, width: 24, height: 24, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: isDark ? '#1C1C1E' : '#F2F2F7' }}
+                onPress={() => removeMedia(index)}
+              >
+                <Ionicons name="close" size={12} color="#FFF" />
+              </TouchableOpacity>
+            </View>
+          ))}
+        </ScrollView>
+        {/* Divider between media and text input */}
+        <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)', marginHorizontal: 2, marginBottom: 6 }} />
+      </View>
     );
   }, [selectedMedia, removeMedia, colors, isDark]);
 
@@ -2433,10 +2443,98 @@ Be thorough and cite specific facts.`;
                   </TouchableOpacity>
                 ) : null}
 
-                <View style={[styles.inputWrapper, { flexDirection: 'column', paddingTop: selectedMedia.length > 0 ? 8 : 4 }]}>
-                  {/* Compact media previews inside input */}
-                  {renderInlineMediaPreviews()}
-                  <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                {/* Input wrapper — iOS: BlurView glass effect, Android: solid */}
+                {Platform.OS === 'ios' ? (
+                  <BlurView
+                    intensity={isDark ? 72 : 62}
+                    tint={isDark ? 'dark' : 'light'}
+                    style={[styles.inputWrapper, { overflow: 'hidden', flexDirection: 'column', paddingTop: (selectedMedia.length > 0 || deepResearchMode) ? 8 : 4 }]}
+                  >
+                    {deepResearchMode ? (
+                      <View style={{ flexDirection: 'row', marginBottom: 6 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(90,200,250,0.18)', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5, gap: 5, borderWidth: 1, borderColor: 'rgba(90,200,250,0.42)' }}>
+                          <Ionicons name="search" size={13} color="#5AC8FA" />
+                          <Text style={{ color: '#5AC8FA', fontSize: 13, fontWeight: '700' }}>Research</Text>
+                          <TouchableOpacity onPress={() => setDeepResearchMode(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                            <Ionicons name="close" size={13} color="rgba(90,200,250,0.8)" />
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    ) : null}
+                    {renderInlineMediaPreviews()}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                    {isRecording ? (
+                      <View style={styles.recordingContainer}>
+                        <Text style={styles.recordingDuration}>{formatDuration(recordingDuration)}</Text>
+                        <WaveformAnimation isRecording={isRecording} />
+                      </View>
+                    ) : isProcessing ? (
+                      <View style={styles.recordingContainer}>
+                        <ActivityIndicator size="small" color={colors.primary} />
+                        <Text style={{ fontSize: 15, color: colors.text, marginLeft: 8 }}>Transcribing...</Text>
+                      </View>
+                    ) : detectedLanguage ? (
+                      <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 12 }}>
+                        <View style={{ backgroundColor: accentColor + '22', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3 }}>
+                          <Text style={{ color: accentColor, fontSize: 12, fontWeight: '600' }}>{'\uD83C\uDF10 ' + detectedLanguage}</Text>
+                        </View>
+                        <Text style={{ color: colors.text, fontSize: 14, flex: 1 }} numberOfLines={1}>{inputText}</Text>
+                      </View>
+                    ) : (
+                      <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
+                        <TextInput
+                          ref={inputRef}
+                          style={styles.input}
+                          placeholder={temporaryChatMode ? 'Temporary chat' : (editingMessageId ? 'Edit message...' : 'Ask anything')}
+                          placeholderTextColor={colors.textSecondary}
+                          value={inputText}
+                          onChangeText={handleInputChange}
+                          multiline
+                          maxLength={8000}
+                          editable={!sending && !isRecording && !isProcessing}
+                          returnKeyType="default"
+                          blurOnSubmit={false}
+                        />
+                        {inputText.length > 120 ? (
+                          <TouchableOpacity onPress={() => { setExpandedText(inputText); setExpandInputVisible(true); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ paddingLeft: 4 }}>
+                            <Ionicons name="expand-outline" size={20} color={colors.textSecondary} />
+                          </TouchableOpacity>
+                        ) : null}
+                      </View>
+                    )}
+                    {!showSendButton && !editingMessageId ? (
+                      <TouchableOpacity onPress={toggleRecording} style={{ paddingHorizontal: 8, paddingVertical: 4 }} hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}>
+                        {isProcessing ? (<ActivityIndicator size="small" color={colors.primary} />) : (
+                          <Ionicons name={isRecording ? 'stop-circle' : 'mic-outline'} size={22} color={isRecording ? '#FF3B30' : colors.textSecondary} />
+                        )}
+                      </TouchableOpacity>
+                    ) : null}
+                    {sending ? (
+                      <TouchableOpacity style={[styles.sendButton, { backgroundColor: isDark ? '#3A3A3C' : '#E5E5EA' }]} onPress={handleStopGeneration}>
+                        <View style={{ width: 11, height: 11, backgroundColor: colors.text, borderRadius: 2 }} />
+                      </TouchableOpacity>
+                    ) : showSendButton ? (
+                      <TouchableOpacity style={[styles.sendButton, { backgroundColor: deepResearchMode ? '#5AC8FA' : accentColor }]} onPress={handleSend} disabled={isRecording || isProcessing}>
+                        {deepResearchMode ? <Ionicons name="search" size={17} color="#FFFFFF" /> : <Ionicons name="arrow-up" size={19} color="#FFFFFF" />}
+                      </TouchableOpacity>
+                    ) : null}
+                    </View>
+                  </BlurView>
+                ) : (
+                  <View style={[styles.inputWrapper, { flexDirection: 'column', paddingTop: (selectedMedia.length > 0 || deepResearchMode) ? 8 : 4 }]}>
+                    {deepResearchMode ? (
+                      <View style={{ flexDirection: 'row', marginBottom: 6 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(90,200,250,0.18)', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5, gap: 5, borderWidth: 1, borderColor: 'rgba(90,200,250,0.42)' }}>
+                          <Ionicons name="search" size={13} color="#5AC8FA" />
+                          <Text style={{ color: '#5AC8FA', fontSize: 13, fontWeight: '700' }}>Research</Text>
+                          <TouchableOpacity onPress={() => setDeepResearchMode(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                            <Ionicons name="close" size={13} color="rgba(90,200,250,0.8)" />
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    ) : null}
+                    {renderInlineMediaPreviews()}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
                   {isRecording ? (
                     <View style={styles.recordingContainer}>
                       <Text style={styles.recordingDuration}>{formatDuration(recordingDuration)}</Text>
@@ -2514,7 +2612,8 @@ Be thorough and cite specific facts.`;
                     </TouchableOpacity>
                   ) : null}
                   </View>
-                </View>
+                  </View>
+                )}
 
                 {editingMessageId ? (
                   <TouchableOpacity style={{ padding: 8 }} onPress={handleCancelEdit}>
@@ -2556,18 +2655,7 @@ Be thorough and cite specific facts.`;
               </TouchableOpacity>
             )}
 
-            {/* Deep Research mode indicator */}
-            {deepResearchMode ? (
-              <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingBottom: 6 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(90,200,250,0.12)', borderRadius: 18, paddingHorizontal: 14, paddingVertical: 8, gap: 8, borderWidth: 1, borderColor: 'rgba(90,200,250,0.3)' }}>
-                  <Ionicons name="search" size={14} color="#5AC8FA" />
-                  <Text style={{ color: '#5AC8FA', fontSize: 14, fontWeight: '600' }}>Deep Research</Text>
-                  <TouchableOpacity onPress={() => setDeepResearchMode(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                    <Ionicons name="close" size={14} color="rgba(90,200,250,0.7)" />
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ) : null}
+
 
             <ToolsModal
               visible={toolsVisible}
@@ -2911,10 +2999,7 @@ Be thorough and cite specific facts.`;
               </View>
             </Modal>
 
-            {/* ── IMAGE CREATION BLUR OVERLAY (shown when AI is generating an image) ── */}
-            {generating && thinkingMode === 'creating_image' ? (
-              <ImageCreatingOverlay />
-            ) : null}
+            {/* Image creation is shown inline in chat via InlineImageCreatingPlaceholder in MessageItem */}
 
             {/* Image analyzing overlay */}
             {imageAnalyzingOverlay ? (
