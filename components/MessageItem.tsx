@@ -65,6 +65,7 @@ interface MessageItemProps {
   streaming?: boolean;
   streamingSpeed?: number;
   isOffline?: boolean;
+  isImageTask?: boolean;
 }
 
 // Blinking cursor for streaming
@@ -640,6 +641,50 @@ const aiImgMenuStyles = StyleSheet.create({
   },
 });
 
+const inlinePlaceholderStyles = StyleSheet.create({
+  card: {
+    borderRadius: 20,
+    backgroundColor: '#111113',
+    overflow: 'hidden',
+    justifyContent: 'flex-end',
+    padding: 16,
+    marginVertical: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.07)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 16,
+    elevation: 16,
+  },
+  dotGrid: {
+    position: 'absolute',
+    top: 14, left: 14, right: 14, bottom: 52,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+  },
+  dot: {
+    width: 5, height: 5, borderRadius: 2.5,
+    backgroundColor: 'rgba(255,255,255,0.75)',
+  },
+  shimmer: {
+    position: 'absolute', top: 0, bottom: 0, width: 60,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+  },
+  textRow: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingTop: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(255,255,255,0.08)',
+  },
+  label: {
+    color: 'rgba(255,255,255,0.78)', fontSize: 14, fontWeight: '500', letterSpacing: 0.2,
+  },
+});
+
 const ctxStyles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' },
   menuWrap: { width: 260, alignSelf: 'center', borderRadius: 18, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.45, shadowRadius: 24, elevation: 24 },
@@ -652,6 +697,59 @@ const ctxStyles = StyleSheet.create({
   destructiveLabel: { color: '#FF453A' },
 });
 
+// ── Inline dot-grid image creation placeholder (LEFT side, inside AI message bubble) ──
+const InlineImageCreatingPlaceholder = memo(function InlineImageCreatingPlaceholder() {
+  const dotCount = 48;
+  const dotAnims = useRef(Array.from({ length: dotCount }, () => new Animated.Value(0))).current;
+  const shimmerX = useRef(new Animated.Value(-200)).current;
+  const mountAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(mountAnim, { toValue: 1, duration: 220, useNativeDriver: true }).start();
+    const dots = dotAnims.map((anim, i) => {
+      const row = Math.floor(i / 8), col = i % 8;
+      return Animated.loop(Animated.sequence([
+        Animated.delay((row + col) * 50),
+        Animated.timing(anim, { toValue: 1, duration: 500 + Math.random() * 400, useNativeDriver: true }),
+        Animated.timing(anim, { toValue: 0, duration: 500 + Math.random() * 400, useNativeDriver: true }),
+      ]));
+    });
+    dots.forEach(a => a.start());
+    const shimmer = Animated.loop(Animated.sequence([
+      Animated.timing(shimmerX, { toValue: 280, duration: 1600, useNativeDriver: true }),
+      Animated.delay(400),
+      Animated.timing(shimmerX, { toValue: -200, duration: 0, useNativeDriver: true }),
+    ]));
+    shimmer.start();
+    return () => { dots.forEach(a => a.stop()); shimmer.stop(); };
+  }, []);
+
+  const cardW = Math.min(SCREEN_WIDTH * 0.62, 260);
+  const cardH = cardW * 1.05;
+  return (
+    <Animated.View style={{ opacity: mountAnim, marginVertical: 4 }}>
+      <View style={[inlinePlaceholderStyles.card, { width: cardW, height: cardH }]}>
+        <View style={inlinePlaceholderStyles.dotGrid}>
+          {dotAnims.map((anim, i) => (
+            <Animated.View key={i} style={[
+              inlinePlaceholderStyles.dot,
+              {
+                opacity: anim.interpolate({ inputRange: [0, 1], outputRange: [0.1, 0.6] }),
+                transform: [{ scale: anim.interpolate({ inputRange: [0, 1], outputRange: [0.5, 1.2] }) }],
+              },
+            ]} />
+          ))}
+        </View>
+        <Animated.View style={[inlinePlaceholderStyles.shimmer, { transform: [{ translateX: shimmerX }] }]} />
+        <View style={inlinePlaceholderStyles.textRow}>
+          <ActivityIndicator size="small" color="rgba(255,255,255,0.65)" style={{ marginRight: 7 }} />
+          <Text style={inlinePlaceholderStyles.label}>Creating image…</Text>
+        </View>
+      </View>
+    </Animated.View>
+  );
+});
+
 export const MessageItem = memo(function MessageItem({
   message,
   onCancel,
@@ -662,6 +760,7 @@ export const MessageItem = memo(function MessageItem({
   streaming = false,
   streamingSpeed = 50,
   isOffline = false,
+  isImageTask = false,
 }: MessageItemProps) {
   const { colors, isDark } = useTheme();
   const { user } = useAuth();
@@ -981,6 +1080,11 @@ export const MessageItem = memo(function MessageItem({
               <Image source={{ uri: message.image_url }} style={styles.userImagePreview} contentFit="cover" transition={200} />
             </TouchableOpacity>
           )}
+
+          {/* ── Inline image creation placeholder (shown by parent when streaming & image task) ── */}
+          {message.role === 'assistant' && !hasGeneratedImage && isGenerating && isImageTask ? (
+            <InlineImageCreatingPlaceholder />
+          ) : null}
 
           {/* AI Generated Image — clean display, long-press action menu */}
           {hasGeneratedImage && message.role === 'assistant' && (
