@@ -1,4 +1,4 @@
-brh fucking fix that in unput tex lew upload photo input dwe vinn large pou si wp past a full tex on it and fix group chat to save in local snd in chat conversation.import React, { useState, useRef, useEffect, useCallback, useMemo, Component, memo } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo, Component, memo } from 'react';
 import { Image as ExpoImage } from 'expo-image';
 import { 
   View, 
@@ -2257,13 +2257,21 @@ Be thorough and cite specific facts.`;
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   }, [showAlert]);
 
-  const handleStartGroupChat = useCallback(() => {
+  const handleStartGroupChat = useCallback(async () => {
     setGroupStartModalVisible(false);
     setGroupChatMode(true);
     setTemporaryChatMode(false);
     setGroupName('New group chat');
-    handleNewChat();
-  }, [handleNewChat]);
+    // Create a real conversation so the group chat is persisted
+    const convId = await createConversation();
+    if (convId) {
+      await updateConversationTitle(convId, 'New group chat');
+    }
+    setInputText('');
+    setSelectedMedia([]);
+    setEditingMessageId(null);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  }, [createConversation, updateConversationTitle]);
 
   const handleSaveGroupName = useCallback((newName: string) => {
     if (newName.trim()) setGroupName(newName.trim());
@@ -2410,8 +2418,8 @@ Be thorough and cite specific facts.`;
     blurText: { fontSize: 24, fontWeight: 'bold', color: 'white', marginTop: 16 },
     messagesContainer: { flex: 1 },
     inputContainer: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 10, paddingBottom: Platform.select({ ios: insets.bottom + 8, android: insets.bottom + 8, default: 8 }), paddingTop: 8, gap: 8, backgroundColor: Platform.OS === 'ios' ? 'transparent' : colors.background },
-    inputWrapper: { flex: 1, backgroundColor: isDark ? '#1C1C1E' : '#F0F0F5', borderRadius: 28, paddingHorizontal: 14, paddingVertical: 4, minHeight: 48, maxHeight: 130, gap: 4 },
-    input: { fontSize: 16, color: colors.text, paddingVertical: 8, maxHeight: 72 },
+    inputWrapper: { flex: 1, backgroundColor: isDark ? '#1C1C1E' : '#F0F0F5', borderRadius: 28, paddingHorizontal: 14, paddingVertical: 4, minHeight: 48, maxHeight: selectedMedia.length > 0 ? 220 : 130, gap: 4 },
+    input: { fontSize: 16, color: colors.text, paddingVertical: 8, maxHeight: selectedMedia.length > 0 ? 120 : 72 },
     recordingContainer: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8 },
     recordingDuration: { color: '#FF3B30', fontSize: 13, fontWeight: '600', minWidth: 36 },
     addBtn: { width: 42, height: 42, borderRadius: 21, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', marginBottom: 2 },
