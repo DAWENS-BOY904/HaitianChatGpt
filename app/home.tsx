@@ -1955,7 +1955,26 @@ Be thorough and cite specific facts.`;
         if (groupMembers.some(m => m.username.toLowerCase() === taggedName)) { setSending(false); setGenerating(false); return; }
       }
 
-      await sendMessage(finalText, undefined, base64Image, false, currentAIModel);
+      // Build group system prompt if group mode
+      let systemPrefixForGroup = '';
+      if (groupChatMode) {
+        const groupSystemPrompt = groupCustomInstructions
+          ? `You are Dawinix, an AI assistant in a group chat named "${groupName}". Custom instructions from the group admin: ${groupCustomInstructions}. Always respond in a helpful, friendly and concise manner tailored for group conversations. Never use personal memory from outside this group.`
+          : `You are Dawinix, an AI assistant in a group chat named "${groupName}". Respond helpfully and concisely as if chatting in a group. Never reference personal memory from outside this conversation.`;
+        systemPrefixForGroup = `[SYSTEM: ${groupSystemPrompt}]\n\n`;
+      }
+
+      // Include reply context if replying
+      let replyContext = '';
+      if (replyingTo) {
+        const replyRole = replyingTo.role === 'assistant' ? 'Dawinix' : 'You';
+        const replySnippet = (replyingTo.content || '').slice(0, 200);
+        replyContext = `[Replying to ${replyRole}: "${replySnippet}"]\n`;
+        setReplyingTo(null);
+      }
+
+      const prefixedText = systemPrefixForGroup + replyContext + finalText;
+      await sendMessage(prefixedText, undefined, base64Image, false, currentAIModel);
       setShowCompletionStatus(true);
       setTimeout(() => setShowCompletionStatus(false), 2000);
       if (user && !isUnlimited && !isAdmin) {
@@ -2721,6 +2740,7 @@ Be thorough and cite specific facts.`;
                               completed={showCompletionStatus}
                               mode={thinkingMode}
                               onCancel={handleStopGeneration}
+                              isGroupMode={groupChatMode}
                             />
                           ) : null}
                         </>
@@ -2743,6 +2763,36 @@ Be thorough and cite specific facts.`;
                     </TouchableOpacity>
                   ))}
                 </ScrollView>
+              ) : null}
+
+              {/* Reply preview bar */}
+              {replyingTo ? (
+                <View style={{
+                  flexDirection: 'row', alignItems: 'center',
+                  paddingHorizontal: 10, paddingBottom: 6, gap: 8,
+                }}>
+                  <View style={{
+                    flex: 1,
+                    flexDirection: 'row', alignItems: 'center',
+                    backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)',
+                    borderRadius: 14,
+                    borderLeftWidth: 3,
+                    borderLeftColor: accentColor,
+                    paddingHorizontal: 10, paddingVertical: 7,
+                    gap: 6,
+                  }}>
+                    <Ionicons name="return-down-forward-outline" size={14} color={accentColor} />
+                    <Text style={{ color: accentColor, fontSize: 13, fontWeight: '600' }} numberOfLines={1}>
+                      {replyingTo.role === 'assistant' ? 'Dawinix' : 'You'}:
+                    </Text>
+                    <Text style={{ color: isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.55)', fontSize: 13, flex: 1 }} numberOfLines={1}>
+                      {(replyingTo.content || '').slice(0, 60)}
+                    </Text>
+                    <TouchableOpacity onPress={() => setReplyingTo(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                      <Ionicons name="close" size={16} color={isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.35)'} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
               ) : null}
 
               {editingMessageId ? (
@@ -2978,7 +3028,37 @@ Be thorough and cite specific facts.`;
                   </View>
                 )}
 
-                {editingMessageId ? (
+                {/* Reply preview bar */}
+              {replyingTo ? (
+                <View style={{
+                  flexDirection: 'row', alignItems: 'center',
+                  paddingHorizontal: 10, paddingBottom: 6, gap: 8,
+                }}>
+                  <View style={{
+                    flex: 1,
+                    flexDirection: 'row', alignItems: 'center',
+                    backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)',
+                    borderRadius: 14,
+                    borderLeftWidth: 3,
+                    borderLeftColor: accentColor,
+                    paddingHorizontal: 10, paddingVertical: 7,
+                    gap: 6,
+                  }}>
+                    <Ionicons name="return-down-forward-outline" size={14} color={accentColor} />
+                    <Text style={{ color: accentColor, fontSize: 13, fontWeight: '600' }} numberOfLines={1}>
+                      {replyingTo.role === 'assistant' ? 'Dawinix' : 'You'}:
+                    </Text>
+                    <Text style={{ color: isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.55)', fontSize: 13, flex: 1 }} numberOfLines={1}>
+                      {(replyingTo.content || '').slice(0, 60)}
+                    </Text>
+                    <TouchableOpacity onPress={() => setReplyingTo(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                      <Ionicons name="close" size={16} color={isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.35)'} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : null}
+
+              {editingMessageId ? (
                   <TouchableOpacity style={{ padding: 8 }} onPress={handleCancelEdit}>
                     <Ionicons name="close-circle-outline" size={24} color="#FF3B30" />
                   </TouchableOpacity>
