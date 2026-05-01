@@ -1,4 +1,4 @@
-please look that photo https://files.catbox.moe/fjoljd.jpeg make the input tex like that when someone upload a photo,file,video.import React, { useState, useRef, useEffect, useCallback, useMemo, Component, memo } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo, Component, memo } from 'react';
 import { Image as ExpoImage } from 'expo-image';
 import { 
   View, 
