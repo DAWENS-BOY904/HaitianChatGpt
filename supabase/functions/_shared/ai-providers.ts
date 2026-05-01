@@ -327,26 +327,20 @@ export async function callGroq(messages: AIMessage[]): Promise<AIResponse> {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Build an enhanced image prompt for logos, photos, and designs
+ * Build an enhanced image prompt for logos and designs
  */
 function buildEnhancedImagePrompt(userPrompt: string): string {
   const lowerPrompt = userPrompt.toLowerCase();
   const isLogo = lowerPrompt.includes('logo') || lowerPrompt.includes('brand') || lowerPrompt.includes('icon');
   const isDesign = lowerPrompt.includes('design') || lowerPrompt.includes('banner') || lowerPrompt.includes('poster');
-  const isPhoto = lowerPrompt.includes('photo') || lowerPrompt.includes('picture') || lowerPrompt.includes('portrait') || lowerPrompt.includes('realistic');
-  const isPerson = lowerPrompt.includes('person') || lowerPrompt.includes('woman') || lowerPrompt.includes('man') || lowerPrompt.includes('girl') || lowerPrompt.includes('boy') || lowerPrompt.includes('model') || lowerPrompt.includes('people');
 
   if (isLogo) {
-    return `Professional logo design: ${userPrompt}. Ultra high quality vector-style graphic design, clean composition, modern bold typography, vibrant balanced colors, transparent background preferred, scalable for any size, suitable for branding and business use. No watermarks, no text artifacts, sharp crisp edges. 4K ultra resolution, studio quality render.`;
+    return `Professional logo design: ${userPrompt}. High quality, clean vector-style design, transparent background preferred, modern typography, suitable for business use. Sharp edges, vibrant colors, scalable design. Studio quality, ultra high resolution.`;
   }
   if (isDesign) {
-    return `Professional graphic design: ${userPrompt}. Ultra high quality, modern aesthetic, clean balanced layout, vibrant professional colors, premium finish. 4K ultra resolution, studio quality, no watermarks.`;
+    return `Professional graphic design: ${userPrompt}. High quality, modern aesthetic, clean layout, vibrant colors, professional finish. Ultra high resolution, studio quality.`;
   }
-  if (isPhoto || isPerson) {
-    return `${userPrompt}. Ultra realistic photography, shot on Sony A7IV with 85mm f/1.8 lens, natural cinematic lighting, bokeh background, magazine-quality photo, ultra sharp focus, 8K resolution, photorealistic detail, professional color grading, no watermarks.`;
-  }
-  // Generic — use premium quality descriptors
-  return `${userPrompt}. Masterpiece quality, ultra high resolution 4K, vibrant colors, highly detailed, professional studio lighting, sharp focus, award-winning composition, no watermarks, no artifacts.`;
+  return `${userPrompt}. High quality, detailed, professional, ultra high resolution, photorealistic or artistic as appropriate.`;
 }
 
 /**
@@ -737,95 +731,7 @@ export async function generateImageWithOnSpaceAI(prompt: string): Promise<{
 }
 
 /**
- * Gemini Image Generation via OnSpace AI (Nano Banana 2 = gemini-3.1-flash-image-preview)
- * Best for: fast generation, text rendering in images, logos, banners
- */
-export async function generateImageWithGeminiOnSpace(prompt: string): Promise<{
-  imageUrl?: string;
-  error?: string;
-}> {
-  const apiKey = Deno.env.get('ONSPACE_AI_API_KEY');
-  const baseUrl = Deno.env.get('ONSPACE_AI_BASE_URL') || 'https://api.onspace.ai';
-
-  if (!apiKey) {
-    return { error: 'OnSpace AI key not configured' };
-  }
-
-  const enhancedPrompt = buildEnhancedImagePrompt(prompt);
-
-  // Nano Banana 2 (gemini-3.1-flash-image-preview) = fastest, best text rendering
-  // Nano Banana Pro (gemini-3-pro-image-preview) = highest quality
-  const imageModels = [
-    'google/gemini-3.1-flash-image-preview',  // Nano Banana 2 — fast, good quality
-    'google/gemini-3-pro-image-preview',       // Nano Banana Pro — highest quality
-    'google/gemini-2.5-flash-image',           // Nano Banana — predecessor fallback
-  ];
-
-  for (const model of imageModels) {
-    try {
-      console.log(`[OnSpace Gemini Image] Trying model: ${model}`);
-      const response = await fetch(`${baseUrl}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model,
-          messages: [
-            {
-              role: 'user',
-              content: enhancedPrompt,
-            },
-          ],
-          max_tokens: 8192,
-          temperature: 1.0,
-        }),
-        signal: AbortSignal.timeout(60000),
-      });
-
-      if (!response.ok) {
-        const errText = await response.text().catch(() => response.statusText);
-        console.log(`[OnSpace Gemini Image] ${model} failed (${response.status}): ${errText.slice(0, 120)}`);
-        continue;
-      }
-
-      const data = await response.json();
-      const content: string = data.choices?.[0]?.message?.content || '';
-
-      // Check for inline data (base64 image)
-      const parts = data.choices?.[0]?.message?.parts || [];
-      for (const part of parts) {
-        if (part?.inline_data?.data) {
-          const mimeType = part.inline_data.mime_type || 'image/png';
-          const dataUrl = `data:${mimeType};base64,${part.inline_data.data}`;
-          console.log(`[OnSpace Gemini Image] Got inline image from ${model}`);
-          return { imageUrl: dataUrl };
-        }
-      }
-
-      if (content.startsWith('data:image/')) {
-        console.log(`[OnSpace Gemini Image] Got base64 image from ${model}`);
-        return { imageUrl: content.trim() };
-      }
-
-      const urlMatch = content.match(/https?:\/\/[^\s"']+\.(png|jpg|jpeg|webp|gif)/i);
-      if (urlMatch) {
-        console.log(`[OnSpace Gemini Image] Got URL from ${model}: ${urlMatch[0]}`);
-        return { imageUrl: urlMatch[0] };
-      }
-
-      console.log(`[OnSpace Gemini Image] ${model} returned text-only response, trying next`);
-    } catch (e: any) {
-      console.log(`[OnSpace Gemini Image] ${model} exception:`, e.message);
-    }
-  }
-
-  return { error: 'OnSpace Gemini image generation unavailable' };
-}
-
-/**
- * Gemini Native Image Generation (Direct Google API)
+ * Gemini Native Image Generation
  */
 export async function generateImageWithGemini(prompt: string): Promise<{
   imageUrl?: string;
@@ -942,16 +848,7 @@ export async function generateImageSmart(
     return rawUrl;
   }
 
-  // ── Priority 1: Gemini via OnSpace AI (Nano Banana 2 — fast, free, great text) ──
-  const geminiOnSpaceResult = await generateImageWithGeminiOnSpace(prompt);
-  if (geminiOnSpaceResult.imageUrl) {
-    const resolvedUrl = await resolveImageUrl(geminiOnSpaceResult.imageUrl);
-    console.log('[Image] Gemini OnSpace (Nano Banana 2) success');
-    return { imageUrl: resolvedUrl, model: 'gemini-nano-banana-2' };
-  }
-  console.log('[Image] Gemini OnSpace failed:', geminiOnSpaceResult.error);
-
-  // ── Priority 2: DALL-E 3 (OpenAI) — high quality, realistic ──────────────
+  // ── Priority 1: DALL-E 3 (OpenAI) ─────────────────────────────────────────
   const dalleResult = await generateImageWithDalle(prompt);
   if (dalleResult.imageUrl) {
     const resolvedUrl = await resolveImageUrl(dalleResult.imageUrl);
@@ -960,7 +857,7 @@ export async function generateImageSmart(
   }
   console.log('[Image] DALL-E 3 failed:', dalleResult.error);
 
-  // ── Priority 3: ElevenLabs ────────────────────────────────────────────────
+  // ── Priority 2: ElevenLabs ────────────────────────────────────────────────
   const elevenLabsResult = await generateImageWithElevenLabs(prompt);
   if (elevenLabsResult.imageUrl) {
     const resolvedUrl = await resolveImageUrl(elevenLabsResult.imageUrl);
@@ -969,7 +866,7 @@ export async function generateImageSmart(
   }
   console.log('[Image] ElevenLabs failed:', elevenLabsResult.error);
 
-  // ── Priority 4: Midjourney ────────────────────────────────────────────────
+  // ── Priority 3: Midjourney ────────────────────────────────────────────────
   const midjourneyResult = await generateImageWithMidjourney(prompt);
   if (midjourneyResult.imageUrl) {
     const resolvedUrl = await resolveImageUrl(midjourneyResult.imageUrl);
@@ -978,7 +875,6 @@ export async function generateImageSmart(
   }
   console.log('[Image] Midjourney failed:', midjourneyResult.error);
 
-  // ── Priority 5: Stability AI ──────────────────────────────────────────────
   const stabilityResult = await generateImageWithStabilityAI(prompt);
   if (stabilityResult.imageUrl) {
     const resolvedUrl = await resolveImageUrl(stabilityResult.imageUrl);
@@ -987,16 +883,16 @@ export async function generateImageSmart(
   }
   console.log('[Image] Stability AI failed:', stabilityResult.error);
 
-  // ── Priority 6: Gemini native (direct Google API) ─────────────────────────
+  // ── Priority 5: Gemini native ──────────────────────────────────────────────
   const geminiResult = await generateImageWithGemini(prompt);
   if (geminiResult.imageUrl) {
     const resolvedUrl = await resolveImageUrl(geminiResult.imageUrl);
-    console.log('[Image] Gemini native image success');
+    console.log('[Image] Gemini image success');
     return { imageUrl: resolvedUrl, model: 'gemini-image' };
   }
-  console.log('[Image] Gemini native failed:', geminiResult.error);
+  console.log('[Image] Gemini image failed:', geminiResult.error);
 
-  // ── Priority 7: OnSpace AI text models ────────────────────────────────────
+  // ── Priority 6: OnSpace AI ─────────────────────────────────────────────────
   const onspaceResult = await generateImageWithOnSpaceAI(prompt);
   if (onspaceResult.imageUrl) {
     const resolvedUrl = await resolveImageUrl(onspaceResult.imageUrl);

@@ -602,150 +602,6 @@ const notifStyles = StyleSheet.create({
   skipBtnText: { color: 'rgba(255,255,255,0.45)', fontSize: 14 },
 });
 
-function ImageCreatingOverlay() {
-  const dotCount = 64; // 8x8 grid
-  const anims = useRef(Array.from({ length: dotCount }, () => new Animated.Value(0))).current;
-  const scaleAnim = useRef(new Animated.Value(0.92)).current;
-  const opacityAnim = useRef(new Animated.Value(0)).current;
-  const shimmerX = useRef(new Animated.Value(-300)).current;
-
-  useEffect(() => {
-    // Entrance animation
-    Animated.parallel([
-      Animated.timing(opacityAnim, { toValue: 1, duration: 280, useNativeDriver: true }),
-      Animated.spring(scaleAnim, { toValue: 1, tension: 200, friction: 20, useNativeDriver: true }),
-    ]).start();
-
-    // Animate dots in wave pattern
-    const animations = anims.map((anim, i) => {
-      const row = Math.floor(i / 8);
-      const col = i % 8;
-      const delay = (row + col) * 55;
-      return Animated.loop(
-        Animated.sequence([
-          Animated.delay(delay),
-          Animated.timing(anim, { toValue: 1, duration: 600 + Math.random() * 400, useNativeDriver: true }),
-          Animated.timing(anim, { toValue: 0, duration: 600 + Math.random() * 400, useNativeDriver: true }),
-        ])
-      );
-    });
-    animations.forEach(a => a.start());
-
-    // Shimmer sweep
-    const shimmerLoop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(shimmerX, { toValue: 400, duration: 1800, useNativeDriver: true }),
-        Animated.delay(600),
-        Animated.timing(shimmerX, { toValue: -300, duration: 0, useNativeDriver: true }),
-      ])
-    );
-    shimmerLoop.start();
-
-    return () => {
-      animations.forEach(a => a.stop());
-      shimmerLoop.stop();
-    };
-  }, []);
-
-  const { width: screenW } = Dimensions.get('window');
-  const cardW = Math.min(screenW - 64, 320);
-  const cardH = cardW * 1.1;
-
-  return (
-    <Animated.View style={[
-      StyleSheet.absoluteFillObject,
-      { zIndex: 999, backgroundColor: 'rgba(0,0,0,0.72)', justifyContent: 'center', alignItems: 'center', opacity: opacityAnim }
-    ]}>
-      <BlurView intensity={60} tint="dark" style={StyleSheet.absoluteFill} />
-      <Animated.View style={[
-        imgOverlayStyles.card,
-        { width: cardW, height: cardH, transform: [{ scale: scaleAnim }] }
-      ]}>
-        {/* Dot grid */}
-        <View style={imgOverlayStyles.dotGrid}>
-          {anims.map((anim, i) => (
-            <Animated.View
-              key={i}
-              style={[
-                imgOverlayStyles.dot,
-                {
-                  opacity: anim.interpolate({ inputRange: [0, 1], outputRange: [0.12, 0.65] }),
-                  transform: [{ scale: anim.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1.3] }) }],
-                },
-              ]}
-            />
-          ))}
-        </View>
-        {/* Shimmer sweep */}
-        <Animated.View style={[
-          imgOverlayStyles.shimmer,
-          { transform: [{ translateX: shimmerX }] },
-        ]} />
-        {/* Text */}
-        <View style={imgOverlayStyles.textRow}>
-          <ActivityIndicator size="small" color="rgba(255,255,255,0.7)" style={{ marginRight: 8 }} />
-          <Text style={imgOverlayStyles.label}>Creating image</Text>
-        </View>
-      </Animated.View>
-    </Animated.View>
-  );
-}
-
-const imgOverlayStyles = StyleSheet.create({
-  card: {
-    borderRadius: 28,
-    backgroundColor: '#111113',
-    overflow: 'hidden',
-    justifyContent: 'flex-end',
-    padding: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.07)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.55,
-    shadowRadius: 28,
-    elevation: 28,
-  },
-  dotGrid: {
-    position: 'absolute',
-    top: 20,
-    left: 20,
-    right: 20,
-    bottom: 60,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: 'rgba(255,255,255,0.75)',
-  },
-  shimmer: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    width: 80,
-    backgroundColor: 'rgba(255,255,255,0.04)',
-  },
-  textRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingTop: 12,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(255,255,255,0.08)',
-  },
-  label: {
-    color: 'rgba(255,255,255,0.82)',
-    fontSize: 16,
-    fontWeight: '500',
-    letterSpacing: 0.2,
-  },
-});
-
 export default function HomeScreen() {
   const { colors, isDark } = useTheme();
   const { settings, updateSetting } = useSettings();
@@ -1863,45 +1719,38 @@ export default function HomeScreen() {
   const renderMediaPreview = useCallback(() => {
     if (selectedMedia.length === 0) return null;
     return (
-      <View style={{ marginHorizontal: 12, marginBottom: 4 }}>
-        {/* Divider */}
-        <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)', marginBottom: 8 }} />
-        <ScrollView 
-          horizontal 
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ gap: 8, alignItems: 'center', paddingHorizontal: 4, paddingBottom: 6 }}
-        >
-          {selectedMedia.map((media, index) => (
-            <View key={`${media.uri}-${index}`} style={{ position: 'relative', alignSelf: 'center' }}>
-              {media.type === 'image' ? (
-                <View style={{ width: 72, height: 72, borderRadius: 14, overflow: 'hidden', backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA', borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)' }}>
-                  <ExpoImage source={{ uri: media.uri }} style={{ width: 72, height: 72 }} contentFit="cover" />
-                  {/* Edit icon overlay */}
-                  <View style={{ position: 'absolute', bottom: 4, left: 4, backgroundColor: 'rgba(0,0,0,0.45)', borderRadius: 8, padding: 2 }}>
-                    <Ionicons name="pencil" size={10} color="#FFF" />
-                  </View>
-                </View>
-              ) : media.type === 'video' ? (
-                <View style={{ width: 72, height: 72, borderRadius: 14, overflow: 'hidden', backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)' }}>
-                  <Ionicons name="videocam" size={26} color={colors.textSecondary} />
-                  <Text style={{ fontSize: 9, color: colors.textSecondary, marginTop: 3, fontWeight: '600' }} numberOfLines={1}>Video</Text>
-                </View>
-              ) : (
-                <View style={{ width: 72, height: 72, borderRadius: 14, backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA', alignItems: 'center', justifyContent: 'center', padding: 6, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)' }}>
-                  <Ionicons name="document-text" size={26} color={colors.textSecondary} />
-                  <Text style={{ fontSize: 8, color: colors.textSecondary, marginTop: 3, textAlign: 'center', fontWeight: '600' }} numberOfLines={2}>{media.name || 'File'}</Text>
-                </View>
-              )}
-              <TouchableOpacity
-                style={{ position: 'absolute', top: -5, right: -5, backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF', borderRadius: 11, width: 22, height: 22, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: isDark ? '#3A3A3C' : '#D1D1D6', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.15, shadowRadius: 3, elevation: 3 }}
-                onPress={() => removeMedia(index)}
-              >
-                <Ionicons name="close" size={11} color={isDark ? '#FFF' : '#333'} />
-              </TouchableOpacity>
-            </View>
-          ))}
-        </ScrollView>
-      </View>
+      <ScrollView 
+        horizontal 
+        showsHorizontalScrollIndicator={false} 
+        style={{ maxHeight: 100, marginBottom: 8 }}
+        contentContainerStyle={{ paddingHorizontal: 16, gap: 10, alignItems: 'center' }}
+      >
+        {selectedMedia.map((media, index) => (
+          <View key={`${media.uri}-${index}`} style={{ position: 'relative', alignSelf: 'center' }}>
+            {media.type === 'image' ? (
+              <View style={{ width: 80, height: 80, borderRadius: 12, overflow: 'hidden', backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA' }}>
+                <ExpoImage source={{ uri: media.uri }} style={{ width: 80, height: 80 }} contentFit="cover" />
+              </View>
+            ) : media.type === 'video' ? (
+              <View style={{ width: 80, height: 80, borderRadius: 12, overflow: 'hidden', backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA', alignItems: 'center', justifyContent: 'center' }}>
+                <Ionicons name="videocam" size={28} color={colors.textSecondary} />
+                <Text style={{ fontSize: 9, color: colors.textSecondary, marginTop: 2 }} numberOfLines={1}>Video</Text>
+              </View>
+            ) : (
+              <View style={{ width: 80, height: 80, borderRadius: 12, backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA', alignItems: 'center', justifyContent: 'center', padding: 4 }}>
+                <Ionicons name="document-text" size={28} color={colors.textSecondary} />
+                <Text style={{ fontSize: 9, color: colors.textSecondary, marginTop: 2 }} numberOfLines={1}>{media.name || 'File'}</Text>
+              </View>
+            )}
+            <TouchableOpacity
+              style={{ position: 'absolute', top: -4, right: -4, backgroundColor: isDark ? '#000' : '#FFF', borderRadius: 10, width: 20, height: 20, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: isDark ? '#333' : '#DDD' }}
+              onPress={() => removeMedia(index)}
+            >
+              <Ionicons name="close" size={12} color={isDark ? '#FFF' : '#333'} />
+            </TouchableOpacity>
+          </View>
+        ))}
+      </ScrollView>
     );
   }, [selectedMedia, removeMedia, colors, isDark]);
 
@@ -2293,7 +2142,7 @@ export default function HomeScreen() {
                 </View>
               ) : null}
 
-              {/* Media Preview — appears above input with divider */}
+              {/* Media Preview */}
               {renderMediaPreview()}
 
               {/* Input Area */}
@@ -2768,11 +2617,6 @@ export default function HomeScreen() {
                 </View>
               </View>
             </Modal>
-
-            {/* ── IMAGE CREATION BLUR OVERLAY (shown when AI is generating an image) ── */}
-            {generating && thinkingMode === 'creating_image' ? (
-              <ImageCreatingOverlay />
-            ) : null}
 
             {/* Image analyzing overlay */}
             {imageAnalyzingOverlay ? (
