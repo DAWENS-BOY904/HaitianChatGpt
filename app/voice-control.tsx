@@ -16,6 +16,8 @@ import {
   Easing,
   Alert,
   Linking,
+  AppState,
+  AppStateStatus,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -62,7 +64,6 @@ function formatTime(ts: number): string {
 
 // ─── Per-voice persona prompts ───────────────────────────────────────────────
 const VOICE_PERSONAS: Record<string, string> = {
-  // Named ElevenLabs voices
   'pNInz6obpgDQGcFmaJgB': 'You speak in a warm, calm, trustworthy male voice. You are composed, reassuring, and knowledgeable. Respond with confidence and warmth.',
   '21m00Tcm4TlvDq8ikWAM': 'You speak in a warm, friendly, approachable female voice. You are cheerful, supportive, and encouraging. Respond with positivity and care.',
   'AZnzlk1XvdvUeBnXmlld': 'You speak in a bright, upbeat, energetic female voice. You are enthusiastic, motivating, and lively. Respond with energy and excitement.',
@@ -72,7 +73,6 @@ const VOICE_PERSONAS: Record<string, string> = {
   'yoZ06aMxZJJ28mfd3POQ': 'You speak in an expressive, energetic British male voice. You are witty, engaging, and dynamic. Respond with personality and British charm.',
   'ThT5KcBeYPX3keUQqHPh': 'You speak in a wise, measured British female voice. You are thoughtful, articulate, and insightful. Respond with wisdom and elegance.',
   'pqHfZKP75CvOlQylNhV4': 'You speak in a professional, deep male voice. You are reliable, clear, and composed. Respond with confidence and professionalism.',
-  // User-specified curated library voices
   'PzuBz8h2SxBvQ7lnUC44': 'You speak in an expressive, dynamic female voice called Aria. You are creative, inspiring, and imaginative. Respond with passion and creativity.',
   'jv41DhCf464zw0TI7I1w': 'You speak in a confident, strong male voice called Marcus. You are bold, motivating, and decisive. Respond with strength and conviction.',
   'kJKMPwrIKzwVkMKOfRtr': 'You speak in a natural, conversational female voice called Sofia. You are relatable, friendly, and down-to-earth. Respond naturally and warmly.',
@@ -102,7 +102,7 @@ CORE RULES (MANDATORY):
 
 function buildSystemPrompt(voiceId: string, langHint = ''): string {
   const persona = getVoicePersona(voiceId);
-  return `${BASE_VOICE_PROMPT}\n\nYOUR VOICE PERSONA:\n${persona}${langHint}`;
+  return `${BASE_VOICE_PROMPT}\\n\\nYOUR VOICE PERSONA:\\n${persona}${langHint}`;
 }
 
 // ─── Language display names ──────────────────────────────────────────────────
@@ -352,16 +352,16 @@ function speakWithDevice(text: string, rate: number, lang: string | null, onDone
 // ─── Strip markdown for voice ─────────────────────────────────────────────────
 function stripMarkdownForVoice(text: string): string {
   return text
-    .replace(/```[\s\S]*?```/g, 'Here is the code.')
-    .replace(/\*\*(.*?)\*\*/g, '$1')
-    .replace(/\*(.*?)\*/g, '$1')
-    .replace(/#{1,6}\s/g, '')
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-    .replace(/\[MESSAGE_CARD\][\s\S]*?\[\/MESSAGE_CARD\]/g, '')
-    .replace(/\[SOURCES\][\s\S]*?\[\/SOURCES\]/g, '')
-    .replace(/\[DOWNLOAD_CARD\][\s\S]*?\[\/DOWNLOAD_CARD\]/g, '')
-    .replace(/\[ANALYSIS\][\s\S]*?\[\/ANALYSIS\]/g, '')
-    .replace(/\n{3,}/g, '\n\n')
+    .replace(/```[\\s\\S]*?```/g, 'Here is the code.')
+    .replace(/\\*\\*(.*?)\\*\\*/g, '$1')
+    .replace(/\\*(.*?)\\*/g, '$1')
+    .replace(/#{1,6}\\s/g, '')
+    .replace(/\\[([^\\]]+)\\]\\([^)]+\\)/g, '$1')
+    .replace(/\\[MESSAGE_CARD\\][\\s\\S]*?\\[\\/MESSAGE_CARD\\]/g, '')
+    .replace(/\\[SOURCES\\][\\s\\S]*?\\[\\/SOURCES\\]/g, '')
+    .replace(/\\[DOWNLOAD_CARD\\][\\s\\S]*?\\[\\/DOWNLOAD_CARD\\]/g, '')
+    .replace(/\\[ANALYSIS\\][\\s\\S]*?\\[\\/ANALYSIS\\]/g, '')
+    .replace(/\\n{3,}/g, '\\n\\n')
     .trim()
     .slice(0, 500);
 }
@@ -390,6 +390,7 @@ export default function VoiceControlScreen() {
   const [statusLabel, setStatusLabel] = useState('');
   const [callDuration, setCallDuration] = useState(0);
   const [callConversationId, setCallConversationId] = useState<string | null>(null);
+  const [callEnded, setCallEnded] = useState(false);
 
   // ── Language detection state ──────────────────────────────────────────────
   const [detectedLanguage, setDetectedLanguage] = useState<string | null>(null);
@@ -408,9 +409,10 @@ export default function VoiceControlScreen() {
   const isRecordingRef = useRef(false);
   const isPausedRef = useRef(false);
   const isConnectingRef = useRef(true);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const appStateRef = useRef<AppStateStatus>('active');
 
-  // ── Read voice selection from settings — supports both camelCase and snake_case keys ──
-  // SettingsContext stores voiceSelection (camelCase) mapping to voice_selection DB column
+  // ── Read voice selection from settings ──
   const selectedVoice = (settings as any).voiceSelection || (settings as any).voice_selection || 'pNInz6obpgDQGcFmaJgB';
   const [speechRate, setSpeechRate] = React.useState<number>(
     parseFloat((settings as any).speech_rate?.toString() || (settings as any).speechRate?.toString() || '1.0')
@@ -421,6 +423,19 @@ export default function VoiceControlScreen() {
   const [autoGreeting, setAutoGreeting] = React.useState<boolean>(
     (settings as any).auto_greeting ?? (settings as any).autoGreeting ?? true
   );
+
+  // ── App state handling (background/foreground) ──────────────────────────
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (nextAppState) => {
+      if (appStateRef.current === 'active' && nextAppState.match(/inactive|background/)) {
+        if (!isPausedRef.current) {
+          handlePause();
+        }
+      }
+      appStateRef.current = nextAppState;
+    });
+    return () => sub.remove();
+  }, []);
 
   // Reload speech rate + toggles from AsyncStorage whenever screen focuses
   useFocusEffect(
@@ -537,12 +552,19 @@ export default function VoiceControlScreen() {
     await speakText(greetings[Math.floor(Math.random() * greetings.length)]);
   }, []);
 
-  // ─── CALL AI via raw fetch (handles SSE streaming) ────────────────────────
+  // ─── CALL AI via streaming edge function ─────────────────────────────────
   const callChatAI = useCallback(async (
     msgs: Array<{ role: string; content: string }>,
-    convId: string
+    convId: string,
+    onToken?: (token: string) => void
   ): Promise<string> => {
-    const supabaseUrl = (process.env.EXPO_PUBLIC_SUPABASE_URL || '').replace(/\/$/, '');
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    const supabaseUrl = (process.env.EXPO_PUBLIC_SUPABASE_URL || '').replace(/\\/$/, '');
     const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
 
     if (!supabaseUrl || !supabaseAnonKey) {
@@ -550,7 +572,6 @@ export default function VoiceControlScreen() {
       return '';
     }
 
-    // Get the current session token for authenticated requests
     let authToken = supabaseAnonKey;
     try {
       const { data: sessionData } = await supabase.auth.getSession();
@@ -575,8 +596,9 @@ export default function VoiceControlScreen() {
           conversationId: chatConvId,
           aiModel: 'google-gemini',
           userId: user?.id,
+          stream: true,
         }),
-        signal: AbortSignal.timeout(30000),
+        signal: controller.signal,
       });
 
       if (!response.ok) {
@@ -589,7 +611,6 @@ export default function VoiceControlScreen() {
       let fullText = '';
 
       if (contentType.includes('text/event-stream')) {
-        // Parse SSE streaming response
         const reader = response.body?.getReader();
         if (reader) {
           const decoder = new TextDecoder();
@@ -598,7 +619,7 @@ export default function VoiceControlScreen() {
             const { done, value } = await reader.read();
             if (done) break;
             buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split('\n');
+            const lines = buffer.split('\\n');
             buffer = lines.pop() || '';
             for (const line of lines) {
               if (!line.startsWith('data: ')) continue;
@@ -606,26 +627,16 @@ export default function VoiceControlScreen() {
               if (!jsonStr || jsonStr === '[DONE]') continue;
               try {
                 const parsed = JSON.parse(jsonStr);
-                if (parsed.token) fullText += parsed.token;
-                if (parsed.done) break;
+                if (parsed.token) {
+                  fullText += parsed.token;
+                  onToken?.(parsed.token);
+                }
+                if (parsed.done || parsed.type === 'complete') break;
               } catch (_e) {}
             }
           }
-        } else {
-          // Fallback: collect full SSE text
-          const text = await response.text();
-          for (const line of text.split('\n')) {
-            if (!line.startsWith('data: ')) continue;
-            const jsonStr = line.slice(6).trim();
-            if (!jsonStr || jsonStr === '[DONE]') continue;
-            try {
-              const parsed = JSON.parse(jsonStr);
-              if (parsed.token) fullText += parsed.token;
-            } catch (_e) {}
-          }
         }
       } else {
-        // Regular JSON response
         try {
           const json = await response.json();
           fullText = json.message || json.content || json.response || json.text || '';
@@ -636,8 +647,14 @@ export default function VoiceControlScreen() {
 
       return fullText.trim();
     } catch (e: any) {
+      if (e.name === 'AbortError') {
+        console.log('[VoiceChat] Request aborted');
+        return '';
+      }
       console.log('[VoiceChat] Fetch error:', e?.message);
       return '';
+    } finally {
+      abortControllerRef.current = null;
     }
   }, [supabase, user]);
 
@@ -645,7 +662,6 @@ export default function VoiceControlScreen() {
   const speakText = useCallback(async (text: string) => {
     if (isPausedRef.current) return;
 
-    // Stop anything currently playing
     if (soundRef.current) {
       try { await soundRef.current.stopAsync(); await soundRef.current.unloadAsync(); } catch {}
       soundRef.current = null;
@@ -669,17 +685,15 @@ export default function VoiceControlScreen() {
         staysActiveInBackground: false,
       });
 
-      // selectedVoice is a raw ElevenLabs voice ID saved from voice-settings
       const { data, error } = await supabase.functions.invoke('generate-tts', {
         body: {
           text: text.slice(0, 500),
-          voice: selectedVoice,          // raw ElevenLabs voice ID
+          voice: selectedVoice,
           speed: speechRate,
           detectedLanguage: detectedLangRef.current,
         },
       });
 
-      // Edge function signals device TTS fallback
       if (data?.fallback === true || data?.code === 'USE_DEVICE_TTS') {
         console.log('[Voice] ElevenLabs unavailable — using device TTS');
         speakWithDevice(text, speechRate, detectedLangRef.current, onDone);
@@ -694,7 +708,6 @@ export default function VoiceControlScreen() {
         return;
       }
 
-      // Play ElevenLabs audio
       const { sound } = await Audio.Sound.createAsync(
         { uri: audioUrl },
         { shouldPlay: true, volume: 1.0 }
@@ -777,7 +790,6 @@ export default function VoiceControlScreen() {
 
       const userText = txData.text.trim();
 
-      // ── Language detection from transcription ─────────────────────────────
       if (txData.detectedLanguage) {
         const lang = txData.detectedLanguage;
         setDetectedLanguage(lang);
@@ -809,10 +821,9 @@ export default function VoiceControlScreen() {
       const convId = callConversationId || currentConversation?.id;
       const chatConvId = convId || `voice-${Date.now()}`;
 
-      // Build language-aware prompt with per-voice persona
       const langName = detectedLangRef.current ? getLangDisplay(detectedLangRef.current) : null;
       const langHint = langName
-        ? `\n\nCRITICAL: The user is speaking ${langName}. You MUST respond ONLY in ${langName}. Do not switch languages.`
+        ? `\\n\\nCRITICAL: The user is speaking ${langName}. You MUST respond ONLY in ${langName}. Do not switch languages.`
         : '';
 
       const contextMsgs = updatedMsgs.slice(-8).map(m => ({ role: m.role, content: m.content }));
@@ -821,25 +832,42 @@ export default function VoiceControlScreen() {
         ...contextMsgs,
       ];
 
-      // Use raw fetch to properly handle SSE streaming from chat edge function
-      let rawReply = await callChatAI(allMsgs, chatConvId);
+      let streamedText = '';
+      
+      const rawReply = await callChatAI(allMsgs, chatConvId, (token) => {
+        streamedText += token;
+        setCurrentAIText(streamedText);
+      });
 
-      // Retry with just the user message if first attempt failed
+      setIsAITyping(false);
+      setCurrentAIText('');
+
       if (!rawReply) {
-        rawReply = await callChatAI(
+        const retryReply = await callChatAI(
           [
             { role: 'system', content: buildSystemPrompt(selectedVoice) },
             { role: 'user', content: userText },
           ],
           `voice-retry-${Date.now()}`
         );
+        
+        if (!retryReply) {
+          const fallbackReply = 'I heard you. Could you tell me a little more so I can help you better?';
+          const aiMsg: ConvMessage = { role: 'assistant', content: fallbackReply, timestamp: Date.now() };
+          messagesRef.current = [...messagesRef.current, aiMsg];
+          setMessages(prev => [...prev, aiMsg]);
+          await speakText(fallbackReply);
+          return;
+        }
+        
+        const spokenText = stripMarkdownForVoice(retryReply);
+        const aiMsg: ConvMessage = { role: 'assistant', content: retryReply, timestamp: Date.now() };
+        messagesRef.current = [...messagesRef.current, aiMsg];
+        setMessages(prev => [...prev, aiMsg]);
+        await speakText(spokenText);
+        return;
       }
 
-      if (!rawReply) {
-        rawReply = 'I heard you. Could you tell me a little more so I can help you better?';
-      }
-
-      setIsAITyping(false);
       const spokenText = stripMarkdownForVoice(rawReply);
 
       const aiMsg: ConvMessage = { role: 'assistant', content: rawReply, timestamp: Date.now() };
@@ -860,6 +888,10 @@ export default function VoiceControlScreen() {
 
   const handleInterrupt = useCallback(async () => {
     if (!allowInterrupt) return;
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
     if (soundRef.current) { try { await soundRef.current.stopAsync(); } catch {} }
     try { Speech.stop(); } catch {}
     setIsAISpeaking(false);
@@ -872,6 +904,10 @@ export default function VoiceControlScreen() {
     setIsPaused(newPaused);
     isPausedRef.current = newPaused;
     if (newPaused) {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
       if (isRecordingRef.current && recordingRef.current) {
         try { await recordingRef.current.stopAndUnloadAsync(); } catch {}
         recordingRef.current = null;
@@ -890,6 +926,10 @@ export default function VoiceControlScreen() {
   }, [isPaused, startListening]);
 
   const handleEnd = useCallback(async (navigate = true) => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
     if (callTimerRef.current) clearInterval(callTimerRef.current);
     isRecordingRef.current = false;
     isPausedRef.current = true;
@@ -900,6 +940,7 @@ export default function VoiceControlScreen() {
     try { Speech.stop(); } catch {}
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     setPhase('ended');
+    setCallEnded(true);
     if (navigate) setTimeout(() => router.replace('/home'), 300);
   }, [router, stopRingtone]);
 
@@ -936,7 +977,7 @@ export default function VoiceControlScreen() {
 
     const langName = detectedLangRef.current ? getLangDisplay(detectedLangRef.current) : null;
     const langHint = langName
-      ? `\n\nCRITICAL: The user is speaking ${langName}. You MUST respond ONLY in ${langName}.`
+      ? `\\n\\nCRITICAL: The user is speaking ${langName}. You MUST respond ONLY in ${langName}.`
       : '';
     const contextMsgs = updatedMsgs.slice(-8).map(m => ({ role: m.role, content: m.content }));
     const allMsgs = [
@@ -946,8 +987,12 @@ export default function VoiceControlScreen() {
 
     const textChatConvId = callConversationId || `voice-${Date.now()}`;
 
-    // Use raw fetch to properly handle SSE streaming
-    let rawReply = await callChatAI(allMsgs, textChatConvId);
+    let streamedText = '';
+    let rawReply = await callChatAI(allMsgs, textChatConvId, (token) => {
+      streamedText += token;
+      setCurrentAIText(streamedText);
+    });
+    
     if (!rawReply) {
       rawReply = await callChatAI(
         [
@@ -962,6 +1007,7 @@ export default function VoiceControlScreen() {
 
     setIsAITyping(false);
     setStatusLabel('');
+    setCurrentAIText('');
     const spokenText = stripMarkdownForVoice(rawReply);
     const aiMsg: ConvMessage = { role: 'assistant', content: rawReply, timestamp: Date.now() };
     messagesRef.current = [...messagesRef.current, aiMsg];
@@ -977,6 +1023,9 @@ export default function VoiceControlScreen() {
 
   useEffect(() => {
     return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
       if (callTimerRef.current) clearInterval(callTimerRef.current);
       soundRef.current?.unloadAsync().catch(() => {});
       ringSoundRef.current?.unloadAsync().catch(() => {});
@@ -1095,6 +1144,17 @@ export default function VoiceControlScreen() {
             </View>
           </View>
         )}
+
+        {/* CALL ENDED BANNER */}
+        {callEnded && phase === 'ended' ? (
+          <CallEndedBanner 
+            duration={callDuration} 
+            onDismiss={() => setCallEnded(false)} 
+            onFeedback={(t) => {
+              console.log('Feedback:', t);
+            }} 
+          />
+        ) : null}
 
         {/* CONTROLS */}
         <View style={[styles.controls, { paddingBottom: insets.bottom + 12 }]}>
