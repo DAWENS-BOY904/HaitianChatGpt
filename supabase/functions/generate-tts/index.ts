@@ -3,7 +3,7 @@ import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 const CONFIG = {
   ONSPACE_AI_API_KEY: Deno.env.get('ONSPACE_AI_API_KEY'),
-  ONSPACE_AI_BASE_URL: (Deno.env.get('ONSPACE_AI_BASE_URL') || 'https://ai.gateway.onspace.ai').replace(/\/v1\/?$/, ''),
+  ONSPACE_AI_BASE_URL: (Deno.env.get('ONSPACE_AI_BASE_URL') || 'https://ai.gateway.onspace.ai').replace(/\\/v1\\/?$/, ''),
   OPENAI_API_KEY: Deno.env.get('OPENAI_API_KEY'),
   ELEVENLABS_API_KEY: Deno.env.get('ELEVENLABS_API_KEY'),
   SUPABASE_URL: Deno.env.get('SUPABASE_URL'),
@@ -15,7 +15,6 @@ const CONFIG = {
   FOLDER_PATH: 'voice-previews',
   VALID_VOICES: [
     'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer', 'coral', 'ash', 'sage',
-    // ElevenLabs custom voices (direct IDs)
     'PzuBz8h2SxBvQ7lnUC44',
     'jv41DhCf464zw0TI7I1w',
     'kJKMPwrIKzwVkMKOfRtr',
@@ -25,9 +24,6 @@ const CONFIG = {
 };
 
 type VoiceType = typeof CONFIG.VALID_VOICES[number];
-
-// ── Extended valid voice IDs (all ElevenLabs voice IDs from voice-settings are accepted) ──
-// Any string longer than 5 chars is treated as a valid voice ID (raw ElevenLabs ID).
 
 // ── Voice metadata ──────────────────────────────────────────────────────────
 const VOICE_LANG_MAP: Record<string, { lang: string; gender: string }> = {
@@ -40,7 +36,6 @@ const VOICE_LANG_MAP: Record<string, { lang: string; gender: string }> = {
   coral:   { lang: 'en-US', gender: 'female'  },
   ash:     { lang: 'en-US', gender: 'male'    },
   sage:    { lang: 'en-US', gender: 'female'  },
-  // Custom ElevenLabs voices
   'PzuBz8h2SxBvQ7lnUC44': { lang: 'en-US', gender: 'female' },
   'jv41DhCf464zw0TI7I1w': { lang: 'en-US', gender: 'male'   },
   'kJKMPwrIKzwVkMKOfRtr': { lang: 'en-US', gender: 'female' },
@@ -48,52 +43,42 @@ const VOICE_LANG_MAP: Record<string, { lang: string; gender: string }> = {
   'mRdG9GYEjJmIzqbYTidv': { lang: 'en-US', gender: 'female' },
 };
 
-// Map named voices (legacy aliases) to UNIQUE ElevenLabs voice IDs.
-// Any raw ElevenLabs voice ID (length > 12) is passed through directly.
+// Map named voices to ElevenLabs voice IDs
 const ELEVENLABS_VOICE_MAP: Record<string, string> = {
-  alloy:   'pNInz6obpgDQGcFmaJgB', // Adam      — warm neutral male (American)
-  echo:    'VR6AewLTigWG4xSOukaG', // Arnold    — calm British male
-  fable:   'yoZ06aMxZJJ28mfd3POQ', // Sam       — expressive energetic male
-  onyx:    'GBv7mTt0atIp3Br8iCZE', // Thomas    — deep authoritative male
-  nova:    '21m00Tcm4TlvDq8ikWAM', // Rachel    — warm friendly female (American)
-  shimmer: 'AZnzlk1XvdvUeBnXmlld', // Domi      — bright upbeat female
-  coral:   'EXAVITQu4vr4xnSDxMaL', // Bella     — soft gentle female
-  ash:     'pqHfZKP75CvOlQylNhV4', // Bill      — professional deep male
-  sage:    'ThT5KcBeYPX3keUQqHPh', // Dorothy   — wise clear female
-  // Known curated voice IDs — passed directly
+  alloy:   'pNInz6obpgDQGcFmaJgB',
+  echo:    'VR6AewLTigWG4xSOukaG',
+  fable:   'yoZ06aMxZJJ28mfd3POQ',
+  onyx:    'GBv7mTt0atIp3Br8iCZE',
+  nova:    '21m00Tcm4TlvDq8ikWAM',
+  shimmer: 'AZnzlk1XvdvUeBnXmlld',
+  coral:   'EXAVITQu4vr4xnSDxMaL',
+  ash:     'pqHfZKP75CvOlQylNhV4',
+  sage:    'ThT5KcBeYPX3keUQqHPh',
   'PzuBz8h2SxBvQ7lnUC44': 'PzuBz8h2SxBvQ7lnUC44',
   'jv41DhCf464zw0TI7I1w': 'jv41DhCf464zw0TI7I1w',
   'kJKMPwrIKzwVkMKOfRtr': 'kJKMPwrIKzwVkMKOfRtr',
   'flHkNRp1BlvT73UL6gyz': 'flHkNRp1BlvT73UL6gyz',
   'mRdG9GYEjJmIzqbYTidv': 'mRdG9GYEjJmIzqbYTidv',
-  // Known named ElevenLabs voice IDs from voice-settings FALLBACK_VOICES
-  'pNInz6obpgDQGcFmaJgB': 'pNInz6obpgDQGcFmaJgB', // Adam
-  '21m00Tcm4TlvDq8ikWAM': '21m00Tcm4TlvDq8ikWAM', // Rachel
-  'AZnzlk1XvdvUeBnXmlld': 'AZnzlk1XvdvUeBnXmlld', // Domi
-  'EXAVITQu4vr4xnSDxMaL': 'EXAVITQu4vr4xnSDxMaL', // Bella
-  'VR6AewLTigWG4xSOukaG': 'VR6AewLTigWG4xSOukaG', // Arnold
-  'GBv7mTt0atIp3Br8iCZE': 'GBv7mTt0atIp3Br8iCZE', // Thomas
-  'yoZ06aMxZJJ28mfd3POQ': 'yoZ06aMxZJJ28mfd3POQ', // Sam
-  'ThT5KcBeYPX3keUQqHPh': 'ThT5KcBeYPX3keUQqHPh', // Dorothy
-  'pqHfZKP75CvOlQylNhV4': 'pqHfZKP75CvOlQylNhV4', // Bill
+  'pNInz6obpgDQGcFmaJgB': 'pNInz6obpgDQGcFmaJgB',
+  '21m00Tcm4TlvDq8ikWAM': '21m00Tcm4TlvDq8ikWAM',
+  'AZnzlk1XvdvUeBnXmlld': 'AZnzlk1XvdvUeBnXmlld',
+  'EXAVITQu4vr4xnSDxMaL': 'EXAVITQu4vr4xnSDxMaL',
+  'VR6AewLTigWG4xSOukaG': 'VR6AewLTigWG4xSOukaG',
+  'GBv7mTt0atIp3Br8iCZE': 'GBv7mTt0atIp3Br8iCZE',
+  'yoZ06aMxZJJ28mfd3POQ': 'yoZ06aMxZJJ28mfd3POQ',
+  'ThT5KcBeYPX3keUQqHPh': 'ThT5KcBeYPX3keUQqHPh',
+  'pqHfZKP75CvOlQylNhV4': 'pqHfZKP75CvOlQylNhV4',
 };
 
-// Resolve any voice string to a valid ElevenLabs voice ID.
-// Raw IDs (length > 10 chars that aren't named aliases) are returned as-is.
 function resolveElevenLabsVoiceId(voice: string): string {
-  // Direct map hit
   if (ELEVENLABS_VOICE_MAP[voice]) return ELEVENLABS_VOICE_MAP[voice];
-  // Raw ElevenLabs-style ID (≥10 chars, not a short alias)
   if (voice.length >= 10) return voice;
-  // Unknown short alias — default to Adam
   return 'pNInz6obpgDQGcFmaJgB';
 }
 
-// Map detected language codes to ElevenLabs model IDs for multilingual support
 function getElevenLabsModel(detectedLang?: string): string {
   if (!detectedLang) return 'eleven_turbo_v2_5';
   const lang = detectedLang.toLowerCase().split('-')[0];
-  // eleven_multilingual_v2 supports: en, de, pl, es, it, fr, pt, hi, ar, cs, sk, ro, bg, uk, hr, fa, nl
   const multilingualSupported = ['de','pl','es','it','fr','pt','hi','ar','cs','sk','ro','bg','uk','hr','fa','nl','ht'];
   if (multilingualSupported.includes(lang)) return 'eleven_multilingual_v2';
   return 'eleven_turbo_v2_5';
@@ -105,14 +90,13 @@ function generateFileName(): string {
   return `voice_${timestamp}_${random}.mp3`;
 }
 
-// ── Provider 1: OpenAI TTS (/v1/audio/speech) — most reliable ─────────────
+// ── Provider 1: OpenAI TTS ────────────────────────────────────────────────
 async function tryOpenAITTS(text: string, voice: string, speed: number, lang?: string): Promise<ArrayBuffer | null> {
   const apiKey = CONFIG.OPENAI_API_KEY;
   if (!apiKey) {
     console.log('[TTS] OPENAI_API_KEY not set — skipping OpenAI');
     return null;
   }
-  // Map custom ElevenLabs IDs to OpenAI equivalents
   const isCustomId = voice.length > 12;
   const openaiVoice = isCustomId ? 'nova' : voice;
 
@@ -193,13 +177,10 @@ async function tryElevenLabsTTS(text: string, voice: string, detectedLang?: stri
     if (!response.ok) {
       const errText = await response.text().catch(() => response.statusText);
       console.log(`[TTS] ElevenLabs failed (${response.status}): ${errText.slice(0, 300)}`);
-      // 401 with 'unusual_activity' = Free Tier flagged — skip silently so OpenAI takes over
       if (response.status === 401 || response.status === 403) {
         const isUnusualActivity = errText.includes('unusual_activity') || errText.includes('Unusual activity');
         if (isUnusualActivity) {
           console.log('[TTS] ElevenLabs Free Tier unusual activity — skipping to OpenAI');
-        } else {
-          console.log('[TTS] ElevenLabs auth failed — skipping to next provider');
         }
       }
       return null;
@@ -218,7 +199,7 @@ async function tryElevenLabsTTS(text: string, voice: string, detectedLang?: stri
   }
 }
 
-// ── Provider 3: OnSpace AI /v1/audio/speech ─────────────────────────────────
+// ── Provider 3: OnSpace AI ─────────────────────────────────────────────────
 async function tryOnSpaceAISpeech(text: string, voice: string, speed: number): Promise<ArrayBuffer | null> {
   const apiKey = CONFIG.ONSPACE_AI_API_KEY;
   const baseUrl = CONFIG.ONSPACE_AI_BASE_URL;
@@ -227,11 +208,8 @@ async function tryOnSpaceAISpeech(text: string, voice: string, speed: number): P
     return null;
   }
 
-  // Use named voice for OpenAI-compatible endpoint (not custom ElevenLabs IDs)
   const isCustomId = voice.length > 12;
   const openaiVoice = isCustomId ? 'nova' : voice;
-
-  // Build clean endpoint — avoid double /v1/v1/
   const endpoint = `${baseUrl}/v1/audio/speech`;
 
   try {
@@ -266,7 +244,7 @@ async function tryOnSpaceAISpeech(text: string, voice: string, speed: number): P
       const b64 = json.audio || json.data || json.audio_data;
       if (b64 && typeof b64 === 'string') {
         try {
-          const decoded = atob(b64.replace(/^data:audio\/[^;]+;base64,/, ''));
+          const decoded = atob(b64.replace(/^data:audio\\/[^;]+;base64,/, ''));
           const bytes = Uint8Array.from(decoded, c => c.charCodeAt(0));
           if (bytes.length > 100) {
             console.log(`[TTS] OnSpace AI audio from JSON: ${bytes.length} bytes`);
@@ -290,10 +268,9 @@ async function tryOnSpaceAISpeech(text: string, voice: string, speed: number): P
   }
 }
 
-// ── Device TTS fallback JSON response ────────────────────────────────────────
+// ── Device TTS fallback ────────────────────────────────────────────────────
 function buildFallbackResponse(text: string, voice: string, detectedLang?: string): Response {
   const voiceInfo = VOICE_LANG_MAP[voice] || { lang: 'en-US', gender: 'neutral' };
-  // Override lang if detected
   const lang = detectedLang || voiceInfo.lang;
   console.log('[TTS] All providers failed — returning device TTS fallback signal');
   return new Response(
@@ -350,57 +327,6 @@ async function uploadAudio(audioBytes: Uint8Array, supabaseAdmin: any): Promise<
   }
 }
 
-// ── Fetch ElevenLabs voice list (for dynamic voice settings) ────────────────
-async function listElevenLabsVoices(): Promise<Response> {
-  const apiKey = CONFIG.ELEVENLABS_API_KEY;
-  if (!apiKey) {
-    return new Response(
-      JSON.stringify({ success: false, voices: [], error: 'ElevenLabs API key not configured' }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-  }
-
-  try {
-    const response = await fetch('https://api.elevenlabs.io/v1/voices', {
-      method: 'GET',
-      headers: { 'xi-api-key': apiKey, 'Accept': 'application/json' },
-      signal: AbortSignal.timeout(15000),
-    });
-
-    if (!response.ok) {
-      const errText = await response.text().catch(() => '');
-      console.log(`[TTS] List voices failed (${response.status}): ${errText.slice(0, 200)}`);
-      // Return curated fallback list
-      return new Response(
-        JSON.stringify({ success: false, voices: [], error: `ElevenLabs error: ${response.status}` }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    const data = await response.json();
-    const voices = (data.voices || []).map((v: any) => ({
-      voice_id: v.voice_id,
-      name: v.name,
-      description: v.description || '',
-      labels: v.labels || {},
-      preview_url: v.preview_url || null,
-      category: v.category || 'premade',
-    }));
-
-    console.log(`[TTS] Listed ${voices.length} ElevenLabs voices`);
-    return new Response(
-      JSON.stringify({ success: true, voices }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-  } catch (e: any) {
-    console.log('[TTS] List voices exception:', e.message);
-    return new Response(
-      JSON.stringify({ success: false, voices: [], error: e.message }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-  }
-}
-
 // ── Main handler ─────────────────────────────────────────────────────────────
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -435,11 +361,6 @@ Deno.serve(async (req) => {
 
     const { text, voice, speed, detectedLanguage, action } = body;
 
-    // ── Handle list_voices action ──
-    if (action === 'list_voices') {
-      return await listElevenLabsVoices();
-    }
-
     if (!text || typeof text !== 'string' || text.trim().length === 0) {
       return new Response(
         JSON.stringify({ success: false, error: 'Text is required' }),
@@ -448,7 +369,6 @@ Deno.serve(async (req) => {
     }
 
     const finalText = text.trim().slice(0, CONFIG.MAX_TEXT_LENGTH);
-    // Accept both named voices and raw ElevenLabs voice IDs
     const isValidVoice = CONFIG.VALID_VOICES.includes(voice as VoiceType) || (typeof voice === 'string' && voice.length > 5);
     const finalVoice = isValidVoice ? voice : CONFIG.DEFAULT_VOICE;
     const finalSpeed = Math.max(0.25, Math.min(4.0, Number(speed) || CONFIG.DEFAULT_SPEED));
@@ -456,35 +376,26 @@ Deno.serve(async (req) => {
     console.log(`[TTS] Request: voice=${finalVoice}, speed=${finalSpeed}, len=${finalText.length}, lang=${detectedLanguage || 'auto'}`);
     console.log(`[TTS] Available keys: OpenAI=${!!CONFIG.OPENAI_API_KEY}, ElevenLabs=${!!CONFIG.ELEVENLABS_API_KEY}, OnSpace=${!!CONFIG.ONSPACE_AI_API_KEY}`);
 
-    // ── Provider priority: OpenAI → ElevenLabs → OnSpace AI → Device fallback ──
-    // OpenAI is FIRST — most reliable and never returns 401 with a valid key.
-    // ElevenLabs is second — supports custom voice IDs but may return 401 on free-tier accounts.
-    // OnSpace AI is the last server-side fallback before device TTS.
     let audioBuffer: ArrayBuffer | null = null;
     let usedProvider = '';
 
-    // 1. OpenAI — reliable, great multilingual support
     audioBuffer = await tryOpenAITTS(finalText, finalVoice, finalSpeed, detectedLanguage);
     if (audioBuffer) usedProvider = 'openai';
 
-    // 2. ElevenLabs — high quality, supports custom voice IDs; may return 401 on free tier
     if (!audioBuffer) {
       audioBuffer = await tryElevenLabsTTS(finalText, finalVoice, detectedLanguage);
       if (audioBuffer) usedProvider = 'elevenlabs';
     }
 
-    // 3. OnSpace AI /v1/audio/speech
     if (!audioBuffer) {
       audioBuffer = await tryOnSpaceAISpeech(finalText, finalVoice, finalSpeed);
       if (audioBuffer) usedProvider = 'onspace-speech';
     }
 
-    // 4. All providers failed → device TTS fallback
     if (!audioBuffer) {
       return buildFallbackResponse(finalText, finalVoice, detectedLanguage);
     }
 
-    // Upload to Supabase storage and return public URL
     const supabaseAdmin = createClient(CONFIG.SUPABASE_URL!, CONFIG.SUPABASE_SERVICE_ROLE_KEY!);
     const audioUint8 = new Uint8Array(audioBuffer);
     const audioUrl = await uploadAudio(audioUint8, supabaseAdmin);
