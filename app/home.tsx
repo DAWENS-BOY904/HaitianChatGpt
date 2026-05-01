@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo, Component, memo } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo, Component } from 'react';
 import { Image as ExpoImage } from 'expo-image';
 import { 
   View, 
@@ -65,29 +65,6 @@ import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { WebView } from 'react-native-webview';
 
-// ── Deep Research Progress Card ──────────────────────────────────────────────
-const DeepResearchCard = memo(function DeepResearchCard({ step, label, done, colors }: { step: number; label: string; done: boolean; colors: any }) {
-  const pulse = useRef(new Animated.Value(0.5)).current;
-  useEffect(() => {
-    if (!done) {
-      const anim = Animated.loop(Animated.sequence([
-        Animated.timing(pulse, { toValue: 1, duration: 700, useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 0.5, duration: 700, useNativeDriver: true }),
-      ]));
-      anim.start();
-      return () => anim.stop();
-    } else { pulse.setValue(1); }
-  }, [done]);
-  return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 14, gap: 10 }}>
-      {done
-        ? <Ionicons name="checkmark-circle" size={20} color="#34C759" />
-        : <Animated.View style={{ opacity: pulse }}><Ionicons name="ellipse" size={10} color="#5AC8FA" /></Animated.View>}
-      <Text style={{ color: colors.text, fontSize: 14, flex: 1 }}>{label}</Text>
-    </View>
-  );
-});
-
 // Custom base64 validator for React Native (atob not available)
 function isValidBase64(str: string): boolean {
   try {
@@ -103,6 +80,17 @@ function isValidBase64(str: string): boolean {
     return false;
   }
 }
+
+const MyWeb = () => {
+
+  return (
+
+    <WebView source={{ uri: 'https://example.com' }} />
+
+  );
+
+};
+
 
 // Input persistence helpers (8-minute TTL)
 const INPUT_PERSIST_KEY = 'home_input_draft';
@@ -789,9 +777,6 @@ export default function HomeScreen() {
   const [conversationMenuVisible, setConversationMenuVisible] = useState(false);
   const [sideMenuVisible, setSideMenuVisible] = useState(false);
   const [chatHistoryVisible, setChatHistoryVisible] = useState(false);
-  const [deepResearchMode, setDeepResearchMode] = useState(false);
-  const [deepResearchSteps, setDeepResearchSteps] = useState<Array<{label:string;done:boolean}>>([]);
-  const [deepResearchActive, setDeepResearchActive] = useState(false);
   const isGuest = !user;
   const [guestMessageCount, setGuestMessageCount] = useState(0);
   const GUEST_MESSAGE_LIMIT = 35;
@@ -830,7 +815,6 @@ export default function HomeScreen() {
   const [presetsModalVisible, setPresetsModalVisible] = useState(false);
   const [thinkingMode, setThinkingMode] = useState<'thinking' | 'creating_image' | 'analyzing' | 'editing_image'>('thinking');
   const [showCompletionStatus, setShowCompletionStatus] = useState(false);
-  const [pendingNotifConvId, setPendingNotifConvId] = useState<string|null>(null);
   // Image-from-images-page overlay
   const [imageAnalyzingOverlay, setImageAnalyzingOverlay] = useState(false);
   const [savedImageUrls, setSavedImageUrls] = useState<Set<string>>(new Set());
@@ -962,33 +946,6 @@ export default function HomeScreen() {
       });
     }
   }, [user?.id]);
-
-  // ── Notification deep-link handler ──────────────────────────────────────
-  useEffect(() => {
-    // Handle tap on notification when app is already open
-    const sub = Notifications.addNotificationResponseReceivedListener(response => {
-      const convId = response.notification.request.content.data?.conversationId as string | undefined;
-      if (convId) setPendingNotifConvId(convId);
-    });
-    // Handle tap when app was killed / background (initial notification)
-    Notifications.getLastNotificationResponseAsync().then(response => {
-      if (response) {
-        const convId = response.notification.request.content.data?.conversationId as string | undefined;
-        if (convId) setPendingNotifConvId(convId);
-      }
-    });
-    return () => sub.remove();
-  }, []);
-
-  // Navigate to conversation once it's loaded
-  useEffect(() => {
-    if (!pendingNotifConvId) return;
-    const conv = conversations?.find((c: any) => c.id === pendingNotifConvId);
-    if (conv) {
-      selectConversation(pendingNotifConvId);
-      setPendingNotifConvId(null);
-    }
-  }, [pendingNotifConvId, conversations]);
 
   useEffect(() => {
     registerForPushNotifications().then(token => { pushTokenRef.current = token; });
@@ -1432,76 +1389,7 @@ export default function HomeScreen() {
     }
   };
 
-  // ── Deep Research multi-step chain ──────────────────────────────────────
-  const runDeepResearch = useCallback(async (query: string) => {
-    const steps = [
-      { label: 'Searching the web…', done: false },
-      { label: 'Reading top sources…', done: false },
-      { label: 'Synthesizing findings…', done: false },
-      { label: 'Formatting report…', done: false },
-    ];
-    setDeepResearchSteps([...steps]);
-    setDeepResearchActive(true);
-    setSending(true);
-    setGenerating(true);
-    setThinkingMode('thinking');
-
-    let conversationId = currentConversation?.id;
-    if (!conversationId) {
-      conversationId = await createConversation();
-      if (!conversationId) { setDeepResearchActive(false); setSending(false); setGenerating(false); return; }
-    }
-
-    const markStep = (i: number) => {
-      setDeepResearchSteps(prev => prev.map((s, idx) => idx === i ? { ...s, done: true } : s));
-    };
-
-    try {
-      // Step 1 & 2 — simulate search delay
-      await new Promise(r => setTimeout(r, 1200));
-      markStep(0);
-      await new Promise(r => setTimeout(r, 900));
-      markStep(1);
-
-      const deepPrompt = `You are performing deep research on: "${query}"
-
-Please provide a comprehensive, well-structured research report with:
-1. Executive Summary
-2. Key Findings (with citations)
-3. Detailed Analysis
-4. Sources & References
-
-Format sources at the end using [SOURCES] block format.
-Be thorough and cite specific facts.`;
-
-      markStep(2);
-      await sendMessage(deepPrompt, undefined, undefined, false, currentAIModel);
-      markStep(3);
-      setShowCompletionStatus(true);
-      setTimeout(() => setShowCompletionStatus(false), 2000);
-    } catch (e: any) {
-      showAlert('Error', e?.message || 'Deep research failed');
-    } finally {
-      setDeepResearchActive(false);
-      setSending(false);
-      setGenerating(false);
-      setDeepResearchMode(false);
-      setDeepResearchSteps([]);
-    }
-  }, [currentConversation, createConversation, sendMessage, currentAIModel, showAlert]);
-
   const handleSend = async () => {
-    // Deep research mode intercept
-    if (deepResearchMode && inputText.trim()) {
-      const query = inputText.trim();
-      setInputText('');
-      setSelectedMedia([]);
-      clearDraft();
-      Keyboard.dismiss();
-      await runDeepResearch(query);
-      return;
-    }
-
     const currentText = inputText.trim();
     const currentMedia = [...selectedMedia];
     const currentEditingId = editingMessageId;
@@ -1925,11 +1813,10 @@ Be thorough and cite specific facts.`;
           onCancel={handleCancelGeneration}
           onEdit={handleEditMessage}
           onCopy={() => handleCopyMessage(item.content)}
-          isGenerating={isStreaming || (generating && item.id === (messages || [])[(messages || []).length-1]?.id)}
+          isGenerating={isStreaming}
           streaming={isStreaming}
           streamingSpeed={isStreaming ? 18 : 0}
           isOffline={isOffline}
-          isImageTask={thinkingMode === 'creating_image' && (generating || isStreaming)}
           onChunkRendered={() => { if (isAtBottom) flatListRef.current?.scrollToEnd({ animated: false }); }}
         />
         {mathData ? (
@@ -1973,41 +1860,48 @@ Be thorough and cite specific facts.`;
     );
   }, [streamingMessageId, handleCancelGeneration, handleEditMessage, handleCopyMessage, isOffline, isAtBottom, savedImageUrls, savingImageId, handleSaveToMyImages, user?.id, isDark, colors]);
 
-  // ── Compact inline media preview inside input wrapper ──────────────────
-  const renderInlineMediaPreviews = useCallback(() => {
+  const renderMediaPreview = useCallback(() => {
     if (selectedMedia.length === 0) return null;
     return (
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={{ marginBottom: 4, marginTop: 2 }}
-        contentContainerStyle={{ gap: 6, alignItems: 'center', paddingHorizontal: 2 }}
-      >
-        {selectedMedia.map((media, index) => (
-          <View key={`${media.uri}-${index}`} style={{ position: 'relative' }}>
-            {media.type === 'image' ? (
-              <View style={{ width: 52, height: 52, borderRadius: 10, overflow: 'hidden', borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)' }}>
-                <ExpoImage source={{ uri: media.uri }} style={{ width: 52, height: 52 }} contentFit="cover" />
-              </View>
-            ) : media.type === 'video' ? (
-              <View style={{ width: 52, height: 52, borderRadius: 10, backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)' }}>
-                <Ionicons name="videocam" size={20} color={colors.textSecondary} />
-              </View>
-            ) : (
-              <View style={{ width: 52, height: 52, borderRadius: 10, backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)' }}>
-                <Ionicons name="document-text" size={18} color={colors.textSecondary} />
-                <Text style={{ fontSize: 7, color: colors.textSecondary, marginTop: 2, textAlign: 'center' }} numberOfLines={1}>{(media.name || 'File').slice(0,8)}</Text>
-              </View>
-            )}
-            <TouchableOpacity
-              style={{ position: 'absolute', top: -4, right: -4, backgroundColor: isDark ? '#3A3A3C' : '#C7C7CC', borderRadius: 9, width: 18, height: 18, alignItems: 'center', justifyContent: 'center' }}
-              onPress={() => removeMedia(index)}
-            >
-              <Ionicons name="close" size={10} color="#FFF" />
-            </TouchableOpacity>
-          </View>
-        ))}
-      </ScrollView>
+      <View style={{ marginHorizontal: 12, marginBottom: 4 }}>
+        {/* Divider */}
+        <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)', marginBottom: 8 }} />
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ gap: 8, alignItems: 'center', paddingHorizontal: 4, paddingBottom: 6 }}
+        >
+          {selectedMedia.map((media, index) => (
+            <View key={`${media.uri}-${index}`} style={{ position: 'relative', alignSelf: 'center' }}>
+              {media.type === 'image' ? (
+                <View style={{ width: 72, height: 72, borderRadius: 14, overflow: 'hidden', backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA', borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)' }}>
+                  <ExpoImage source={{ uri: media.uri }} style={{ width: 72, height: 72 }} contentFit="cover" />
+                  {/* Edit icon overlay */}
+                  <View style={{ position: 'absolute', bottom: 4, left: 4, backgroundColor: 'rgba(0,0,0,0.45)', borderRadius: 8, padding: 2 }}>
+                    <Ionicons name="pencil" size={10} color="#FFF" />
+                  </View>
+                </View>
+              ) : media.type === 'video' ? (
+                <View style={{ width: 72, height: 72, borderRadius: 14, overflow: 'hidden', backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)' }}>
+                  <Ionicons name="videocam" size={26} color={colors.textSecondary} />
+                  <Text style={{ fontSize: 9, color: colors.textSecondary, marginTop: 3, fontWeight: '600' }} numberOfLines={1}>Video</Text>
+                </View>
+              ) : (
+                <View style={{ width: 72, height: 72, borderRadius: 14, backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA', alignItems: 'center', justifyContent: 'center', padding: 6, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)' }}>
+                  <Ionicons name="document-text" size={26} color={colors.textSecondary} />
+                  <Text style={{ fontSize: 8, color: colors.textSecondary, marginTop: 3, textAlign: 'center', fontWeight: '600' }} numberOfLines={2}>{media.name || 'File'}</Text>
+                </View>
+              )}
+              <TouchableOpacity
+                style={{ position: 'absolute', top: -5, right: -5, backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF', borderRadius: 11, width: 22, height: 22, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: isDark ? '#3A3A3C' : '#D1D1D6', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.15, shadowRadius: 3, elevation: 3 }}
+                onPress={() => removeMedia(index)}
+              >
+                <Ionicons name="close" size={11} color={isDark ? '#FFF' : '#333'} />
+              </TouchableOpacity>
+            </View>
+          ))}
+        </ScrollView>
+      </View>
     );
   }, [selectedMedia, removeMedia, colors, isDark]);
 
@@ -2029,8 +1923,8 @@ Be thorough and cite specific facts.`;
     blurText: { fontSize: 24, fontWeight: 'bold', color: 'white', marginTop: 16 },
     messagesContainer: { flex: 1 },
     inputContainer: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 10, paddingBottom: Platform.select({ ios: insets.bottom + 8, android: insets.bottom + 8, default: 8 }), paddingTop: 8, gap: 8, backgroundColor: Platform.OS === 'ios' ? 'transparent' : colors.background },
-    inputWrapper: { flex: 1, backgroundColor: isDark ? '#1C1C1E' : '#F0F0F5', borderRadius: 28, paddingHorizontal: 14, paddingVertical: 4, minHeight: 48, maxHeight: 160, gap: 4 },
-    input: { flex: 1, fontSize: 16, color: colors.text, paddingVertical: 8, maxHeight: 100 },
+    inputWrapper: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? '#1C1C1E' : '#F0F0F5', borderRadius: 28, paddingHorizontal: 14, paddingVertical: 4, minHeight: 48, maxHeight: 120, gap: 6 },
+    input: { flex: 1, fontSize: 16, color: colors.text, paddingVertical: 12, maxHeight: 100 },
     recordingContainer: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8 },
     recordingDuration: { color: '#FF3B30', fontSize: 13, fontWeight: '600', minWidth: 36 },
     addBtn: { width: 42, height: 42, borderRadius: 21, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', marginBottom: 2 },
@@ -2399,19 +2293,8 @@ Be thorough and cite specific facts.`;
                 </View>
               ) : null}
 
-              {/* Deep Research Steps */}
-              {deepResearchActive && deepResearchSteps.length > 0 ? (
-                <View style={{ marginHorizontal: 12, marginBottom: 8, backgroundColor: isDark ? 'rgba(44,44,46,0.9)' : 'rgba(242,242,247,0.95)', borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }}>
-                  <View style={{ paddingHorizontal: 14, paddingTop: 12, paddingBottom: 4, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                    <Ionicons name="search" size={16} color="#5AC8FA" />
-                    <Text style={{ color: isDark ? '#FFF' : '#000', fontWeight: '700', fontSize: 14 }}>Deep Research</Text>
-                  </View>
-                  {deepResearchSteps.map((step, i) => (
-                    <DeepResearchCard key={i} step={i} label={step.label} done={step.done} colors={colors} />
-                  ))}
-                  <View style={{ height: 8 }} />
-                </View>
-              ) : null}
+              {/* Media Preview — appears above input with divider */}
+              {renderMediaPreview()}
 
               {/* Input Area */}
               <View style={[styles.inputContainer, Platform.OS === 'ios' && { backgroundColor: 'transparent' }]}>
@@ -2433,10 +2316,7 @@ Be thorough and cite specific facts.`;
                   </TouchableOpacity>
                 ) : null}
 
-                <View style={[styles.inputWrapper, { flexDirection: 'column', paddingTop: selectedMedia.length > 0 ? 8 : 4 }]}>
-                  {/* Compact media previews inside input */}
-                  {renderInlineMediaPreviews()}
-                  <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                <View style={styles.inputWrapper}>
                   {isRecording ? (
                     <View style={styles.recordingContainer}>
                       <Text style={styles.recordingDuration}>{formatDuration(recordingDuration)}</Text>
@@ -2504,16 +2384,13 @@ Be thorough and cite specific facts.`;
                     </TouchableOpacity>
                   ) : showSendButton ? (
                     <TouchableOpacity
-                      style={[styles.sendButton, { backgroundColor: deepResearchMode ? '#5AC8FA' : accentColor }]}
+                      style={[styles.sendButton, { backgroundColor: accentColor }]}
                       onPress={handleSend}
                       disabled={isRecording || isProcessing}
                     >
-                      {deepResearchMode
-                        ? <Ionicons name="search" size={17} color="#FFFFFF" />
-                        : <Ionicons name="arrow-up" size={19} color="#FFFFFF" />}
+                      <Ionicons name="arrow-up" size={19} color="#FFFFFF" />
                     </TouchableOpacity>
                   ) : null}
-                  </View>
                 </View>
 
                 {editingMessageId ? (
@@ -2556,19 +2433,6 @@ Be thorough and cite specific facts.`;
               </TouchableOpacity>
             )}
 
-            {/* Deep Research mode indicator */}
-            {deepResearchMode ? (
-              <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingBottom: 6 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(90,200,250,0.12)', borderRadius: 18, paddingHorizontal: 14, paddingVertical: 8, gap: 8, borderWidth: 1, borderColor: 'rgba(90,200,250,0.3)' }}>
-                  <Ionicons name="search" size={14} color="#5AC8FA" />
-                  <Text style={{ color: '#5AC8FA', fontSize: 14, fontWeight: '600' }}>Deep Research</Text>
-                  <TouchableOpacity onPress={() => setDeepResearchMode(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                    <Ionicons name="close" size={14} color="rgba(90,200,250,0.7)" />
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ) : null}
-
             <ToolsModal
               visible={toolsVisible}
               onClose={() => setToolsVisible(false)}
@@ -2596,12 +2460,6 @@ Be thorough and cite specific facts.`;
               onOpenPresets={() => {
                 if (isGuest) { setToolsVisible(false); setGuestLockFeature('presets'); setGuestLockModal(true); return; }
                 setPresetsModalVisible(true);
-              }}
-              onDeepResearch={() => {
-                if (isGuest) { setGuestLockFeature('deep research'); setGuestLockModal(true); return; }
-                setDeepResearchMode(true);
-                setInputText('');
-                setTimeout(() => inputRef.current?.focus(), 100);
               }}
             />
 

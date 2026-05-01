@@ -44,7 +44,6 @@ interface ToolsModalProps {
   currentModel?: string;
   onOpenQuiz?: () => void;
   onOpenPresets?: () => void;
-  onDeepResearch?: () => void;
 }
 
 const THEME = {
@@ -66,7 +65,6 @@ export function ToolsModal({
   currentModel = 'gemini',
   onOpenQuiz,
   onOpenPresets,
-  onDeepResearch,
 }: ToolsModalProps) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -359,8 +357,6 @@ export function ToolsModal({
       action: () => { router.push('/voice-control'); onClose(); } },
     { id: 'presets', label: 'Presets', icon: 'cube-outline',
       action: () => { onOpenPresets?.(); onClose(); } },
-    { id: 'deep-research', label: 'Deep Research', icon: 'search-outline',
-      action: () => { onDeepResearch?.(); onClose(); } },
   ];
 
   if (!visible && !rendered) return null;
