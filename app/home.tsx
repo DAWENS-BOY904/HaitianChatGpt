@@ -107,7 +107,7 @@ function isValidBase64(str: string): boolean {
 
 // Input persistence helpers (8-minute TTL)
 const INPUT_PERSIST_KEY = 'home_input_draft';
-const INPUT_PERSIST_TTL = 8 * 60 * 1000; // 8 minutes
+const INPUT_PERSIST_TTL = 8 * 60 * 1000;
 async function saveDraft(text: string) {
   try {
     if (!text.trim()) { await AsyncStorage.removeItem(INPUT_PERSIST_KEY); return; }
@@ -460,7 +460,6 @@ function ProfileEditModal({ visible, user, profilePhotoUrl, onClose, onSave, isD
     </Modal>
   );
 }
-
 // ── Group Start Modal (Photo 1) with dark/light + blur ──
 function GroupStartModal({ visible, user, profilePhotoUrl, onClose, onStartGroup, isDark, onSetupProfile }: {
   visible: boolean; user: any; profilePhotoUrl: string | null; onClose: () => void; onStartGroup: () => void;
@@ -826,7 +825,7 @@ function InviteLinkModal({ visible, onClose, isPlus, isDark }: { visible: boolea
   const id = Math.random().toString(36).substring(2, 14);
   const link = `https://dawinix.com/gg/v/${id}?token=${token}`;
   const textC = isDark !== false ? '#FFF' : '#000';
-  const handleShare = async () => { try { await Share.share({ message: `Join my Dawinix group chat!\n\n${link}`, url: link }); } catch (e) {} onClose(); };
+  const handleShare = async () => { try { await Share.share({ message: `Join my Dawinix group chat!\\n\\n${link}`, url: link }); } catch (e) {} onClose(); };
   const handleCopy = () => { Clipboard.setString(link); onClose(); };
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -943,20 +942,18 @@ const notifStyles = StyleSheet.create({
 });
 
 function ImageCreatingOverlay() {
-  const dotCount = 64; // 8x8 grid
+  const dotCount = 64;
   const anims = useRef(Array.from({ length: dotCount }, () => new Animated.Value(0))).current;
   const scaleAnim = useRef(new Animated.Value(0.92)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
   const shimmerX = useRef(new Animated.Value(-300)).current;
 
   useEffect(() => {
-    // Entrance animation
     Animated.parallel([
       Animated.timing(opacityAnim, { toValue: 1, duration: 280, useNativeDriver: true }),
       Animated.spring(scaleAnim, { toValue: 1, tension: 200, friction: 20, useNativeDriver: true }),
     ]).start();
 
-    // Animate dots in wave pattern
     const animations = anims.map((anim, i) => {
       const row = Math.floor(i / 8);
       const col = i % 8;
@@ -971,7 +968,6 @@ function ImageCreatingOverlay() {
     });
     animations.forEach(a => a.start());
 
-    // Shimmer sweep
     const shimmerLoop = Animated.loop(
       Animated.sequence([
         Animated.timing(shimmerX, { toValue: 400, duration: 1800, useNativeDriver: true }),
@@ -1001,7 +997,6 @@ function ImageCreatingOverlay() {
         imgOverlayStyles.card,
         { width: cardW, height: cardH, transform: [{ scale: scaleAnim }] }
       ]}>
-        {/* Dot grid */}
         <View style={imgOverlayStyles.dotGrid}>
           {anims.map((anim, i) => (
             <Animated.View
@@ -1016,12 +1011,10 @@ function ImageCreatingOverlay() {
             />
           ))}
         </View>
-        {/* Shimmer sweep */}
         <Animated.View style={[
           imgOverlayStyles.shimmer,
           { transform: [{ translateX: shimmerX }] },
         ]} />
-        {/* Text */}
         <View style={imgOverlayStyles.textRow}>
           <ActivityIndicator size="small" color="rgba(255,255,255,0.7)" style={{ marginRight: 8 }} />
           <Text style={imgOverlayStyles.label}>Creating image</Text>
@@ -1086,12 +1079,166 @@ const imgOverlayStyles = StyleSheet.create({
   },
 });
 
+// ============================================================================
+// FIXED MEDIA PREVIEW STYLES - Define BEFORE component
+// ============================================================================
+
+const mediaPreviewStyles = StyleSheet.create({
+  container: {
+    marginTop: 6,
+    marginBottom: 4,
+  },
+  scrollView: {
+    maxHeight: 100,
+  },
+  scrollContent: {
+    paddingHorizontal: 2,
+    paddingBottom: 8,
+    alignItems: 'flex-start',
+  },
+  rowContent: {
+    flexDirection: 'row',
+    paddingHorizontal: 2,
+    paddingBottom: 8,
+    flexWrap: 'nowrap',
+  },
+  itemContainer: {
+    position: 'relative',
+    marginRight: 10,
+  },
+  imageWrapper: {
+    width: 80,
+    height: 80,
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(128,128,128,0.2)',
+  },
+  imageThumb: {
+    width: 80,
+    height: 80,
+  },
+  videoWrapper: {
+    backgroundColor: 'rgba(128,128,128,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  videoLabel: {
+    fontSize: 9,
+    marginTop: 4,
+    fontWeight: '700',
+    color: 'rgba(128,128,128,0.7)',
+  },
+  docPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(128,128,128,0.12)',
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    maxWidth: 200,
+    borderWidth: 1,
+    borderColor: 'rgba(128,128,128,0.15)',
+  },
+  docIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  docTextBox: {
+    flex: 1,
+    minWidth: 0,
+    marginLeft: 8,
+  },
+  docName: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  docType: {
+    fontSize: 10,
+    marginTop: 2,
+  },
+  removeBtn: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    zIndex: 10,
+    padding: 4,
+  },
+  removeBtnInner: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#FFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.3,
+    shadowRadius: 2,
+    elevation: 3,
+  },
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    marginHorizontal: 0,
+    marginTop: 4,
+  },
+});
+
+// ============================================================================
+// FIXED ADDITIONAL STYLES
+// ============================================================================
+
+const additionalStyles = StyleSheet.create({
+  addBtnBlur: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  researchBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(90,200,250,0.18)',
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    gap: 5,
+    borderWidth: 1,
+    borderColor: 'rgba(90,200,250,0.42)',
+  },
+  researchBadgeText: {
+    color: '#5AC8FA',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  saveImageBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderWidth: 1,
+  },
+  saveImageText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+});
+
 export default function HomeScreen() {
   const { colors, isDark } = useTheme();
   const { settings, updateSetting } = useSettings();
   const { user } = useAuth();
   const { canSendMessage, coins, isUnlimited, incrementMessageCount, isAdmin: rawIsAdmin } = useGuestLimits();
-  // Admin emails always get both pro & plus plan access
   const ADMIN_EMAILS = ['berryxoe@gmail.com', 'newdawens@gmail.com', 'kontgithub@gmail.com'];
   const isAdminEmail = user?.email ? ADMIN_EMAILS.includes(user.email.toLowerCase()) : false;
   const isAdmin = rawIsAdmin || isAdminEmail;
@@ -1159,7 +1306,6 @@ export default function HomeScreen() {
   const [thinkingMode, setThinkingMode] = useState<'thinking' | 'creating_image' | 'analyzing' | 'editing_image'>('thinking');
   const [showCompletionStatus, setShowCompletionStatus] = useState(false);
   const [pendingNotifConvId, setPendingNotifConvId] = useState<string|null>(null);
-  // Image-from-images-page overlay
   const [imageAnalyzingOverlay, setImageAnalyzingOverlay] = useState(false);
   const [savedImageUrls, setSavedImageUrls] = useState<Set<string>>(new Set());
   const [savingImageId, setSavingImageId] = useState<string | null>(null);
@@ -1204,6 +1350,25 @@ export default function HomeScreen() {
   const [filteredMentionMembers, setFilteredMentionMembers] = useState<GroupMember[]>([]);
   const [userProfilePhoto, setUserProfilePhoto] = useState<string | null>(null);
   const pushTokenRef = useRef<string | null>(null);
+  const [inlineQuizVisible, setInlineQuizVisible] = useState(false);
+  const [inlineQuizQuestions, setInlineQuizQuestions] = useState<QuizQuestion[]>([]);
+  const [preGeneratedQuestions, setPreGeneratedQuestions] = useState<QuizQuestion[] | null>(null);
+  const preGenRunning = useRef(false);
+  const [messageLikes, setMessageLikes] = useState<Record<string, 'like' | 'dislike' | null>>({});
+  const wasGeneratingRef = useRef(false);
+  const appStateForNotifRef = useRef(AppState.currentState);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(100)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const flatListRef = useRef<FlatList>(null);
+  const recordingRef = useRef<Audio.Recording | null>(null);
+  const recordingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const audioPermissionRef = useRef<boolean>(false);
+  const isRecordingRef = useRef<boolean>(false);
+  const stopTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const appStateRef = useRef(AppState.currentState);
+  const autoLockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const processingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Handle incoming image from images page ──
   useEffect(() => {
@@ -1247,7 +1412,6 @@ export default function HomeScreen() {
   // Load persisted draft on mount
   useEffect(() => {
     loadDraft().then(draft => { if (draft) setInputText(draft); });
-    // Clear stale draft after 8 min
     const clearTimer = setTimeout(() => clearDraft(), INPUT_PERSIST_TTL);
     return () => clearTimeout(clearTimer);
   }, []);
@@ -1255,10 +1419,8 @@ export default function HomeScreen() {
   const handleInputChange = useCallback(async (txt: string) => {
     const safeTxt = txt ?? '';
     const byteLength = new Blob([safeTxt]).size;
-
-    // Detect if text is ONLY code (no natural language)
     const codePatterns = /^(\s*(import|from|const|let|var|function|class|interface|type|export|async|await|if|for|while|return|try|catch|\{|\}|\(|\)|\[|\]|=>|:|;|,|\.|\+|\-|\*|\/|=|!|&|\||<|>|\d+|\s+|\/\/|\/\*|\*|#).*)+$/s;
-    const hasNaturalLanguage = /(the|and|is|are|was|were|be|been|have|has|had|do|does|did|will|would|could|should|may|might|can|shall|this|that|these|those|with|for|from|about|into|through|during|before|after|above|below|between|under|again|further|then|once|here|there|when|where|why|how|all|each|few|more|most|other|some|such|no|nor|not|only|own|same|so|than|too|very|just|now|also|back|down|off|over|out|up|any|both|each|few|more|most|other|some|such|what|which|who|whom|whose|why|how|where|when)/gi.test(safeTxt);
+    const hasNaturalLanguage = /\b(the|and|is|are|was|were|be|been|have|has|had|do|does|did|will|would|could|should|may|might|can|shall|this|that|these|those|with|for|from|about|into|through|during|before|after|above|below|between|under|again|further|then|once|here|there|when|where|why|how|all|each|few|more|most|other|some|such|no|nor|not|only|own|same|so|than|too|very|just|now|also|back|down|off|over|out|up|any|both|each|few|more|most|other|some|such|what|which|who|whom|whose|why|how|where|when)\b/gi.test(safeTxt);
     const looksLikeCodeOnly = codePatterns.test(safeTxt) && !hasNaturalLanguage && safeTxt.length > 50;
 
     if (byteLength > 4000 && looksLikeCodeOnly) {
@@ -1278,7 +1440,6 @@ export default function HomeScreen() {
     }
 
     setInputText(safeTxt);
-    // Debounce draft save (300ms)
     if (draftSaveTimer.current) clearTimeout(draftSaveTimer.current);
     draftSaveTimer.current = setTimeout(() => saveDraft(safeTxt), 300);
     try { setCodeLangChips(/```\w*$/.test(safeTxt)); } catch (_e) { setCodeLangChips(false); }
