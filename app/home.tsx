@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo, Component, memo } from 'react';
+brh fucking fix that in unput tex lew upload photo input dwe vinn large pou si wp past a full tex on it and fix group chat to save in local snd in chat conversation.import React, { useState, useRef, useEffect, useCallback, useMemo, Component, memo } from 'react';
 import { Image as ExpoImage } from 'expo-image';
 import { 
   View, 
