@@ -5,24 +5,88 @@ import { corsHeaders } from '../_shared/cors.ts';
 import { callAI, detectContentType, generateImageSmart } from '../_shared/ai-providers.ts';
 
 // ==========================================
-// FULL SAFETY MODULE HELPER
+// ADVANCED SAFETY MODULE (SELF-HARM DETECTION)
 // ==========================================
-function detectSelfHarmIntent(text: string, context_tags: string[] = []) {
+
+// Normalize text
+function normalize(text: string) {
+  return text.toLowerCase().trim();
+}
+
+// Detect basic intent
+export function detectSelfHarmIntent(text: string, context_tags: string[] = []) {
   const triggers = [
     "suicide", "kill myself", "end my life", "i want to die",
     "mwen vle mouri", "touye tèt mwen", "pa vle viv ankò",
     "end it all", "no reason to live"
   ];
 
-  const lower = text.toLowerCase();
+  const lower = normalize(text);
 
-  const matched =
+  return (
     triggers.some(t => lower.includes(t)) ||
-    context_tags.includes("self-harm");
-
-  return matched;
+    context_tags.includes("self-harm")
+  );
 }
 
+// Detect HIGH RISK (plan, urgency, timing)
+export function detectHighRisk(text: string) {
+  const highRiskTriggers = [
+    "i will kill myself", "i'm going to end my life",
+    "tonight", "right now", "i can't go on",
+    "map touye tèt mwen jodi a", "kounye a mwen fini"
+  ];
+
+  const lower = normalize(text);
+
+  return highRiskTriggers.some(t => lower.includes(t));
+}
+
+// Detect MEDIUM RISK (hopelessness)
+export function detectMediumRisk(text: string) {
+  const mediumTriggers = [
+    "i feel empty", "no purpose", "tired of life",
+    "life is pointless", "mwen fatige ak lavi",
+    "anyen pa gen sans ankò"
+  ];
+
+  const lower = normalize(text);
+
+  return mediumTriggers.some(t => lower.includes(t));
+}
+
+// Risk level classifier
+export function classifyRisk(text: string, context_tags: string[] = []) {
+  if (detectHighRisk(text)) return "HIGH";
+  if (detectSelfHarmIntent(text, context_tags)) return "MEDIUM";
+  if (detectMediumRisk(text)) return "LOW";
+  return "NONE";
+}
+
+// Suggested response generator
+export function generateSafetyResponse(level: string) {
+  switch (level) {
+    case "HIGH":
+      return "I’m really sorry you’re feeling this way. You’re not alone. Please reach out to someone you trust or a crisis hotline right now.";
+    case "MEDIUM":
+      return "That sounds really hard. Do you want to talk about what’s been going on?";
+    case "LOW":
+      return "I’m here for you. Want to share more about how you’re feeling?";
+    default:
+      return null;
+  }
+}
+
+// Full handler
+export function handleSafety(text: string, context_tags: string[] = []) {
+  const level = classifyRisk(text, context_tags);
+
+  return {
+    triggered: level !== "NONE",
+    level,
+    response: generateSafetyResponse(level),
+  };
+}
 function generateCrisisResponse() {
   return `
 🛑 I’m really sorry you’re feeling this way.
@@ -204,11 +268,19 @@ REAL-TIME DATE & TIME (AUTHORITATIVE — ALWAYS USE THESE VALUES):
 - Day of week: ${dayName}
 
 DATE ANSWER RULES:
-- When asked about today's date, current time, day of week, week, month, year — ALWAYS use the values above.
-- NEVER guess or use a hardcoded date from training data.
-- Keep date/time answers SHORT. Example: "Today is ${dayName}, ${month} ${day} ${year}."
-- Do not add unnecessary explanations unless the user asks. Do not mention dates unless specifically requested or required.
-==============================`;
+// SOURCE OF TRUTH// 
+Always use the system-provided current date/time values.
+Never guess, never hardcode, never use training data dates.
+WHEN TO USE DATE/TIME// Only mention date or time when: -The user explicitly asks for it
+- It is clearly required in the context
+//HOW TO ANSWER (FORMAT)
+Keep answers SHORT and direct.
+Do NOT add explanations unless the user asks.
+// Examples: "Today is Saturday, May 2, 2026."
+"The current time is 3:45 PM."
+"It’s Monday."
+STRICT RULES
+- NEVER guess the date or time// - NEVER reuse old/static values// - NEVER add extra commentary// - ALWAYS stay concise// SUPPORTED QUESTIONS// - today's date// - current time// - day of week// - week / month / year// STYLE// - Clean// - Direct// - No extra text unless needed// ==========================================`;
 }
 
 // ==========================================
@@ -894,6 +966,7 @@ CONTENT SAFETY:
 ==============================
 - Block attacks, fraud, scams, and harmful behavior
 - Warn users about potentially dangerous actions
+- Stop using emoji to much only when its require
 - Refuse to generate illegal, unethical, or harmful content
 - Stay professional, respectful, and helpful at all times
 `; // <-- Removed the comma here. The original error "Parsing error: Expression expected" was due to the comma at the end of the `systemPrompt` template literal, right before the `const support_messages` declaration. This makes the template literal think there's more to parse as part of the string, but then it encounters `const`, leading to the error.
