@@ -1465,15 +1465,13 @@ export default function HomeScreen() {
       const convId = response.notification.request.content.data?.conversationId as string | undefined;
       if (convId) setPendingNotifConvId(convId);
     });
-    // Handle tap when app was killed / background (initial notification) — web not supported
-    if (Platform.OS !== 'web') {
-      Notifications.getLastNotificationResponseAsync().then(response => {
-        if (response) {
-          const convId = response.notification.request.content.data?.conversationId as string | undefined;
-          if (convId) setPendingNotifConvId(convId);
-        }
-      }).catch(() => {});
-    }
+    // Handle tap when app was killed / background (initial notification)
+    Notifications.getLastNotificationResponseAsync().then(response => {
+      if (response) {
+        const convId = response.notification.request.content.data?.conversationId as string | undefined;
+        if (convId) setPendingNotifConvId(convId);
+      }
+    });
     return () => sub.remove();
   }, []);
 
