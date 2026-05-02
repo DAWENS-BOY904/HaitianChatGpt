@@ -1111,7 +1111,7 @@ export default function VoiceControlScreen() {
         );
         
         if (!retryReply) {
-          const fallbackReply = 'I heard you. Could you tell me a little more so I can help you better?';
+          const fallbackReply = 'I heard you. Could you tell me a little more so I can help you betters?';
           const aiMsg: ConvMessage = { role: 'assistant', content: fallbackReply, timestamp: Date.now() };
           messagesRef.current = [...messagesRef.current, aiMsg];
           setMessages(prev => [...prev, aiMsg]);
