@@ -1053,3 +1053,4 @@ export function useConversation() {
   if (context === undefined) throw new Error('useConversation must be used within a ConversationProvider');
   return context;
 }
+fix error Failed to create conversation.
