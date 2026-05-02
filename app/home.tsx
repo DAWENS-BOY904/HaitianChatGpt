@@ -2050,15 +2050,10 @@ Be thorough and cite specific facts.`;
         console.log('[Home] createConversation error:', convErr);
       }
       if (!conversationId) {
-        // Guest users don't persist conversations — create a transient local ID
-        if (isGuest) {
-          conversationId = `guest-${Date.now()}`;
-        } else {
-          showAlert('Error', 'Failed to create conversation. Please try again.');
-          setSending(false);
-          setGenerating(false);
-          return;
-        }
+        showAlert('Error', 'Failed to create conversation. Please try again.');
+        setSending(false);
+        setGenerating(false);
+        return;
       }
     }
 

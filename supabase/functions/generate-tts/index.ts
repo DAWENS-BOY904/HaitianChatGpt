@@ -370,9 +370,8 @@ Deno.serve(async (req) => {
     }
 
     const finalText = text.trim().slice(0, CONFIG.MAX_TEXT_LENGTH);
-    // Accept any string voice — covers ElevenLabs IDs (20+ chars), named voices, and custom IDs
-    const isValidVoice = typeof voice === 'string' && voice.trim().length > 0;
-    const finalVoice = isValidVoice ? voice.trim() : CONFIG.DEFAULT_VOICE;
+    const isValidVoice = CONFIG.VALID_VOICES.includes(voice as VoiceType) || (typeof voice === 'string' && voice.length > 5);
+    const finalVoice = isValidVoice ? voice : CONFIG.DEFAULT_VOICE;
     const finalSpeed = Math.max(0.25, Math.min(4.0, Number(speed) || CONFIG.DEFAULT_SPEED));
 
     console.log(`[TTS] Request: voice=${finalVoice}, speed=${finalSpeed}, len=${finalText.length}, lang=${detectedLanguage || 'auto'}`);
