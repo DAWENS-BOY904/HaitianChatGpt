@@ -448,7 +448,7 @@ export default function SettingsScreen() {
     if (!user) return;
     setSavingProfile(true);
     try {
-      const updates: any = { full_name: editName, profile_photo_url: editPhoto };
+      const updates: any = { full_name: editName, profile_photo_url: editPhoto || null };
       const usernameChanged = editUsername !== username;
       if (usernameChanged) {
         if (!canChangeUsername()) {
@@ -677,7 +677,7 @@ export default function SettingsScreen() {
                     borderBottomWidth: i < options.length - 1 ? StyleSheet.hairlineWidth : 0,
                     borderBottomColor: divider,
                   }}
-                  onPress={() => { updateSetting('appearance', opt); setShowDropdown(false); }}
+                  onPress={async () => { await updateSetting('appearance', opt as any); setShowDropdown(false); }}
                   activeOpacity={0.6}
                 >
                   <Text style={{ fontSize: 16, color: primaryText }}>{opt}</Text>
@@ -821,7 +821,7 @@ export default function SettingsScreen() {
             ═══════════════════════════════════════════════════════════════ */}
         <SectionLabel text="Voice" />
         <Card>
-          <Row icon="mic-outline" label="Voice" value={settings.voiceSelection || 'Juniper'} onPress={() => router.push('/voice-settings')} />
+          <Row icon="mic-outline" label="Voice" value={(() => { const voices: Record<string, string> = { 'pNInz6obpgDQGcFmaJgB': 'Adam', '21m00Tcm4TlvDq8ikWAM': 'Rachel', 'AZnzlk1XvdvUeBnXmlld': 'Domi', 'EXAVITQu4vr4xnSDxMaL': 'Bella', 'VR6AewLTigWG4xSOukaG': 'Arnold', 'GBv7mTt0atIp3Br8iCZE': 'Thomas', 'yoZ06aMxZJJ28mfd3POQ': 'Sam', 'ThT5KcBeYPX3keUQqHPh': 'Dorothy', 'pqHfZKP75CvOlQylNhV4': 'Bill' }; return voices[settings.voiceSelection] || 'Adam'; })()} onPress={() => router.push('/voice-select')} />
           <SwitchRow icon="chatbubbles-outline" label="Background conversations" value={settings.backgroundConversations} onChange={v => updateSetting('backgroundConversations', v)} isLast />
         </Card>
         <Text style={{
@@ -995,7 +995,7 @@ export default function SettingsScreen() {
                   return (
                     <TouchableOpacity
                       key={color}
-                      onPress={() => { updateSetting('accentColor', color); setAccentPickerVisible(false); }}
+                      onPress={async () => { await updateSetting('accentColor', color); setAccentPickerVisible(false); }}
                       activeOpacity={0.75}
                       style={{
                         width: 44, height: 44, borderRadius: 22,
