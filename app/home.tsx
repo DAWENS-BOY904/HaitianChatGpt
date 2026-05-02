@@ -3847,4 +3847,3 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-in this page add a smooth layout animation when transitioning between the unified pill (empty state) and the separated + button + input wrapper (active state), using React Native LayoutAnimation.configureNext(spring) to prevent jarring layout shifts when the user starts typing.
