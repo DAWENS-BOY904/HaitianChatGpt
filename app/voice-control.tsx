@@ -119,6 +119,139 @@ function getLangDisplay(code: string): string {
   return LANG_DISPLAY[base] || code;
 }
 
+// ─── TTS Audio Cache (keyed by text hash, max 10 entries) ──────────────────
+const TTS_CACHE_KEY = 'tts_audio_cache_v1';
+const TTS_CACHE_MAX = 10;
+
+function simpleHash(str: string): string {
+  let h = 0;
+  for (let i = 0; i < Math.min(str.length, 200); i++) {
+    h = ((h << 5) - h) + str.charCodeAt(i);
+    h |= 0;
+  }
+  return Math.abs(h).toString(36);
+}
+
+async function getTTSCache(): Promise<Record<string, string>> {
+  try {
+    const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+    const raw = await AsyncStorage.getItem(TTS_CACHE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch { return {}; }
+}
+
+async function setTTSCache(cache: Record<string, string>): Promise<void> {
+  try {
+    const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+    const keys = Object.keys(cache);
+    if (keys.length > TTS_CACHE_MAX) {
+      // Evict oldest entries
+      const trimmed: Record<string, string> = {};
+      keys.slice(-TTS_CACHE_MAX).forEach(k => { trimmed[k] = cache[k]; });
+      await AsyncStorage.setItem(TTS_CACHE_KEY, JSON.stringify(trimmed));
+    } else {
+      await AsyncStorage.setItem(TTS_CACHE_KEY, JSON.stringify(cache));
+    }
+  } catch {}
+}
+
+async function getCachedTTSUrl(text: string, voiceId: string): Promise<string | null> {
+  const key = `${simpleHash(text)}_${voiceId.slice(0, 8)}`;
+  const cache = await getTTSCache();
+  return cache[key] || null;
+}
+
+async function cacheTTSUrl(text: string, voiceId: string, url: string): Promise<void> {
+  const key = `${simpleHash(text)}_${voiceId.slice(0, 8)}`;
+  const cache = await getTTSCache();
+  cache[key] = url;
+  await setTTSCache(cache);
+}
+
+// ─── Real-time Amplitude Waveform (expo-av metering) ─────────────────────────
+function AmplitudeWaveform({ isRecording, recording }: { isRecording: boolean; recording: Audio.Recording | null }) {
+  const BAR_COUNT = 24;
+  const barAnims = useRef(Array.from({ length: BAR_COUNT }, () => new Animated.Value(0.15))).current;
+  const idleAnimRef = useRef<Animated.CompositeAnimation | null>(null);
+  const meteringIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    if (!isRecording) {
+      // Stop metering
+      if (meteringIntervalRef.current) {
+        clearInterval(meteringIntervalRef.current);
+        meteringIntervalRef.current = null;
+      }
+      // Gentle idle pulse
+      idleAnimRef.current = Animated.loop(
+        Animated.sequence([
+          Animated.timing(barAnims[Math.floor(BAR_COUNT / 2)], { toValue: 0.35, duration: 800, useNativeDriver: false }),
+          Animated.timing(barAnims[Math.floor(BAR_COUNT / 2)], { toValue: 0.15, duration: 800, useNativeDriver: false }),
+        ])
+      );
+      idleAnimRef.current.start();
+      barAnims.forEach((a, i) => {
+        if (i !== Math.floor(BAR_COUNT / 2)) Animated.timing(a, { toValue: 0.15, duration: 300, useNativeDriver: false }).start();
+      });
+      return;
+    }
+
+    idleAnimRef.current?.stop();
+    idleAnimRef.current = null;
+
+    // Enable metering and poll every 80ms
+    if (recording) {
+      recording.setProgressUpdateInterval(80);
+      recording.setOnRecordingStatusUpdate((status) => {
+        if (!status.isRecording) return;
+        // metering is -160 (silence) to 0 (max)
+        const db = (status as any).metering ?? -60;
+        const normalized = Math.max(0, Math.min(1, (db + 60) / 60));
+        // Distribute across bars with slight randomness for visual interest
+        barAnims.forEach((a, i) => {
+          const dist = Math.abs(i - BAR_COUNT / 2) / (BAR_COUNT / 2);
+          const barVal = Math.max(0.08, normalized * (1 - dist * 0.5) + Math.random() * 0.1);
+          Animated.timing(a, { toValue: barVal, duration: 60, useNativeDriver: false }).start();
+        });
+      });
+    }
+
+    return () => {
+      if (meteringIntervalRef.current) clearInterval(meteringIntervalRef.current);
+      if (recording) {
+        try { recording.setOnRecordingStatusUpdate(null as any); } catch {}
+      }
+      idleAnimRef.current?.stop();
+    };
+  }, [isRecording, recording]);
+
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 3, height: 60 }}>
+      {barAnims.map((anim, i) => {
+        const dist = Math.abs(i - BAR_COUNT / 2) / (BAR_COUNT / 2);
+        const maxH = 48 * (1 - dist * 0.3);
+        const minH = 6;
+        return (
+          <Animated.View
+            key={i}
+            style={{
+              width: 3,
+              height: anim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [minH, maxH],
+              }),
+              borderRadius: 2,
+              backgroundColor: isRecording
+                ? `rgba(16,163,127,${0.6 + 0.4 * (1 - dist)})`
+                : 'rgba(255,255,255,0.22)',
+            }}
+          />
+        );
+      })}
+    </View>
+  );
+}
+
 // ─── Animated connecting dots ────────────────────────────────────────────────
 function ConnectingDots() {
   const anims = useRef(Array.from({ length: 7 }, () => new Animated.Value(0.3))).current;
@@ -718,7 +851,7 @@ export default function VoiceControlScreen() {
     }
   }, [supabase, user]);
 
-  // ─── SPEAK TEXT — TTS with real-time edge function + device TTS fallback ────
+  // ─── SPEAK TEXT — TTS with caching + real-time edge function + device TTS fallback ────
   const speakText = useCallback(async (text: string) => {
     if (isPausedRef.current) return;
 
@@ -743,6 +876,22 @@ export default function VoiceControlScreen() {
       speakWithDevice(text, speechRate, detectedLangRef.current, onDone);
     };
 
+    const playFromUrl = async (audioUrl: string) => {
+      console.log('[Voice] Playing audio from URL:', audioUrl.slice(0, 80));
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: audioUrl },
+        { shouldPlay: true, volume: 1.0 }
+      );
+      soundRef.current = sound;
+      sound.setOnPlaybackStatusUpdate((s) => {
+        if (s.isLoaded && s.didJustFinish) {
+          sound.unloadAsync().catch(() => {});
+          soundRef.current = null;
+          onDone();
+        }
+      });
+    };
+
     try {
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: false,
@@ -752,9 +901,20 @@ export default function VoiceControlScreen() {
         playThroughEarpieceAndroid: false,
       });
 
+      // Check cache first
+      const cachedUrl = await getCachedTTSUrl(text, selectedVoice);
+      if (cachedUrl) {
+        console.log('[Voice] TTS cache hit — playing instantly');
+        try {
+          await playFromUrl(cachedUrl);
+          return;
+        } catch (_e) {
+          console.log('[Voice] Cached URL failed, calling edge function');
+        }
+      }
+
       console.log('[Voice] Calling generate-tts edge function, voice:', selectedVoice, 'speed:', speechRate);
 
-      // Use raw fetch for TTS to avoid invoke timeout issues
       const supabaseUrl = (process.env.EXPO_PUBLIC_SUPABASE_URL || '').replace(/\/$/, '');
       const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
       let authToken = supabaseAnonKey;
@@ -814,20 +974,10 @@ export default function VoiceControlScreen() {
         return;
       }
 
-      console.log('[Voice] Playing audio from URL:', audioUrl.slice(0, 80));
+      // Cache the URL for instant replay next time
+      cacheTTSUrl(text, selectedVoice, audioUrl).catch(() => {});
 
-      const { sound } = await Audio.Sound.createAsync(
-        { uri: audioUrl },
-        { shouldPlay: true, volume: 1.0 }
-      );
-      soundRef.current = sound;
-      sound.setOnPlaybackStatusUpdate((s) => {
-        if (s.isLoaded && s.didJustFinish) {
-          sound.unloadAsync().catch(() => {});
-          soundRef.current = null;
-          onDone();
-        }
-      });
+      await playFromUrl(audioUrl);
     } catch (e: any) {
       console.log('[Voice] speakText error:', e?.message);
       setIsAISpeaking(false);
@@ -1231,7 +1381,11 @@ export default function VoiceControlScreen() {
               </ScrollView>
             ) : (
               <View style={{ flex: 1, position: 'relative' }}>
-                <GlowingOrb isAISpeaking={isAISpeaking} isUserSpeaking={isUserSpeaking} />
+                {/* Real-time amplitude waveform replaces static ConnectingDots in active phase */}
+                <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 32 }}>
+                  <GlowingOrb isAISpeaking={isAISpeaking} isUserSpeaking={isUserSpeaking} />
+                  <AmplitudeWaveform isRecording={isUserSpeaking} recording={recordingRef.current} />
+                </View>
                 {currentAIText ? (
                   <View style={styles.spokenTextWrap} pointerEvents="none">
                     <Text style={styles.spokenText} numberOfLines={4}>{currentAIText}</Text>

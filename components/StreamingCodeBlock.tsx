@@ -19,61 +19,65 @@ import { WebView } from 'react-native-webview';
 const { width: SCREEN_W } = Dimensions.get('window');
 
 // ── Dark theme token colors (VS Code Dark+ inspired) ──────────────────────────
-const T = {
+const DARK_T = {
   bg:       '#1e1e1e',
   header:   '#252526',
   border:   '#3c3c3c',
-  // syntax
-  keyword:  '#569CD6',   // blue  — const, let, return, if
-  control:  '#C586C0',   // purple — function, class, import
-  string:   '#CE9178',   // peach — "string"
-  template: '#CE9178',   // template literal
-  comment:  '#6A9955',   // green — // comment
-  number:   '#B5CEA8',   // light green — 42, 3.14
-  type:     '#4EC9B0',   // teal — ClassName, Type
-  func:     '#DCDCAA',   // yellow — functionName()
-  operator: '#D4D4D4',   // white — = + - * /
-  attr:     '#9CDCFE',   // light blue — attribute
-  tag:      '#4EC9B0',   // teal — <html-tag>
-  tagAttr:  '#9CDCFE',   // <tag attr="">
-  attrVal:  '#CE9178',   // attribute="value"
-  special:  '#FF8C00',   // placeholder highlight
-  lineNum:  '#858585',   // gutter numbers
-  plain:    '#D4D4D4',   // default
+  keyword:  '#569CD6',
+  control:  '#C586C0',
+  string:   '#CE9178',
+  template: '#CE9178',
+  comment:  '#6A9955',
+  number:   '#B5CEA8',
+  type:     '#4EC9B0',
+  func:     '#DCDCAA',
+  operator: '#D4D4D4',
+  attr:     '#9CDCFE',
+  tag:      '#4EC9B0',
+  tagAttr:  '#9CDCFE',
+  attrVal:  '#CE9178',
+  special:  '#FF8C00',
+  lineNum:  '#858585',
+  plain:    '#D4D4D4',
   phBg:     'rgba(255,140,0,0.15)',
   cursor:   '#AEAFAD',
 };
 
-// ── Light theme token colors (GitHub Light / VS Code Light+) ───────────────
-const TL = {
-  bg:       '#FFFFFF',
-  header:   '#F6F8FA',
-  border:   '#D0D7DE',
-  keyword:  '#CF222E',   // red — const, let, if
-  control:  '#8250DF',   // purple — function, class, import
-  string:   '#0A3069',   // dark blue — "string"
-  template: '#0A3069',
-  comment:  '#6E7781',   // gray — // comment
-  number:   '#0550AE',   // blue — numbers
-  type:     '#953800',   // orange-brown — TypeName
-  func:     '#8250DF',   // purple — functionName()
-  operator: '#24292F',   // near-black
-  attr:     '#0550AE',   // blue — attributes
-  tag:      '#116329',   // green — <html-tag>
-  tagAttr:  '#0550AE',
-  attrVal:  '#0A3069',
-  special:  '#E36209',   // orange — placeholder
-  lineNum:  '#8C959F',
-  plain:    '#24292F',   // near-black default
-  phBg:     'rgba(227,98,9,0.10)',
-  cursor:   '#24292F',
+// ── Light theme token colors (GitHub Light / VS Code Light) ──────────────────
+const LIGHT_T = {
+  bg:       '#ffffff',
+  header:   '#f6f8fa',
+  border:   '#d0d7de',
+  keyword:  '#0550ae',   // blue
+  control:  '#8250df',   // purple
+  string:   '#0a3069',   // dark blue
+  template: '#0a3069',
+  comment:  '#6e7781',   // gray
+  number:   '#0550ae',
+  type:     '#116329',   // green
+  func:     '#8250df',
+  operator: '#24292f',
+  attr:     '#0550ae',
+  tag:      '#116329',
+  tagAttr:  '#0550ae',
+  attrVal:  '#0a3069',
+  special:  '#cf222e',   // red for placeholders
+  lineNum:  '#8c959f',
+  plain:    '#24292f',
+  phBg:     'rgba(207,34,46,0.08)',
+  cursor:   '#586069',
 };
+
+// Select theme based on isDark prop
+function getTheme(isDark: boolean) {
+  return isDark ? DARK_T : LIGHT_T;
+}
 
 // ── Language registry ─────────────────────────────────────────────────────────
 interface LangInfo {
   label: string;
-  dot: string;    // badge color
-  icon?: string;  // remote png url for the icon badge
+  dot: string;
+  icon?: string;
   runnable: boolean;
   previewable: boolean;
 }
@@ -127,13 +131,11 @@ function getLang(raw: string): LangInfo & { key: string } {
   return { ...info, key };
 }
 
-// ── Syntax token type ─────────────────────────────────────────────────────────
 type Token = { text: string; color: string; bold?: boolean; isPlaceholder?: boolean };
 
-// ── Placeholder detection ─────────────────────────────────────────────────────
 const PH_RE = /\b(YOUR_API_KEY|YOUR_SECRET_KEY|YOUR_PUBLIC_KEY|API_KEY_HERE|SECRET_KEY_HERE|YOUR_TOKEN|YOUR_ACCESS_TOKEN|INSERT_API_KEY|PUT_YOUR_KEY_HERE|your_api_key|your_secret|ADD_YOUR_KEY)\b/g;
 
-function injectPlaceholders(tokens: Token[]): Token[] {
+function injectPlaceholders(tokens: Token[], T: typeof DARK_T): Token[] {
   return tokens.flatMap(tok => {
     if (tok.isPlaceholder) return [tok];
     const parts: Token[] = [];
@@ -150,17 +152,15 @@ function injectPlaceholders(tokens: Token[]): Token[] {
   });
 }
 
-// ── Tokenizer engine ──────────────────────────────────────────────────────────
 type TokenRule = { re: RegExp; color: string; group?: number };
 
 function applyRules(line: string, rules: TokenRule[]): Token[] {
-  // Build a combined regex that alternates all patterns
   const combined = new RegExp(rules.map((r, i) => `(?<g${i}>${r.re.source})`).join('|'), 'g');
   const tokens: Token[] = [];
   let last = 0;
   let m: RegExpExecArray | null;
   while ((m = combined.exec(line)) !== null) {
-    if (m.index > last) tokens.push({ text: line.slice(last, m.index), color: T.plain });
+    if (m.index > last) tokens.push({ text: line.slice(last, m.index), color: '' });
     for (let i = 0; i < rules.length; i++) {
       const key = `g${i}`;
       if (m.groups && m.groups[key] !== undefined && m.groups[key] !== null && m[0] !== undefined) {
@@ -170,12 +170,11 @@ function applyRules(line: string, rules: TokenRule[]): Token[] {
     }
     last = combined.lastIndex;
   }
-  if (last < line.length) tokens.push({ text: line.slice(last), color: T.plain });
+  if (last < line.length) tokens.push({ text: line.slice(last), color: '' });
   return tokens;
 }
 
-// ── Per-language tokenizers ───────────────────────────────────────────────────
-function tokenizeHTML(line: string): Token[] {
+function tokenizeHTML(line: string, T: typeof DARK_T): Token[] {
   const tokens: Token[] = [];
   let last = 0;
   const re = /(<!--[\s\S]*?-->)|(<\/?)([a-zA-Z][a-zA-Z0-9-]*)((?:\s+[\w:.-]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s/>]*))?)*)\s*(\/?>)/g;
@@ -208,9 +207,9 @@ function tokenizeHTML(line: string): Token[] {
   return tokens;
 }
 
-function tokenizeJS(line: string): Token[] {
+function tokenizeJS(line: string, T: typeof DARK_T): Token[] {
   try {
-    return applyRules(line, [
+    const raw = applyRules(line, [
       { re: /\/\/[^\n]*/, color: T.comment },
       { re: /\/\*[\s\S]*?\*\//, color: T.comment },
       { re: /`[^`\\]*(?:\\.[^`\\]*)*`/, color: T.template },
@@ -225,12 +224,13 @@ function tokenizeJS(line: string): Token[] {
       { re: /-?\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b/, color: T.number },
       { re: /(?:===|!==|==|!=|>=|<=|=>|&&|\|\||[+\-*/%&|^~!<>=?:])/, color: T.operator },
     ]);
+    return raw.map(t => ({ ...t, color: t.color || T.plain }));
   } catch { return [{ text: line, color: T.plain }]; }
 }
 
-function tokenizeCSS(line: string): Token[] {
+function tokenizeCSS(line: string, T: typeof DARK_T): Token[] {
   try {
-    return applyRules(line, [
+    const raw = applyRules(line, [
       { re: /\/\*[\s\S]*?\*\//, color: T.comment },
       { re: /"[^"]*"|'[^']*'/, color: T.string },
       { re: /#[a-fA-F0-9]{3,8}\b/, color: T.string },
@@ -242,12 +242,13 @@ function tokenizeCSS(line: string): Token[] {
       { re: /[\w-]+\s*(?=:)/, color: T.attr },
       { re: /[{}:;,>~+*]/, color: T.operator },
     ]);
+    return raw.map(t => ({ ...t, color: t.color || T.plain }));
   } catch { return [{ text: line, color: T.plain }]; }
 }
 
-function tokenizePython(line: string): Token[] {
+function tokenizePython(line: string, T: typeof DARK_T): Token[] {
   try {
-    return applyRules(line, [
+    const raw = applyRules(line, [
       { re: /#[^\n]*/, color: T.comment },
       { re: /"""[\s\S]*?"""|'''[\s\S]*?'''/, color: T.string },
       { re: /"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/, color: T.string },
@@ -260,24 +261,26 @@ function tokenizePython(line: string): Token[] {
       { re: /-?\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b/, color: T.number },
       { re: /[=+\-*/%&|^~<>!]+/, color: T.operator },
     ]);
+    return raw.map(t => ({ ...t, color: t.color || T.plain }));
   } catch { return [{ text: line, color: T.plain }]; }
 }
 
-function tokenizeJSON(line: string): Token[] {
+function tokenizeJSON(line: string, T: typeof DARK_T): Token[] {
   try {
-    return applyRules(line, [
+    const raw = applyRules(line, [
       { re: /"(?:[^"\\]|\\.)*"\s*:/, color: T.attr },
       { re: /"(?:[^"\\]|\\.)*"/, color: T.string },
       { re: /\b(?:true|false|null)\b/, color: T.keyword },
       { re: /-?\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b/, color: T.number },
       { re: /[{}[\]:,]/, color: T.operator },
     ]);
+    return raw.map(t => ({ ...t, color: t.color || T.plain }));
   } catch { return [{ text: line, color: T.plain }]; }
 }
 
-function tokenizeBash(line: string): Token[] {
+function tokenizeBash(line: string, T: typeof DARK_T): Token[] {
   try {
-    return applyRules(line, [
+    const raw = applyRules(line, [
       { re: /#[^\n]*/, color: T.comment },
       { re: /"(?:[^"\\]|\\.)*"|'[^']*'/, color: T.string },
       { re: /\$\{?[\w@#*!?-]+\}?/, color: T.attr },
@@ -287,12 +290,13 @@ function tokenizeBash(line: string): Token[] {
       { re: /\d+/, color: T.number },
       { re: /[|&;<>(){}!]/, color: T.operator },
     ]);
+    return raw.map(t => ({ ...t, color: t.color || T.plain }));
   } catch { return [{ text: line, color: T.plain }]; }
 }
 
-function tokenizeSQL(line: string): Token[] {
+function tokenizeSQL(line: string, T: typeof DARK_T): Token[] {
   try {
-    return applyRules(line, [
+    const raw = applyRules(line, [
       { re: /--[^\n]*/, color: T.comment },
       { re: /'(?:[^'\\]|\\.)*'/, color: T.string },
       { re: /\b(?:SELECT|FROM|WHERE|INSERT|INTO|UPDATE|DELETE|CREATE|DROP|ALTER|TABLE|INDEX|DATABASE|SCHEMA|VIEW|JOIN|LEFT|RIGHT|INNER|OUTER|FULL|CROSS|ON|AS|AND|OR|NOT|IN|IS|NULL|ORDER|BY|GROUP|HAVING|LIMIT|OFFSET|DISTINCT|UNION|ALL|EXISTS|SET|VALUES|PRIMARY|KEY|FOREIGN|REFERENCES|CASCADE|DEFAULT|CONSTRAINT|UNIQUE|CHECK|TRIGGER|PROCEDURE|FUNCTION|BEGIN|COMMIT|ROLLBACK|TRANSACTION)\b/i, color: T.keyword },
@@ -301,32 +305,29 @@ function tokenizeSQL(line: string): Token[] {
       { re: /\b\d+(?:\.\d+)?\b/, color: T.number },
       { re: /[=<>!+\-*/%(),;]/, color: T.operator },
     ]);
+    return raw.map(t => ({ ...t, color: t.color || T.plain }));
   } catch { return [{ text: line, color: T.plain }]; }
 }
 
-function tokenizePlain(line: string): Token[] {
-  return [{ text: line, color: T.plain }];
-}
-
-function tokenizeLine(line: string, langKey: string): Token[] {
+function tokenizeLine(line: string, langKey: string, T: typeof DARK_T): Token[] {
   let raw: Token[];
   switch (langKey) {
-    case 'html': case 'htm': case 'xml':   raw = tokenizeHTML(line);   break;
+    case 'html': case 'htm': case 'xml':   raw = tokenizeHTML(line, T);   break;
     case 'js':   case 'ts':  case 'jsx':
     case 'tsx':  case 'javascript':
-    case 'typescript':                     raw = tokenizeJS(line);     break;
-    case 'css':  case 'scss':              raw = tokenizeCSS(line);    break;
-    case 'python': case 'py':             raw = tokenizePython(line); break;
-    case 'json':                           raw = tokenizeJSON(line);   break;
-    case 'bash': case 'sh': case 'shell': raw = tokenizeBash(line);   break;
-    case 'sql':                            raw = tokenizeSQL(line);    break;
-    default:                               raw = tokenizePlain(line);  break;
+    case 'typescript':                     raw = tokenizeJS(line, T);     break;
+    case 'css':  case 'scss':              raw = tokenizeCSS(line, T);    break;
+    case 'python': case 'py':             raw = tokenizePython(line, T); break;
+    case 'json':                           raw = tokenizeJSON(line, T);   break;
+    case 'bash': case 'sh': case 'shell': raw = tokenizeBash(line, T);   break;
+    case 'sql':                            raw = tokenizeSQL(line, T);    break;
+    default:                               raw = [{ text: line, color: T.plain }]; break;
   }
-  return injectPlaceholders(raw);
+  return injectPlaceholders(raw, T);
 }
 
 // ── Blinking cursor ───────────────────────────────────────────────────────────
-const BlinkCursor = memo(function BlinkCursor() {
+const BlinkCursor = memo(function BlinkCursor({ color }: { color: string }) {
   const op = useRef(new Animated.Value(1)).current;
   useEffect(() => {
     const anim = Animated.loop(Animated.sequence([
@@ -336,7 +337,7 @@ const BlinkCursor = memo(function BlinkCursor() {
     anim.start();
     return () => anim.stop();
   }, []);
-  return <Animated.View style={{ opacity: op, width: 2, height: 15, backgroundColor: T.cursor, marginLeft: 2, borderRadius: 1 }} />;
+  return <Animated.View style={{ opacity: op, width: 2, height: 15, backgroundColor: color, marginLeft: 2, borderRadius: 1 }} />;
 });
 
 // ── Language dot badge ────────────────────────────────────────────────────────
@@ -366,7 +367,7 @@ const LangDot = memo(function LangDot({ langKey }: { langKey: string }) {
 });
 
 // ── Copy button ───────────────────────────────────────────────────────────────
-const CopyBtn = memo(function CopyBtn({ code }: { code: string }) {
+const CopyBtn = memo(function CopyBtn({ code, isDark }: { code: string; isDark: boolean }) {
   const [ok, setOk] = useState(false);
   const onPress = useCallback(() => {
     try { Clipboard.setString(code); } catch {}
@@ -375,8 +376,7 @@ const CopyBtn = memo(function CopyBtn({ code }: { code: string }) {
   }, [code]);
   return (
     <TouchableOpacity onPress={onPress} style={st.actionBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} activeOpacity={0.7}>
-      {/* SVG-equivalent via Ionicons — cross-platform, no native-svg dep needed */}
-      <Ionicons name={ok ? 'checkmark' : 'copy-outline'} size={15} color={ok ? '#98C379' : 'rgba(200,200,200,0.7)'} />
+      <Ionicons name={ok ? 'checkmark' : 'copy-outline'} size={15} color={ok ? '#98C379' : (isDark ? 'rgba(200,200,200,0.7)' : 'rgba(80,80,80,0.7)')} />
     </TouchableOpacity>
   );
 });
@@ -391,7 +391,6 @@ function buildHTML(code: string, langKey: string): string {
     return `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>*{box-sizing:border-box}body{margin:16px;font-family:system-ui,sans-serif}${code}</style></head><body><h1>CSS Preview</h1><p>Your styles are applied to this page.</p><button class="btn">Sample Button</button><div class="card">Sample Card</div></body></html>`;
   }
   if (['js', 'jsx', 'ts', 'tsx', 'javascript', 'typescript'].includes(langKey)) {
-    // Strip TS types for safe eval
     const stripped = code
       .replace(/:\s*(string|number|boolean|any|void|never|unknown|object|null|undefined|[A-Z][A-Za-z<>[\], ]*?)(\[\])?\s*(?=[,)=;{]|=>)/g, '')
       .replace(/interface\s+\w+\s*\{[^}]*\}/g, '')
@@ -425,11 +424,10 @@ try{${stripped}}catch(e){put('Error: '+e.message,'e');}
   return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>body{margin:16px;font-family:'Courier New',monospace;background:#1e1e1e;color:#d4d4d4;font-size:13px;white-space:pre-wrap}</style></head><body>${esc}</body></html>`;
 }
 
-// ── Code runner / preview modal ───────────────────────────────────────────────
+// ── Modals ────────────────────────────────────────────────────────────────────
 const RunnerModal = memo(function RunnerModal({
-  visible, code, langKey, isDark, onClose,
-}: { visible: boolean; code: string; langKey: string; isDark?: boolean; onClose: () => void }) {
-  const C = isDark !== false ? T : TL;
+  visible, code, langKey, onClose, isDark,
+}: { visible: boolean; code: string; langKey: string; onClose: () => void; isDark: boolean }) {
   const info = getLang(langKey);
   const [tab, setTab] = useState<'preview' | 'code'>('preview');
   const [wvLoaded, setWvLoaded] = useState(false);
@@ -437,133 +435,96 @@ const RunnerModal = memo(function RunnerModal({
   const isTerminal = ['bash', 'sh', 'shell'].includes(langKey);
   const isPython = ['python', 'py'].includes(langKey);
   const tabLabel = isTerminal ? 'Terminal' : isPython ? 'Output' : info.previewable ? 'Preview' : 'Run';
-  const dark = isDark !== false;
+  const T = getTheme(isDark);
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
-      <SafeAreaView style={[st.modalRoot, { backgroundColor: C.bg }]}>
-        {/* Modal Header */}
-        <View style={[st.modalHdr, { backgroundColor: C.header, borderBottomColor: C.border }]}>
+      <SafeAreaView style={[st.modalRoot, { backgroundColor: T.bg }]}>
+        <View style={[st.modalHdr, { backgroundColor: T.header, borderBottomColor: T.border }]}>
           <TouchableOpacity onPress={onClose} style={st.modalClose} hitSlop={12}>
-            <Ionicons name="chevron-down" size={22} color={dark ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.7)'} />
+            <Ionicons name="chevron-down" size={22} color={isDark ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.6)'} />
           </TouchableOpacity>
           <View style={st.modalTitle}>
             <LangDot langKey={langKey} />
             <Text style={[st.modalLangText, { color: info.dot }]}>{info.label}</Text>
           </View>
-          <CopyBtn code={code} />
+          <CopyBtn code={code} isDark={isDark} />
         </View>
-        {/* Tab bar */}
-        <View style={[st.modalTabBar, { backgroundColor: C.header, borderBottomColor: C.border }]}>
-          <TouchableOpacity
-            style={[st.modalTab, tab === 'preview' && st.modalTabActive]}
-            onPress={() => setTab('preview')}
-          >
-            <Ionicons
-              name={isTerminal ? 'terminal-outline' : isPython ? 'code-working-outline' : 'globe-outline'}
-              size={14}
-              color={tab === 'preview' ? (dark ? '#fff' : '#000') : (dark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)')}
-            />
-            <Text style={[st.modalTabText, tab === 'preview' && { color: dark ? '#fff' : '#000' }]}>{tabLabel}</Text>
+        <View style={[st.modalTabBar, { backgroundColor: T.header, borderBottomColor: T.border }]}>
+          <TouchableOpacity style={[st.modalTab, tab === 'preview' && { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)' }]} onPress={() => setTab('preview')}>
+            <Ionicons name={isTerminal ? 'terminal-outline' : isPython ? 'code-working-outline' : 'globe-outline'} size={14} color={tab === 'preview' ? (isDark ? '#fff' : '#000') : T.lineNum} />
+            <Text style={[st.modalTabText, { color: tab === 'preview' ? (isDark ? '#fff' : '#000') : T.lineNum }]}>{tabLabel}</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={[st.modalTab, tab === 'code' && st.modalTabActive]}
-            onPress={() => setTab('code')}
-          >
-            <Ionicons name="code-slash" size={14} color={tab === 'code' ? (dark ? '#fff' : '#000') : (dark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)')} />
-            <Text style={[st.modalTabText, tab === 'code' && { color: dark ? '#fff' : '#000' }]}>Code</Text>
+          <TouchableOpacity style={[st.modalTab, tab === 'code' && { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)' }]} onPress={() => setTab('code')}>
+            <Ionicons name="code-slash" size={14} color={tab === 'code' ? (isDark ? '#fff' : '#000') : T.lineNum} />
+            <Text style={[st.modalTabText, { color: tab === 'code' ? (isDark ? '#fff' : '#000') : T.lineNum }]}>Code</Text>
           </TouchableOpacity>
         </View>
-        {/* Content */}
         {tab === 'preview' ? (
           <View style={{ flex: 1 }}>
             {!wvLoaded && (
-              <View style={st.wvLoading}>
-                <Ionicons name="globe-outline" size={32} color="rgba(255,255,255,0.3)" />
-                <Text style={st.wvLoadingText}>Loading...</Text>
+              <View style={[st.wvLoading, { backgroundColor: T.bg }]}>
+                <Ionicons name="globe-outline" size={32} color={T.lineNum} />
+                <Text style={[st.wvLoadingText, { color: T.lineNum }]}>Loading...</Text>
               </View>
             )}
-            <WebView
-              source={{ html }}
-              style={{ flex: 1 }}
-              javaScriptEnabled
-              domStorageEnabled
-              originWhitelist={['*']}
-              onLoad={() => setWvLoaded(true)}
-            />
+            <WebView source={{ html }} style={{ flex: 1 }} javaScriptEnabled domStorageEnabled originWhitelist={['*']} onLoad={() => setWvLoaded(true)} />
           </View>
         ) : (
-          <FullCodeView code={code} langKey={langKey} isDark={dark} />
+          <FullCodeView code={code} langKey={langKey} isDark={isDark} />
         )}
       </SafeAreaView>
     </Modal>
   );
 });
 
-// ── Fullscreen code viewer modal ──────────────────────────────────────────────
 const FullscreenModal = memo(function FullscreenModal({
-  visible, code, langKey, isDark, onClose,
-}: { visible: boolean; code: string; langKey: string; isDark?: boolean; onClose: () => void }) {
-  const C = isDark !== false ? T : TL;
-  const dark = isDark !== false;
+  visible, code, langKey, onClose, isDark,
+}: { visible: boolean; code: string; langKey: string; onClose: () => void; isDark: boolean }) {
   const info = getLang(langKey);
+  const T = getTheme(isDark);
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
-      <SafeAreaView style={[st.modalRoot, { backgroundColor: C.bg }]}>
-        <View style={[st.modalHdr, { backgroundColor: C.header, borderBottomColor: C.border }]}>
+      <SafeAreaView style={[st.modalRoot, { backgroundColor: T.bg }]}>
+        <View style={[st.modalHdr, { backgroundColor: T.header, borderBottomColor: T.border }]}>
           <TouchableOpacity onPress={onClose} style={st.modalClose} hitSlop={12}>
-            <Ionicons name="chevron-down" size={22} color={dark ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.7)'} />
+            <Ionicons name="chevron-down" size={22} color={isDark ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.6)'} />
           </TouchableOpacity>
           <View style={st.modalTitle}>
             <LangDot langKey={langKey} />
             <Text style={[st.modalLangText, { color: info.dot }]}>{info.label}</Text>
           </View>
-          <CopyBtn code={code} />
+          <CopyBtn code={code} isDark={isDark} />
         </View>
-        <FullCodeView code={code} langKey={langKey} isDark={dark} />
+        <FullCodeView code={code} langKey={langKey} isDark={isDark} />
       </SafeAreaView>
     </Modal>
   );
 });
 
-const FullCodeView = memo(function FullCodeView({ code, langKey, isDark = true }: { code: string; langKey: string; isDark?: boolean }) {
-  const C = isDark ? T : TL;
+const FullCodeView = memo(function FullCodeView({ code, langKey, isDark }: { code: string; langKey: string; isDark: boolean }) {
   const lines = code.split('\n');
+  const T = getTheme(isDark);
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: C.bg }} nestedScrollEnabled showsVerticalScrollIndicator indicatorStyle={isDark ? 'white' : 'black'}>
-      <ScrollView horizontal showsHorizontalScrollIndicator indicatorStyle={isDark ? 'white' : 'black'} contentContainerStyle={st.codeRow}>
-        <View style={[st.gutterCol, { borderRightColor: C.border }]}>
+    <ScrollView style={{ flex: 1, backgroundColor: T.bg }} nestedScrollEnabled showsVerticalScrollIndicator>
+      <ScrollView horizontal showsHorizontalScrollIndicator contentContainerStyle={[st.codeRow]}>
+        <View style={[st.gutterCol, { borderRightColor: T.border }]}>
           {lines.map((_, i) => (
-            <Text key={i} style={[st.gutterNum, { color: C.lineNum }]}>{i + 1}</Text>
+            <Text key={i} style={[st.gutterNum, { color: T.lineNum }]}>{i + 1}</Text>
           ))}
         </View>
         <View style={st.linesCol}>
           {lines.map((line, i) => (
             <View key={i} style={st.codeLine}>
-              {tokenizeLine(line, langKey).map((tok, j) => {
-                const color = isDark ? tok.color : (() => {
-                  if (tok.color === T.keyword)  return TL.keyword;
-                  if (tok.color === T.control)  return TL.control;
-                  if (tok.color === T.string || tok.color === T.template) return TL.string;
-                  if (tok.color === T.comment)  return TL.comment;
-                  if (tok.color === T.number)   return TL.number;
-                  if (tok.color === T.type)     return TL.type;
-                  if (tok.color === T.func)     return TL.func;
-                  if (tok.color === T.operator) return TL.operator;
-                  if (tok.color === T.attr || tok.color === T.tagAttr) return TL.attr;
-                  if (tok.color === T.tag)      return TL.tag;
-                  if (tok.color === T.attrVal)  return TL.attrVal;
-                  if (tok.color === T.special)  return TL.special;
-                  return TL.plain;
-                })();
-                return tok.isPlaceholder ? (
-                  <View key={j} style={{ backgroundColor: C.phBg, borderRadius: 3, paddingHorizontal: 2 }}>
-                    <Text style={[st.codeToken, { color, fontWeight: '700' }]}>{tok.text}</Text>
+              {tokenizeLine(line, langKey, T).map((tok, j) => (
+                tok.isPlaceholder ? (
+                  <View key={j} style={{ backgroundColor: T.phBg, borderRadius: 3, paddingHorizontal: 2 }}>
+                    <Text style={[st.codeToken, { color: tok.color, fontWeight: '700' }]}>{tok.text}</Text>
                   </View>
                 ) : (
-                  <Text key={j} style={[st.codeToken, { color, fontWeight: tok.bold ? '700' : '400' }]}>{tok.text}</Text>
-                );
-              })}
+                  <Text key={j} style={[st.codeToken, { color: tok.color || T.plain, fontWeight: tok.bold ? '700' : '400' }]}>{tok.text}</Text>
+                )
+              ))}
             </View>
           ))}
         </View>
@@ -572,7 +533,6 @@ const FullCodeView = memo(function FullCodeView({ code, langKey, isDark = true }
   );
 });
 
-// ── Inline preview (inside chat bubble) ──────────────────────────────────────
 const InlinePreview = memo(function InlinePreview({ code, langKey }: { code: string; langKey: string }) {
   const [loaded, setLoaded] = useState(false);
   return (
@@ -583,14 +543,7 @@ const InlinePreview = memo(function InlinePreview({ code, langKey }: { code: str
           <Text style={{ color: '#bbb', fontSize: 12, marginTop: 6 }}>Loading preview...</Text>
         </View>
       )}
-      <WebView
-        source={{ html: buildHTML(code, langKey) }}
-        style={{ flex: 1 }}
-        javaScriptEnabled
-        domStorageEnabled
-        originWhitelist={['*']}
-        onLoad={() => setLoaded(true)}
-      />
+      <WebView source={{ html: buildHTML(code, langKey) }} style={{ flex: 1 }} javaScriptEnabled domStorageEnabled originWhitelist={['*']} onLoad={() => setLoaded(true)} />
     </View>
   );
 });
@@ -600,9 +553,8 @@ interface CodeBlockProps {
   code: string;
   language?: string;
   fileName?: string;
-  /** If true, code will animate in character by character */
   streaming?: boolean;
-  /** Pass false to use light mode palette (GitHub Light). Defaults to true (dark mode). */
+  speed?: number;
   isDark?: boolean;
 }
 
@@ -615,8 +567,7 @@ export const CodeBlock = memo(function CodeBlock({
   streaming = false,
   isDark = true,
 }: CodeBlockProps) {
-  // Pick palette based on isDark
-  const C = isDark ? T : TL;
+  const T = getTheme(isDark);
   const langKey = (language || 'code').toLowerCase().trim();
   const info = getLang(langKey);
 
@@ -635,7 +586,6 @@ export const CodeBlock = memo(function CodeBlock({
       return;
     }
     if (charIdxRef.current >= code.length) {
-      // All chars already shown — sync in case more arrived
       setDisplayedCode(code);
       return;
     }
@@ -653,7 +603,6 @@ export const CodeBlock = memo(function CodeBlock({
 
   const isStreaming = streaming && displayedCode.length < code.length;
 
-  // ── Collapse / expand ──
   const [expanded, setExpanded] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [runnerOpen, setRunnerOpen] = useState(false);
@@ -669,18 +618,18 @@ export const CodeBlock = memo(function CodeBlock({
   const hasPH = PH_RE.test(code);
   const showRunBtn = info.runnable && !isStreaming;
   const showPreviewInline = info.previewable && !isStreaming;
+  const runLabel = ['bash','sh','shell'].includes(langKey) ? 'Terminal' : ['python','py'].includes(langKey) ? 'Output' : 'Preview';
 
-  const runLabel = ['bash','sh','shell'].includes(langKey) ? 'Terminal'
-    : ['python','py'].includes(langKey) ? 'Output' : 'Preview';
+  // Derived style tokens
+  const headerBg = T.header;
+  const borderC = T.border;
+  const textSecondary = isDark ? 'rgba(200,200,200,0.55)' : 'rgba(60,60,60,0.55)';
 
   return (
     <>
-      <View style={[
-        cb.container,
-        { backgroundColor: C.bg, borderColor: C.border },
-      ]}>
-        {/* ── Header ── */}
-        <View style={[cb.header, { backgroundColor: C.header, borderBottomColor: C.border }]}>
+      <View style={[cb.container, { backgroundColor: T.bg, borderColor: T.border, shadowColor: isDark ? '#000' : '#aaa' }]}>
+        {/* Header */}
+        <View style={[cb.header, { backgroundColor: headerBg, borderBottomColor: borderC }]}>
           <View style={cb.headerLeft}>
             <LangDot langKey={langKey} />
             <Text style={[cb.langLabel, { color: info.dot }]}>{fileName ? `${info.label} · ${fileName}` : info.label}</Text>
@@ -691,64 +640,45 @@ export const CodeBlock = memo(function CodeBlock({
             )}
           </View>
           <View style={cb.actions}>
-            {/* Expand SVG via Ionicons */}
-            <TouchableOpacity
-              style={cb.actionBtn}
-              onPress={() => setFullscreen(true)}
-              hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="expand-outline" size={15} color={isDark ? 'rgba(200,200,200,0.6)' : 'rgba(0,0,0,0.45)'} />
+            <TouchableOpacity style={cb.actionBtn} onPress={() => setFullscreen(true)} hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }} activeOpacity={0.7}>
+              <Ionicons name="expand-outline" size={15} color={textSecondary} />
             </TouchableOpacity>
-            {/* Run/Preview button */}
             {showRunBtn && (
-              <TouchableOpacity
-                style={[cb.actionBtn, { backgroundColor: 'rgba(48,209,88,0.12)', marginHorizontal: 2 }]}
-                onPress={() => setRunnerOpen(true)}
-                hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
-                activeOpacity={0.7}
-              >
+              <TouchableOpacity style={[cb.actionBtn, { backgroundColor: 'rgba(48,209,88,0.12)', marginHorizontal: 2 }]} onPress={() => setRunnerOpen(true)} hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }} activeOpacity={0.7}>
                 <Ionicons name="play-circle-outline" size={15} color="#30D158" />
               </TouchableOpacity>
             )}
-            {/* Copy button */}
-            <CopyBtn code={code} />
+            <CopyBtn code={code} isDark={isDark} />
           </View>
         </View>
 
-        {/* ── Preview/Code tabs (for runnable langs) ── */}
+        {/* Tabs */}
         {showPreviewInline && (
-          <View style={[cb.tabBar, { backgroundColor: C.header, borderBottomColor: C.border }]}>
-            <TouchableOpacity
-              style={[cb.tabBtn, inlineTab === 'code' && cb.tabBtnActive]}
-              onPress={() => setInlineTab('code')}
-            >
-              <Ionicons name="code-slash" size={12} color={inlineTab === 'code' ? (isDark ? '#fff' : '#000') : (isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)')} />
-              <Text style={[cb.tabText, inlineTab === 'code' && { color: isDark ? '#fff' : '#000' }]}>Code</Text>
+          <View style={[cb.tabBar, { backgroundColor: headerBg, borderBottomColor: borderC }]}>
+            <TouchableOpacity style={[cb.tabBtn, inlineTab === 'code' && { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)' }]} onPress={() => setInlineTab('code')}>
+              <Ionicons name="code-slash" size={12} color={inlineTab === 'code' ? (isDark ? '#fff' : '#000') : T.lineNum} />
+              <Text style={[cb.tabText, { color: inlineTab === 'code' ? (isDark ? '#fff' : '#000') : T.lineNum }]}>Code</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={[cb.tabBtn, inlineTab === 'preview' && cb.tabBtnActive]}
-              onPress={() => setInlineTab('preview')}
-            >
-              <Ionicons name="globe-outline" size={12} color={inlineTab === 'preview' ? (isDark ? '#fff' : '#000') : (isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)')} />
-              <Text style={[cb.tabText, inlineTab === 'preview' && { color: isDark ? '#fff' : '#000' }]}>{runLabel}</Text>
+            <TouchableOpacity style={[cb.tabBtn, inlineTab === 'preview' && { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)' }]} onPress={() => setInlineTab('preview')}>
+              <Ionicons name="globe-outline" size={12} color={inlineTab === 'preview' ? (isDark ? '#fff' : '#000') : T.lineNum} />
+              <Text style={[cb.tabText, { color: inlineTab === 'preview' ? (isDark ? '#fff' : '#000') : T.lineNum }]}>{runLabel}</Text>
             </TouchableOpacity>
           </View>
         )}
 
-        {/* ── Placeholder warning ── */}
+        {/* Placeholder warning */}
         {hasPH && (
-          <View style={cb.phBanner}>
+          <View style={[cb.phBanner, { backgroundColor: isDark ? 'rgba(255,140,0,0.07)' : 'rgba(255,140,0,0.06)', borderBottomColor: 'rgba(255,140,0,0.2)' }]}>
             <Ionicons name="warning-outline" size={11} color={T.special} />
-            <Text style={cb.phBannerText}>Replace highlighted placeholders before using</Text>
+            <Text style={[cb.phBannerText, { color: T.special }]}>Replace highlighted placeholders before using</Text>
           </View>
         )}
 
-        {/* ── Code area or Preview ── */}
+        {/* Code or Preview */}
         {showPreviewInline && inlineTab === 'preview' ? (
           <InlinePreview code={code} langKey={langKey} />
         ) : (
-          <View style={[cb.scrollOuter, { backgroundColor: C.bg }]}>
+          <View style={cb.scrollOuter}>
             <ScrollView
               ref={vertRef}
               style={{ flex: 1 }}
@@ -760,55 +690,28 @@ export const CodeBlock = memo(function CodeBlock({
                 setScrollAtBottom(contentSize.height - layoutMeasurement.height - contentOffset.y < 40);
               }}
             >
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator
-                indicatorStyle="white"
-                contentContainerStyle={cb.codeRow}
-              >
-                {/* Gutter */}
-                <View style={[cb.gutter, { borderRightColor: C.border }]}>
+              <ScrollView horizontal showsHorizontalScrollIndicator indicatorStyle={isDark ? 'white' : 'black'} contentContainerStyle={cb.codeRow}>
+                <View style={[cb.gutter, { borderRightColor: T.border }]}>
                   {displayLines.map((_, i) => (
-                    <Text key={i} style={[cb.gutterNum, { color: C.lineNum }]}>{i + 1}</Text>
+                    <Text key={i} style={[cb.gutterNum, { color: T.lineNum }]}>{i + 1}</Text>
                   ))}
                 </View>
-                {/* Lines */}
                 <View style={cb.linesArea}>
                   {displayLines.map((line, i) => {
-                    const toks = tokenizeLine(line, langKey).map(tok => ({
-                      ...tok,
-                      // Remap dark-palette colors to light-palette equivalents when in light mode
-                      color: isDark ? tok.color : (() => {
-                        // Map the dark palette constant to light palette
-                        if (tok.color === T.keyword)  return TL.keyword;
-                        if (tok.color === T.control)  return TL.control;
-                        if (tok.color === T.string || tok.color === T.template) return TL.string;
-                        if (tok.color === T.comment)  return TL.comment;
-                        if (tok.color === T.number)   return TL.number;
-                        if (tok.color === T.type)     return TL.type;
-                        if (tok.color === T.func)     return TL.func;
-                        if (tok.color === T.operator) return TL.operator;
-                        if (tok.color === T.attr || tok.color === T.tagAttr) return TL.attr;
-                        if (tok.color === T.tag)      return TL.tag;
-                        if (tok.color === T.attrVal)  return TL.attrVal;
-                        if (tok.color === T.special)  return TL.special;
-                        if (tok.color === T.plain)    return TL.plain;
-                        return TL.plain;
-                      })(),
-                    }));
+                    const toks = tokenizeLine(line, langKey, T);
                     const isCursorLine = isStreaming && i === displayLines.length - 1;
                     return (
                       <View key={i} style={cb.codeLine}>
                         {toks.map((tok, j) => (
                           tok.isPlaceholder ? (
-                            <View key={j} style={{ backgroundColor: C.phBg, borderRadius: 3, paddingHorizontal: 2 }}>
+                            <View key={j} style={{ backgroundColor: T.phBg, borderRadius: 3, paddingHorizontal: 2 }}>
                               <Text style={[cb.token, { color: tok.color, fontWeight: '700' }]}>{tok.text}</Text>
                             </View>
                           ) : (
-                            <Text key={j} style={[cb.token, { color: tok.color, fontWeight: tok.bold ? '700' : '400' }]}>{tok.text}</Text>
+                            <Text key={j} style={[cb.token, { color: tok.color || T.plain, fontWeight: tok.bold ? '700' : '400' }]}>{tok.text}</Text>
                           )
                         ))}
-                        {isCursorLine && <BlinkCursor />}
+                        {isCursorLine && <BlinkCursor color={T.cursor} />}
                       </View>
                     );
                   })}
@@ -816,42 +719,27 @@ export const CodeBlock = memo(function CodeBlock({
               </ScrollView>
             </ScrollView>
 
-            {/* Scroll to bottom indicator */}
             {isLong && expanded && !scrollAtBottom && (
               <View style={cb.scrollIndicator} pointerEvents="box-none">
-                <TouchableOpacity
-                  onPress={() => vertRef.current?.scrollToEnd({ animated: true })}
-                  style={cb.scrollIndicatorBtn}
-                  hitSlop={8}
-                >
-                  <Ionicons name="chevron-down" size={14} color="rgba(255,255,255,0.75)" />
+                <TouchableOpacity onPress={() => vertRef.current?.scrollToEnd({ animated: true })} style={[cb.scrollIndicatorBtn, { backgroundColor: isDark ? 'rgba(50,50,50,0.92)' : 'rgba(220,220,220,0.95)', borderColor: T.border }]} hitSlop={8}>
+                  <Ionicons name="chevron-down" size={14} color={isDark ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.6)'} />
                 </TouchableOpacity>
               </View>
             )}
           </View>
         )}
 
-        {/* ── Expand / Collapse footer ── */}
+        {/* Expand / Collapse */}
         {isLong && inlineTab === 'code' && (
-          <TouchableOpacity
-            style={[cb.expandBar, { backgroundColor: C.header, borderTopColor: C.border }]}
-            onPress={() => setExpanded(e => !e)}
-            activeOpacity={0.75}
-          >
-            <Text style={[cb.expandText, { color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)' }]}>
-              {expanded ? 'Show less' : `Expand · ${lineCount - COLLAPSE_AT} more lines`}
-            </Text>
-            <Ionicons
-              name={expanded ? 'chevron-up' : 'chevron-down'}
-              size={13}
-              color="rgba(255,255,255,0.4)"
-            />
+          <TouchableOpacity style={[cb.expandBar, { backgroundColor: headerBg, borderTopColor: borderC }]} onPress={() => setExpanded(e => !e)} activeOpacity={0.75}>
+            <Text style={[cb.expandText, { color: textSecondary }]}>{expanded ? 'Show less' : `Expand · ${lineCount - COLLAPSE_AT} more lines`}</Text>
+            <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={13} color={textSecondary} />
           </TouchableOpacity>
         )}
 
-        {/* ── Run strip at bottom ── */}
+        {/* Run strip */}
         {showRunBtn && inlineTab === 'code' && (
-          <TouchableOpacity style={cb.runStrip} onPress={() => setRunnerOpen(true)} activeOpacity={0.8}>
+          <TouchableOpacity style={[cb.runStrip, { borderTopColor: 'rgba(48,209,88,0.18)', backgroundColor: 'rgba(48,209,88,0.06)' }]} onPress={() => setRunnerOpen(true)} activeOpacity={0.8}>
             <Ionicons name="play-circle" size={14} color="#30D158" />
             <Text style={cb.runStripText}>{runLabel}</Text>
             <Ionicons name="chevron-forward" size={13} color="rgba(48,209,88,0.5)" style={{ marginLeft: 'auto' }} />
@@ -859,9 +747,8 @@ export const CodeBlock = memo(function CodeBlock({
         )}
       </View>
 
-      {/* ── Modals ── */}
-      <FullscreenModal visible={fullscreen} code={code} langKey={langKey} isDark={isDark} onClose={() => setFullscreen(false)} />
-      <RunnerModal visible={runnerOpen} code={code} langKey={langKey} isDark={isDark} onClose={() => setRunnerOpen(false)} />
+      <FullscreenModal visible={fullscreen} code={code} langKey={langKey} onClose={() => setFullscreen(false)} isDark={isDark} />
+      <RunnerModal visible={runnerOpen} code={code} langKey={langKey} onClose={() => setRunnerOpen(false)} isDark={isDark} />
     </>
   );
 });
@@ -872,31 +759,30 @@ export const StreamingCodeBlock = CodeBlock;
 const MONO = Platform.OS === 'ios' ? 'Menlo' : 'monospace';
 
 const st = StyleSheet.create({
-  modalRoot: { flex: 1, backgroundColor: T.bg },
+  modalRoot: { flex: 1 },
   modalHdr: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: T.header, paddingHorizontal: 14, paddingVertical: 13,
-    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: T.border,
+    paddingHorizontal: 14, paddingVertical: 13,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   modalClose: { padding: 4 },
   modalTitle: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   modalLangText: { fontSize: 15, fontWeight: '700' },
   modalTabBar: {
-    flexDirection: 'row', backgroundColor: T.header,
-    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: T.border,
+    flexDirection: 'row',
+    borderBottomWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: 14, paddingBottom: 10, paddingTop: 8, gap: 8,
   },
   modalTab: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10 },
-  modalTabActive: { backgroundColor: 'rgba(255,255,255,0.1)' },
-  modalTabText: { fontSize: 13, fontWeight: '600', color: 'rgba(255,255,255,0.4)' },
+  modalTabText: { fontSize: 13, fontWeight: '600' },
   wvLoading: {
     ...StyleSheet.absoluteFillObject,
-    alignItems: 'center', justifyContent: 'center', backgroundColor: '#0d1117', zIndex: 1,
+    alignItems: 'center', justifyContent: 'center', zIndex: 1,
   },
-  wvLoadingText: { color: 'rgba(255,255,255,0.3)', fontSize: 13, marginTop: 10 },
+  wvLoadingText: { fontSize: 13, marginTop: 10 },
   codeRow: { flexDirection: 'row', paddingVertical: 14, minWidth: '100%', alignItems: 'flex-start' },
-  gutterCol: { paddingLeft: 12, paddingRight: 10, alignItems: 'flex-end', borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: T.border, minWidth: 40 },
-  gutterNum: { fontSize: 12, lineHeight: 20, color: T.lineNum, fontFamily: MONO, includeFontPadding: false },
+  gutterCol: { paddingLeft: 12, paddingRight: 10, alignItems: 'flex-end', borderRightWidth: StyleSheet.hairlineWidth, minWidth: 40 },
+  gutterNum: { fontSize: 12, lineHeight: 20, fontFamily: MONO, includeFontPadding: false },
   linesCol: { paddingLeft: 14, paddingRight: 28 },
   codeLine: { flexDirection: 'row', flexWrap: 'nowrap', minHeight: 20, alignItems: 'center' },
   codeToken: { fontSize: 13, lineHeight: 20, fontFamily: MONO, includeFontPadding: false },
@@ -905,22 +791,19 @@ const st = StyleSheet.create({
 
 const cb = StyleSheet.create({
   container: {
-    backgroundColor: T.bg,
     borderRadius: 14,
     overflow: 'hidden',
     marginVertical: 6,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: T.border,
-    shadowColor: '#000',
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.45,
+    shadowOpacity: 0.35,
     shadowRadius: 14,
     elevation: 8,
   },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: T.header, paddingHorizontal: 14, paddingVertical: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: T.border,
+    paddingHorizontal: 14, paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
   langLabel: { fontSize: 13, fontWeight: '700', letterSpacing: 0.1 },
@@ -932,51 +815,45 @@ const cb = StyleSheet.create({
   actions: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   actionBtn: { padding: 5, borderRadius: 7, alignItems: 'center', justifyContent: 'center' },
   tabBar: {
-    flexDirection: 'row', backgroundColor: T.header,
-    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: T.border,
+    flexDirection: 'row',
+    borderBottomWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: 12, paddingBottom: 8, gap: 6,
   },
   tabBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
-  tabBtnActive: { backgroundColor: 'rgba(255,255,255,0.1)' },
-  tabText: { fontSize: 12, fontWeight: '600', color: 'rgba(255,255,255,0.4)' },
+  tabText: { fontSize: 12, fontWeight: '600' },
   phBanner: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     paddingHorizontal: 14, paddingVertical: 5,
-    backgroundColor: 'rgba(255,140,0,0.07)',
-    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(255,140,0,0.2)',
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  phBannerText: { fontSize: 11, color: T.special, fontWeight: '500', flex: 1 },
+  phBannerText: { fontSize: 11, fontWeight: '500', flex: 1 },
   scrollOuter: { maxHeight: 340, position: 'relative' },
   codeRow: { flexDirection: 'row', paddingVertical: 12, minWidth: '100%', alignItems: 'flex-start' },
   gutter: {
     paddingLeft: 10, paddingRight: 10,
-    borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: T.border,
+    borderRightWidth: StyleSheet.hairlineWidth,
     alignItems: 'flex-end', minWidth: 36,
   },
-  gutterNum: { fontSize: 12, lineHeight: 19, color: T.lineNum, fontFamily: MONO, includeFontPadding: false },
+  gutterNum: { fontSize: 12, lineHeight: 19, fontFamily: MONO, includeFontPadding: false },
   linesArea: { paddingLeft: 14, paddingRight: 28, flexShrink: 0 },
   codeLine: { flexDirection: 'row', flexWrap: 'nowrap', minHeight: 19, alignItems: 'center' },
   token: { fontSize: 13, lineHeight: 19, fontFamily: MONO, includeFontPadding: false },
-  scrollIndicator: {
-    position: 'absolute', bottom: 10, left: 0, right: 0, alignItems: 'center',
-  },
+  scrollIndicator: { position: 'absolute', bottom: 10, left: 0, right: 0, alignItems: 'center' },
   scrollIndicatorBtn: {
     width: 28, height: 28, borderRadius: 14,
-    backgroundColor: 'rgba(50,50,50,0.92)',
-    borderWidth: StyleSheet.hairlineWidth, borderColor: T.border,
+    borderWidth: StyleSheet.hairlineWidth,
     alignItems: 'center', justifyContent: 'center',
   },
   expandBar: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
-    paddingVertical: 10, backgroundColor: T.header,
-    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: T.border,
+    paddingVertical: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
-  expandText: { fontSize: 12, color: 'rgba(255,255,255,0.5)', fontWeight: '500' },
+  expandText: { fontSize: 12, fontWeight: '500' },
   runStrip: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
     paddingHorizontal: 14, paddingVertical: 10,
-    backgroundColor: 'rgba(48,209,88,0.06)',
-    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(48,209,88,0.18)',
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
   runStripText: { fontSize: 12, color: '#30D158', fontWeight: '700', flex: 1 },
 });
