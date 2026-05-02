@@ -44,6 +44,31 @@ const T = {
   cursor:   '#AEAFAD',
 };
 
+// ── Light theme token colors (GitHub Light / VS Code Light+) ───────────────
+const TL = {
+  bg:       '#FFFFFF',
+  header:   '#F6F8FA',
+  border:   '#D0D7DE',
+  keyword:  '#CF222E',   // red — const, let, if
+  control:  '#8250DF',   // purple — function, class, import
+  string:   '#0A3069',   // dark blue — "string"
+  template: '#0A3069',
+  comment:  '#6E7781',   // gray — // comment
+  number:   '#0550AE',   // blue — numbers
+  type:     '#953800',   // orange-brown — TypeName
+  func:     '#8250DF',   // purple — functionName()
+  operator: '#24292F',   // near-black
+  attr:     '#0550AE',   // blue — attributes
+  tag:      '#116329',   // green — <html-tag>
+  tagAttr:  '#0550AE',
+  attrVal:  '#0A3069',
+  special:  '#E36209',   // orange — placeholder
+  lineNum:  '#8C959F',
+  plain:    '#24292F',   // near-black default
+  phBg:     'rgba(227,98,9,0.10)',
+  cursor:   '#24292F',
+};
+
 // ── Language registry ─────────────────────────────────────────────────────────
 interface LangInfo {
   label: string;
@@ -402,8 +427,9 @@ try{${stripped}}catch(e){put('Error: '+e.message,'e');}
 
 // ── Code runner / preview modal ───────────────────────────────────────────────
 const RunnerModal = memo(function RunnerModal({
-  visible, code, langKey, onClose,
-}: { visible: boolean; code: string; langKey: string; onClose: () => void }) {
+  visible, code, langKey, isDark, onClose,
+}: { visible: boolean; code: string; langKey: string; isDark?: boolean; onClose: () => void }) {
+  const C = isDark !== false ? T : TL;
   const info = getLang(langKey);
   const [tab, setTab] = useState<'preview' | 'code'>('preview');
   const [wvLoaded, setWvLoaded] = useState(false);
@@ -411,14 +437,15 @@ const RunnerModal = memo(function RunnerModal({
   const isTerminal = ['bash', 'sh', 'shell'].includes(langKey);
   const isPython = ['python', 'py'].includes(langKey);
   const tabLabel = isTerminal ? 'Terminal' : isPython ? 'Output' : info.previewable ? 'Preview' : 'Run';
+  const dark = isDark !== false;
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
-      <SafeAreaView style={st.modalRoot}>
+      <SafeAreaView style={[st.modalRoot, { backgroundColor: C.bg }]}>
         {/* Modal Header */}
-        <View style={st.modalHdr}>
+        <View style={[st.modalHdr, { backgroundColor: C.header, borderBottomColor: C.border }]}>
           <TouchableOpacity onPress={onClose} style={st.modalClose} hitSlop={12}>
-            <Ionicons name="chevron-down" size={22} color="rgba(255,255,255,0.7)" />
+            <Ionicons name="chevron-down" size={22} color={dark ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.7)'} />
           </TouchableOpacity>
           <View style={st.modalTitle}>
             <LangDot langKey={langKey} />
@@ -427,7 +454,7 @@ const RunnerModal = memo(function RunnerModal({
           <CopyBtn code={code} />
         </View>
         {/* Tab bar */}
-        <View style={st.modalTabBar}>
+        <View style={[st.modalTabBar, { backgroundColor: C.header, borderBottomColor: C.border }]}>
           <TouchableOpacity
             style={[st.modalTab, tab === 'preview' && st.modalTabActive]}
             onPress={() => setTab('preview')}
@@ -435,16 +462,16 @@ const RunnerModal = memo(function RunnerModal({
             <Ionicons
               name={isTerminal ? 'terminal-outline' : isPython ? 'code-working-outline' : 'globe-outline'}
               size={14}
-              color={tab === 'preview' ? '#fff' : 'rgba(255,255,255,0.4)'}
+              color={tab === 'preview' ? (dark ? '#fff' : '#000') : (dark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)')}
             />
-            <Text style={[st.modalTabText, tab === 'preview' && { color: '#fff' }]}>{tabLabel}</Text>
+            <Text style={[st.modalTabText, tab === 'preview' && { color: dark ? '#fff' : '#000' }]}>{tabLabel}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[st.modalTab, tab === 'code' && st.modalTabActive]}
             onPress={() => setTab('code')}
           >
-            <Ionicons name="code-slash" size={14} color={tab === 'code' ? '#fff' : 'rgba(255,255,255,0.4)'} />
-            <Text style={[st.modalTabText, tab === 'code' && { color: '#fff' }]}>Code</Text>
+            <Ionicons name="code-slash" size={14} color={tab === 'code' ? (dark ? '#fff' : '#000') : (dark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)')} />
+            <Text style={[st.modalTabText, tab === 'code' && { color: dark ? '#fff' : '#000' }]}>Code</Text>
           </TouchableOpacity>
         </View>
         {/* Content */}
@@ -466,7 +493,7 @@ const RunnerModal = memo(function RunnerModal({
             />
           </View>
         ) : (
-          <FullCodeView code={code} langKey={langKey} />
+          <FullCodeView code={code} langKey={langKey} isDark={dark} />
         )}
       </SafeAreaView>
     </Modal>
@@ -475,15 +502,17 @@ const RunnerModal = memo(function RunnerModal({
 
 // ── Fullscreen code viewer modal ──────────────────────────────────────────────
 const FullscreenModal = memo(function FullscreenModal({
-  visible, code, langKey, onClose,
-}: { visible: boolean; code: string; langKey: string; onClose: () => void }) {
+  visible, code, langKey, isDark, onClose,
+}: { visible: boolean; code: string; langKey: string; isDark?: boolean; onClose: () => void }) {
+  const C = isDark !== false ? T : TL;
+  const dark = isDark !== false;
   const info = getLang(langKey);
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
-      <SafeAreaView style={st.modalRoot}>
-        <View style={st.modalHdr}>
+      <SafeAreaView style={[st.modalRoot, { backgroundColor: C.bg }]}>
+        <View style={[st.modalHdr, { backgroundColor: C.header, borderBottomColor: C.border }]}>
           <TouchableOpacity onPress={onClose} style={st.modalClose} hitSlop={12}>
-            <Ionicons name="chevron-down" size={22} color="rgba(255,255,255,0.7)" />
+            <Ionicons name="chevron-down" size={22} color={dark ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.7)'} />
           </TouchableOpacity>
           <View style={st.modalTitle}>
             <LangDot langKey={langKey} />
@@ -491,34 +520,50 @@ const FullscreenModal = memo(function FullscreenModal({
           </View>
           <CopyBtn code={code} />
         </View>
-        <FullCodeView code={code} langKey={langKey} />
+        <FullCodeView code={code} langKey={langKey} isDark={dark} />
       </SafeAreaView>
     </Modal>
   );
 });
 
-const FullCodeView = memo(function FullCodeView({ code, langKey }: { code: string; langKey: string }) {
+const FullCodeView = memo(function FullCodeView({ code, langKey, isDark = true }: { code: string; langKey: string; isDark?: boolean }) {
+  const C = isDark ? T : TL;
   const lines = code.split('\n');
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: T.bg }} nestedScrollEnabled showsVerticalScrollIndicator indicatorStyle="white">
-      <ScrollView horizontal showsHorizontalScrollIndicator indicatorStyle="white" contentContainerStyle={st.codeRow}>
-        <View style={st.gutterCol}>
+    <ScrollView style={{ flex: 1, backgroundColor: C.bg }} nestedScrollEnabled showsVerticalScrollIndicator indicatorStyle={isDark ? 'white' : 'black'}>
+      <ScrollView horizontal showsHorizontalScrollIndicator indicatorStyle={isDark ? 'white' : 'black'} contentContainerStyle={st.codeRow}>
+        <View style={[st.gutterCol, { borderRightColor: C.border }]}>
           {lines.map((_, i) => (
-            <Text key={i} style={st.gutterNum}>{i + 1}</Text>
+            <Text key={i} style={[st.gutterNum, { color: C.lineNum }]}>{i + 1}</Text>
           ))}
         </View>
         <View style={st.linesCol}>
           {lines.map((line, i) => (
             <View key={i} style={st.codeLine}>
-              {tokenizeLine(line, langKey).map((tok, j) => (
-                tok.isPlaceholder ? (
-                  <View key={j} style={{ backgroundColor: T.phBg, borderRadius: 3, paddingHorizontal: 2 }}>
-                    <Text style={[st.codeToken, { color: tok.color, fontWeight: '700' }]}>{tok.text}</Text>
+              {tokenizeLine(line, langKey).map((tok, j) => {
+                const color = isDark ? tok.color : (() => {
+                  if (tok.color === T.keyword)  return TL.keyword;
+                  if (tok.color === T.control)  return TL.control;
+                  if (tok.color === T.string || tok.color === T.template) return TL.string;
+                  if (tok.color === T.comment)  return TL.comment;
+                  if (tok.color === T.number)   return TL.number;
+                  if (tok.color === T.type)     return TL.type;
+                  if (tok.color === T.func)     return TL.func;
+                  if (tok.color === T.operator) return TL.operator;
+                  if (tok.color === T.attr || tok.color === T.tagAttr) return TL.attr;
+                  if (tok.color === T.tag)      return TL.tag;
+                  if (tok.color === T.attrVal)  return TL.attrVal;
+                  if (tok.color === T.special)  return TL.special;
+                  return TL.plain;
+                })();
+                return tok.isPlaceholder ? (
+                  <View key={j} style={{ backgroundColor: C.phBg, borderRadius: 3, paddingHorizontal: 2 }}>
+                    <Text style={[st.codeToken, { color, fontWeight: '700' }]}>{tok.text}</Text>
                   </View>
                 ) : (
-                  <Text key={j} style={[st.codeToken, { color: tok.color, fontWeight: tok.bold ? '700' : '400' }]}>{tok.text}</Text>
-                )
-              ))}
+                  <Text key={j} style={[st.codeToken, { color, fontWeight: tok.bold ? '700' : '400' }]}>{tok.text}</Text>
+                );
+              })}
             </View>
           ))}
         </View>
@@ -557,6 +602,8 @@ interface CodeBlockProps {
   fileName?: string;
   /** If true, code will animate in character by character */
   streaming?: boolean;
+  /** Pass false to use light mode palette (GitHub Light). Defaults to true (dark mode). */
+  isDark?: boolean;
 }
 
 const COLLAPSE_AT = 16;
@@ -566,7 +613,10 @@ export const CodeBlock = memo(function CodeBlock({
   language = 'code',
   fileName,
   streaming = false,
+  isDark = true,
 }: CodeBlockProps) {
+  // Pick palette based on isDark
+  const C = isDark ? T : TL;
   const langKey = (language || 'code').toLowerCase().trim();
   const info = getLang(langKey);
 
@@ -625,9 +675,12 @@ export const CodeBlock = memo(function CodeBlock({
 
   return (
     <>
-      <View style={cb.container}>
+      <View style={[
+        cb.container,
+        { backgroundColor: C.bg, borderColor: C.border },
+      ]}>
         {/* ── Header ── */}
-        <View style={cb.header}>
+        <View style={[cb.header, { backgroundColor: C.header, borderBottomColor: C.border }]}>
           <View style={cb.headerLeft}>
             <LangDot langKey={langKey} />
             <Text style={[cb.langLabel, { color: info.dot }]}>{fileName ? `${info.label} · ${fileName}` : info.label}</Text>
@@ -645,7 +698,7 @@ export const CodeBlock = memo(function CodeBlock({
               hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
               activeOpacity={0.7}
             >
-              <Ionicons name="expand-outline" size={15} color="rgba(200,200,200,0.6)" />
+              <Ionicons name="expand-outline" size={15} color={isDark ? 'rgba(200,200,200,0.6)' : 'rgba(0,0,0,0.45)'} />
             </TouchableOpacity>
             {/* Run/Preview button */}
             {showRunBtn && (
@@ -665,20 +718,20 @@ export const CodeBlock = memo(function CodeBlock({
 
         {/* ── Preview/Code tabs (for runnable langs) ── */}
         {showPreviewInline && (
-          <View style={cb.tabBar}>
+          <View style={[cb.tabBar, { backgroundColor: C.header, borderBottomColor: C.border }]}>
             <TouchableOpacity
               style={[cb.tabBtn, inlineTab === 'code' && cb.tabBtnActive]}
               onPress={() => setInlineTab('code')}
             >
-              <Ionicons name="code-slash" size={12} color={inlineTab === 'code' ? '#fff' : 'rgba(255,255,255,0.4)'} />
-              <Text style={[cb.tabText, inlineTab === 'code' && { color: '#fff' }]}>Code</Text>
+              <Ionicons name="code-slash" size={12} color={inlineTab === 'code' ? (isDark ? '#fff' : '#000') : (isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)')} />
+              <Text style={[cb.tabText, inlineTab === 'code' && { color: isDark ? '#fff' : '#000' }]}>Code</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[cb.tabBtn, inlineTab === 'preview' && cb.tabBtnActive]}
               onPress={() => setInlineTab('preview')}
             >
-              <Ionicons name="globe-outline" size={12} color={inlineTab === 'preview' ? '#fff' : 'rgba(255,255,255,0.4)'} />
-              <Text style={[cb.tabText, inlineTab === 'preview' && { color: '#fff' }]}>{runLabel}</Text>
+              <Ionicons name="globe-outline" size={12} color={inlineTab === 'preview' ? (isDark ? '#fff' : '#000') : (isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)')} />
+              <Text style={[cb.tabText, inlineTab === 'preview' && { color: isDark ? '#fff' : '#000' }]}>{runLabel}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -695,7 +748,7 @@ export const CodeBlock = memo(function CodeBlock({
         {showPreviewInline && inlineTab === 'preview' ? (
           <InlinePreview code={code} langKey={langKey} />
         ) : (
-          <View style={cb.scrollOuter}>
+          <View style={[cb.scrollOuter, { backgroundColor: C.bg }]}>
             <ScrollView
               ref={vertRef}
               style={{ flex: 1 }}
@@ -714,21 +767,41 @@ export const CodeBlock = memo(function CodeBlock({
                 contentContainerStyle={cb.codeRow}
               >
                 {/* Gutter */}
-                <View style={cb.gutter}>
+                <View style={[cb.gutter, { borderRightColor: C.border }]}>
                   {displayLines.map((_, i) => (
-                    <Text key={i} style={cb.gutterNum}>{i + 1}</Text>
+                    <Text key={i} style={[cb.gutterNum, { color: C.lineNum }]}>{i + 1}</Text>
                   ))}
                 </View>
                 {/* Lines */}
                 <View style={cb.linesArea}>
                   {displayLines.map((line, i) => {
-                    const toks = tokenizeLine(line, langKey);
+                    const toks = tokenizeLine(line, langKey).map(tok => ({
+                      ...tok,
+                      // Remap dark-palette colors to light-palette equivalents when in light mode
+                      color: isDark ? tok.color : (() => {
+                        // Map the dark palette constant to light palette
+                        if (tok.color === T.keyword)  return TL.keyword;
+                        if (tok.color === T.control)  return TL.control;
+                        if (tok.color === T.string || tok.color === T.template) return TL.string;
+                        if (tok.color === T.comment)  return TL.comment;
+                        if (tok.color === T.number)   return TL.number;
+                        if (tok.color === T.type)     return TL.type;
+                        if (tok.color === T.func)     return TL.func;
+                        if (tok.color === T.operator) return TL.operator;
+                        if (tok.color === T.attr || tok.color === T.tagAttr) return TL.attr;
+                        if (tok.color === T.tag)      return TL.tag;
+                        if (tok.color === T.attrVal)  return TL.attrVal;
+                        if (tok.color === T.special)  return TL.special;
+                        if (tok.color === T.plain)    return TL.plain;
+                        return TL.plain;
+                      })(),
+                    }));
                     const isCursorLine = isStreaming && i === displayLines.length - 1;
                     return (
                       <View key={i} style={cb.codeLine}>
                         {toks.map((tok, j) => (
                           tok.isPlaceholder ? (
-                            <View key={j} style={{ backgroundColor: T.phBg, borderRadius: 3, paddingHorizontal: 2 }}>
+                            <View key={j} style={{ backgroundColor: C.phBg, borderRadius: 3, paddingHorizontal: 2 }}>
                               <Text style={[cb.token, { color: tok.color, fontWeight: '700' }]}>{tok.text}</Text>
                             </View>
                           ) : (
@@ -761,11 +834,11 @@ export const CodeBlock = memo(function CodeBlock({
         {/* ── Expand / Collapse footer ── */}
         {isLong && inlineTab === 'code' && (
           <TouchableOpacity
-            style={cb.expandBar}
+            style={[cb.expandBar, { backgroundColor: C.header, borderTopColor: C.border }]}
             onPress={() => setExpanded(e => !e)}
             activeOpacity={0.75}
           >
-            <Text style={cb.expandText}>
+            <Text style={[cb.expandText, { color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)' }]}>
               {expanded ? 'Show less' : `Expand · ${lineCount - COLLAPSE_AT} more lines`}
             </Text>
             <Ionicons
@@ -787,8 +860,8 @@ export const CodeBlock = memo(function CodeBlock({
       </View>
 
       {/* ── Modals ── */}
-      <FullscreenModal visible={fullscreen} code={code} langKey={langKey} onClose={() => setFullscreen(false)} />
-      <RunnerModal visible={runnerOpen} code={code} langKey={langKey} onClose={() => setRunnerOpen(false)} />
+      <FullscreenModal visible={fullscreen} code={code} langKey={langKey} isDark={isDark} onClose={() => setFullscreen(false)} />
+      <RunnerModal visible={runnerOpen} code={code} langKey={langKey} isDark={isDark} onClose={() => setRunnerOpen(false)} />
     </>
   );
 });

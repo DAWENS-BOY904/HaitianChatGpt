@@ -568,7 +568,7 @@ export default function VoiceControlScreen() {
     const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
 
     if (!supabaseUrl || !supabaseAnonKey) {
-      console.log('[VoiceChat] Missing Supabase env vars');
+      console.log('[VoiceChat] Missing Supabase env vars — EXPO_PUBLIC_SUPABASE_URL:', !!supabaseUrl, 'KEY:', !!supabaseAnonKey);
       return '';
     }
 
@@ -582,6 +582,7 @@ export default function VoiceControlScreen() {
 
     const chatConvId = convId || `voice-${Date.now()}`;
     const endpoint = `${supabaseUrl}/functions/v1/chat`;
+    console.log('[VoiceChat] Calling chat edge function:', endpoint, 'model: google-gemini, msgs:', msgs.length);
 
     try {
       const response = await fetch(endpoint, {
@@ -601,64 +602,123 @@ export default function VoiceControlScreen() {
         signal: controller.signal,
       });
 
+      console.log('[VoiceChat] Edge function response status:', response.status, 'content-type:', response.headers.get('content-type'));
+
       if (!response.ok) {
         const errText = await response.text().catch(() => '');
-        console.log('[VoiceChat] Chat HTTP error:', response.status, errText.slice(0, 150));
+        console.log('[VoiceChat] Chat HTTP error:', response.status, errText.slice(0, 300));
         return '';
       }
 
       const contentType = response.headers.get('content-type') || '';
       let fullText = '';
 
-      if (contentType.includes('text/event-stream')) {
-        const reader = response.body?.getReader();
-        if (reader) {
-          const decoder = new TextDecoder();
-          let buffer = '';
+      // Try streaming reader first (mobile may not support ReadableStream)
+      const reader = response.body?.getReader();
+      if (reader) {
+        console.log('[VoiceChat] Using streaming reader');
+        const decoder = new TextDecoder();
+        let buffer = '';
+        try {
           while (true) {
             const { done, value } = await reader.read();
             if (done) break;
-            buffer += decoder.decode(value, { stream: true });
+            const chunk = decoder.decode(value, { stream: true });
+            buffer += chunk;
+            // Parse SSE lines
             const lines = buffer.split('\n');
             buffer = lines.pop() || '';
             for (const line of lines) {
-              if (!line.startsWith('data: ')) continue;
-              const jsonStr = line.slice(6).trim();
+              const trimmed = line.trim();
+              if (!trimmed || !trimmed.startsWith('data: ')) continue;
+              const jsonStr = trimmed.slice(6).trim();
               if (!jsonStr || jsonStr === '[DONE]') continue;
               try {
                 const parsed = JSON.parse(jsonStr);
-                if (parsed.token) {
-                  fullText += parsed.token;
-                  onToken?.(parsed.token);
+                // Support multiple token field names from the edge function
+                const token = parsed.token || parsed.content || parsed.delta || parsed.text ||
+                  parsed.choices?.[0]?.delta?.content || parsed.choices?.[0]?.text || '';
+                if (token) {
+                  fullText += token;
+                  onToken?.(token);
                 }
-                if (parsed.done || parsed.type === 'complete') break;
+                if (parsed.done === true || parsed.type === 'complete' || parsed.finish_reason === 'stop') {
+                  console.log('[VoiceChat] Stream complete signal received');
+                }
+              } catch (_parseErr) {
+                // Non-JSON chunk — may be plain text delta
+                if (jsonStr && jsonStr !== '[DONE]' && !jsonStr.startsWith('{')) {
+                  fullText += jsonStr;
+                  onToken?.(jsonStr);
+                }
+              }
+            }
+          }
+          // Flush remaining buffer
+          if (buffer.trim()) {
+            const finalLines = buffer.split('\n');
+            for (const line of finalLines) {
+              const trimmed = line.trim();
+              if (!trimmed || !trimmed.startsWith('data: ')) continue;
+              const jsonStr = trimmed.slice(6).trim();
+              if (!jsonStr || jsonStr === '[DONE]') continue;
+              try {
+                const parsed = JSON.parse(jsonStr);
+                const token = parsed.token || parsed.content || parsed.delta || parsed.text || '';
+                if (token) { fullText += token; onToken?.(token); }
               } catch (_e) {}
             }
           }
+        } finally {
+          reader.releaseLock();
         }
       } else {
+        // Fallback: read full response body (mobile fallback)
+        console.log('[VoiceChat] No stream reader — reading full response body');
+        const rawText = await response.text().catch(() => '');
+        console.log('[VoiceChat] Raw response (first 300):', rawText.slice(0, 300));
+        // Try parsing as JSON
         try {
-          const json = await response.json();
-          fullText = json.message || json.content || json.response || json.text || '';
+          const json = JSON.parse(rawText);
+          fullText = json.message || json.content || json.response || json.text ||
+            json.choices?.[0]?.message?.content || json.choices?.[0]?.text || '';
         } catch (_e) {
-          fullText = await response.text().catch(() => '');
+          // Try parsing as SSE lines
+          const lines = rawText.split('\n');
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith('data: ')) continue;
+            const jsonStr = trimmed.slice(6).trim();
+            if (!jsonStr || jsonStr === '[DONE]') continue;
+            try {
+              const parsed = JSON.parse(jsonStr);
+              const token = parsed.token || parsed.content || parsed.delta || parsed.text || '';
+              if (token) { fullText += token; onToken?.(token); }
+            } catch (_pe) {
+              // Plain text delta
+              if (jsonStr && !jsonStr.startsWith('{')) { fullText += jsonStr; }
+            }
+          }
+          // If still empty, use raw text
+          if (!fullText) fullText = rawText;
         }
       }
 
+      console.log('[VoiceChat] Full response length:', fullText.length, 'preview:', fullText.slice(0, 80));
       return fullText.trim();
     } catch (e: any) {
       if (e.name === 'AbortError') {
         console.log('[VoiceChat] Request aborted');
         return '';
       }
-      console.log('[VoiceChat] Fetch error:', e?.message);
+      console.log('[VoiceChat] Fetch error:', e?.message, e?.stack?.slice(0, 200));
       return '';
     } finally {
       abortControllerRef.current = null;
     }
   }, [supabase, user]);
 
-  // ─── SPEAK TEXT — always uses ElevenLabs via edge function ─────────────────
+  // ─── SPEAK TEXT — TTS with real-time edge function + device TTS fallback ────
   const speakText = useCallback(async (text: string) => {
     if (isPausedRef.current) return;
 
@@ -678,35 +738,83 @@ export default function VoiceControlScreen() {
       if (!isPausedRef.current) setTimeout(() => startListening(), 400);
     };
 
+    const tryDeviceTTS = () => {
+      console.log('[Voice] Using device TTS fallback');
+      speakWithDevice(text, speechRate, detectedLangRef.current, onDone);
+    };
+
     try {
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: false,
         playsInSilentModeIOS: true,
         staysActiveInBackground: false,
+        shouldDuckAndroid: false,
+        playThroughEarpieceAndroid: false,
       });
 
-      const { data, error } = await supabase.functions.invoke('generate-tts', {
-        body: {
+      console.log('[Voice] Calling generate-tts edge function, voice:', selectedVoice, 'speed:', speechRate);
+
+      // Use raw fetch for TTS to avoid invoke timeout issues
+      const supabaseUrl = (process.env.EXPO_PUBLIC_SUPABASE_URL || '').replace(/\/$/, '');
+      const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+      let authToken = supabaseAnonKey;
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        if (sessionData?.session?.access_token) authToken = sessionData.session.access_token;
+      } catch (_e) {}
+
+      const ttsEndpoint = `${supabaseUrl}/functions/v1/generate-tts`;
+      const ttsResponse = await fetch(ttsEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`,
+          'apikey': supabaseAnonKey,
+        },
+        body: JSON.stringify({
           text: text.slice(0, 500),
           voice: selectedVoice,
           speed: speechRate,
           detectedLanguage: detectedLangRef.current,
-        },
+        }),
+        signal: AbortSignal.timeout ? AbortSignal.timeout(35000) : undefined,
+      }).catch((fetchErr) => {
+        console.log('[Voice] TTS fetch error:', fetchErr?.message);
+        return null;
       });
 
+      if (!ttsResponse || !ttsResponse.ok) {
+        console.log('[Voice] TTS edge function failed, status:', ttsResponse?.status);
+        tryDeviceTTS();
+        return;
+      }
+
+      let data: any = null;
+      try {
+        data = await ttsResponse.json();
+      } catch (_e) {
+        console.log('[Voice] TTS response not JSON');
+        tryDeviceTTS();
+        return;
+      }
+
+      console.log('[Voice] TTS response:', JSON.stringify(data).slice(0, 200));
+
       if (data?.fallback === true || data?.code === 'USE_DEVICE_TTS') {
-        console.log('[Voice] ElevenLabs unavailable — using device TTS');
-        speakWithDevice(text, speechRate, detectedLangRef.current, onDone);
+        console.log('[Voice] TTS signalled device fallback');
+        tryDeviceTTS();
         return;
       }
 
       const audioUrl = data?.audioUrl || data?.audio_url;
 
-      if (error || !audioUrl) {
-        console.log('[Voice] No audio URL from TTS edge function — using device TTS');
-        speakWithDevice(text, speechRate, detectedLangRef.current, onDone);
+      if (!audioUrl) {
+        console.log('[Voice] No audio URL in TTS response');
+        tryDeviceTTS();
         return;
       }
+
+      console.log('[Voice] Playing audio from URL:', audioUrl.slice(0, 80));
 
       const { sound } = await Audio.Sound.createAsync(
         { uri: audioUrl },
