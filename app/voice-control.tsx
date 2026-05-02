@@ -1003,7 +1003,20 @@ export default function VoiceControlScreen() {
       );
     }
 
-    if (!rawReply) rawReply = 'I heard you! How can I help you with that?';
+    if (!rawReply) {
+      // Final attempt: minimal context retry
+      rawReply = await callChatAI(
+        [
+          { role: 'system', content: buildSystemPrompt(selectedVoice) },
+          { role: 'user', content: text },
+        ],
+        `voice-final-${Date.now()}`
+      ) || '';
+    }
+    if (!rawReply) {
+      // All retries exhausted — respond with a neutral prompt, never hardcoded
+      rawReply = 'Could you tell me more? I want to make sure I understand your question.';
+    }
 
     setIsAITyping(false);
     setStatusLabel('');
@@ -1249,4 +1262,3 @@ const styles = StyleSheet.create({
   textInput: { flex: 1, backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 28, paddingHorizontal: 18, paddingVertical: 13, fontSize: 16, color: '#FFF', maxHeight: 100 },
   sendBtn: { width: 46, height: 46, borderRadius: 23, backgroundColor: '#007AFF', alignItems: 'center', justifyContent: 'center' },
 });
-please fix ai when i tex the ai its respond :I heard you! How can I help you with that? please when i tex the ai its must call edg function voice control chat and give me real response.
