@@ -33,11 +33,14 @@ import { Image as ExpoImageBadge } from 'expo-image';
 // ═══════════════════════════════════════════════════════════════════════════════
 // VERIFIED BADGE COMPONENT
 // ═══════════════════════════════════════════════════════════════════════════════
-function VerifiedBadge({ onPress, isPro }: { onPress: () => void; isPro: boolean }) {
+// ═══════════════════════════════════════════════════════════════════════════════
+// VERIFIED BADGE COMPONENT — Updated for Pro & Plus
+// ═══════════════════════════════════════════════════════════════════════════════
+function VerifiedBadge({ onPress, tier }: { onPress: () => void; tier: 'pro' | 'plus' | null }) {
   const glowAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    if (isPro) {
+    if (tier) {
       Animated.loop(
         Animated.sequence([
           Animated.timing(glowAnim, { toValue: 1, duration: 1200, useNativeDriver: true }),
@@ -45,9 +48,14 @@ function VerifiedBadge({ onPress, isPro }: { onPress: () => void; isPro: boolean
         ])
       ).start();
     }
-  }, [isPro]);
+  }, [tier]);
 
-  if (!isPro) return null;
+  if (!tier) return null;
+
+  // Chwazi bon image selon tier
+  const badgeSource = tier === 'plus'
+    ? require('../assets/images/plus-badge.png')      // 🆕 NOUVO badge pou Plus
+    : require('../assets/images/verified-badge.png');  // Ansye badge pou Pro
 
   return (
     <TouchableOpacity onPress={onPress} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.75}>
@@ -56,7 +64,7 @@ function VerifiedBadge({ onPress, isPro }: { onPress: () => void; isPro: boolean
         transform: [{ scale: glowAnim.interpolate({ inputRange: [0, 1], outputRange: [0.95, 1.05] }) }],
       }}>
         <ExpoImageBadge
-          source={require('../assets/images/verified-badge.png')}
+          source={badgeSource}
           style={{ width: 22, height: 22 }}
           contentFit="contain"
         />
@@ -68,12 +76,19 @@ function VerifiedBadge({ onPress, isPro }: { onPress: () => void; isPro: boolean
 // ═══════════════════════════════════════════════════════════════════════════════
 // VERIFIED BADGE MODAL
 // ═══════════════════════════════════════════════════════════════════════════════
-function VerifiedBadgeModal({ visible, onClose, isDark }: { visible: boolean; onClose: () => void; isDark: boolean }) {
+function VerifiedBadgeModal({ visible, onClose, isDark, tier }: { 
+  visible: boolean; 
+  onClose: () => void; 
+  isDark: boolean;
+  tier: 'pro' | 'plus';
+}) {
   const bg = isDark ? '#1C1C1E' : '#FFFFFF';
   const primaryText = isDark ? '#FFFFFF' : '#000000';
   const secondaryText = isDark ? 'rgba(255,255,255,0.65)' : 'rgba(0,0,0,0.6)';
 
-  const benefits = [
+  const isPlus = tier === 'plus';
+
+  const proBenefits = [
     { icon: '💰', text: '$20 welcome reward (credited after verification approval)' },
     { icon: '🚀', text: 'Unlimited messaging access' },
     { icon: '📸', text: 'Unlimited photo uploads' },
@@ -81,6 +96,24 @@ function VerifiedBadgeModal({ visible, onClose, isDark }: { visible: boolean; on
     { icon: '⚡', text: 'Priority system performance' },
     { icon: '🎯', text: 'Full premium feature access' },
   ];
+
+  const plusBenefits = [
+    { icon: '✨', text: 'Advanced AI model access' },
+    { icon: '🚀', text: 'Faster response times' },
+    { icon: '📸', text: 'Higher quality outputs' },
+    { icon: '💬', text: 'Extended context window' },
+    { icon: '⚡', text: 'Priority support' },
+    { icon: '🎯', text: 'Exclusive Plus features' },
+  ];
+
+  const benefits = isPlus ? plusBenefits : proBenefits;
+  const badgeSource = isPlus 
+    ? require('../assets/images/plus-badge.png')
+    : require('../assets/images/verified-badge.png');
+  const title = isPlus ? '✔ Verified Plus Member' : '✔ Verified Pro Member';
+  const subtitle = isPlus 
+    ? 'This badge confirms that the user is a Plus Plan Verified Member.'
+    : 'This badge confirms that the user is a Pro Plan Verified Member.';
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -98,18 +131,20 @@ function VerifiedBadgeModal({ visible, onClose, isDark }: { visible: boolean; on
           <View style={{ padding: 28, alignItems: 'center' }}>
             {/* Badge icon */}
             <ExpoImageBadge
-              source={require('../assets/images/verified-badge.png')}
+              source={badgeSource}
               style={{ width: 72, height: 72, marginBottom: 16 }}
               contentFit="contain"
             />
 
-            <Text style={{ fontSize: 22, fontWeight: '800', color: primaryText, marginBottom: 6, textAlign: 'center' }}>✔ Verified Pro Member</Text>
+            <Text style={{ fontSize: 22, fontWeight: '800', color: primaryText, marginBottom: 6, textAlign: 'center' }}>{title}</Text>
             <Text style={{ fontSize: 14, color: secondaryText, textAlign: 'center', lineHeight: 20, marginBottom: 24 }}>
-              This badge confirms that the user is a Pro Plan Verified Member.
+              {subtitle}
             </Text>
 
             <View style={{ width: '100%', backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)', borderRadius: 16, padding: 16, marginBottom: 20 }}>
-              <Text style={{ fontSize: 13, fontWeight: '700', color: secondaryText, marginBottom: 12, textTransform: 'uppercase' }}>Exclusive Benefits</Text>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: secondaryText, marginBottom: 12, textTransform: 'uppercase' }}>
+                {isPlus ? 'Plus Benefits' : 'Exclusive Benefits'}
+              </Text>
               {benefits.map((b, i) => (
                 <View key={i} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 10 }}>
                   <Text style={{ fontSize: 16 }}>{b.icon}</Text>
@@ -120,7 +155,7 @@ function VerifiedBadgeModal({ visible, onClose, isDark }: { visible: boolean; on
 
             <View style={{ backgroundColor: 'rgba(220,38,38,0.1)', borderRadius: 12, padding: 12, width: '100%', borderWidth: 1, borderColor: 'rgba(220,38,38,0.2)' }}>
               <Text style={{ fontSize: 12, color: '#DC2626', textAlign: 'center', fontWeight: '600', lineHeight: 18 }}>
-                All benefits are activated only for verified Pro members. Badge status is controlled by the system only.
+                All benefits are activated only for verified {isPlus ? 'Plus' : 'Pro'} members. Badge status is controlled by the system only.
               </Text>
             </View>
           </View>
@@ -849,7 +884,14 @@ export default function SettingsScreen() {
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
             <Text style={{ fontSize: 22, fontWeight: '700', color: primaryText }}>{displayName}</Text>
-            <VerifiedBadge isPro={isPaidPlan} onPress={() => setVerifiedBadgeModalVisible(true)} />
+            // ANSYEN:
+<VerifiedBadge isPro={isPaidPlan} onPress={() => setVerifiedBadgeModalVisible(true)} />
+
+// NOUVO — pase ki tier li ye a:
+<VerifiedBadge 
+  tier={isAdminUser ? 'pro' : tier === 'plus' || tier === 'premium_yearly' ? 'plus' : isPaidPlan ? 'pro' : null} 
+  onPress={() => setVerifiedBadgeModalVisible(true)} 
+/>
           </View>
           {displayUsername ? <Text style={{ fontSize: 15, color: secondaryText, marginBottom: 14 }}>{displayUsername}</Text> : null}
           <TouchableOpacity
@@ -1046,11 +1088,20 @@ export default function SettingsScreen() {
       </Modal>
 
       {/* Verified Badge Modal */}
-      <VerifiedBadgeModal
-        visible={verifiedBadgeModalVisible}
-        onClose={() => setVerifiedBadgeModalVisible(false)}
-        isDark={isDark}
-      />
+      // ANSYEN:
+<VerifiedBadgeModal
+  visible={verifiedBadgeModalVisible}
+  onClose={() => setVerifiedBadgeModalVisible(false)}
+  isDark={isDark}
+/>
+
+// NOUVO — pase tier a:
+<VerifiedBadgeModal
+  visible={verifiedBadgeModalVisible}
+  onClose={() => setVerifiedBadgeModalVisible(false)}
+  isDark={isDark}
+  tier={isAdminUser ? 'pro' : tier === 'plus' || tier === 'premium_yearly' ? 'plus' : 'pro'}
+/>
 
       {/* ═══════════════════════════════════════════════════════════════
           PHOTO PICKER MODAL
