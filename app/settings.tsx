@@ -879,8 +879,8 @@ export default function SettingsScreen() {
             /* Upgrade — NO chevron */
             <Row icon="arrow-up-circle-outline" label="Upgrade to Plus" showChevron={false} />
           )}
-          {/* Restore purchases — NO chevron */}
-          <Row icon="refresh-outline" label="Restore purchases" onPress={() => router.push('/upgrade')} isLast />
+          {/* Restore purchases — clickable */}
+          <Row icon="refresh-outline" label="Restore purchases" onPress={() => router.push('/subscription')} isLast />
           {/* These have chevrons because they navigate */}
           <Row icon="receipt-outline" label="Orders" onPress={() => router.push('/orders')} />
           <Row icon="person-circle-outline" label="Personalization" onPress={() => router.push('/personalization')} />
@@ -1131,4 +1131,4 @@ export default function SettingsScreen() {
     </View>
   );
 }
-fix all kote ki pa gen chevron yo dwe click al nn bon kote like old
+
