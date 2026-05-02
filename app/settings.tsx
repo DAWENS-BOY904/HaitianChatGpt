@@ -964,7 +964,7 @@ export default function SettingsScreen() {
             ═══════════════════════════════════════════════════════════════ */}
         <SectionLabel text="Voice" />
         <Card>
-          <Row icon="mic-outline" label="Voice" value={settings.voiceSelection || 'Juniper'} onPress={() => router.push('/voice-settings')} />
+          <Row icon="mic-outline" label="Voice" value={settings.voiceSelection || 'Juniper'} onPress={() => router.push('/voice-select')} />
           <SwitchRow icon="chatbubbles-outline" label="Background conversations" value={settings.backgroundConversations} onChange={v => updateSetting('backgroundConversations', v)} isLast />
         </Card>
         <Text style={{
