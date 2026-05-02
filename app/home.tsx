@@ -1355,6 +1355,9 @@ export default function HomeScreen() {
   const [preGeneratedQuestions, setPreGeneratedQuestions] = useState<QuizQuestion[] | null>(null);
   const preGenRunning = useRef(false);
   const [messageLikes, setMessageLikes] = useState<Record<string, 'like' | 'dislike' | null>>({});
+  const [msgMenuVisible, setMsgMenuVisible] = useState(false);
+  const [msgMenuMsg, setMsgMenuMsg] = useState<any>(null);
+  const [msgMenuPageY, setMsgMenuPageY] = useState(0);
   const wasGeneratingRef = useRef(false);
   const appStateForNotifRef = useRef(AppState.currentState);
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -2499,6 +2502,14 @@ Be thorough and cite specific facts.`;
     setTimeout(() => inputRef.current?.focus(), 100);
   }, []);
 
+  const handleUserMsgPress = useCallback((item: any, pageY: number) => {
+    if (groupChatMode) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setMsgMenuMsg(item);
+    setMsgMenuPageY(pageY);
+    setMsgMenuVisible(true);
+  }, [groupChatMode]);
+
   const renderMessage = useCallback(({ item }: { item: any }) => {
     const isStreaming = streamingMessageId === item.id;
     const mathData = item.role === 'assistant' ? detectMathExpression(item.content) : null;
@@ -2508,8 +2519,14 @@ Be thorough and cite specific facts.`;
     const detectedImageUrl: string | null = imageUrlMatch ? imageUrlMatch[0] : (item.imageUrl || null);
     const alreadySaved = detectedImageUrl ? savedImageUrls.has(detectedImageUrl) : false;
     const isSavingThis = savingImageId === item.id;
+    const isUserMsg = item.role === 'user';
     return (
       <View>
+        <Pressable
+          onPress={isUserMsg && !groupChatMode ? (e: any) => handleUserMsgPress(item, e.nativeEvent.pageY) : undefined}
+          onLongPress={!isUserMsg ? () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); Clipboard.setString(item.content || ''); showAlert('Copied', 'Message copied'); } : undefined}
+          delayLongPress={450}
+        >
         <MessageItem
           message={item}
           onCancel={handleCancelGeneration}
@@ -2525,6 +2542,7 @@ Be thorough and cite specific facts.`;
           onDelete={(msgId) => {}}
           onChunkRendered={() => { if (isAtBottom) flatListRef.current?.scrollToEnd({ animated: false }); }}
         />
+        </Pressable>
         {mathData ? (
           <CalculatorCard
             expression={mathData.expression}
@@ -2564,7 +2582,7 @@ Be thorough and cite specific facts.`;
         ) : null}
       </View>
     );
-  }, [streamingMessageId, handleCancelGeneration, handleEditMessage, handleCopyMessage, isOffline, isAtBottom, savedImageUrls, savingImageId, handleSaveToMyImages, user?.id, isDark, colors]);
+  }, [streamingMessageId, handleCancelGeneration, handleEditMessage, handleCopyMessage, isOffline, isAtBottom, savedImageUrls, savingImageId, handleSaveToMyImages, user?.id, isDark, colors, groupChatMode, handleUserMsgPress, generating, messages, thinkingMode, isAdmin, showAlert]);
 
   // ── Inline media previews inside input wrapper (large cards with divider) ──
   const renderInlineMediaPreviews = useCallback(() => {
@@ -3034,7 +3052,7 @@ Be thorough and cite specific facts.`;
                 <View style={[{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingBottom: 6 }]}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#1A1A2A', borderRadius: 18, paddingHorizontal: 14, paddingVertical: 8, gap: 8 }}>
                     <Ionicons name="pencil" size={16} color="#007AFF" />
-                    <Text style={{ color: '#007AFF', fontSize: 15, fontWeight: '600' }}>Edit</Text>
+                    <Text style={{ color: '#007AFF', fontSize: 13, fontWeight: '700' }}>Edit</Text>
                     <TouchableOpacity onPress={handleCancelEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                       <Ionicons name="close" size={16} color="rgba(255,255,255,0.5)" />
                     </TouchableOpacity>
@@ -3291,12 +3309,6 @@ Be thorough and cite specific facts.`;
                   </View>
                 </View>
               ) : null}
-
-              {editingMessageId ? (
-                  <TouchableOpacity style={{ padding: 8 }} onPress={handleCancelEdit}>
-                    <Ionicons name="close-circle-outline" size={24} color="#FF3B30" />
-                  </TouchableOpacity>
-                ) : null}
 
                 {!showSendButton && !sending && !editingMessageId ? (
                   <TouchableOpacity
@@ -3646,6 +3658,60 @@ Be thorough and cite specific facts.`;
             <InviteLinkModal visible={inviteLinkVisible} onClose={() => setInviteLinkVisible(false)} isPlus={isUnlimited} isDark={isDark} />
             <NotificationPermissionModal visible={notifPermModalVisible} onAllow={handleAllowNotifications} onSkip={() => setNotifPermModalVisible(false)} />
 
+            {msgMenuVisible && msgMenuMsg ? (() => {
+              const menuBg = isDark ? 'rgba(36,36,40,0.98)' : 'rgba(255,255,255,0.97)';
+              const menuTextC = isDark ? '#FFFFFF' : '#000000';
+              const menuSubC = isDark ? 'rgba(255,255,255,0.38)' : 'rgba(0,0,0,0.38)';
+              const divC = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)';
+              const createdAt = msgMenuMsg.created_at || msgMenuMsg.createdAt;
+              const ts = createdAt ? new Date(createdAt) : new Date();
+              const dateLabel = 'Today, ' + ts.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+              const { height: SCREEN_H } = Dimensions.get('window');
+              const menuTop = Math.max(80, Math.min(msgMenuPageY - 10, SCREEN_H - 160));
+              return (
+                <Modal visible={msgMenuVisible} transparent animationType="none" onRequestClose={() => setMsgMenuVisible(false)}>
+                  <Pressable style={{ flex: 1 }} onPress={() => setMsgMenuVisible(false)}>
+                    {Platform.OS === 'ios' ? (
+                      <BlurView intensity={isDark ? 16 : 10} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
+                    ) : (
+                      <View style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? 'rgba(0,0,0,0.22)' : 'rgba(0,0,0,0.1)' }]} />
+                    )}
+                  </Pressable>
+                  <View style={{ position: 'absolute', right: 14, top: menuTop, width: 218, borderRadius: 18, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: isDark ? 0.5 : 0.2, shadowRadius: 22, elevation: 22 }}>
+                    {Platform.OS === 'ios' ? (
+                      <BlurView intensity={isDark ? 88 : 78} tint={isDark ? 'dark' : 'extraLight'} style={{ borderRadius: 18, overflow: 'hidden' }}>
+                        <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: divC }}>
+                          <Text style={{ color: menuSubC, fontSize: 12, fontWeight: '500' }}>{dateLabel}</Text>
+                        </View>
+                        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, gap: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: divC }} onPress={() => { setMsgMenuVisible(false); Clipboard.setString(msgMenuMsg.content || ''); showAlert('Copied', 'Message copied to clipboard'); }} activeOpacity={0.65}>
+                          <Ionicons name="copy-outline" size={20} color={menuTextC} />
+                          <Text style={{ fontSize: 17, color: menuTextC }}>Copy</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, gap: 12 }} onPress={() => { setMsgMenuVisible(false); handleEditMessage(msgMenuMsg.id, msgMenuMsg.content || ''); }} activeOpacity={0.65}>
+                          <Ionicons name="pencil-outline" size={20} color={menuTextC} />
+                          <Text style={{ fontSize: 17, color: menuTextC }}>Edit</Text>
+                        </TouchableOpacity>
+                      </BlurView>
+                    ) : (
+                      <View style={{ backgroundColor: menuBg, borderRadius: 18 }}>
+                        <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: divC }}>
+                          <Text style={{ color: menuSubC, fontSize: 12, fontWeight: '500' }}>{dateLabel}</Text>
+                        </View>
+                        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, gap: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: divC }} onPress={() => { setMsgMenuVisible(false); Clipboard.setString(msgMenuMsg.content || ''); showAlert('Copied', 'Message copied to clipboard'); }} activeOpacity={0.65}>
+                          <Ionicons name="copy-outline" size={20} color={menuTextC} />
+                          <Text style={{ fontSize: 17, color: menuTextC }}>Copy</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, gap: 12 }} onPress={() => { setMsgMenuVisible(false); handleEditMessage(msgMenuMsg.id, msgMenuMsg.content || ''); }} activeOpacity={0.65}>
+                          <Ionicons name="pencil-outline" size={20} color={menuTextC} />
+                          <Text style={{ fontSize: 17, color: menuTextC }}>Edit</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                  </View>
+                </Modal>
+              );
+            })() : null}
+
             <MessageLimitModal
               visible={messageLimitModalVisible}
               onClose={() => {
@@ -3781,4 +3847,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-
+in this page add a smooth layout animation when transitioning between the unified pill (empty state) and the separated + button + input wrapper (active state), using React Native LayoutAnimation.configureNext(spring) to prevent jarring layout shifts when the user starts typing.
