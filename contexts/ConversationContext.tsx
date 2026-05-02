@@ -1,4 +1,4 @@
-import React, { createContext, ReactNode, useState, useEffect, useCallback, useRef } from 'react';
+in ConversationContext createConversation(), add a user-facing fallback so that when the DB insert fails the app silently uses a local transient ID (guest-{timestamp}) instead of throwing an error, so users can still chat without seeing 'Failed to create conversation'.import React, { createContext, ReactNode, useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../template';
 import { getSupabaseClient } from '../template';
 import { FunctionsHttpError } from '@supabase/supabase-js';
