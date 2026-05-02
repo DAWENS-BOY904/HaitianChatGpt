@@ -1249,3 +1249,4 @@ const styles = StyleSheet.create({
   textInput: { flex: 1, backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 28, paddingHorizontal: 18, paddingVertical: 13, fontSize: 16, color: '#FFF', maxHeight: 100 },
   sendBtn: { width: 46, height: 46, borderRadius: 23, backgroundColor: '#007AFF', alignItems: 'center', justifyContent: 'center' },
 });
+please fix ai when i tex the ai its respond :I heard you! How can I help you with that? please when i tex the ai its must call edg function voice control chat and give me real response.
