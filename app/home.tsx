@@ -2044,17 +2044,8 @@ Be thorough and cite specific facts.`;
 
     let conversationId = currentConversation?.id;
     if (!conversationId) {
-      try {
-        conversationId = await createConversation();
-      } catch (convErr) {
-        console.log('[Home] createConversation error:', convErr);
-      }
-      if (!conversationId) {
-        showAlert('Error', 'Failed to create conversation. Please try again.');
-        setSending(false);
-        setGenerating(false);
-        return;
-      }
+      conversationId = await createConversation();
+      if (!conversationId) { showAlert('Error', 'Failed to create conversation'); return; }
     }
 
     setInputText('');
