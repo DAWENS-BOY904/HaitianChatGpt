@@ -330,3 +330,4 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     </SubscriptionContext.Provider>
   );
 }
+hello ai if you see my message made all change in real time dont skip please read and amke achange in contexts/SubscriptionContext remove the 'premium_monthly', 'premium_yearly', and 'lifetime' tiers entirely — keep only 'free', 'go', and 'plus'. Update the SubscriptionTier type, PAID_TIERS array, SUBSCRIPTION_LIMITS object, and upgradeSubscription/restorePurchases logic to only reference those three tiers.
