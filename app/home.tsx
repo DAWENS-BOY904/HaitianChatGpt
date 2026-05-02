@@ -854,7 +854,7 @@ function TemporaryChatBanner() {
   return (
     <View style={tmpStyles.banner}>
       <Ionicons name="time-outline" size={18} color="rgba(255,255,255,0.6)" style={{ marginBottom: 8 }} />
-      <Text style={tmpStyles.title}>Temporary chat</Text>
+      <Text style={tmpStyles.title}>Temporary chats</Text>
       <Text style={tmpStyles.body}>This chat will not appear in history, use or update Dawinix memory, or be used to train our models.{'\n\n'}For safety purposes, we may keep a copy of this chat for up to 30 days.</Text>
     </View>
   );
