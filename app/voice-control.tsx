@@ -705,6 +705,7 @@ export default function VoiceControlScreen() {
       return '';
     }
 
+    // Always use user JWT when available; anon key as fallback (edge function accepts both)
     let authToken = supabaseAnonKey;
     try {
       const { data: sessionData } = await supabase.auth.getSession();
