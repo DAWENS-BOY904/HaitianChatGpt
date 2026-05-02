@@ -1,4 +1,4 @@
-fix this page error cant save fix all must can saved and fix settings voice go to voice-select.import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
