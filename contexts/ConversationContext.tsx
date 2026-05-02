@@ -65,7 +65,7 @@ interface ConversationContextType {
   checkAccountStatus: () => Promise<void>;
   createConversation: () => Promise<string | null>;
   selectConversation: (id: string) => Promise<void>;
-  sendMessage: (content: string, fileContents?: Array<{name: string; type: string; content: string}> | string, base64Image?: string, isImageGeneration?: boolean, aiModel?: string, isPriorityUser?: boolean) => Promise<void>;
+  sendMessage: (content: string, fileContents?: Array<{name: string; type: string; content: string}> | string, base64Image?: string, isImageGeneration?: boolean, aiModel?: string) => Promise<void>;
   sendAudioMessage: (audioBase64: string, duration: number, transcription?: string) => Promise<void>;
   updateMessage: (messageId: string, newContent: string) => Promise<void>;
   updateMessageAndRegenerate: (messageId: string, newContent: string, aiModel?: string) => Promise<void>;
@@ -412,18 +412,12 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
     fileContents?: Array<{name: string; type: string; content: string}> | string,
     base64Image?: string,
     isImageGeneration: boolean = false,
-    aiModel?: string,
-    isPriorityUser: boolean = false
+    aiModel?: string
   ) => {
     const imageUrl = typeof fileContents === 'string' ? fileContents : undefined;
     const filePayload = Array.isArray(fileContents) ? fileContents : undefined;
     if (!user) return;
     if (accountStatus.isSuspended) throw new Error(`Account suspended: ${accountStatus.reason || 'Contact support'}`);
-
-    // ── Priority delay: free users wait 800ms; pro/plus/admin get instant requests ──
-    if (!isPriorityUser) {
-      await new Promise(r => setTimeout(r, 800));
-    }
 
     let conversationId = currentConversation?.id;
     if (!conversationId) {
