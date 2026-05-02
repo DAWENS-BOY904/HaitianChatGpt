@@ -86,22 +86,37 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   };
 
   const updateSetting = async <K extends keyof UserSettings>(key: K, value: UserSettings[K]) => {
-    // Optimistic UI update
+    // Optimistic UI update — immediate
     setSettings(prev => ({ ...prev, [key]: value }));
 
     if (!user) return;
 
     // Convert camelCase key to snake_case for DB column name
-    const dbKey = key.replace(/([A-Z])/g, '_$1').toLowerCase();
+    // Special cases for keys that don't follow simple camelCase
+    const KEY_MAP: Record<string, string> = {
+      appLanguage: 'app_language',
+      appearance: 'appearance',
+      accentColor: 'accent_color',
+      hapticFeedback: 'haptic_feedback',
+      autoSpelling: 'auto_spelling',
+      mainLanguage: 'main_language',
+      voiceSelection: 'voice_selection',
+      backgroundConversations: 'background_conversations',
+      autocomplete: 'autocomplete',
+      trendingSearches: 'trending_searches',
+      followupSuggestions: 'followup_suggestions',
+      preferredAiModel: 'preferred_ai_model',
+    };
+    const dbKey = KEY_MAP[key as string] || (key as string).replace(/([A-Z])/g, '_$1').toLowerCase();
 
     // Upsert so the row is created if it doesn't exist yet
-    await supabase
+    const { error } = await supabase
       .from('user_settings')
       .upsert(
         { user_id: user.id, [dbKey]: value, updated_at: new Date().toISOString() },
         { onConflict: 'user_id' }
-      )
-      .catch((err: any) => console.log('[Settings] upsert error:', err?.message));
+      );
+    if (error) console.log('[Settings] upsert error:', error?.message, 'key:', dbKey, 'value:', value);
   };
 
   return (

@@ -358,6 +358,8 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
       const newConv: Conversation = { id: data.id, title: data.title, createdAt: data.created_at, updatedAt: data.updated_at };
       setCurrentConversation(newConv);
       setMessages([]);
+      // Add to conversations list immediately for real-time side menu
+      setConversations(prev => [newConv, ...prev.filter(c => c.id !== data.id)]);
       return data.id;
     } catch (err) {
       console.error('Error creating conversation:', err);
@@ -648,8 +650,9 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
         cleanMessage = 'I am here to help! What would you like to know?';
       }
 
-      // ── Save user message to DB ──
-      const { data: savedUserMessage } = await supabase
+      // ── Save user message to DB (skip for local/guest IDs) ──
+      const isTransientId = conversationId.startsWith('guest-') || conversationId.startsWith('local-');
+      const { data: savedUserMessage } = isTransientId ? { data: null } : await supabase
         .from('messages')
         .insert({ conversation_id: conversationId, role: 'user', content, image_url: finalImageUrl || null })
         .select()
@@ -659,8 +662,8 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
         setMessages(prev => prev.map(m => m.id === userMessageId ? { ...savedUserMessage } : m));
       }
 
-      // ── Save AI message to DB ──
-      const { data: savedAIMessage } = await supabase
+      // ── Save AI message to DB (skip for local/guest IDs) ──
+      const { data: savedAIMessage } = isTransientId ? { data: null } : await supabase
         .from('messages')
         .insert({
           conversation_id: conversationId,
@@ -687,28 +690,30 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
       setStreamingMessageId(null);
 
       // ── Update conversation title on first message ──
-      if (messages.length === 0) {
-        let title = content.slice(0, 50);
-        if (finalImageUrlFromResponse) {
-          title = content.toLowerCase().includes('logo') ? 'Logo Design' : 'Image Generation';
-        } else if (content.length > 50) {
-          title = content.slice(0, 47) + '...';
+      if (!isTransientId) {
+        if (messages.length === 0) {
+          let title = content.slice(0, 50);
+          if (finalImageUrlFromResponse) {
+            title = content.toLowerCase().includes('logo') ? 'Logo Design' : 'Image Generation';
+          } else if (content.length > 50) {
+            title = content.slice(0, 47) + '...';
+          }
+          await updateConversationTitle(conversationId, title);
+          const newConv: Conversation = {
+            id: conversationId, title,
+            createdAt: currentConversation?.createdAt || new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+          setConversations(prev => [newConv, ...prev.filter(c => c.id !== conversationId)]);
+        } else {
+          await supabase.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id', conversationId);
+          setConversations(prev => {
+            const updated = prev.map(c => c.id === conversationId ? { ...c, updatedAt: new Date().toISOString() } : c);
+            const current = updated.find(c => c.id === conversationId);
+            const others = updated.filter(c => c.id !== conversationId);
+            return current ? [current, ...others] : updated;
+          });
         }
-        await updateConversationTitle(conversationId, title);
-        const newConv: Conversation = {
-          id: conversationId, title,
-          createdAt: currentConversation?.createdAt || new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-        setConversations(prev => [newConv, ...prev.filter(c => c.id !== conversationId)]);
-      } else {
-        await supabase.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id', conversationId);
-        setConversations(prev => {
-          const updated = prev.map(c => c.id === conversationId ? { ...c, updatedAt: new Date().toISOString() } : c);
-          const current = updated.find(c => c.id === conversationId);
-          const others = updated.filter(c => c.id !== conversationId);
-          return current ? [current, ...others] : updated;
-        });
       }
 
     } catch (error: any) {
