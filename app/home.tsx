@@ -2030,33 +2030,6 @@ Be thorough and cite specific facts.`;
       return;
     }
 
-    // ── Free user file limits: 1 file, 5MB max ──────────────────────────────
-    if (!isGuest && !isPro && !isUnlimited && !isAdmin && currentMedia.length > 0) {
-      if (currentMedia.length > 1) {
-        showAlert(
-          'File Limit',
-          'Free plan allows 1 file per message. Upgrade to Plus for unlimited files.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Get Plus', onPress: () => router.push('/subscription') },
-          ]
-        );
-        return;
-      }
-      const file = currentMedia[0];
-      if (file.size && file.size > 5 * 1024 * 1024) {
-        showAlert(
-          'File Too Large',
-          'Free plan supports files up to 5MB. Upgrade to Plus for larger files.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Get Plus', onPress: () => router.push('/subscription') },
-          ]
-        );
-        return;
-      }
-    }
-
     if (isGuest) {
       if (guestMessageCount >= GUEST_MESSAGE_LIMIT) {
         setGuestLoginModal(true);
@@ -2079,9 +2052,15 @@ Be thorough and cite specific facts.`;
         console.log('[Home] createConversation error:', convErr);
       }
       if (!conversationId) {
-        // Guest users and users without DB access — create a transient local ID
-        // Don't show an error — just proceed with a local ID that the edge function handles
-        conversationId = isGuest ? `guest-${Date.now()}` : `local-${Date.now()}`;
+        // Guest users don't persist conversations — create a transient local ID
+        if (isGuest) {
+          conversationId = `guest-${Date.now()}`;
+        } else {
+          showAlert('Error', 'Failed to create conversation. Please try again.');
+          setSending(false);
+          setGenerating(false);
+          return;
+        }
       }
     }
 
