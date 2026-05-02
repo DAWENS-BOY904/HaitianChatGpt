@@ -486,7 +486,9 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
 
       // ── Get session token for Authorization header ──
       const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData?.session?.access_token;
+      const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+      // Use user JWT if available; fall back to anon key so edge function allows guest chat
+      const token = sessionData?.session?.access_token || anonKey;
 
       const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
       const edgeFunctionUrl = `${supabaseUrl}/functions/v1/chat`;
@@ -511,7 +513,7 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
             headers: {
               'Content-Type': 'application/json',
               'Authorization': `Bearer ${token}`,
-              'apikey': process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '',
+              'apikey': anonKey,
               // Hint to server about retry attempt for smarter handling
               'x-retry-attempt': String(attempt),
             },
@@ -841,7 +843,8 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
       setStreamingMessageId(aiMessageId);
 
       const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData?.session?.access_token;
+      const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+      const token = sessionData?.session?.access_token || anonKey;
       const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
       const edgeFunctionUrl = `${supabaseUrl}/functions/v1/chat`;
 
@@ -854,7 +857,7 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'apikey': process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '',
+          'apikey': anonKey,
         },
         body: JSON.stringify({
           messages: contextMessages,
