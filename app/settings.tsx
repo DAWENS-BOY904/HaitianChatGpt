@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
   TextInput,
   ActivityIndicator,
   KeyboardAvoidingView,
+  Animated,
 } from 'react-native';
 import VersionCheck from 'react-native-version-check';
 import { Ionicons } from '@expo/vector-icons';
@@ -27,6 +28,107 @@ import * as ImagePicker from 'expo-image-picker';
 import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useProfile } from '../contexts/ProfileContext';
+import { Image as ExpoImageBadge } from 'expo-image';
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// VERIFIED BADGE COMPONENT
+// ═══════════════════════════════════════════════════════════════════════════════
+function VerifiedBadge({ onPress, isPro }: { onPress: () => void; isPro: boolean }) {
+  const glowAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (isPro) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(glowAnim, { toValue: 1, duration: 1200, useNativeDriver: true }),
+          Animated.timing(glowAnim, { toValue: 0, duration: 1200, useNativeDriver: true }),
+        ])
+      ).start();
+    }
+  }, [isPro]);
+
+  if (!isPro) return null;
+
+  return (
+    <TouchableOpacity onPress={onPress} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.75}>
+      <Animated.View style={{
+        opacity: glowAnim.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] }),
+        transform: [{ scale: glowAnim.interpolate({ inputRange: [0, 1], outputRange: [0.95, 1.05] }) }],
+      }}>
+        <ExpoImageBadge
+          source={require('../assets/images/verified-badge.png')}
+          style={{ width: 22, height: 22 }}
+          contentFit="contain"
+        />
+      </Animated.View>
+    </TouchableOpacity>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// VERIFIED BADGE MODAL
+// ═══════════════════════════════════════════════════════════════════════════════
+function VerifiedBadgeModal({ visible, onClose, isDark }: { visible: boolean; onClose: () => void; isDark: boolean }) {
+  const bg = isDark ? '#1C1C1E' : '#FFFFFF';
+  const primaryText = isDark ? '#FFFFFF' : '#000000';
+  const secondaryText = isDark ? 'rgba(255,255,255,0.65)' : 'rgba(0,0,0,0.6)';
+
+  const benefits = [
+    { icon: '💰', text: '$20 welcome reward (credited after verification approval)' },
+    { icon: '🚀', text: 'Unlimited messaging access' },
+    { icon: '📸', text: 'Unlimited photo uploads' },
+    { icon: '💬', text: 'No message limits' },
+    { icon: '⚡', text: 'Priority system performance' },
+    { icon: '🎯', text: 'Full premium feature access' },
+  ];
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.55)', paddingHorizontal: 24 }}>
+        <TouchableOpacity style={{ ...StyleSheet.absoluteFillObject }} activeOpacity={1} onPress={onClose} />
+        <View style={{ width: '100%', maxWidth: 360, borderRadius: 24, overflow: 'hidden', backgroundColor: bg, shadowColor: '#000', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.4, shadowRadius: 24, elevation: 24 }}>
+          {/* Close button */}
+          <TouchableOpacity
+            style={{ position: 'absolute', top: 14, right: 14, width: 32, height: 32, borderRadius: 16, backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}
+            onPress={onClose}
+          >
+            <Text style={{ color: primaryText, fontSize: 16, fontWeight: '600' }}>✕</Text>
+          </TouchableOpacity>
+
+          <View style={{ padding: 28, alignItems: 'center' }}>
+            {/* Badge icon */}
+            <ExpoImageBadge
+              source={require('../assets/images/verified-badge.png')}
+              style={{ width: 72, height: 72, marginBottom: 16 }}
+              contentFit="contain"
+            />
+
+            <Text style={{ fontSize: 22, fontWeight: '800', color: primaryText, marginBottom: 6, textAlign: 'center' }}>✔ Verified Pro Member</Text>
+            <Text style={{ fontSize: 14, color: secondaryText, textAlign: 'center', lineHeight: 20, marginBottom: 24 }}>
+              This badge confirms that the user is a Pro Plan Verified Member.
+            </Text>
+
+            <View style={{ width: '100%', backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)', borderRadius: 16, padding: 16, marginBottom: 20 }}>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: secondaryText, marginBottom: 12, textTransform: 'uppercase' }}>Exclusive Benefits</Text>
+              {benefits.map((b, i) => (
+                <View key={i} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 10 }}>
+                  <Text style={{ fontSize: 16 }}>{b.icon}</Text>
+                  <Text style={{ fontSize: 14, color: primaryText, flex: 1, lineHeight: 20 }}>{b.text}</Text>
+                </View>
+              ))}
+            </View>
+
+            <View style={{ backgroundColor: 'rgba(220,38,38,0.1)', borderRadius: 12, padding: 12, width: '100%', borderWidth: 1, borderColor: 'rgba(220,38,38,0.2)' }}>
+              <Text style={{ fontSize: 12, color: '#DC2626', textAlign: 'center', fontWeight: '600', lineHeight: 18 }}>
+                All benefits are activated only for verified Pro members. Badge status is controlled by the system only.
+              </Text>
+            </View>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // EDIT PROFILE MODAL
@@ -274,6 +376,7 @@ export default function SettingsScreen() {
   const [photoPickerVisible, setPhotoPickerVisible] = useState(false);
   const [accentPickerVisible, setAccentPickerVisible] = useState(false);
   const [appearancePickerVisible, setAppearancePickerVisible] = useState(false);
+  const [verifiedBadgeModalVisible, setVerifiedBadgeModalVisible] = useState(false);
 
   const currentVersion = Constants.expoConfig?.version || '1.0.0';
   const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'update' | 'no-update' | 'version'>('idle');
@@ -744,7 +847,10 @@ export default function SettingsScreen() {
               <Text style={{ fontSize: 34, fontWeight: '700', color: primaryText }}>{initials}</Text>
             )}
           </View>
-          <Text style={{ fontSize: 22, fontWeight: '700', color: primaryText, marginBottom: 4 }}>{displayName}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+            <Text style={{ fontSize: 22, fontWeight: '700', color: primaryText }}>{displayName}</Text>
+            <VerifiedBadge isPro={isPaidPlan} onPress={() => setVerifiedBadgeModalVisible(true)} />
+          </View>
           {displayUsername ? <Text style={{ fontSize: 15, color: secondaryText, marginBottom: 14 }}>{displayUsername}</Text> : null}
           <TouchableOpacity
             style={{
@@ -938,6 +1044,13 @@ export default function SettingsScreen() {
           </KeyboardAvoidingView>
         </View>
       </Modal>
+
+      {/* Verified Badge Modal */}
+      <VerifiedBadgeModal
+        visible={verifiedBadgeModalVisible}
+        onClose={() => setVerifiedBadgeModalVisible(false)}
+        isDark={isDark}
+      />
 
       {/* ═══════════════════════════════════════════════════════════════
           PHOTO PICKER MODAL
