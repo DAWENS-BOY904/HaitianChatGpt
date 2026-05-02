@@ -3,9 +3,9 @@ import { AppState, AppStateStatus } from 'react-native';
 import { useAuth } from '../template';
 import { getSupabaseClient } from '../template';
 
-export type SubscriptionTier = 'free' | 'go' | 'plus' | 'premium_monthly' | 'premium_yearly' | 'lifetime';
+export type SubscriptionTier = 'free' | 'go' | 'plus';
 
-const PAID_TIERS: SubscriptionTier[] = ['go', 'plus', 'premium_monthly', 'premium_yearly', 'lifetime'];
+const PAID_TIERS: SubscriptionTier[] = ['go', 'plus'];
 
 export function isPaidTier(tier: SubscriptionTier): boolean {
   return PAID_TIERS.includes(tier);
@@ -64,33 +64,6 @@ const SUBSCRIPTION_LIMITS: Record<SubscriptionTier, SubscriptionLimits> = {
     imageUploadsPerSession: 20,
     fileUploadsPerSession: 20,
   },
-  premium_monthly: {
-    messagesPerDay: 1000,
-    canUploadMedia: true,
-    canCreateGroups: true,
-    maxGroupMembers: 256,
-    canUseAdvancedAI: true,
-    imageUploadsPerSession: 10,
-    fileUploadsPerSession: 10,
-  },
-  premium_yearly: {
-    messagesPerDay: 5000,
-    canUploadMedia: true,
-    canCreateGroups: true,
-    maxGroupMembers: 512,
-    canUseAdvancedAI: true,
-    imageUploadsPerSession: 20,
-    fileUploadsPerSession: 20,
-  },
-  lifetime: {
-    messagesPerDay: 99999,
-    canUploadMedia: true,
-    canCreateGroups: true,
-    maxGroupMembers: 512,
-    canUseAdvancedAI: true,
-    imageUploadsPerSession: 999,
-    fileUploadsPerSession: 999,
-  },
 };
 
 export function SubscriptionProvider({ children }: { children: ReactNode }) {
@@ -101,6 +74,13 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
   const supabase = getSupabaseClient();
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   const lastRefreshRef = useRef<number>(0);
+
+  // Normalize any legacy tier value to the three supported tiers
+  const normalizeTier = (raw: string): SubscriptionTier => {
+    if (raw === 'plus' || raw === 'premium_yearly') return 'plus';
+    if (raw === 'go' || raw === 'premium_monthly') return 'go';
+    return 'free';
+  };
 
   // Load from DB
   const loadSubscriptionData = useCallback(async () => {
@@ -114,19 +94,15 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         .single();
 
       if (!error && data) {
-        const currentTier = (data.subscription_tier || 'free') as SubscriptionTier;
+        const rawTier = data.subscription_tier || 'free';
 
         if (data.subscription_expires_at && new Date(data.subscription_expires_at) < new Date()) {
-          if (currentTier !== 'lifetime') {
-            try {
-              await supabase.from('user_profiles').update({ subscription_tier: 'free' }).eq('id', user.id);
-            } catch (_e) {}
-            setTier('free');
-          } else {
-            setTier(currentTier);
-          }
+          try {
+            await supabase.from('user_profiles').update({ subscription_tier: 'free' }).eq('id', user.id);
+          } catch (_e) {}
+          setTier('free');
         } else {
-          setTier(currentTier);
+          setTier(normalizeTier(rawTier));
         }
 
         setMessageCountToday(data.message_count_today || 0);
@@ -155,8 +131,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
 
       if (!error && data) {
         if (data.subscribed && data.plan) {
-          const syncedTier = data.plan as SubscriptionTier;
-          setTier(syncedTier);
+          setTier(normalizeTier(data.plan));
         } else {
           // No active Stripe sub — fall back to DB value
           await loadSubscriptionData();
@@ -187,7 +162,6 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         nextState === 'active' &&
         user
       ) {
-        // App came to foreground — refresh subscription tier from Stripe
         refreshSubscription();
       }
       appStateRef.current = nextState;
@@ -221,21 +195,18 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
   const upgradeSubscription = async (plan: SubscriptionTier) => {
     if (!user) return { error: 'Not authenticated' };
 
-    const prices: Record<string, number> = {
+    const prices: Record<SubscriptionTier, number> = {
       free: 0,
-      premium_monthly: 10,
-      premium_yearly: 20,
-      lifetime: 80,
       go: 8,
       plus: 20,
     };
 
     let expiresAt: string | null = null;
-    if (plan === 'premium_monthly' || plan === 'go') {
+    if (plan === 'go') {
       const expiry = new Date();
       expiry.setMonth(expiry.getMonth() + 1);
       expiresAt = expiry.toISOString();
-    } else if (plan === 'premium_yearly' || plan === 'plus') {
+    } else if (plan === 'plus') {
       const expiry = new Date();
       expiry.setFullYear(expiry.getFullYear() + 1);
       expiresAt = expiry.toISOString();
@@ -284,13 +255,14 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
       }
 
       const lastPurchase = data[0];
+      const restoredTier = normalizeTier(lastPurchase.plan);
 
       let expiresAt: string | null = null;
-      if (lastPurchase.plan === 'premium_monthly' || lastPurchase.plan === 'go') {
+      if (restoredTier === 'go') {
         const purchaseDate = new Date(lastPurchase.created_at);
         purchaseDate.setMonth(purchaseDate.getMonth() + 1);
         expiresAt = purchaseDate.toISOString();
-      } else if (lastPurchase.plan === 'premium_yearly' || lastPurchase.plan === 'plus') {
+      } else if (restoredTier === 'plus') {
         const purchaseDate = new Date(lastPurchase.created_at);
         purchaseDate.setFullYear(purchaseDate.getFullYear() + 1);
         expiresAt = purchaseDate.toISOString();
@@ -299,7 +271,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
       await supabase
         .from('user_profiles')
         .update({
-          subscription_tier: lastPurchase.plan,
+          subscription_tier: restoredTier,
           subscription_expires_at: expiresAt,
         })
         .eq('id', user.id);
@@ -330,4 +302,3 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     </SubscriptionContext.Provider>
   );
 }
-hello ai if you see my message made all change in real time dont skip please read and amke achange in contexts/SubscriptionContext remove the 'premium_monthly', 'premium_yearly', and 'lifetime' tiers entirely — keep only 'free', 'go', and 'plus'. Update the SubscriptionTier type, PAID_TIERS array, SUBSCRIPTION_LIMITS object, and upgradeSubscription/restorePurchases logic to only reference those three tiers.

@@ -1,9 +1,19 @@
 import { useContext } from 'react';
-import { SubscriptionContext } from '../contexts/SubscriptionContext';
+import { SubscriptionContext, SubscriptionTier } from '../contexts/SubscriptionContext';
 import { useAuth } from '@/template';
 
 const ADMIN_EMAILS = ['berryxoe@gmail.com', 'kontgithub@gmail.com'];
 const GEN_PLUS_EMAILS = ['newdawens@gmail.com'];
+
+const UNLIMITED_LIMITS = {
+  messagesPerDay: 99999,
+  canUploadMedia: true,
+  canCreateGroups: true,
+  maxGroupMembers: 512,
+  canUseAdvancedAI: true,
+  imageUploadsPerSession: 999,
+  fileUploadsPerSession: 999,
+};
 
 export function useSubscription() {
   const context = useContext(SubscriptionContext);
@@ -16,42 +26,26 @@ export function useSubscription() {
   const isAdminEmail = email ? ADMIN_EMAILS.includes(email) : false;
   const isGenPlusEmail = email ? GEN_PLUS_EMAILS.includes(email) : false;
 
-  // Gen Plus email gets plus tier with Gen Plus limits
+  // Gen Plus email gets plus tier with unlimited limits
   if (isGenPlusEmail) {
     return {
       ...context,
-      tier: 'plus' as const,
+      tier: 'plus' as SubscriptionTier,
       isPro: true,
       canSendMessage: () => true,
-      limits: {
-        messagesPerDay: 99999,
-        canUploadMedia: true,
-        canCreateGroups: true,
-        maxGroupMembers: 512,
-        canUseAdvancedAI: true,
-        imageUploadsPerSession: 999,
-        fileUploadsPerSession: 999,
-      },
+      limits: UNLIMITED_LIMITS,
       incrementMessageCount: async () => {},
     };
   }
 
-  // Admin emails always get pro + unlimited access
+  // Admin emails always get plus + unlimited access
   if (isAdminEmail) {
     return {
       ...context,
-      tier: 'pro' as const,
+      tier: 'plus' as SubscriptionTier,
       isPro: true,
       canSendMessage: () => true,
-      limits: {
-        messagesPerDay: 99999,
-        canUploadMedia: true,
-        canCreateGroups: true,
-        maxGroupMembers: 512,
-        canUseAdvancedAI: true,
-        imageUploadsPerSession: 999,
-        fileUploadsPerSession: 999,
-      },
+      limits: UNLIMITED_LIMITS,
       incrementMessageCount: async () => {},
     };
   }

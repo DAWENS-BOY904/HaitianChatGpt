@@ -633,13 +633,12 @@ export default function SettingsScreen() {
 
   const ADMIN_EMAILS_SETTINGS = ['berryxoe@gmail.com', 'newdawens@gmail.com', 'kontgithub@gmail.com'];
   const isAdminUser = ADMIN_EMAILS_SETTINGS.includes(user?.email?.toLowerCase() || '');
-  const isPaidPlan = isAdminUser || ['go', 'plus', 'premium_monthly', 'premium_yearly', 'lifetime'].includes(tier);
+  const isPaidPlan = isAdminUser || ['go', 'plus'].includes(tier);
 
   const tierLabel = () => {
-    if (isAdminUser) return 'Admin — Pro';
-    if (tier === 'lifetime') return 'Lifetime Pro';
-    if (tier === 'plus' || tier === 'premium_yearly') return 'Plus';
-    if (tier === 'go' || tier === 'premium_monthly') return 'Go';
+    if (isAdminUser) return 'Admin — Plus';
+    if (tier === 'plus') return 'Plus';
+    if (tier === 'go') return 'Go';
     return 'Free Plan';
   };
 
@@ -884,14 +883,10 @@ export default function SettingsScreen() {
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
             <Text style={{ fontSize: 22, fontWeight: '700', color: primaryText }}>{displayName}</Text>
-            // ANSYEN:
-<VerifiedBadge isPro={isPaidPlan} onPress={() => setVerifiedBadgeModalVisible(true)} />
-
-// NOUVO — pase ki tier li ye a:
-<VerifiedBadge 
-  tier={isAdminUser ? 'pro' : tier === 'plus' || tier === 'premium_yearly' ? 'plus' : isPaidPlan ? 'pro' : null} 
-  onPress={() => setVerifiedBadgeModalVisible(true)} 
-/>
+            <VerifiedBadge
+              tier={isAdminUser ? 'plus' : tier === 'plus' ? 'plus' : tier === 'go' ? 'go' : null}
+              onPress={() => setVerifiedBadgeModalVisible(true)}
+            />
           </View>
           {displayUsername ? <Text style={{ fontSize: 15, color: secondaryText, marginBottom: 14 }}>{displayUsername}</Text> : null}
           <TouchableOpacity
@@ -1088,20 +1083,12 @@ export default function SettingsScreen() {
       </Modal>
 
       {/* Verified Badge Modal */}
-      // ANSYEN:
-<VerifiedBadgeModal
-  visible={verifiedBadgeModalVisible}
-  onClose={() => setVerifiedBadgeModalVisible(false)}
-  isDark={isDark}
-/>
-
-// NOUVO — pase tier a:
-<VerifiedBadgeModal
-  visible={verifiedBadgeModalVisible}
-  onClose={() => setVerifiedBadgeModalVisible(false)}
-  isDark={isDark}
-  tier={isAdminUser ? 'pro' : tier === 'plus' || tier === 'premium_yearly' ? 'plus' : 'pro'}
-/>
+      <VerifiedBadgeModal
+        visible={verifiedBadgeModalVisible}
+        onClose={() => setVerifiedBadgeModalVisible(false)}
+        isDark={isDark}
+        tier={isAdminUser ? 'plus' : tier === 'plus' ? 'plus' : 'pro'}
+      />
 
       {/* ═══════════════════════════════════════════════════════════════
           PHOTO PICKER MODAL
