@@ -345,7 +345,23 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
   };
 
   const createConversation = async (): Promise<string | null> => {
-    if (!user) return null;
+    // Helper: silently create a local transient conversation so chat works even if DB is unreachable
+    const fallbackLocal = (): string => {
+      const localId = `guest-${Date.now()}`;
+      const localConv: Conversation = {
+        id: localId,
+        title: 'New Chat',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      setCurrentConversation(localConv);
+      setMessages([]);
+      // Don't add transient convs to the sidebar list
+      return localId;
+    };
+
+    if (!user) return fallbackLocal();
+
     try {
       const { data, error } = await supabase
         .from('conversations')
@@ -353,7 +369,11 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
         .select()
         .single();
 
-      if (error || !data) { console.error('Failed to create conversation:', error); return null; }
+      if (error || !data) {
+        console.error('Failed to create conversation (DB):', error);
+        // Silently fall back — user can still chat with a local transient ID
+        return fallbackLocal();
+      }
 
       const newConv: Conversation = { id: data.id, title: data.title, createdAt: data.created_at, updatedAt: data.updated_at };
       setCurrentConversation(newConv);
@@ -363,7 +383,7 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
       return data.id;
     } catch (err) {
       console.error('Error creating conversation:', err);
-      return null;
+      return fallbackLocal();
     }
   };
 
