@@ -34,9 +34,7 @@ import { StreamingText } from './StreamingText';
 import { MessageActionsModal } from './MessageActionsModal';
 import { LinkSafetyModal } from './LinkSafetyModal';
 import { WebViewModal } from './WebViewModal';
-import { ImageViewerModal } from './ImageViewerModal';
-import { ImageEditModal } from './ImageEditModal';
-import { FileDownloadModal } from './FileDownloadModal';
+import { ImageSearchResults } from './ImageSearchResults';
 import { SourcesButton, parseSources, Source } from './SourcesModal';
 import { AnalysisModal, TerminalButton, parseAnalysis } from './AnalysisModal';
 import { getSupabaseClient } from '@/template';
@@ -513,6 +511,23 @@ function parseDownloadCard(content: string): { text: string; downloadLabel?: str
   const before = content.substring(0, start).trim();
   const after = content.substring(end + endTag.length).trim();
   return { text: [before, after].filter(Boolean).join('\n\n'), downloadLabel: label };
+}
+
+function parseImageSearchResults(content: string): { text: string; imageSearchResults?: any[] } {
+  const startTag = '[IMAGE_SEARCH_RESULTS:';
+  const endTag = ']';
+  const start = content.indexOf(startTag);
+  const end = content.indexOf(endTag, start);
+  if (start === -1 || end === -1) return { text: content };
+  const jsonStr = content.substring(start + startTag.length, end).trim();
+  const before = content.substring(0, start).trim();
+  const after = content.substring(end + endTag.length).trim();
+  try {
+    const results = JSON.parse(jsonStr);
+    return { text: [before, after].filter(Boolean).join('\n\n'), imageSearchResults: results };
+  } catch {
+    return { text: content };
+  }
 }
 
 function formatMessageTime(dateStr: string): string {
@@ -1050,11 +1065,12 @@ export const MessageItem = memo(function MessageItem({
     const { text: t1, sources } = parseSources(message.content);
     const { text: t2, entries: analysisEntries } = parseAnalysis(t1);
     const { text: t3, downloadLabel } = parseDownloadCard(t2);
-    const { hasCard, cardContent, beforeCard } = extractMessageCard(t3);
-    return { sources, analysisEntries, downloadLabel, hasCard, cardContent, beforeCard };
+    const { text: t4, imageSearchResults } = parseImageSearchResults(t3);
+    const { hasCard, cardContent, beforeCard } = extractMessageCard(t4);
+    return { sources, analysisEntries, downloadLabel, hasCard, cardContent, beforeCard, imageSearchResults };
   }, [message.content]);
 
-  const { sources, analysisEntries, downloadLabel, hasCard, cardContent, beforeCard } = parsed;
+  const { sources, analysisEntries, downloadLabel, hasCard, cardContent, beforeCard, imageSearchResults } = parsed;
 
   const { inlineImages, cleanedBeforeCard } = useMemo(() => {
     if (message.role !== 'assistant') return { inlineImages: [], cleanedBeforeCard: beforeCard };
@@ -1277,6 +1293,14 @@ export const MessageItem = memo(function MessageItem({
               </TouchableOpacity>
             </TouchableOpacity>
           ))}
+
+          {imageSearchResults && imageSearchResults.length > 0 && (
+            <ImageSearchResults
+              query={message.content.split('\n')[0] || 'Image search'}
+              images={imageSearchResults}
+              onImagePress={(url) => handleImagePress(url)}
+            />
+          )}
 
           {downloadLabel && message.role === 'assistant' && <DownloadLinkCard label={downloadLabel} colors={colors} />}
           {hasCard && message.role === 'assistant' && <MessageCard content={cardContent} colors={colors} />}

@@ -1092,11 +1092,50 @@ export async function callAI(modelId: string, messages: AIMessage[], isImageTask
 }
 
 /**
+ * Search for images using Unsplash API
+ */
+export async function searchImages(query: string, limit: number = 10): Promise<{
+  images: Array<{ url: string; title?: string; source: string; resolution?: string }>;
+  error?: string;
+}> {
+  const accessKey = Deno.env.get('UNSPLASH_ACCESS_KEY');
+  if (!accessKey) {
+    return { images: [], error: 'Unsplash API key not configured' };
+  }
+
+  try {
+    const response = await fetch(`https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&per_page=${limit}&orientation=landscape`, {
+      headers: {
+        'Authorization': `Client-ID ${accessKey}`,
+      },
+      signal: AbortSignal.timeout(10000),
+    });
+
+    if (!response.ok) {
+      return { images: [], error: `Unsplash API error: ${response.status}` };
+    }
+
+    const data = await response.json();
+    const images = data.results.map((img: any) => ({
+      url: img.urls.regular,
+      title: img.description || img.alt_description || query,
+      source: 'Unsplash',
+      resolution: `${img.width}x${img.height}`,
+    }));
+
+    return { images };
+  } catch (error: any) {
+    console.log('[Image Search] Unsplash failed:', error.message);
+    return { images: [], error: error.message || 'Image search failed' };
+  }
+}
+
+/**
  * Detect content type from user message
  */
 export function detectContentType(userMessage: string): {
-  type: 'image' | 'file' | 'both' | 'code' | 'text';
-  thinkingMode: 'thinking' | 'creating_image' | 'analyzing' | 'editing_image';
+  type: 'image' | 'file' | 'both' | 'code' | 'text' | 'search';
+  thinkingMode: 'thinking' | 'creating_image' | 'analyzing' | 'editing_image' | 'searching';
   suggestedModel: string;
   isImageTask: boolean;
   hasImageKeywords: boolean;
@@ -1136,6 +1175,13 @@ export function detectContentType(userMessage: string): {
     'generate a photo of', 'create a photo of', 'make a photo of',
   ];
 
+  const searchKeywords = [
+    'search for photos', 'find photos', 'look for images', 'search images', 'find images',
+    'show me photos', 'show me images', 'search photo', 'find photo', 'look for photo',
+    'cherche foto', 'jwenn foto', 'montre m foto', 'recherche photo',
+    'buscar fotos', 'encontrar fotos', 'mostrar fotos',
+  ];
+
   const editKeywords = [
     'edit image', 'edit the image', 'modify image', 'edit photo', 'modify photo',
   ];
@@ -1147,11 +1193,16 @@ export function detectContentType(userMessage: string): {
   ];
 
   const hasImageKeywords = imageKeywords.some(keyword => lowerMsg.includes(keyword));
+  const hasSearchKeywords = searchKeywords.some(keyword => lowerMsg.includes(keyword));
   const hasFileKeywords = fileKeywords.some(keyword => lowerMsg.includes(keyword));
   const hasEditKeywords = editKeywords.some(keyword => lowerMsg.includes(keyword));
 
   if (hasEditKeywords) {
     return { type: 'image', thinkingMode: 'editing_image', suggestedModel: 'google-gemini', isImageTask: true, hasImageKeywords: true, hasFileKeywords: false };
+  }
+
+  if (hasSearchKeywords) {
+    return { type: 'search', thinkingMode: 'searching', suggestedModel: 'search-engine', isImageTask: false, hasImageKeywords: false, hasFileKeywords: false };
   }
 
   if (hasImageKeywords && hasFileKeywords) {

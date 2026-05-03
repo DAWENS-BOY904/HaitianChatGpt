@@ -2,7 +2,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
-import { callAI, detectContentType, generateImageSmart } from '../_shared/ai-providers.ts';
+import { callAI, detectContentType, generateImageSmart, searchImages } from '../_shared/ai-providers.ts';
 
 // ==========================================
 // ADVANCED SAFETY MODULE (SELF-HARM DETECTION)
@@ -1104,9 +1104,31 @@ const safety_rules = [
         .trim();
     }
 
-    // ── STRICT IMAGE TASK HANDLER ──────────────────────────────────────────────
-    // Always generate a real image — NEVER return raw JSON action blobs
-    if (detectionResult.isImageTask) {
+    // ── IMAGE SEARCH HANDLER ──────────────────────────────────────────────────
+    if (detectionResult.type === 'search') {
+      console.log('[chat] Image search detected, searching for:', lastUserContent.slice(0, 120));
+
+      const searchResult = await searchImages(lastUserContent, 10);
+
+      if (searchResult.images && searchResult.images.length > 0) {
+        // Format the response with image search results
+        const imageList = searchResult.images.map((img, idx) => 
+          `[IMAGE_${idx + 1}] ${img.title || 'Image'} - ${img.source} (${img.resolution || 'Unknown resolution'})\nURL: ${img.url}`
+        ).join('\n\n');
+
+        aiResponse = {
+          content: `Here are some images I found for "${lastUserContent}":\n\n${imageList}\n\n[IMAGE_SEARCH_RESULTS:${JSON.stringify(searchResult.images)}]`,
+          model: 'image-search',
+          tokens: 0,
+        };
+      } else {
+        aiResponse = {
+          content: `I couldn't find any images for "${lastUserContent}". Please try a different search term or be more specific.`,
+          model: 'image-search',
+          tokens: 0,
+        };
+      }
+    } else if (detectionResult.isImageTask) {
       console.log('[chat] Image task detected, generating image for prompt:', lastUserContent.slice(0, 120));
 
       // Pass supabaseAdmin so generateImageSmart can upload base64 images automatically
