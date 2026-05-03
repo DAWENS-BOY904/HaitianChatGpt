@@ -1375,4 +1375,3 @@ export const MessageItem = memo(function MessageItem({
     </>
   );
 });
-please block reply modal from user message only put copy and edit modal.
