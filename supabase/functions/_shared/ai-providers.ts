@@ -1178,8 +1178,16 @@ export function detectContentType(userMessage: string): {
   const searchKeywords = [
     'search for photos', 'find photos', 'look for images', 'search images', 'find images',
     'show me photos', 'show me images', 'search photo', 'find photo', 'look for photo',
-    'cherche foto', 'jwenn foto', 'montre m foto', 'recherche photo',
-    'buscar fotos', 'encontrar fotos', 'mostrar fotos',
+    // Haitian Creole
+    'ban m foto', 'banm foto', 'ban mwen foto', 'banm we foto', 'ban m we foto',
+    'ban m kek foto', 'banm kek foto', 'ban mwen kek foto',
+    'cherche foto', 'jwenn foto', 'montre m foto', 'montre mwen foto',
+    'voye foto', 'send photo', 'send foto', 'montre foto',
+    'kek imaj', 'ban m imaj', 'banm imaj', 'montre m imaj',
+    // French
+    'recherche photo', 'chercher des photos', 'trouver des images', 'montre moi des photos',
+    // Spanish
+    'buscar fotos', 'encontrar fotos', 'mostrar fotos', 'buscar imagenes',
   ];
 
   const editKeywords = [

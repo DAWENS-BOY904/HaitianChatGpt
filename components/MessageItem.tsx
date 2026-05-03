@@ -517,15 +517,27 @@ function parseDownloadCard(content: string): { text: string; downloadLabel?: str
 
 function parseImageSearchResults(content: string): { text: string; imageSearchResults?: any[] } {
   const startTag = '[IMAGE_SEARCH_RESULTS:';
-  const endTag = ']';
   const start = content.indexOf(startTag);
-  const end = content.indexOf(endTag, start);
-  if (start === -1 || end === -1) return { text: content };
+  if (start === -1) return { text: content };
+
+  // Find the matching closing bracket by counting brackets
+  let depth = 0;
+  let end = -1;
+  for (let i = start + startTag.length; i < content.length; i++) {
+    if (content[i] === '[') depth++;
+    else if (content[i] === ']') {
+      if (depth === 0) { end = i; break; }
+      depth--;
+    }
+  }
+  if (end === -1) return { text: content };
+
   const jsonStr = content.substring(start + startTag.length, end).trim();
   const before = content.substring(0, start).trim();
-  const after = content.substring(end + endTag.length).trim();
+  const after = content.substring(end + 1).trim();
   try {
     const results = JSON.parse(jsonStr);
+    if (!Array.isArray(results) || results.length === 0) return { text: [before, after].filter(Boolean).join('\n\n') };
     return { text: [before, after].filter(Boolean).join('\n\n'), imageSearchResults: results };
   } catch {
     return { text: content };

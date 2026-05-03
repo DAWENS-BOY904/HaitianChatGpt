@@ -686,32 +686,13 @@ When you reference or search for real information from the web, include the sour
 [/SOURCES]
 Do this whenever you cite facts, statistics, or information that comes from specific websites.
 
-IMAGE SEARCH RESULTS RULES (CRITICAL):
-When the user asks for images, photos, pictures, or visual examples of any topic, you MUST include image search results using this EXACT format at the END of your response:
-[IMAGE_SEARCH_RESULTS:[{"url":"https://images.unsplash.com/photo-XXXXXXXXX?w=800","title":"Description","source":"unsplash.com"},{"url":"https://images.unsplash.com/photo-XXXXXXXXX?w=800","title":"Description","source":"unsplash.com"},{"url":"https://images.unsplash.com/photo-XXXXXXXXX?w=800","title":"Description","source":"unsplash.com"}]]
-
-WHEN TO ADD IMAGE RESULTS:
-- User asks "show me photos/images of X"
-- User asks "give me examples with photos"
-- User says "I don not understand, show me pictures"  
-- User asks about anything visual (animals, places, objects, food, art, etc.)
-- Any request that benefits from visual illustration
-
-UNSPLASH PHOTO IDs TO USE (rotate these based on topic):
-- Technology: photo-1518770660439-4636190af475, photo-1461749280684-dccba630e2f6, photo-1504639725590-34d0984388bd
-- Nature: photo-1501854140801-50d01698950b, photo-1441974231531-c6227db76b6e, photo-1470071459604-3b5ec3a7fe05
-- Food: photo-1567620905732-2d1ec7ab7445, photo-1565299624946-b28f40a0ae38, photo-1484723091739-30a097e8f929
-- People: photo-1529156069898-49953e39b3ac, photo-1522556189639-b150ed9c4330, photo-1494790108377-be9c29b29330
-- Architecture: photo-1486325212027-8081e485255e, photo-1511818966892-d7d671e672a2, photo-1449157291145-7efd050a4d0e
-- Animals: photo-1474511320723-9a56873867b5, photo-1437622368342-7a3d73a34c8f, photo-1518020382113-a7e8fc38eac9
-- Sports: photo-1461896836934-ffe607ba8211, photo-1540747913346-19e32dc3e97e, photo-1574629810360-7efbbe195018
-- Science: photo-1507413245164-6160d8298b31, photo-1576086213369-97a306d36557, photo-1532187863486-abf9dbad1b69
-- Business: photo-1556761175-b413da4baf72, photo-1542744173-8e7e53415bb0, photo-1497366216548-37526070297c
-- Travel: photo-1488085061387-422e29b40080, photo-1476514525535-07fb3b4ae5f1, photo-1469854523086-cc02fe5d8800
-- Fashion: photo-1445205170230-053b83016050, photo-1490481651871-ab68de25d43d, photo-1483985988355-763728e1935b
-- Art: photo-1547891654-e66ed7ebb968, photo-1501084817091-a4f3d1d19e07, photo-1460661419201-fd4cecdf8a8b
-- Health: photo-1571019613454-1cb2f99b2d8b, photo-1532938911079-1b06ac7ceec7, photo-1559839734-2b71ea197ec2
-Always include 3-6 relevant images. Use real Unsplash photo IDs that match the topic closely.
+IMAGE SEARCH RULES (CRITICAL):
+DO NOT generate fake image search results.
+DO NOT create [IMAGE_SEARCH_RESULTS:...] tags yourself.
+DO NOT invent Unsplash photo IDs or fake image URLs.
+The system will automatically search and display real images when the user requests them.
+If a user asks for images and the system cannot find them, clearly say: "I cannot search for images right now. Please try again later."
+NEVER pretend to show images by generating mock JSON or placeholder URLs.
 
 DOWNLOAD CARD RULES:
 When you generate a complete file or multi-file project for the user, add a download card AFTER your explanation like this:
@@ -1138,22 +1119,21 @@ const safety_rules = [
       const searchResult = await searchImages(lastUserContent, 10);
 
       if (searchResult.images && searchResult.images.length > 0) {
-        // Format the response with image search results
-        const imageList = searchResult.images.map((img, idx) => 
-          `[IMAGE_${idx + 1}] ${img.title || 'Image'} - ${img.source} (${img.resolution || 'Unknown resolution'})\nURL: ${img.url}`
-        ).join('\n\n');
-
+        // Return real image results tagged for client-side rendering
         aiResponse = {
-          content: `Here are some images I found for "${lastUserContent}":\n\n${imageList}\n\n[IMAGE_SEARCH_RESULTS:${JSON.stringify(searchResult.images)}]`,
+          content: `Men kèk imaj mwen te jwenn pou w:\n\n[IMAGE_SEARCH_RESULTS:${JSON.stringify(searchResult.images)}]`,
           model: 'image-search',
           tokens: 0,
         };
       } else {
-        aiResponse = {
-          content: `I couldn't find any images for "${lastUserContent}". Please try a different search term or be more specific.`,
-          model: 'image-search',
-          tokens: 0,
-        };
+        // No real images found — let the AI respond truthfully, no fake results
+        aiResponse = await callAI(aiModel, [
+          ...aiMessages,
+          {
+            role: 'system',
+            content: 'The image search returned no results. Tell the user honestly in their language that you could not find images for their request and suggest they try different keywords. Do NOT generate or invent any image URLs or [IMAGE_SEARCH_RESULTS] tags.',
+          }
+        ], false);
       }
     } else if (detectionResult.isImageTask) {
       console.log('[chat] Image task detected, generating image for prompt:', lastUserContent.slice(0, 120));
@@ -1263,6 +1243,8 @@ const safety_rules = [
     cleanMessage = cleanMessage.replace(/google-gemini unavailable/gi, '');
     cleanMessage = cleanMessage.replace(/openai unavailable/gi, '');
     cleanMessage = cleanMessage.replace(/claude unavailable/gi, '');
+    // Strip any fake IMAGE_SEARCH_RESULTS the text AI may have generated
+    cleanMessage = cleanMessage.replace(/\[IMAGE_SEARCH_RESULTS:[^\]]*\]/gs, '').trim();
     cleanMessage = cleanMessage.trim();
 
     // Final safety net — never send empty content to client
