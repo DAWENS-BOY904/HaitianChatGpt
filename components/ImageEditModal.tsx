@@ -7,9 +7,9 @@ import {
   TextInput,
   TouchableOpacity,
   Platform,
-  Image,
   ActivityIndicator,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
 import { useAlert } from '@/template';
