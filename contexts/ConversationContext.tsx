@@ -89,6 +89,81 @@ interface ConversationContextType {
 
 export const ConversationContext = createContext<ConversationContextType | undefined>(undefined);
 
+// ==================== SMART CONVERSATION TITLE GENERATOR ====================
+
+const SELF_HARM_KEYWORDS = [
+  'kill myself', 'kill my self', 'suicide', 'suicidal', 'end my life', 'end it all',
+  'i want to die', 'i wanna die', 'hurt myself', 'self harm', 'self-harm',
+  'mwen vle mouri', 'touye tet mwen', 'pa vle viv', 'mouri', 'touye tèt mwen',
+  'i want to kill', 'no reason to live', 'not worth living',
+  'pa anfom', 'feeling hopeless', 'hopeless',
+];
+
+function generateSmartConversationTitle(firstMessage: string, hasImage: boolean): string {
+  if (!firstMessage) return 'New Chat';
+  const lower = firstMessage.toLowerCase();
+
+  // Safety: detect self-harm before anything else
+  if (SELF_HARM_KEYWORDS.some(kw => lower.includes(kw))) {
+    return 'Safety Support';
+  }
+
+  // Image tasks
+  if (hasImage || ['create a logo', 'generate logo', 'make a logo', 'design a logo', 'create image', 'generate image', 'make an image', 'create an image'].some(kw => lower.includes(kw))) {
+    if (lower.includes('logo')) return 'Logo Design';
+    if (lower.includes('banner')) return 'Banner Design';
+    if (lower.includes('image') || lower.includes('photo') || lower.includes('picture')) return 'Image Creation';
+    return 'Image Generation';
+  }
+
+  // Greeting
+  if (/^(hi|hello|hey|bonjou|alo|salut|hola|konnichiwa|bonsoir|good morning|good evening|good night)\b/.test(lower.trim())) {
+    return 'Greeting';
+  }
+
+  // Code / programming
+  if (lower.includes('code') || lower.includes('bug') || lower.includes('function') || lower.includes('script') || lower.includes('program') || lower.includes('error') || lower.includes('debug')) {
+    const langMatch = firstMessage.match(/(javascript|typescript|python|java|swift|kotlin|html|css|react|node)/i);
+    return langMatch ? `${langMatch[1]} Help` : 'Coding Help';
+  }
+
+  // Translation
+  if (lower.includes('translate') || lower.includes('traduction') || lower.includes('traduire') || lower.includes('tradiksyon')) {
+    return 'Translation';
+  }
+
+  // Quiz
+  if (lower.includes('quiz') || lower.includes('test my knowledge') || lower.includes('trivia')) {
+    return 'Quiz';
+  }
+
+  // Math
+  if (/\d+\s*[+\-*/^]\s*\d+/.test(firstMessage) || lower.includes('calculate') || lower.includes('math') || lower.includes('solve')) {
+    return 'Math Problem';
+  }
+
+  // Writing/message
+  if (lower.includes('write') || lower.includes('compose') || lower.includes('draft') || lower.includes('letter') || lower.includes('message') || lower.includes('email')) {
+    return 'Writing Help';
+  }
+
+  // Research/explain
+  if (lower.includes('research') || lower.includes('explain') || lower.includes('what is') || lower.includes('how does') || lower.includes('why does') || lower.includes('tell me about')) {
+    const topicMatch = firstMessage.match(/(?:what is|how does|explain|about|research)\s+(.{3,30})/i);
+    if (topicMatch) return topicMatch[1].trim().split(' ').slice(0, 4).join(' ');
+    return 'Research';
+  }
+
+  // Recipe/food
+  if (lower.includes('recipe') || lower.includes('cook') || lower.includes('food') || lower.includes('eat') || lower.includes('manje')) {
+    return 'Recipe';
+  }
+
+  // Default: use cleaned first ~40 chars
+  const cleaned = firstMessage.replace(/[\r\n]+/g, ' ').trim();
+  return cleaned.length <= 40 ? cleaned : cleaned.slice(0, 37) + '...';
+}
+
 // ==================== WEB-ONLY TYPES (guarded by Platform.OS) ====================
 
 type MediaRecorderType = any;
@@ -728,15 +803,10 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
 
       setStreamingMessageId(null);
 
-      // ── Update conversation title on first message ──
+      // ── Update conversation title on first message (smart title generation) ──
       if (!isTransientId) {
         if (messages.length === 0) {
-          let title = content.slice(0, 50);
-          if (finalImageUrlFromResponse) {
-            title = content.toLowerCase().includes('logo') ? 'Logo Design' : 'Image Generation';
-          } else if (content.length > 50) {
-            title = content.slice(0, 47) + '...';
-          }
+          let title = generateSmartConversationTitle(content, !!finalImageUrlFromResponse);
           await updateConversationTitle(conversationId, title);
           const newConv: Conversation = {
             id: conversationId, title,
