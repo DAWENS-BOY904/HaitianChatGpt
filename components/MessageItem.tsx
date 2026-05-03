@@ -35,6 +35,7 @@ import { MessageActionsModal } from './MessageActionsModal';
 import { LinkSafetyModal } from './LinkSafetyModal';
 import { WebViewModal } from './WebViewModal';
 import { ImageSearchResults } from './ImageSearchResults';
+import { ImageViewerModal } from './ImageViewerModal';
 import { SourcesButton, parseSources, Source } from './SourcesModal';
 import { AnalysisModal, TerminalButton, parseAnalysis } from './AnalysisModal';
 import { getSupabaseClient } from '@/template';
