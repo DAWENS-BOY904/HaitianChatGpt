@@ -1156,7 +1156,7 @@ export const MessageItem = memo(function MessageItem({
 
           {hasGeneratedImage && message.role === 'assistant' && (
             <View style={imgCardStyles.cardWrap}>
-              <Text style={imgCardStyles.label}>Image created</Text>
+              <Text style={imgCardStyles.label}>Image created ✨</Text>
               <View style={imgCardStyles.imageContainer}>
                 <Pressable onPress={() => handleImagePress(message.image_url!)} onLongPress={() => handleAIImageLongPress(message.image_url!)} delayLongPress={350} disabled={downloadingImage}>
                   <Image source={{ uri: message.image_url }} style={imgCardStyles.image} contentFit="cover" transition={400} />
@@ -1212,7 +1212,7 @@ export const MessageItem = memo(function MessageItem({
 
             if (part.type === 'code') {
               return (
-                <View key={`code-${index}`}>
+                <View key={`code-${index}`} style={{ marginVertical: 2 }}>
                   <CodeBlock code={part.content} language={part.language || 'code'} streaming={shouldStream} speed={streamingSpeed} />
                 </View>
               );
@@ -1368,7 +1368,7 @@ export const MessageItem = memo(function MessageItem({
       <LinkSafetyModal visible={modals.link} url={selectedLink} onClose={() => toggleModal('link', false)} onOpenLink={() => { toggleModal('link', false); toggleModal('webView', true); }} />
       {/* Live chat and other URLs open in-app WebView */}
       <WebViewModal visible={modals.webView} url={selectedLink} onClose={() => toggleModal('webView', false)} />
-      <ImageViewerModal visible={modals.imageViewer} imageUrl={selectedImageUrl} onClose={() => toggleModal('imageViewer', false)} onEdit={viewerIsUserImage ? undefined : handleImageEdit} title={viewerIsUserImage ? 'Photo' : 'Image created'} isUserImage={viewerIsUserImage} />
+      <ImageViewerModal visible={modals.imageViewer} imageUrl={selectedImageUrl} onClose={() => toggleModal('imageViewer', false)} onEdit={viewerIsUserImage ? undefined : handleImageEdit} title={viewerIsUserImage ? 'Photo' : 'Image created ✨'} isUserImage={viewerIsUserImage} />
       <ImageEditModal visible={modals.imageEdit} imageUrl={selectedImageUrl} onClose={() => toggleModal('imageEdit', false)} onApplyEdits={handleApplyImageEdits} />
       <FileDownloadModal visible={modals.file} fileName={fileData.name} fileContent={fileData.content} fileType={fileData.type} onClose={() => toggleModal('file', false)} />
       <MessageActionsModal visible={showActionsModal} onClose={() => setShowActionsModal(false)} message={message} onLike={handleLike} />

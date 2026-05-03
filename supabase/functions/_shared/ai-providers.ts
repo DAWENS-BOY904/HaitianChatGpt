@@ -1178,16 +1178,23 @@ export function detectContentType(userMessage: string): {
   const searchKeywords = [
     'search for photos', 'find photos', 'look for images', 'search images', 'find images',
     'show me photos', 'show me images', 'search photo', 'find photo', 'look for photo',
+    'search openai photo', 'search google photo', 'search company photo', 'find company photo',
+    'show photo', 'get photo', 'get image', 'show image', 'fetch photo', 'fetch image',
     // Haitian Creole
     'ban m foto', 'banm foto', 'ban mwen foto', 'banm we foto', 'ban m we foto',
     'ban m kek foto', 'banm kek foto', 'ban mwen kek foto',
     'cherche foto', 'jwenn foto', 'montre m foto', 'montre mwen foto',
     'voye foto', 'send photo', 'send foto', 'montre foto',
     'kek imaj', 'ban m imaj', 'banm imaj', 'montre m imaj',
+    'search foto', 'chache foto', 'chache imaj',
     // French
     'recherche photo', 'chercher des photos', 'trouver des images', 'montre moi des photos',
+    'trouve des photos', 'cherche des images',
     // Spanish
     'buscar fotos', 'encontrar fotos', 'mostrar fotos', 'buscar imagenes',
+    'encuentra fotos', 'muestra fotos',
+    // Generic patterns - detect "X photo/image" search intent
+    'photo company', 'photo openai', 'photo google', 'image company', 'image openai',
   ];
 
   const editKeywords = [

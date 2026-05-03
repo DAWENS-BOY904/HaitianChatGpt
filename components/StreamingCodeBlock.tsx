@@ -43,37 +43,35 @@ const DARK_T = {
   cursor:   '#AEAFAD',
 };
 
-// ── Light theme token colors (GitHub Light / VS Code Light) ──────────────────
+// ── Light theme token colors ──────────────────────────
 const LIGHT_T = {
   bg:       '#ffffff',
   header:   '#f6f8fa',
   border:   '#d0d7de',
-  keyword:  '#0550ae',   // blue
-  control:  '#8250df',   // purple
-  string:   '#0a3069',   // dark blue
+  keyword:  '#0550ae',
+  control:  '#8250df',
+  string:   '#0a3069',
   template: '#0a3069',
-  comment:  '#6e7781',   // gray
+  comment:  '#6e7781',
   number:   '#0550ae',
-  type:     '#116329',   // green
+  type:     '#116329',
   func:     '#8250df',
   operator: '#24292f',
   attr:     '#0550ae',
   tag:      '#116329',
   tagAttr:  '#0550ae',
   attrVal:  '#0a3069',
-  special:  '#cf222e',   // red for placeholders
+  special:  '#cf222e',
   lineNum:  '#8c959f',
   plain:    '#24292f',
   phBg:     'rgba(207,34,46,0.08)',
   cursor:   '#586069',
 };
 
-// Select theme based on isDark prop
 function getTheme(isDark: boolean) {
   return isDark ? DARK_T : LIGHT_T;
 }
 
-// ── Language registry ─────────────────────────────────────────────────────────
 interface LangInfo {
   label: string;
   dot: string;
@@ -317,9 +315,9 @@ function tokenizeLine(line: string, langKey: string, T: typeof DARK_T): Token[] 
     case 'tsx':  case 'javascript':
     case 'typescript':                     raw = tokenizeJS(line, T);     break;
     case 'css':  case 'scss':              raw = tokenizeCSS(line, T);    break;
-    case 'python': case 'py':             raw = tokenizePython(line, T); break;
+    case 'python': case 'py':              raw = tokenizePython(line, T); break;
     case 'json':                           raw = tokenizeJSON(line, T);   break;
-    case 'bash': case 'sh': case 'shell': raw = tokenizeBash(line, T);   break;
+    case 'bash': case 'sh': case 'shell':  raw = tokenizeBash(line, T);   break;
     case 'sql':                            raw = tokenizeSQL(line, T);    break;
     default:                               raw = [{ text: line, color: T.plain }]; break;
   }
@@ -340,7 +338,7 @@ const BlinkCursor = memo(function BlinkCursor({ color }: { color: string }) {
   return <Animated.View style={{ opacity: op, width: 2, height: 15, backgroundColor: color, marginLeft: 2, borderRadius: 1 }} />;
 });
 
-// ── Language dot badge ────────────────────────────────────────────────────────
+// ── Language badge ──────────────────────────────────────────────────────────
 const LangDot = memo(function LangDot({ langKey }: { langKey: string }) {
   const info = getLang(langKey);
   if (info.icon) {
@@ -536,7 +534,7 @@ const FullCodeView = memo(function FullCodeView({ code, langKey, isDark }: { cod
 const InlinePreview = memo(function InlinePreview({ code, langKey }: { code: string; langKey: string }) {
   const [loaded, setLoaded] = useState(false);
   return (
-    <View style={{ height: 240, borderBottomLeftRadius: 12, borderBottomRightRadius: 12, overflow: 'hidden', backgroundColor: '#fff' }}>
+    <View style={{ height: 300, borderBottomLeftRadius: 12, borderBottomRightRadius: 12, overflow: 'hidden', backgroundColor: '#fff' }}>
       {!loaded && (
         <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center', backgroundColor: '#f5f5f5' }]}>
           <Ionicons name="globe-outline" size={24} color="#ccc" />
@@ -558,7 +556,8 @@ interface CodeBlockProps {
   isDark?: boolean;
 }
 
-const COLLAPSE_AT = 16;
+// Show first 25 lines before collapsing
+const COLLAPSE_AT = 25;
 
 export const CodeBlock = memo(function CodeBlock({
   code,
@@ -571,7 +570,6 @@ export const CodeBlock = memo(function CodeBlock({
   const langKey = (language || 'code').toLowerCase().trim();
   const info = getLang(langKey);
 
-  // ── Streaming animation ──
   const [displayedCode, setDisplayedCode] = useState(streaming ? '' : code);
   const charIdxRef = useRef(streaming ? 0 : code.length);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -613,6 +611,7 @@ export const CodeBlock = memo(function CodeBlock({
   const rawLines = displayedCode.split('\n');
   const lineCount = rawLines.length;
   const isLong = lineCount > COLLAPSE_AT && !isStreaming;
+  // Show first COLLAPSE_AT lines when not expanded; always show code
   const displayLines = (!expanded && isLong) ? rawLines.slice(0, COLLAPSE_AT) : rawLines;
 
   const hasPH = PH_RE.test(code);
@@ -620,7 +619,6 @@ export const CodeBlock = memo(function CodeBlock({
   const showPreviewInline = info.previewable && !isStreaming;
   const runLabel = ['bash','sh','shell'].includes(langKey) ? 'Terminal' : ['python','py'].includes(langKey) ? 'Output' : 'Preview';
 
-  // Derived style tokens
   const headerBg = T.header;
   const borderC = T.border;
   const textSecondary = isDark ? 'rgba(200,200,200,0.55)' : 'rgba(60,60,60,0.55)';
@@ -652,7 +650,7 @@ export const CodeBlock = memo(function CodeBlock({
           </View>
         </View>
 
-        {/* Tabs */}
+        {/* Tabs for previewable languages */}
         {showPreviewInline && (
           <View style={[cb.tabBar, { backgroundColor: headerBg, borderBottomColor: borderC }]}>
             <TouchableOpacity style={[cb.tabBtn, inlineTab === 'code' && { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)' }]} onPress={() => setInlineTab('code')}>
@@ -674,7 +672,7 @@ export const CodeBlock = memo(function CodeBlock({
           </View>
         )}
 
-        {/* Code or Preview */}
+        {/* Code content or inline preview */}
         {showPreviewInline && inlineTab === 'preview' ? (
           <InlinePreview code={code} langKey={langKey} />
         ) : (
@@ -691,11 +689,13 @@ export const CodeBlock = memo(function CodeBlock({
               }}
             >
               <ScrollView horizontal showsHorizontalScrollIndicator indicatorStyle={isDark ? 'white' : 'black'} contentContainerStyle={cb.codeRow}>
+                {/* Line numbers gutter */}
                 <View style={[cb.gutter, { borderRightColor: T.border }]}>
                   {displayLines.map((_, i) => (
                     <Text key={i} style={[cb.gutterNum, { color: T.lineNum }]}>{i + 1}</Text>
                   ))}
                 </View>
+                {/* Code lines with syntax highlighting */}
                 <View style={cb.linesArea}>
                   {displayLines.map((line, i) => {
                     const toks = tokenizeLine(line, langKey, T);
@@ -729,7 +729,7 @@ export const CodeBlock = memo(function CodeBlock({
           </View>
         )}
 
-        {/* Expand / Collapse */}
+        {/* Expand/Collapse bar */}
         {isLong && inlineTab === 'code' && (
           <TouchableOpacity style={[cb.expandBar, { backgroundColor: headerBg, borderTopColor: borderC }]} onPress={() => setExpanded(e => !e)} activeOpacity={0.75}>
             <Text style={[cb.expandText, { color: textSecondary }]}>{expanded ? 'Show less' : `Expand · ${lineCount - COLLAPSE_AT} more lines`}</Text>
@@ -737,7 +737,7 @@ export const CodeBlock = memo(function CodeBlock({
           </TouchableOpacity>
         )}
 
-        {/* Run strip */}
+        {/* Run / Preview strip */}
         {showRunBtn && inlineTab === 'code' && (
           <TouchableOpacity style={[cb.runStrip, { borderTopColor: 'rgba(48,209,88,0.18)', backgroundColor: 'rgba(48,209,88,0.06)' }]} onPress={() => setRunnerOpen(true)} activeOpacity={0.8}>
             <Ionicons name="play-circle" size={14} color="#30D158" />
@@ -793,12 +793,12 @@ const cb = StyleSheet.create({
   container: {
     borderRadius: 14,
     overflow: 'hidden',
-    marginVertical: 6,
+    marginVertical: 3,      // Tight spacing between code blocks and text
     borderWidth: StyleSheet.hairlineWidth,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35,
-    shadowRadius: 14,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.22,
+    shadowRadius: 8,
+    elevation: 5,
   },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
@@ -827,7 +827,8 @@ const cb = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   phBannerText: { fontSize: 11, fontWeight: '500', flex: 1 },
-  scrollOuter: { maxHeight: 340, position: 'relative' },
+  // Always show at least 60px, up to 480px - code is ALWAYS visible
+  scrollOuter: { minHeight: 60, maxHeight: 480, position: 'relative' },
   codeRow: { flexDirection: 'row', paddingVertical: 12, minWidth: '100%', alignItems: 'flex-start' },
   gutter: {
     paddingLeft: 10, paddingRight: 10,
@@ -846,7 +847,7 @@ const cb = StyleSheet.create({
   },
   expandBar: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
-    paddingVertical: 10,
+    paddingVertical: 9,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   expandText: { fontSize: 12, fontWeight: '500' },
