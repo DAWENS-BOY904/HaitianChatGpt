@@ -15,7 +15,8 @@ import {
   Platform,
   Animated,
   TextInput,
-  Linking,
+  findNodeHandle,
+  UIManager,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -35,8 +36,6 @@ import { LinkSafetyModal } from './LinkSafetyModal';
 import { WebViewModal } from './WebViewModal';
 import { ImageSearchResults } from './ImageSearchResults';
 import { ImageViewerModal } from './ImageViewerModal';
-import { ImageEditModal } from './ImageEditModal';
-import { FileDownloadModal } from './FileDownloadModal';
 import { SourcesButton, parseSources, Source } from './SourcesModal';
 import { AnalysisModal, TerminalButton, parseAnalysis } from './AnalysisModal';
 import { getSupabaseClient } from '@/template';
@@ -532,14 +531,45 @@ function parseImageSearchResults(content: string): { text: string; imageSearchRe
   }
 }
 
-// ── Reaction + Action bottom sheet ──
+function formatMessageTime(dateStr: string): string {
+  try {
+    const d = new Date(dateStr);
+    const now = new Date();
+    const isToday = d.toDateString() === now.toDateString();
+    const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    if (isToday) return `Today, ${timeStr}`;
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    if (d.toDateString() === yesterday.toDateString()) return `Yesterday, ${timeStr}`;
+    return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ', ' + timeStr;
+  } catch { return ''; }
+}
+
+// ── Reaction + Action bottom sheet (Photo 11 style) ──
 const QUICK_REACTIONS = ['❤️', '👍', '👎', '😆', '😮', '😐'];
 
 const MessageReactionSheet = memo(function MessageReactionSheet({
-  visible, onClose, message, onCopy, onReply, onDelete, onReport, isAdmin, isDark, colors,
+  visible,
+  onClose,
+  message,
+  onCopy,
+  onReply,
+  onDelete,
+  onReport,
+  isAdmin,
+  isDark,
+  colors,
 }: {
-  visible: boolean; onClose: () => void; message: any; onCopy: () => void; onReply?: () => void;
-  onDelete?: () => void; onReport?: () => void; isAdmin?: boolean; isDark: boolean; colors: any;
+  visible: boolean;
+  onClose: () => void;
+  message: any;
+  onCopy: () => void;
+  onReply?: () => void;
+  onDelete?: () => void;
+  onReport?: () => void;
+  isAdmin?: boolean;
+  isDark: boolean;
+  colors: any;
 }) {
   const slideAnim = useRef(new Animated.Value(300)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -561,47 +591,14 @@ const MessageReactionSheet = memo(function MessageReactionSheet({
 
   if (!visible) return null;
 
+  const modelName = 'GPT-5.3';
+
   const menuItems = [
     { icon: 'copy-outline', label: 'Copy', onPress: () => { onClose(); setTimeout(onCopy, 60); } },
-    { icon: 'arrow-undo-outline', label: 'Reply', onPress: () => { onClose(); setTimeout(() => onReply?.(), 60); } },
+    { icon: 'arrow-undo-outline', label: 'Reply', onPress: () => { onClose(); setTimeout(() => onReply?.(), 60); }, show: true },
     ...(isAdmin || message.role === 'assistant' ? [{ icon: 'trash-outline', label: 'Delete', onPress: () => { onClose(); setTimeout(() => onDelete?.(), 60); }, destructive: true }] : []),
     ...(message.role === 'assistant' ? [{ icon: 'flag-outline', label: 'Report', onPress: () => { onClose(); setTimeout(() => onReport?.(), 60); }, destructive: true }] : []),
   ];
-
-  const sheetContent = (
-    <>
-      <View style={rsStyles.handle} />
-      <View style={rsStyles.reactionRow}>
-        {QUICK_REACTIONS.map((emoji) => (
-          <TouchableOpacity
-            key={emoji}
-            style={[rsStyles.emojiBtn, selectedReaction === emoji && { backgroundColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)', borderRadius: 20 }]}
-            onPress={() => setSelectedReaction(selectedReaction === emoji ? null : emoji)}
-            activeOpacity={0.7}
-          >
-            <Text style={rsStyles.emoji}>{emoji}</Text>
-          </TouchableOpacity>
-        ))}
-        <TouchableOpacity style={rsStyles.emojiBtn} activeOpacity={0.7}>
-          <View style={[rsStyles.plusCircle, { backgroundColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.08)' }]}>
-            <Ionicons name="add" size={18} color={colors.text} />
-          </View>
-        </TouchableOpacity>
-      </View>
-      <View style={[rsStyles.divider, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)' }]} />
-      {menuItems.map((item, i) => (
-        <TouchableOpacity
-          key={item.label}
-          style={[rsStyles.actionRow, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }]}
-          onPress={item.onPress}
-          activeOpacity={0.7}
-        >
-          <Ionicons name={item.icon as any} size={22} color={(item as any).destructive ? '#FF453A' : colors.text} />
-          <Text style={[rsStyles.actionLabel, { color: (item as any).destructive ? '#FF453A' : colors.text }]}>{item.label}</Text>
-        </TouchableOpacity>
-      ))}
-    </>
-  );
 
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
@@ -610,11 +607,74 @@ const MessageReactionSheet = memo(function MessageReactionSheet({
         <Animated.View style={{ transform: [{ translateY: slideAnim }] }}>
           {Platform.OS === 'ios' ? (
             <BlurView intensity={85} tint={isDark ? 'dark' : 'extraLight'} style={rsStyles.sheet}>
-              {sheetContent}
+              <View style={rsStyles.handle} />
+              {/* Model label */}
+              <Text style={[rsStyles.modelLabel, { color: colors.textSecondary }]}>{modelName}</Text>
+              {/* Reaction row */}
+              <View style={rsStyles.reactionRow}>
+                {QUICK_REACTIONS.map((emoji) => (
+                  <TouchableOpacity
+                    key={emoji}
+                    style={[rsStyles.emojiBtn, selectedReaction === emoji && { backgroundColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)', borderRadius: 20 }]}
+                    onPress={() => setSelectedReaction(selectedReaction === emoji ? null : emoji)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={rsStyles.emoji}>{emoji}</Text>
+                  </TouchableOpacity>
+                ))}
+                <TouchableOpacity style={rsStyles.emojiBtn} activeOpacity={0.7}>
+                  <View style={[rsStyles.plusCircle, { backgroundColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.08)' }]}>
+                    <Ionicons name="add" size={18} color={colors.text} />
+                  </View>
+                </TouchableOpacity>
+              </View>
+              <View style={[rsStyles.divider, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)' }]} />
+              {/* Action items */}
+              {menuItems.map((item, i) => (
+                <TouchableOpacity
+                  key={item.label}
+                  style={[rsStyles.actionRow, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }]}
+                  onPress={item.onPress}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name={item.icon as any} size={22} color={item.destructive ? '#FF453A' : colors.text} />
+                  <Text style={[rsStyles.actionLabel, item.destructive && { color: '#FF453A' }]}>{item.label}</Text>
+                </TouchableOpacity>
+              ))}
             </BlurView>
           ) : (
             <View style={[rsStyles.sheet, { backgroundColor: isDark ? '#1C1C1E' : '#F2F2F7' }]}>
-              {sheetContent}
+              <View style={rsStyles.handle} />
+              <Text style={[rsStyles.modelLabel, { color: colors.textSecondary }]}>{modelName}</Text>
+              <View style={rsStyles.reactionRow}>
+                {QUICK_REACTIONS.map((emoji) => (
+                  <TouchableOpacity
+                    key={emoji}
+                    style={[rsStyles.emojiBtn, selectedReaction === emoji && { backgroundColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)', borderRadius: 20 }]}
+                    onPress={() => setSelectedReaction(selectedReaction === emoji ? null : emoji)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={rsStyles.emoji}>{emoji}</Text>
+                  </TouchableOpacity>
+                ))}
+                <TouchableOpacity style={rsStyles.emojiBtn} activeOpacity={0.7}>
+                  <View style={[rsStyles.plusCircle, { backgroundColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.08)' }]}>
+                    <Ionicons name="add" size={18} color={colors.text} />
+                  </View>
+                </TouchableOpacity>
+              </View>
+              <View style={[rsStyles.divider, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)' }]} />
+              {menuItems.map((item, i) => (
+                <TouchableOpacity
+                  key={item.label}
+                  style={[rsStyles.actionRow, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }]}
+                  onPress={item.onPress}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name={item.icon as any} size={22} color={item.destructive ? '#FF453A' : colors.text} />
+                  <Text style={[rsStyles.actionLabel, { color: item.destructive ? '#FF453A' : colors.text }]}>{item.label}</Text>
+                </TouchableOpacity>
+              ))}
             </View>
           )}
         </Animated.View>
@@ -624,15 +684,55 @@ const MessageReactionSheet = memo(function MessageReactionSheet({
 });
 
 const rsStyles = StyleSheet.create({
-  sheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingBottom: 34, overflow: 'hidden' },
-  handle: { width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(128,128,128,0.4)', alignSelf: 'center', marginTop: 10, marginBottom: 6 },
-  reactionRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 8, gap: 2 },
-  emojiBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  sheet: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingBottom: 34,
+    overflow: 'hidden',
+  },
+  handle: {
+    width: 36, height: 4, borderRadius: 2,
+    backgroundColor: 'rgba(128,128,128,0.4)',
+    alignSelf: 'center',
+    marginTop: 10, marginBottom: 6,
+  },
+  modelLabel: {
+    fontSize: 13, fontWeight: '500',
+    paddingHorizontal: 18, paddingTop: 4, paddingBottom: 10,
+  },
+  reactionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    gap: 2,
+  },
+  emojiBtn: {
+    width: 44, height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   emoji: { fontSize: 28 },
-  plusCircle: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
-  divider: { height: StyleSheet.hairlineWidth, marginHorizontal: 0, marginBottom: 4 },
-  actionRow: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 20, paddingVertical: 15 },
-  actionLabel: { fontSize: 17, fontWeight: '400' },
+  plusCircle: {
+    width: 34, height: 34, borderRadius: 17,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    marginHorizontal: 0,
+    marginBottom: 4,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+  },
+  actionLabel: {
+    fontSize: 17,
+    fontWeight: '400',
+  },
 });
 
 // ── Inline dot-grid image creation placeholder ──
@@ -689,12 +789,24 @@ const InlineImageCreatingPlaceholder = memo(function InlineImageCreatingPlacehol
 });
 
 const inlinePH = StyleSheet.create({
-  card: { borderRadius: 20, backgroundColor: '#111113', overflow: 'hidden', justifyContent: 'flex-end', padding: 16, marginVertical: 4, borderWidth: 1, borderColor: 'rgba(255,255,255,0.07)' },
+  card: { borderRadius: 20, backgroundColor: '#111113', overflow: 'hidden', justifyContent: 'flex-end', padding: 16, marginVertical: 4, borderWidth: 1, borderColor: 'rgba(255,255,255,0.07)', shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.4, shadowRadius: 16, elevation: 16 },
   dotGrid: { position: 'absolute', top: 14, left: 14, right: 14, bottom: 52, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: 7 },
   dot: { width: 5, height: 5, borderRadius: 2.5, backgroundColor: 'rgba(255,255,255,0.75)' },
   shimmer: { position: 'absolute', top: 0, bottom: 0, width: 60, backgroundColor: 'rgba(255,255,255,0.04)' },
   textRow: { flexDirection: 'row', alignItems: 'center', paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.08)' },
   label: { color: 'rgba(255,255,255,0.78)', fontSize: 14, fontWeight: '500', letterSpacing: 0.2 },
+});
+
+const ctxStyles = StyleSheet.create({
+  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' },
+  menuWrap: { width: 260, alignSelf: 'center', borderRadius: 18, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.45, shadowRadius: 24, elevation: 24 },
+  blurBox: { borderRadius: 18, overflow: 'hidden' },
+  timeRow: { paddingHorizontal: 18, paddingTop: 14, paddingBottom: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(255,255,255,0.1)' },
+  timeText: { color: 'rgba(255,255,255,0.5)', fontSize: 13, textAlign: 'center', fontWeight: '500' },
+  menuItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingVertical: 15 },
+  menuItemBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.08)' },
+  menuLabel: { fontSize: 17, color: 'rgba(255,255,255,0.92)', fontWeight: '400' },
+  destructiveLabel: { color: '#FF453A' },
 });
 
 const aiImgMenuStyles = StyleSheet.create({
@@ -706,9 +818,15 @@ const aiImgMenuStyles = StyleSheet.create({
 
 // ── Report AI Message Modal ──
 const REPORT_CATEGORIES = [
-  'Violence & self-harm', 'Sexual exploitation & abuse', 'Child/teen exploitation',
-  'Bullying & harassment', 'Spam, fraud & deception', 'Privacy violation',
-  'Intellectual property', 'Age-inappropriate content', 'Something else',
+  'Violence & self-harm',
+  'Sexual exploitation & abuse',
+  'Child/teen exploitation',
+  'Bullying & harassment',
+  'Spam, fraud & deception',
+  'Privacy violation',
+  'Intellectual property',
+  'Age-inappropriate content',
+  'Something else',
 ];
 
 const ReportMessageModal = memo(function ReportMessageModal({ visible, onClose, onSubmit, isDark, colors }: {
@@ -732,6 +850,7 @@ const ReportMessageModal = memo(function ReportMessageModal({ visible, onClose, 
   return (
     <Modal visible={visible} transparent={false} animationType="slide" onRequestClose={onClose}>
       <View style={{ flex: 1, backgroundColor: bg }}>
+        {/* Header */}
         <View style={{ flexDirection: 'row', alignItems: 'center', paddingTop: Platform.OS === 'ios' ? 56 : 28, paddingHorizontal: 16, paddingBottom: 16 }}>
           {step === 'detail' ? (
             <TouchableOpacity onPress={() => setStep('category')} style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.06)', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
@@ -749,12 +868,17 @@ const ReportMessageModal = memo(function ReportMessageModal({ visible, onClose, 
             </TouchableOpacity>
           ) : null}
         </View>
+
         {step === 'category' ? (
           <>
             <Text style={{ color: subC, fontSize: 15, textAlign: 'center', marginBottom: 20, paddingHorizontal: 24 }}>Why are you reporting this conversation?</Text>
             <View style={{ marginHorizontal: 16, borderRadius: 16, overflow: 'hidden', backgroundColor: cardBg }}>
               {REPORT_CATEGORIES.map((cat, i) => (
-                <TouchableOpacity key={cat} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingVertical: 16, borderTopWidth: i > 0 ? StyleSheet.hairlineWidth : 0, borderTopColor: borderC }} onPress={() => { setSelectedCategory(cat); setStep('detail'); }}>
+                <TouchableOpacity
+                  key={cat}
+                  style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingVertical: 16, borderTopWidth: i > 0 ? StyleSheet.hairlineWidth : 0, borderTopColor: borderC }}
+                  onPress={() => { setSelectedCategory(cat); setStep('detail'); }}
+                >
                   <Text style={{ color: textC, fontSize: 16 }}>{cat}</Text>
                   <Ionicons name="chevron-forward" size={18} color={subC} />
                 </TouchableOpacity>
@@ -766,43 +890,18 @@ const ReportMessageModal = memo(function ReportMessageModal({ visible, onClose, 
             <Text style={{ color: textC, fontSize: 17, fontWeight: '600', textAlign: 'center', marginBottom: 4, paddingHorizontal: 24 }}>{selectedCategory}</Text>
             <Text style={{ color: subC, fontSize: 14, textAlign: 'center', marginBottom: 24 }}>Please provide more details</Text>
             <View style={{ marginHorizontal: 16, borderRadius: 16, overflow: 'hidden', backgroundColor: cardBg, padding: 16 }}>
-              <TextInput style={{ color: textC, fontSize: 16, minHeight: 120, textAlignVertical: 'top' }} placeholder="Please provide more details" placeholderTextColor={subC} value={detail} onChangeText={setDetail} multiline autoFocus />
+              <TextInput
+                style={{ color: textC, fontSize: 16, minHeight: 120, textAlignVertical: 'top' }}
+                placeholder="Please provide more details"
+                placeholderTextColor={subC}
+                value={detail}
+                onChangeText={setDetail}
+                multiline
+                autoFocus
+              />
             </View>
           </>
         )}
-      </View>
-    </Modal>
-  );
-});
-
-// ── Phone Call Confirmation Modal ──
-const PhoneCallModal = memo(function PhoneCallModal({ visible, number, onCall, onCancel, isDark }: {
-  visible: boolean; number: string; onCall: () => void; onCancel: () => void; isDark: boolean;
-}) {
-  if (!visible) return null;
-  const bg = isDark ? 'rgba(30,30,34,0.97)' : 'rgba(255,255,255,0.97)';
-  const textC = isDark ? '#FFFFFF' : '#000000';
-  const subC = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)';
-  return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
-      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
-        {Platform.OS === 'ios' ? <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} /> : null}
-        <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onCancel} />
-        <View style={{ backgroundColor: bg, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 28, paddingBottom: 40, alignItems: 'center' }}>
-          <View style={{ width: 60, height: 60, borderRadius: 30, backgroundColor: '#34C759', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
-            <Ionicons name="call" size={28} color="#FFF" />
-          </View>
-          <Text style={{ color: textC, fontSize: 20, fontWeight: '700', marginBottom: 6 }}>Call {number}?</Text>
-          <Text style={{ color: subC, fontSize: 14, textAlign: 'center', marginBottom: 28 }}>Do you want to call this number?</Text>
-          <View style={{ flexDirection: 'row', gap: 12, width: '100%' }}>
-            <TouchableOpacity style={{ flex: 1, backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)', borderRadius: 50, paddingVertical: 15, alignItems: 'center' }} onPress={onCancel}>
-              <Text style={{ color: textC, fontSize: 16, fontWeight: '600' }}>Cancel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={{ flex: 1, backgroundColor: '#007AFF', borderRadius: 50, paddingVertical: 15, alignItems: 'center' }} onPress={onCall}>
-              <Text style={{ color: '#FFF', fontSize: 16, fontWeight: '700' }}>Call {number}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
       </View>
     </Modal>
   );
@@ -833,14 +932,14 @@ export const MessageItem = memo(function MessageItem({
   const [showActionsModal, setShowActionsModal] = useState(false);
   const [showSelectTextModal, setShowSelectTextModal] = useState(false);
   const [liked, setLiked] = useState<'like' | 'dislike' | null>(null);
+  const [messageReactions, setMessageReactions] = useState<Record<string, number>>({});
   const [analysisVisible, setAnalysisVisible] = useState(false);
   const [selectedLink, setSelectedLink] = useState('');
   const [selectedImageUrl, setSelectedImageUrl] = useState('');
   const [fileData, setFileData] = useState({ name: '', content: '', type: '' });
   const [modals, setModals] = useState({ link: false, webView: false, imageViewer: false, imageEdit: false, file: false });
   const [downloadingImage, setDownloadingImage] = useState(false);
-  // Phone call confirmation
-  const [phoneCallModal, setPhoneCallModal] = useState<{ visible: boolean; number: string }>({ visible: false, number: '' });
+  const [menuImageUrl, setMenuImageUrl] = useState('');
 
   const entranceOpacity = useRef(new Animated.Value(0)).current;
   const entranceTranslateY = useRef(new Animated.Value(16)).current;
@@ -884,7 +983,8 @@ export const MessageItem = memo(function MessageItem({
     setShowReactionSheet(true);
   }, [hasOnlyImage]);
 
-  const handleAIImageLongPress = useCallback((_imageUrl: string) => {
+  const handleAIImageLongPress = useCallback((imageUrl: string) => {
+    setMenuImageUrl(imageUrl);
     setShowReactionSheet(true);
   }, []);
 
@@ -897,6 +997,10 @@ export const MessageItem = memo(function MessageItem({
     showAlert('Copied!', 'Full message copied to clipboard');
     onCopy?.();
   }, [message.content, showAlert, onCopy]);
+
+  const handleEdit = useCallback(() => {
+    onEdit?.(message.id, message.content);
+  }, [message.id, message.content, onEdit]);
 
   const handleLike = useCallback(async (type: 'like' | 'dislike') => {
     if (!user) { showAlert('Sign In Required', 'Please sign in to rate messages'); router.push('/login'); return; }
@@ -913,35 +1017,9 @@ export const MessageItem = memo(function MessageItem({
     } catch (err: any) { showAlert('Error', err?.message || 'Failed to save feedback'); setLiked(liked); }
   }, [liked, message.id, user, supabase, showAlert]);
 
-  // ── Link press: detect phone numbers, live chat, and normal URLs ──
-  const handleLinkPress = useCallback((url: string) => {
-    if (url.startsWith('tel:')) {
-      const number = url.replace('tel:', '');
-      setPhoneCallModal({ visible: true, number });
-      return;
-    }
-    // Live chat links open in-app WebView
-    if (url.includes('988lifeline.org') || url.includes('/chat') || url.includes('livechat') || url.includes('live-chat') || url.includes('crisis') || url.includes('suicidepreventionlifeline')) {
-      setSelectedLink(url);
-      toggleModal('webView', true);
-      return;
-    }
-    setSelectedLink(url);
-    toggleModal('link', true);
-  }, [toggleModal]);
-
-  // ── Phone call handler ──
-  const handlePhoneCall = useCallback((number: string) => {
-    Linking.openURL(`tel:${number}`).catch(() => {});
-    setPhoneCallModal({ visible: false, number: '' });
-  }, []);
-
+  const handleLinkPress = useCallback((url: string) => { setSelectedLink(url); toggleModal('link', true); }, [toggleModal]);
   const [viewerIsUserImage, setViewerIsUserImage] = useState(false);
-  const handleImagePress = useCallback((imageUrl: string, isUser = false) => {
-    setSelectedImageUrl(imageUrl);
-    setViewerIsUserImage(isUser);
-    toggleModal('imageViewer', true);
-  }, [toggleModal]);
+  const handleImagePress = useCallback((imageUrl: string, isUser = false) => { setSelectedImageUrl(imageUrl); setViewerIsUserImage(isUser); toggleModal('imageViewer', true); }, [toggleModal]);
   const handleImageEdit = useCallback(() => { toggleModal('imageViewer', false); toggleModal('imageEdit', true); }, [toggleModal]);
 
   const handleApplyImageEdits = useCallback(async (editPrompt: string) => {
@@ -959,19 +1037,29 @@ export const MessageItem = memo(function MessageItem({
   }, [toggleModal, showAlert]);
 
   const handleDeleteMessage = useCallback(() => {
-    Alert.alert('Delete message?', 'This message will be permanently deleted.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => onDelete?.(message.id) },
-    ]);
+    Alert.alert(
+      'Delete message?',
+      'This message will be permanently deleted.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: () => onDelete?.(message.id) },
+      ]
+    );
   }, [message.id, onDelete]);
 
   const handleReportSubmit = useCallback(async (category: string, detail: string) => {
     try {
       if (user?.id) {
-        await supabase.from('bug_reports').insert({ user_id: user.id, description: `Report message - Category: ${category}\nDetail: ${detail}\nMessage ID: ${message.id}`, status: 'pending' });
+        await supabase.from('bug_reports').insert({
+          user_id: user.id,
+          description: `Report message - Category: ${category}\nDetail: ${detail}\nMessage ID: ${message.id}`,
+          status: 'pending',
+        });
       }
       showAlert('Reported', 'Thank you for your report. We will review it.');
-    } catch (_e) { showAlert('Reported', 'Thank you for your report.'); }
+    } catch (_e) {
+      showAlert('Reported', 'Thank you for your report.');
+    }
   }, [user?.id, supabase, showAlert, message.id]);
 
   const parsed = useMemo(() => {
@@ -1006,50 +1094,17 @@ export const MessageItem = memo(function MessageItem({
     return parts.length > 0 ? parts : [{ type: 'text' as const, content: textToProcess }];
   }, [cleanedBeforeCard]);
 
-  // ── Parse text into segments: URLs, phone numbers, live chat, plain text ──
   const parseTextWithLinks = useCallback((text: string) => {
-    if (!text) return [{ type: 'text', content: '' }];
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
     const parts: any[] = [];
-    // Match URLs and phone numbers
-    const combinedRegex = /((https?:\/\/[^\s]+)|(\b988\b|\b911\b|\b1-800-[\d-]+\b|\+?1?[-.\s]?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b))/g;
-    let match;
     let lastIndex = 0;
-
-    while ((match = combinedRegex.exec(text)) !== null) {
-      const preceding = text.substring(lastIndex, match.index);
-      if (preceding) {
-        // Detect "live chat" in preceding text
-        const lc = /(live\s+chat)/gi;
-        let lcM;
-        let lcLast = 0;
-        while ((lcM = lc.exec(preceding)) !== null) {
-          if (lcM.index > lcLast) parts.push({ type: 'text', content: preceding.substring(lcLast, lcM.index) });
-          parts.push({ type: 'livechat', content: lcM[0] });
-          lcLast = lcM.index + lcM[0].length;
-        }
-        if (lcLast < preceding.length) parts.push({ type: 'text', content: preceding.substring(lcLast) });
-      }
-      const matched = match[0];
-      if (/^https?:\/\//.test(matched)) {
-        parts.push({ type: 'link', content: matched, url: matched });
-      } else {
-        parts.push({ type: 'phone', content: matched, number: matched.replace(/[^\d+]/g, '') });
-      }
-      lastIndex = match.index + matched.length;
+    let match;
+    while ((match = urlRegex.exec(text)) !== null) {
+      if (match.index > lastIndex) parts.push({ type: 'text', content: text.substring(lastIndex, match.index) });
+      parts.push({ type: 'link', content: match[0], url: match[0] });
+      lastIndex = match.index + match[0].length;
     }
-
-    if (lastIndex < text.length) {
-      const remaining = text.substring(lastIndex);
-      const lc = /(live\s+chat)/gi;
-      let lcM;
-      let lcLast = 0;
-      while ((lcM = lc.exec(remaining)) !== null) {
-        if (lcM.index > lcLast) parts.push({ type: 'text', content: remaining.substring(lcLast, lcM.index) });
-        parts.push({ type: 'livechat', content: lcM[0] });
-        lcLast = lcM.index + lcM[0].length;
-      }
-      if (lcLast < remaining.length) parts.push({ type: 'text', content: remaining.substring(lcLast) });
-    }
+    if (lastIndex < text.length) parts.push({ type: 'text', content: text.substring(lastIndex) });
     return parts.length > 0 ? parts : [{ type: 'text', content: text }];
   }, []);
 
@@ -1084,26 +1139,10 @@ export const MessageItem = memo(function MessageItem({
     actionButton: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: Spacing.sm, paddingVertical: 6, borderRadius: BorderRadius.sm, backgroundColor: message.role === 'user' ? 'rgba(255,255,255,0.15)' : colors.background },
     actionButtonActive: { backgroundColor: colors.primary },
     linkText: { color: message.role === 'user' ? '#FFFFFF' : colors.primary, textDecorationLine: 'underline', fontWeight: '500' },
-    phoneText: { color: '#007AFF', textDecorationLine: 'underline', fontWeight: '600' },
     userImagePreview: { width: SCREEN_WIDTH * 0.55, height: SCREEN_WIDTH * 0.4, borderRadius: BorderRadius.md, marginBottom: Spacing.sm },
   }), [colors, message.role]);
 
   const isStreamingRendered = streaming && isGenerating && message.role === 'assistant';
-
-  const renderTextParts = useCallback((textParts: any[], isUserMsg: boolean) => {
-    return textParts.map((textPart, textIndex) => {
-      if (textPart.type === 'link') {
-        return <Text key={`link-${textIndex}`} style={isUserMsg ? styles.linkText : [styles.linkText, { color: colors.primary }]} onPress={() => handleLinkPress(textPart.url)}>{textPart.content}</Text>;
-      }
-      if (textPart.type === 'phone') {
-        return <Text key={`phone-${textIndex}`} style={[styles.phoneText, isUserMsg && { color: 'rgba(255,255,255,0.9)' }]} onPress={() => setPhoneCallModal({ visible: true, number: textPart.number })}>{textPart.content}</Text>;
-      }
-      if (textPart.type === 'livechat') {
-        return <Text key={`lc-${textIndex}`} style={isUserMsg ? styles.linkText : [styles.linkText, { color: colors.primary }]} onPress={() => { setSelectedLink('https://988lifeline.org/chat/'); toggleModal('webView', true); }}>{textPart.content}</Text>;
-      }
-      return <Text key={`txt-${textIndex}`}>{textPart.content}</Text>;
-    });
-  }, [styles, colors, handleLinkPress, toggleModal]);
 
   return (
     <>
@@ -1119,7 +1158,10 @@ export const MessageItem = memo(function MessageItem({
                 const textParts = parseTextWithLinks(part.content);
                 return (
                   <Text key={`seg-${index}`} style={[styles.messageText, styles.userMessageText]}>
-                    {renderTextParts(textParts, true)}
+                    {textParts.map((tp, ti) => tp.type === 'link'
+                      ? <Text key={`lnk-${ti}`} style={styles.linkText} onPress={() => handleLinkPress(tp.url)}>{tp.content}</Text>
+                      : <Text key={`tx-${ti}`}>{tp.content}</Text>
+                    )}
                   </Text>
                 );
               })}
@@ -1233,7 +1275,10 @@ export const MessageItem = memo(function MessageItem({
                   const textParts = parseTextWithLinks(seg.content);
                   return (
                     <Text key={`seg-${si}`} style={[styles.messageText, styles.userMessageText]}>
-                      {renderTextParts(textParts, true)}
+                      {textParts.map((textPart, textIndex) => {
+                        if (textPart.type === 'link') return <Text key={`link-${textIndex}`} style={styles.linkText} onPress={() => handleLinkPress(textPart.url)}>{textPart.content}</Text>;
+                        return <Text key={`txt-${textIndex}`}>{textPart.content}</Text>;
+                      })}
                     </Text>
                   );
                 })}
@@ -1312,7 +1357,6 @@ export const MessageItem = memo(function MessageItem({
         colors={colors}
       />
 
-      {/* Select text modal */}
       <Modal visible={showSelectTextModal} transparent={false} animationType="slide" onRequestClose={() => setShowSelectTextModal(false)}>
         <View style={{ flex: 1, backgroundColor: colors.background }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: Platform.OS === 'ios' ? 56 : 28, paddingBottom: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border }}>
@@ -1320,15 +1364,37 @@ export const MessageItem = memo(function MessageItem({
               <Ionicons name="close" size={24} color={colors.text} />
             </TouchableOpacity>
             <Text style={{ color: colors.text, fontSize: 17, fontWeight: '600' }}>Select Text</Text>
-            <TouchableOpacity onPress={async () => { try { await Clipboard.setStringAsync(message.content); showAlert('Copied!', 'Message copied to clipboard'); setShowSelectTextModal(false); } catch { setShowSelectTextModal(false); } }} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <TouchableOpacity
+              onPress={async () => {
+                try {
+                  await Clipboard.setStringAsync(message.content);
+                  showAlert('Copied!', 'Message copied to clipboard');
+                  setShowSelectTextModal(false);
+                } catch {
+                  setShowSelectTextModal(false);
+                }
+              }}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
               <Text style={{ color: colors.primary, fontSize: 15, fontWeight: '600' }}>Copy All</Text>
             </TouchableOpacity>
           </View>
           <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20, paddingBottom: 60 }} keyboardShouldPersistTaps="always">
             {Platform.OS === 'ios' ? (
-              <TextInput value={message.content} multiline editable={false} scrollEnabled={false} showSoftInputOnFocus={false} contextMenuHidden={false} selectionColor={`${colors.primary}55`} style={{ color: colors.text, fontSize: 16, lineHeight: 26, padding: 0, margin: 0, textAlignVertical: 'top' }} />
+              <TextInput
+                value={message.content}
+                multiline
+                editable={false}
+                scrollEnabled={false}
+                showSoftInputOnFocus={false}
+                contextMenuHidden={false}
+                selectionColor={`${colors.primary}55`}
+                style={{ color: colors.text, fontSize: 16, lineHeight: 26, padding: 0, margin: 0, textAlignVertical: 'top' }}
+              />
             ) : (
-              <Text selectable selectionColor={`${colors.primary}55`} style={{ color: colors.text, fontSize: 16, lineHeight: 26 }}>{message.content}</Text>
+              <Text selectable selectionColor={`${colors.primary}55`} style={{ color: colors.text, fontSize: 16, lineHeight: 26 }}>
+                {message.content}
+              </Text>
             )}
           </ScrollView>
           <View style={{ flexDirection: 'row', gap: 12, paddingHorizontal: 16, paddingBottom: Platform.OS === 'ios' ? 34 : 20, paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }}>
@@ -1344,17 +1410,7 @@ export const MessageItem = memo(function MessageItem({
         </View>
       </Modal>
 
-      {/* Phone call confirmation modal */}
-      <PhoneCallModal
-        visible={phoneCallModal.visible}
-        number={phoneCallModal.number}
-        onCall={() => handlePhoneCall(phoneCallModal.number)}
-        onCancel={() => setPhoneCallModal({ visible: false, number: '' })}
-        isDark={isDark}
-      />
-
       <LinkSafetyModal visible={modals.link} url={selectedLink} onClose={() => toggleModal('link', false)} onOpenLink={() => { toggleModal('link', false); toggleModal('webView', true); }} />
-      {/* Live chat and other URLs open in-app WebView */}
       <WebViewModal visible={modals.webView} url={selectedLink} onClose={() => toggleModal('webView', false)} />
       <ImageViewerModal visible={modals.imageViewer} imageUrl={selectedImageUrl} onClose={() => toggleModal('imageViewer', false)} onEdit={viewerIsUserImage ? undefined : handleImageEdit} title={viewerIsUserImage ? 'Photo' : 'Image created'} isUserImage={viewerIsUserImage} />
       <ImageEditModal visible={modals.imageEdit} imageUrl={selectedImageUrl} onClose={() => toggleModal('imageEdit', false)} onApplyEdits={handleApplyImageEdits} />
