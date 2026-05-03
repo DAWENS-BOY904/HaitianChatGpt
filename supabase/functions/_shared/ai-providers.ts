@@ -1,4 +1,4 @@
-// AI Provider Service - Handles all AI model integrations (PRODUCTION-READY 2026)
+// AI Provider Service - Handles all AI model integrations By Dawns (PRODUCTION-READY 2026)
 
 interface AIMessage {
   role: 'system' | 'user' | 'assistant';
