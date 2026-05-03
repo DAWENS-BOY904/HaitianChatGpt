@@ -32,6 +32,7 @@ interface ImageViewerModalProps {
   onEdit?: () => void;
   title?: string;
   isUserImage?: boolean; // true = photo sent by user (no AI overlay actions)
+  text?: string;
 }
 
 // ── Pill blur button ──
