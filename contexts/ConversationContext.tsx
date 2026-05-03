@@ -565,7 +565,22 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
       // Use user JWT if available; fall back to anon key so edge function allows guest chat
       const token = sessionData?.session?.access_token || anonKey;
 
-      // No artificial delay — all users get immediate responses
+      // ── Priority delay: free users get 800ms wait; paid/pro users get immediate requests ──
+      try {
+        const { data: subCheck } = await supabase
+          .from('user_profiles')
+          .select('subscription_tier')
+          .eq('id', user.id)
+          .single();
+        const userTier = subCheck?.subscription_tier || 'free';
+        const isPremiumUser = ['go', 'plus', 'premium_monthly', 'premium_yearly', 'lifetime'].includes(userTier);
+        if (!isPremiumUser) {
+          // Small artificial delay for free users — paid users get priority
+          await new Promise(r => setTimeout(r, 800));
+        }
+      } catch (_tierErr) {
+        // If tier check fails, proceed immediately — don't block the user
+      }
 
       const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
       const edgeFunctionUrl = `${supabaseUrl}/functions/v1/chat`;

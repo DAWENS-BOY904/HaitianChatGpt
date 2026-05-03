@@ -17,6 +17,7 @@ import {
   Linking,
   AppState,
   Image,
+  Clipboard,
   Share,
   Vibration,
   Dimensions,
@@ -39,7 +40,6 @@ import { MenuModal } from '../components/MenuModal';
 import { MessageLimitModal } from '../components/MessageLimitModal';
 import { ToolsModal } from '../components/ToolsModal';
 import * as ImagePicker from 'expo-image-picker';
-import * as Clipboard from 'expo-clipboard';
 import * as DocumentPicker from 'expo-document-picker';
 import { QuizModal, QuizView, QuizQuestion, QuizHistoryEntry } from '../components/QuizModal';
 import { PresetsModal } from '../components/PresetsModal';
@@ -827,7 +827,7 @@ function InviteLinkModal({ visible, onClose, isPlus, isDark }: { visible: boolea
   const link = `https://dawinix.com/gg/v/${id}?token=${token}`;
   const textC = isDark !== false ? '#FFF' : '#000';
   const handleShare = async () => { try { await Share.share({ message: `Join my Dawinix group chat!\\n\\n${link}`, url: link }); } catch (e) {} onClose(); };
-  const handleCopy = () => { Clipboard.setStringAsync(link); onClose(); };
+  const handleCopy = () => { Clipboard.setString(link); onClose(); };
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onClose} />
@@ -2453,7 +2453,7 @@ Be thorough and cite specific facts.`;
     }
   }, [messageLikes, user?.id, supabase, router, currentConversation?.id]);
 
-  const handleCopyMessage = useCallback(async (content: string) => { await Clipboard.setStringAsync(content); showAlert('Copied', 'Message copied to clipboard'); }, [showAlert]);
+  const handleCopyMessage = useCallback(async (content: string) => { await Clipboard.setString(content); showAlert('Copied', 'Message copied to clipboard'); }, [showAlert]);
 
   const handleAddPeople = useCallback(async () => {
     setConversationMenuVisible(false);
@@ -2525,7 +2525,7 @@ Be thorough and cite specific facts.`;
       <View>
         <Pressable
           onPress={isUserMsg && !groupChatMode ? (e: any) => handleUserMsgPress(item, e.nativeEvent.pageY) : undefined}
-          onLongPress={!isUserMsg ? () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); Clipboard.setStringAsync(item.content || ''); showAlert('Copied', 'Message copied'); } : undefined}
+          onLongPress={!isUserMsg ? () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); Clipboard.setString(item.content || ''); showAlert('Copied', 'Message copied'); } : undefined}
           delayLongPress={450}
         >
         <MessageItem
@@ -3051,11 +3051,11 @@ Be thorough and cite specific facts.`;
 
               {editingMessageId ? (
                 <View style={[{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingBottom: 6 }]}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? '#1A2030' : '#E8F0FE', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 9, gap: 7, alignSelf: 'flex-start', borderWidth: 1, borderColor: isDark ? 'rgba(0,122,255,0.3)' : 'rgba(0,122,255,0.2)' }}>
-                    <Ionicons name="pencil" size={15} color="#007AFF" />
-                    <Text style={{ color: '#007AFF', fontSize: 14, fontWeight: '700' }}>Edit</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#1A1A2A', borderRadius: 18, paddingHorizontal: 14, paddingVertical: 8, gap: 8 }}>
+                    <Ionicons name="pencil" size={16} color="#007AFF" />
+                    <Text style={{ color: '#007AFF', fontSize: 13, fontWeight: '700' }}>Edit</Text>
                     <TouchableOpacity onPress={handleCancelEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                      <Ionicons name="close" size={15} color={isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.4)'} />
+                      <Ionicons name="close" size={16} color="rgba(255,255,255,0.5)" />
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -3684,11 +3684,11 @@ Be thorough and cite specific facts.`;
                         <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: divC }}>
                           <Text style={{ color: menuSubC, fontSize: 12, fontWeight: '500' }}>{dateLabel}</Text>
                         </View>
-                        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, gap: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: divC }} onPress={async () => { setMsgMenuVisible(false); await Clipboard.setStringAsync(msgMenuMsg.content || ''); showAlert('Copied', 'Message copied to clipboard'); }} activeOpacity={0.65}>
+                        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, gap: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: divC }} onPress={() => { setMsgMenuVisible(false); Clipboard.setString(msgMenuMsg.content || ''); showAlert('Copied', 'Message copied to clipboard'); }} activeOpacity={0.65}>
                           <Ionicons name="copy-outline" size={20} color={menuTextC} />
                           <Text style={{ fontSize: 17, color: menuTextC }}>Copy</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, gap: 12 }} onPress={() => { setMsgMenuVisible(false); setTimeout(() => { handleEditMessage(msgMenuMsg.id, msgMenuMsg.content || ''); setTimeout(() => inputRef.current?.focus(), 100); }, 60); }} activeOpacity={0.65}>
+                        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, gap: 12 }} onPress={() => { setMsgMenuVisible(false); handleEditMessage(msgMenuMsg.id, msgMenuMsg.content || ''); }} activeOpacity={0.65}>
                           <Ionicons name="pencil-outline" size={20} color={menuTextC} />
                           <Text style={{ fontSize: 17, color: menuTextC }}>Edit</Text>
                         </TouchableOpacity>
@@ -3698,11 +3698,11 @@ Be thorough and cite specific facts.`;
                         <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: divC }}>
                           <Text style={{ color: menuSubC, fontSize: 12, fontWeight: '500' }}>{dateLabel}</Text>
                         </View>
-                        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, gap: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: divC }} onPress={async () => { setMsgMenuVisible(false); await Clipboard.setStringAsync(msgMenuMsg.content || ''); showAlert('Copied', 'Message copied to clipboard'); }} activeOpacity={0.65}>
+                        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, gap: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: divC }} onPress={() => { setMsgMenuVisible(false); Clipboard.setString(msgMenuMsg.content || ''); showAlert('Copied', 'Message copied to clipboard'); }} activeOpacity={0.65}>
                           <Ionicons name="copy-outline" size={20} color={menuTextC} />
                           <Text style={{ fontSize: 17, color: menuTextC }}>Copy</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, gap: 12 }} onPress={() => { setMsgMenuVisible(false); setTimeout(() => { handleEditMessage(msgMenuMsg.id, msgMenuMsg.content || ''); setTimeout(() => inputRef.current?.focus(), 100); }, 60); }} activeOpacity={0.65}>
+                        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, gap: 12 }} onPress={() => { setMsgMenuVisible(false); handleEditMessage(msgMenuMsg.id, msgMenuMsg.content || ''); }} activeOpacity={0.65}>
                           <Ionicons name="pencil-outline" size={20} color={menuTextC} />
                           <Text style={{ fontSize: 17, color: menuTextC }}>Edit</Text>
                         </TouchableOpacity>
