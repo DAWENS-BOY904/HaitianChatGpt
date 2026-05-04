@@ -430,86 +430,12 @@ const extractMessageCard = (content: string): { hasCard: boolean; cardContent: s
 };
 
 const DownloadLinkCard = memo(function DownloadLinkCard({ label, colors }: { label: string; colors: any }) {
-  const [downloading, setDownloading] = useState(false);
-  const [done, setDone] = useState(false);
-  const { showAlert } = useAlert();
-
-  const handlePress = useCallback(async () => {
-    if (downloading || done) return;
-    setDownloading(true);
-    try {
-      // Write the label text as a downloadable .txt file
-      const safeFileName = label.replace(/[^a-zA-Z0-9_\- ]/g, '').trim().slice(0, 60) || 'download';
-      const fileName = `${safeFileName}_${Date.now()}.txt`;
-      const fileUri = `${FileSystem.documentDirectory}${fileName}`;
-      await FileSystem.writeAsStringAsync(fileUri, label, { encoding: FileSystem.EncodingType.UTF8 });
-      const isAvailable = await Sharing.isAvailableAsync();
-      if (isAvailable) {
-        await Sharing.shareAsync(fileUri, {
-          mimeType: 'text/plain',
-          dialogTitle: 'Save or share',
-          UTI: 'public.plain-text',
-        });
-      } else {
-        await Share.share({ message: label, title: safeFileName });
-      }
-      setDone(true);
-      setTimeout(() => setDone(false), 3000);
-    } catch (err: any) {
-      if (err?.message !== 'User canceled') {
-        showAlert('Download failed', err?.message || 'Could not download file');
-      }
-    } finally {
-      setDownloading(false);
-    }
-  }, [label, downloading, done, showAlert]);
-
   return (
-    <TouchableOpacity
-      onPress={handlePress}
-      activeOpacity={0.75}
-      disabled={downloading}
-      style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        marginTop: 8,
-        marginBottom: 4,
-        backgroundColor: done
-          ? 'rgba(52,199,89,0.12)'
-          : `${colors.primary}14`,
-        borderRadius: 12,
-        paddingHorizontal: 14,
-        paddingVertical: 10,
-        borderWidth: 1,
-        borderColor: done ? 'rgba(52,199,89,0.35)' : `${colors.primary}30`,
-        alignSelf: 'flex-start',
-      }}
-    >
-      {downloading ? (
-        <ActivityIndicator size="small" color={colors.primary} />
-      ) : (
-        <Ionicons
-          name={done ? 'checkmark-circle' : 'download-outline'}
-          size={16}
-          color={done ? '#34C759' : colors.primary}
-        />
-      )}
-      <Text
-        style={{
-          fontSize: 14,
-          color: done ? '#34C759' : colors.primary,
-          fontWeight: '600',
-          flexShrink: 1,
-        }}
-        numberOfLines={1}
-      >
-        {done ? 'Downloaded!' : label}
-      </Text>
-      {!downloading && !done && (
-        <Ionicons name="arrow-down" size={13} color={colors.primary} />
-      )}
-    </TouchableOpacity>
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6, marginBottom: 2 }}>
+      <Text style={{ fontSize: 18 }}>{'👉'}</Text>
+      <Text style={{ fontSize: 15, color: colors.primary, textDecorationLine: 'underline', fontWeight: '500' }}>{label}</Text>
+      <Text style={{ fontSize: 14, color: colors.primary }}>{'↗'}</Text>
+    </View>
   );
 });
 
@@ -1142,26 +1068,12 @@ export const MessageItem = memo(function MessageItem({
   const hasGeneratedImage = useMemo(() => Boolean(message.image_url && isImageUrl(message.image_url)), [message.image_url]);
   const shouldStreamPart = useCallback((isLastPart: boolean) => streaming && isGenerating && message.role === 'assistant' && isLastPart, [streaming, isGenerating, message.role]);
 
-  // Image card: square 1:1 ratio, full width of assistant bubble, with rounded corners
-  const imgCardImgSize = Math.min(SCREEN_WIDTH * 0.78, 320);
   const imgCardStyles = useMemo(() => StyleSheet.create({
-    cardWrap: { marginTop: 4, marginBottom: 6, alignSelf: 'flex-start' },
-    label: { color: colors.textSecondary, fontSize: 13, fontWeight: '500', marginBottom: 6, paddingLeft: 2 },
-    imageContainer: {
-      borderRadius: 18,
-      overflow: 'hidden',
-      backgroundColor: colors.surface,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.22,
-      shadowRadius: 14,
-      elevation: 10,
-      // Ensure the Pressable wraps the image tightly
-      width: imgCardImgSize,
-      height: imgCardImgSize,
-    },
-    image: { width: imgCardImgSize, height: imgCardImgSize },
-  }), [colors, imgCardImgSize]);
+    cardWrap: { marginTop: 4, marginBottom: 4 },
+    label: { color: colors.textSecondary, fontSize: 13, fontWeight: '500', marginBottom: 8, paddingLeft: 2 },
+    imageContainer: { borderRadius: 18, overflow: 'hidden', backgroundColor: colors.surface, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.18, shadowRadius: 12, elevation: 8 },
+    image: { width: Math.min(SCREEN_WIDTH - 48, 340), height: Math.min(SCREEN_WIDTH - 48, 340), borderRadius: 18 },
+  }), [colors]);
 
   const styles = useMemo(() => StyleSheet.create({
     container: { paddingHorizontal: Spacing.md, paddingVertical: 10, marginVertical: 2, maxWidth: '78%' },
@@ -1245,56 +1157,39 @@ export const MessageItem = memo(function MessageItem({
           {hasGeneratedImage && message.role === 'assistant' && (
             <View style={imgCardStyles.cardWrap}>
               <Text style={imgCardStyles.label}>Image created ✨</Text>
-              {/* Tap image → fullscreen viewer */}
-              <Pressable
-                onPress={() => handleImagePress(message.image_url!)}
-                onLongPress={() => handleAIImageLongPress(message.image_url!)}
-                delayLongPress={350}
-                disabled={downloadingImage}
-                style={imgCardStyles.imageContainer}
-              >
-                <Image
-                  source={{ uri: message.image_url }}
-                  style={imgCardStyles.image}
-                  contentFit="cover"
-                  transition={400}
-                />
+              <View style={imgCardStyles.imageContainer}>
+                <Pressable onPress={() => handleImagePress(message.image_url!)} onLongPress={() => handleAIImageLongPress(message.image_url!)} delayLongPress={350} disabled={downloadingImage}>
+                  <Image source={{ uri: message.image_url }} style={imgCardStyles.image} contentFit="cover" transition={400} />
+                </Pressable>
                 {downloadingImage ? (
                   <View style={[StyleSheet.absoluteFillObject, { borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', alignItems: 'center' }]}>
                     <ActivityIndicator color="#fff" size="large" />
                     <Text style={{ color: '#fff', marginTop: 8, fontSize: 13 }}>Saving...</Text>
                   </View>
                 ) : null}
-                {/* Download button overlaid on image */}
-                <TouchableOpacity
-                  style={styles.downloadButton}
-                  onPress={(e) => { e.stopPropagation?.(); handleDownloadImage(message.image_url!); }}
-                  disabled={downloadingImage}
-                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                >
-                  <Ionicons name="download" size={20} color="#fff" />
+                <TouchableOpacity style={styles.downloadButton} onPress={() => handleDownloadImage(message.image_url!)} disabled={downloadingImage}>
+                  <Ionicons name="download" size={22} color="#fff" />
                 </TouchableOpacity>
-              </Pressable>
-              {/* Action bar below image */}
+              </View>
               <BlurView intensity={75} tint="dark" style={aiImgMenuStyles.bar}>
                 <TouchableOpacity style={aiImgMenuStyles.btn} onPress={() => handleDownloadImage(message.image_url!)}>
-                  <Ionicons name="arrow-down-circle-outline" size={20} color="#FFF" />
+                  <Ionicons name="arrow-down-circle-outline" size={22} color="#FFF" />
                   <Text style={aiImgMenuStyles.btnLabel}>Save</Text>
                 </TouchableOpacity>
                 <View style={aiImgMenuStyles.divider} />
-                <TouchableOpacity style={aiImgMenuStyles.btn} onPress={() => handleImagePress(message.image_url!)}>
-                  <Ionicons name="expand-outline" size={20} color="#FFF" />
-                  <Text style={aiImgMenuStyles.btnLabel}>View</Text>
-                </TouchableOpacity>
-                <View style={aiImgMenuStyles.divider} />
                 <TouchableOpacity style={aiImgMenuStyles.btn} onPress={() => handleShareImage(message.image_url!)}>
-                  <Ionicons name="share-outline" size={20} color="#FFF" />
+                  <Ionicons name="share-outline" size={22} color="#FFF" />
                   <Text style={aiImgMenuStyles.btnLabel}>Share</Text>
                 </TouchableOpacity>
                 <View style={aiImgMenuStyles.divider} />
                 <TouchableOpacity style={aiImgMenuStyles.btn} onPress={() => handleLike('like')}>
-                  <Ionicons name={liked === 'like' ? 'thumbs-up' : 'thumbs-up-outline'} size={20} color={liked === 'like' ? '#34C759' : '#FFF'} />
+                  <Ionicons name={liked === 'like' ? 'thumbs-up' : 'thumbs-up-outline'} size={22} color={liked === 'like' ? '#34C759' : '#FFF'} />
                   <Text style={[aiImgMenuStyles.btnLabel, liked === 'like' && { color: '#34C759' }]}>Good</Text>
+                </TouchableOpacity>
+                <View style={aiImgMenuStyles.divider} />
+                <TouchableOpacity style={aiImgMenuStyles.btn} onPress={() => handleLike('dislike')}>
+                  <Ionicons name={liked === 'dislike' ? 'thumbs-down' : 'thumbs-down-outline'} size={22} color={liked === 'dislike' ? '#FF453A' : '#FFF'} />
+                  <Text style={[aiImgMenuStyles.btnLabel, liked === 'dislike' && { color: '#FF453A' }]}>Bad</Text>
                 </TouchableOpacity>
               </BlurView>
             </View>
