@@ -4,6 +4,7 @@
  * Full-screen viewer with swipe gestures
  */
 
+
 import React, { useState } from 'react';
 import {
   View,
