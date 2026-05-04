@@ -1375,3 +1375,5 @@ export const MessageItem = memo(function MessageItem({
     </>
   );
 });
+
+hello ai fix donwload card allow real click please fix it and also fix image card fix position in home page please make all change dont skip
