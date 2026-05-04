@@ -2626,51 +2626,92 @@ Be thorough and cite specific facts.`;
   const IMG_THUMB = 116;
   const renderInlineMediaPreviews = useCallback(() => {
     if (selectedMedia.length === 0) return null;
-    const items = selectedMedia.map((media, index) => (
-      <View key={`${media.uri}-${index}`} style={{ position: 'relative', marginRight: 10 }}>
-        {media.type === 'image' ? (
-          <View style={{ width: IMG_THUMB, height: IMG_THUMB, borderRadius: 18, overflow: 'hidden', borderWidth: 1.5, borderColor: isDark ? 'rgba(255,255,255,0.16)' : 'rgba(0,0,0,0.12)', backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA' }}>
-            <ExpoImage source={{ uri: media.uri }} style={{ width: IMG_THUMB, height: IMG_THUMB }} contentFit="cover" />
-          </View>
-        ) : media.type === 'video' ? (
-          <View style={{ width: IMG_THUMB, height: IMG_THUMB, borderRadius: 18, backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)' }}>
-            <Ionicons name="videocam" size={36} color={colors.textSecondary} />
-            <Text style={{ fontSize: 10, color: colors.textSecondary, marginTop: 6, fontWeight: '700' }}>VIDEO</Text>
-          </View>
-        ) : (
-          <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? '#2A2A2E' : '#EBEBF0', borderRadius: 16, paddingHorizontal: 12, paddingVertical: 12, gap: 10, maxWidth: 220, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.07)', minHeight: 64 }}>
-            <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: isDark ? '#3A3A3C' : '#D1D1D6', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <Ionicons name="document-text" size={22} color={colors.primary} />
+
+    // Single image: ChatGPT-style compact square thumbnail at top of input
+    if (selectedMedia.length === 1 && selectedMedia[0].type === 'image') {
+      const media = selectedMedia[0];
+      return (
+        <View style={{ marginBottom: 8, flexDirection: 'row', alignItems: 'flex-start' }}>
+          <View style={{ position: 'relative' }}>
+            <View style={{ width: 72, height: 72, borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.1)' }}>
+              <ExpoImage source={{ uri: media.uri }} style={{ width: 72, height: 72 }} contentFit="cover" />
             </View>
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={{ fontSize: 13, color: colors.text, fontWeight: '600' }} numberOfLines={2}>{media.name || 'File'}</Text>
-              <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 3 }}>{(media.mimeType || '').split('/')[1]?.toUpperCase() || 'FILE'}</Text>
-            </View>
+            <TouchableOpacity
+              style={{ position: 'absolute', top: -7, right: -7, width: 22, height: 22, borderRadius: 11, backgroundColor: isDark ? '#555' : '#888', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: isDark ? '#1C1C1E' : '#F0F0F5', zIndex: 10 }}
+              onPress={() => removeMedia(0)}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            >
+              <Ionicons name="close" size={11} color="#FFF" />
+            </TouchableOpacity>
           </View>
-        )}
-        <TouchableOpacity
-          style={{ position: 'absolute', top: -8, right: -8, backgroundColor: isDark ? '#636366' : '#8E8E93', borderRadius: 13, width: 26, height: 26, alignItems: 'center', justifyContent: 'center', borderWidth: 2.5, borderColor: isDark ? '#111113' : '#F0F0F5', zIndex: 5 }}
-          onPress={() => removeMedia(index)}
-          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-        >
-          <Ionicons name="close" size={13} color="#FFF" />
-        </TouchableOpacity>
-      </View>
-    ));
+        </View>
+      );
+    }
+
+    // Single document
+    if (selectedMedia.length === 1 && selectedMedia[0].type === 'document') {
+      const media = selectedMedia[0];
+      return (
+        <View style={{ marginBottom: 8 }}>
+          <View style={{ position: 'relative', alignSelf: 'flex-start' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? '#2A2A2E' : '#EBEBF0', borderRadius: 14, paddingHorizontal: 10, paddingVertical: 8, gap: 8, maxWidth: 220, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.07)' }}>
+              <View style={{ width: 34, height: 34, borderRadius: 8, backgroundColor: isDark ? '#3A3A3C' : '#D1D1D6', alignItems: 'center', justifyContent: 'center' }}>
+                <Ionicons name="document-text" size={18} color={colors.primary} />
+              </View>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={{ fontSize: 12, color: colors.text, fontWeight: '600' }} numberOfLines={1}>{media.name || 'File'}</Text>
+                <Text style={{ fontSize: 10, color: colors.textSecondary, marginTop: 2 }}>{(media.mimeType || '').split('/')[1]?.toUpperCase() || 'FILE'}</Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              style={{ position: 'absolute', top: -7, right: -7, width: 22, height: 22, borderRadius: 11, backgroundColor: isDark ? '#555' : '#888', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: isDark ? '#1C1C1E' : '#F0F0F5', zIndex: 10 }}
+              onPress={() => removeMedia(0)}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            >
+              <Ionicons name="close" size={11} color="#FFF" />
+            </TouchableOpacity>
+          </View>
+        </View>
+      );
+    }
+
+    // Multiple files: compact horizontal strip
     return (
-      <View>
+      <View style={{ marginBottom: 8 }}>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          style={{ marginTop: 8, marginBottom: 2 }}
-          contentContainerStyle={{ alignItems: 'flex-start', paddingHorizontal: 2, paddingBottom: 4 }}
+          contentContainerStyle={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8, paddingBottom: 2 }}
         >
-          {items}
+          {selectedMedia.map((media, index) => (
+            <View key={`${media.uri}-${index}`} style={{ position: 'relative' }}>
+              {media.type === 'image' ? (
+                <View style={{ width: 64, height: 64, borderRadius: 10, overflow: 'hidden', borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.1)' }}>
+                  <ExpoImage source={{ uri: media.uri }} style={{ width: 64, height: 64 }} contentFit="cover" />
+                </View>
+              ) : media.type === 'video' ? (
+                <View style={{ width: 64, height: 64, borderRadius: 10, backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)' }}>
+                  <Ionicons name="videocam" size={24} color={colors.textSecondary} />
+                </View>
+              ) : (
+                <View style={{ width: 64, height: 64, borderRadius: 10, backgroundColor: isDark ? '#2A2A2E' : '#EBEBF0', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.07)' }}>
+                  <Ionicons name="document-text" size={24} color={colors.primary} />
+                  <Text style={{ fontSize: 8, color: colors.textSecondary, marginTop: 2, fontWeight: '700' }} numberOfLines={1}>{(media.name || '').slice(0, 6)}</Text>
+                </View>
+              )}
+              <TouchableOpacity
+                style={{ position: 'absolute', top: -7, right: -7, width: 20, height: 20, borderRadius: 10, backgroundColor: isDark ? '#555' : '#888', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: isDark ? '#1C1C1E' : '#F0F0F5', zIndex: 10 }}
+                onPress={() => removeMedia(index)}
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+              >
+                <Ionicons name="close" size={9} color="#FFF" />
+              </TouchableOpacity>
+            </View>
+          ))}
         </ScrollView>
-        <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)', marginTop: 6, marginBottom: 2 }} />
       </View>
     );
-  }, [selectedMedia, removeMedia, colors, isDark, IMG_THUMB]);
+  }, [selectedMedia, removeMedia, colors, isDark]);
 
   const styles = useMemo(() => StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background, paddingTop: Platform.select({ ios: insets.top, android: StatusBar.currentHeight || 0, default: 0 }) },
@@ -2690,8 +2731,8 @@ Be thorough and cite specific facts.`;
     blurText: { fontSize: 24, fontWeight: 'bold', color: 'white', marginTop: 16 },
     messagesContainer: { flex: 1 },
     inputContainer: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 10, paddingBottom: Platform.select({ ios: insets.bottom + 8, android: insets.bottom + 8, default: 8 }), paddingTop: 8, gap: 8, backgroundColor: Platform.OS === 'ios' ? 'transparent' : colors.background },
-    inputWrapper: { flex: 1, backgroundColor: isDark ? '#1C1C1E' : '#F0F0F5', borderRadius: 26, paddingHorizontal: 14, paddingVertical: 6, minHeight: selectedMedia.length > 0 ? 180 : 52, maxHeight: selectedMedia.length > 0 ? 320 : 140, gap: 0 },
-    input: { fontSize: 16, color: colors.text, paddingVertical: 10, maxHeight: selectedMedia.length > 0 ? 100 : 96, minHeight: 36 },
+    inputWrapper: { flex: 1, backgroundColor: isDark ? '#1C1C1E' : '#F0F0F5', borderRadius: 26, paddingHorizontal: 14, paddingVertical: 10, minHeight: 52, maxHeight: 420, gap: 0 },
+    input: { fontSize: 16, color: colors.text, paddingVertical: 6, maxHeight: 160, minHeight: 34 },
     recordingContainer: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8 },
     recordingDuration: { color: '#FF3B30', fontSize: 13, fontWeight: '600', minWidth: 36 },
     addBtn: { width: 42, height: 42, borderRadius: 21, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', marginBottom: 2 },
@@ -3141,7 +3182,7 @@ Be thorough and cite specific facts.`;
                   <BlurView
                     intensity={isDark ? 72 : 62}
                     tint={isDark ? 'dark' : 'light'}
-                    style={[styles.inputWrapper, { overflow: 'hidden', flexDirection: 'column', paddingTop: (selectedMedia.length > 0 || deepResearchMode) ? 8 : 4 }]}
+                    style={[styles.inputWrapper, { overflow: 'hidden', flexDirection: 'column' }]}
                   >
                     {deepResearchMode ? (
                       <View style={{ flexDirection: 'row', marginBottom: 6 }}>
@@ -3214,7 +3255,7 @@ Be thorough and cite specific facts.`;
                     </View>
                   </BlurView>
                 ) : (
-                  <View style={[styles.inputWrapper, { flexDirection: 'column', paddingTop: (selectedMedia.length > 0 || deepResearchMode) ? 8 : 4 }]}>
+                  <View style={[styles.inputWrapper, { flexDirection: 'column' }]}>
                     {deepResearchMode ? (
                       <View style={{ flexDirection: 'row', marginBottom: 6 }}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(90,200,250,0.18)', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5, gap: 5, borderWidth: 1, borderColor: 'rgba(90,200,250,0.42)' }}>
