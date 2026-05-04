@@ -108,6 +108,7 @@ function isValidBase64(str: string): boolean {
 
 // Input persistence helpers (8-minute TTL)
 const INPUT_PERSIST_KEY = 'home_input_draft';
+const CONV_PERSIST_KEY = 'home_current_conv_id';
 const INPUT_PERSIST_TTL = 8 * 60 * 1000;
 async function saveDraft(text: string) {
   try {
@@ -1413,12 +1414,39 @@ export default function HomeScreen() {
     }
   }, [user?.id, supabase, showAlert, savingImageId]);
 
-  // Load persisted draft on mount
+  // ── 8-minute inactivity timer: auto-create new conversation ──
+  const inactivityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const resetInactivityTimer = useCallback(() => {
+    if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
+    inactivityTimerRef.current = setTimeout(async () => {
+      if ((messages || []).length > 0) {
+        try { await createConversation(); } catch (_e) {}
+      }
+    }, INPUT_PERSIST_TTL);
+  }, [messages, createConversation]);
+
+  // Load persisted draft + conversation ID on mount
   useEffect(() => {
     loadDraft().then(draft => { if (draft) setInputText(draft); });
+    // Restore last conversation
+    AsyncStorage.getItem(CONV_PERSIST_KEY).then(savedId => {
+      if (savedId && selectConversation) {
+        selectConversation(savedId).catch(() => {});
+      }
+    }).catch(() => {});
     const clearTimer = setTimeout(() => clearDraft(), INPUT_PERSIST_TTL);
-    return () => clearTimeout(clearTimer);
+    return () => {
+      clearTimeout(clearTimer);
+      if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
+    };
   }, []);
+
+  // Save conversation ID whenever it changes
+  useEffect(() => {
+    if (currentConversation?.id) {
+      AsyncStorage.setItem(CONV_PERSIST_KEY, currentConversation.id).catch(() => {});
+    }
+  }, [currentConversation?.id]);
 
   const handleInputChange = useCallback(async (txt: string) => {
     const safeTxt = txt ?? '';
@@ -1594,7 +1622,13 @@ export default function HomeScreen() {
     return () => clearInterval(interval);
   }, [computeTimeUntilMidnight]);
 
-  const swipeGesture = Gesture.Pan()
+  // Refresh conversations when side menu opens
+  const { refreshConversations } = useConversation();
+  useEffect(() => {
+    if (sideMenuVisible) {
+      refreshConversations().catch(() => {});
+    }
+  }, [sideMenuVisible]);
     .activeOffsetX([20, 10000])
     .failOffsetY([-10, 10])
     .onEnd((e) => {
@@ -2586,65 +2620,55 @@ Be thorough and cite specific facts.`;
   }, [streamingMessageId, handleCancelGeneration, handleEditMessage, handleCopyMessage, isOffline, isAtBottom, savedImageUrls, savingImageId, handleSaveToMyImages, user?.id, isDark, colors, groupChatMode, handleUserMsgPress, generating, messages, thinkingMode, isAdmin, showAlert]);
 
   // ── Inline media previews inside input wrapper (large cards with divider) ──
+  // ── Inline media previews: large ChatGPT-style thumbnails ──
+  const IMG_THUMB = 116;
   const renderInlineMediaPreviews = useCallback(() => {
     if (selectedMedia.length === 0) return null;
-    // Use flat wrap for ≤2 items, horizontal scroll for 3+
-    const useScroll = selectedMedia.length > 2;
     const items = selectedMedia.map((media, index) => (
-      <View key={`${media.uri}-${index}`} style={{ position: 'relative' }}>
+      <View key={`${media.uri}-${index}`} style={{ position: 'relative', marginRight: 10 }}>
         {media.type === 'image' ? (
-          // Large 80x80 image thumbnail — ChatGPT style
-          <View style={{ width: 80, height: 80, borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.1)' }}>
-            <ExpoImage source={{ uri: media.uri }} style={{ width: 80, height: 80 }} contentFit="cover" />
+          <View style={{ width: IMG_THUMB, height: IMG_THUMB, borderRadius: 18, overflow: 'hidden', borderWidth: 1.5, borderColor: isDark ? 'rgba(255,255,255,0.16)' : 'rgba(0,0,0,0.12)', backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA' }}>
+            <ExpoImage source={{ uri: media.uri }} style={{ width: IMG_THUMB, height: IMG_THUMB }} contentFit="cover" />
           </View>
         ) : media.type === 'video' ? (
-          // Video pill
-          <View style={{ width: 80, height: 80, borderRadius: 16, backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)' }}>
-            <Ionicons name="videocam" size={30} color={colors.textSecondary} />
-            <Text style={{ fontSize: 9, color: colors.textSecondary, marginTop: 4, fontWeight: '700' }}>VIDEO</Text>
+          <View style={{ width: IMG_THUMB, height: IMG_THUMB, borderRadius: 18, backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)' }}>
+            <Ionicons name="videocam" size={36} color={colors.textSecondary} />
+            <Text style={{ fontSize: 10, color: colors.textSecondary, marginTop: 6, fontWeight: '700' }}>VIDEO</Text>
           </View>
         ) : (
-          // Compact document pill
-          <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? '#2A2A2E' : '#EBEBF0', borderRadius: 14, paddingHorizontal: 10, paddingVertical: 10, gap: 8, maxWidth: 200, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.07)' }}>
-            <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: isDark ? '#3A3A3C' : '#D1D1D6', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <Ionicons name="document-text" size={20} color={colors.primary} />
+          <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? '#2A2A2E' : '#EBEBF0', borderRadius: 16, paddingHorizontal: 12, paddingVertical: 12, gap: 10, maxWidth: 220, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.07)', minHeight: 64 }}>
+            <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: isDark ? '#3A3A3C' : '#D1D1D6', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <Ionicons name="document-text" size={22} color={colors.primary} />
             </View>
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={{ fontSize: 12, color: colors.text, fontWeight: '600' }} numberOfLines={1}>{media.name || 'File'}</Text>
-              <Text style={{ fontSize: 10, color: colors.textSecondary, marginTop: 2 }}>{(media.mimeType || '').split('/')[1]?.toUpperCase() || 'FILE'}</Text>
+              <Text style={{ fontSize: 13, color: colors.text, fontWeight: '600' }} numberOfLines={2}>{media.name || 'File'}</Text>
+              <Text style={{ fontSize: 11, color: colors.textSecondary, marginTop: 3 }}>{(media.mimeType || '').split('/')[1]?.toUpperCase() || 'FILE'}</Text>
             </View>
           </View>
         )}
         <TouchableOpacity
-          style={{ position: 'absolute', top: -6, right: -6, backgroundColor: isDark ? '#636366' : '#8E8E93', borderRadius: 12, width: 24, height: 24, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: isDark ? '#1C1C1E' : '#F2F2F7', zIndex: 5 }}
+          style={{ position: 'absolute', top: -8, right: -8, backgroundColor: isDark ? '#636366' : '#8E8E93', borderRadius: 13, width: 26, height: 26, alignItems: 'center', justifyContent: 'center', borderWidth: 2.5, borderColor: isDark ? '#111113' : '#F0F0F5', zIndex: 5 }}
           onPress={() => removeMedia(index)}
           hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
         >
-          <Ionicons name="close" size={12} color="#FFF" />
+          <Ionicons name="close" size={13} color="#FFF" />
         </TouchableOpacity>
       </View>
     ));
     return (
       <View>
-        {useScroll ? (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={{ marginTop: 6 }}
-            contentContainerStyle={{ gap: 10, alignItems: 'flex-start', paddingHorizontal: 2, paddingBottom: 8 }}
-          >
-            {items}
-          </ScrollView>
-        ) : (
-          <View style={{ flexDirection: 'row', gap: 10, marginTop: 6, paddingHorizontal: 2, paddingBottom: 8, flexWrap: 'nowrap' }}>
-            {items}
-          </View>
-        )}
-        {/* Hairline divider between media and text input */}
-        <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.14)', marginHorizontal: 0, marginBottom: 4 }} />
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={{ marginTop: 8, marginBottom: 2 }}
+          contentContainerStyle={{ alignItems: 'flex-start', paddingHorizontal: 2, paddingBottom: 4 }}
+        >
+          {items}
+        </ScrollView>
+        <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)', marginTop: 6, marginBottom: 2 }} />
       </View>
     );
-  }, [selectedMedia, removeMedia, colors, isDark]);
+  }, [selectedMedia, removeMedia, colors, isDark, IMG_THUMB]);
 
   const styles = useMemo(() => StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background, paddingTop: Platform.select({ ios: insets.top, android: StatusBar.currentHeight || 0, default: 0 }) },
@@ -2664,8 +2688,8 @@ Be thorough and cite specific facts.`;
     blurText: { fontSize: 24, fontWeight: 'bold', color: 'white', marginTop: 16 },
     messagesContainer: { flex: 1 },
     inputContainer: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 10, paddingBottom: Platform.select({ ios: insets.bottom + 8, android: insets.bottom + 8, default: 8 }), paddingTop: 8, gap: 8, backgroundColor: Platform.OS === 'ios' ? 'transparent' : colors.background },
-    inputWrapper: { flex: 1, backgroundColor: isDark ? '#1C1C1E' : '#F0F0F5', borderRadius: 28, paddingHorizontal: 14, paddingVertical: 4, minHeight: 48, maxHeight: selectedMedia.length > 0 ? 220 : 130, gap: 4 },
-    input: { fontSize: 16, color: colors.text, paddingVertical: 8, maxHeight: selectedMedia.length > 0 ? 120 : 72 },
+    inputWrapper: { flex: 1, backgroundColor: isDark ? '#1C1C1E' : '#F0F0F5', borderRadius: 26, paddingHorizontal: 14, paddingVertical: 6, minHeight: selectedMedia.length > 0 ? 180 : 52, maxHeight: selectedMedia.length > 0 ? 320 : 140, gap: 0 },
+    input: { fontSize: 16, color: colors.text, paddingVertical: 10, maxHeight: selectedMedia.length > 0 ? 100 : 96, minHeight: 36 },
     recordingContainer: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8 },
     recordingDuration: { color: '#FF3B30', fontSize: 13, fontWeight: '600', minWidth: 36 },
     addBtn: { width: 42, height: 42, borderRadius: 21, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', marginBottom: 2 },
