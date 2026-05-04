@@ -327,4 +327,4 @@ export function ImageCard({
     </>
   );
 }
-hello ai when i ask the ai for a image its send link but for the link only if user ask to send it in link the ai must display the image in home page clear and open in imageviewer modal real no demo make its better fix ai creation file and detect pipe-delimited markdown table syntax in AI responses (| col | col |) and render them as native React Native tables with ScrollView horizontal scroll, alternating row background colors, and bold header row.
+hello ai please fix image generate in home page gen yon kote ki pa gen inag fix position card image bien koz gen yon bo image la fini and li paret make sure fix its
