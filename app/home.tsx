@@ -3915,5 +3915,5 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-
+fix unpute texting when i tex its bug fix it and make it better blur background input and fix all input you can tex not only where says ask ai.
 
