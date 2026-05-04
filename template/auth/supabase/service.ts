@@ -451,8 +451,9 @@ export class AuthService {
     try {
       // Generate cross-platform redirect URL
       const redirectUrl = AuthSession.makeRedirectUri({
-        scheme: 'onspaceapp',
-        path: 'auth'
+        scheme: 'dawinixht',
+        path: 'auth',
+        useProxy: Platform.OS !== 'web',
       });
 
       // Step 1: Get OAuth URL from Supabase

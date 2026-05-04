@@ -35,12 +35,19 @@ export function MockAuthRouter({
       return;
     }
 
-    const isLoginRoute = pathname === loginRoute;
+    const matchesRoute = (route: string, path: string) => {
+      if (route === '/') {
+        return path === '/' || path === '';
+      }
+      return path === route || path === `${route}/index` || path.startsWith(`${route}/`);
+    };
+
+    const isLoginRoute = matchesRoute(loginRoute, pathname);
     const isExcludedRoute = excludeRoutes.some(route =>
-      pathname.startsWith(route)
+      matchesRoute(route, pathname)
     );
     const isGuestRoute = guestRoutes.some(route =>
-      route === '/' ? pathname === route : pathname.startsWith(route)
+      matchesRoute(route, pathname)
     );
 
     const action = !user && !isLoginRoute && !isExcludedRoute && !isGuestRoute ? 'redirect_to_login' :
@@ -59,12 +66,19 @@ export function MockAuthRouter({
     return <LoadingComponent />;
   }
 
-  const isLoginRoute = pathname === loginRoute;
+  const matchesRoute = (route: string, path: string) => {
+    if (route === '/') {
+      return path === '/' || path === '';
+    }
+    return path === route || path === `${route}/index` || path.startsWith(`${route}/`);
+  };
+
+  const isLoginRoute = matchesRoute(loginRoute, pathname);
   const isExcludedRoute = excludeRoutes.some(route =>
-    pathname.startsWith(route)
+    matchesRoute(route, pathname)
   );
   const isGuestRoute = guestRoutes.some(route =>
-    route === '/' ? pathname === route : pathname.startsWith(route)
+    matchesRoute(route, pathname)
   );
 
   if (isLoginRoute || isExcludedRoute || isGuestRoute || user) {
