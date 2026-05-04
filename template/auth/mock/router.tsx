@@ -40,7 +40,7 @@ export function MockAuthRouter({
       pathname.startsWith(route)
     );
     const isGuestRoute = guestRoutes.some(route =>
-      pathname.startsWith(route)
+      route === '/' ? pathname === route : pathname.startsWith(route)
     );
 
     const action = !user && !isLoginRoute && !isExcludedRoute && !isGuestRoute ? 'redirect_to_login' :
@@ -64,7 +64,7 @@ export function MockAuthRouter({
     pathname.startsWith(route)
   );
   const isGuestRoute = guestRoutes.some(route =>
-    pathname.startsWith(route)
+    route === '/' ? pathname === route : pathname.startsWith(route)
   );
 
   if (isLoginRoute || isExcludedRoute || isGuestRoute || user) {
