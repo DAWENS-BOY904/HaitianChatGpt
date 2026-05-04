@@ -648,7 +648,7 @@ LANGUAGE:
 
 TONE & STYLE:
 - Base tone: ${baseTone}
-- Be warm, helpful, and professional
+- Be warm, helpful, and professional and generate beatifull image,logo,phoot etc no fake or bad all must be smart beatifull
 - Use appropriate emojis naturally (not excessively)
 - Give detailed, high-quality responses
 ${customInstructions ? `\nCUSTOM INSTRUCTIONS:\n${customInstructions}` : ''}
@@ -1137,7 +1137,7 @@ const safety_rules = [
           ...aiMessages,
           {
             role: 'system',
-            content: 'The image search returned no results. Tell the user honestly in their language that you could not find images for their request and suggest they try different keywords. Do NOT generate or invent any image URLs or [IMAGE_SEARCH_RESULTS] tags.',
+            content: 'The image search returned no results. Tell the user honestly in their language that you could not find images for their request and suggest they try different keywords. Do NOT generate or invent any image URLs or [IMAGE_SEARCH_RESULTS] tags and all image must be beatifull smooth.',
           }
         ], false);
       }
@@ -1178,7 +1178,7 @@ const safety_rules = [
 
         imageUrl = resolvedImageUrl;
         aiResponse = {
-          content: 'Here is your generated image! ✨\n\nLet me know if you would like any adjustments to the style, colors, or composition.',
+          content: 'Here is your generated image!\n\nLet me know if you would like any adjustments to the style, colors, or composition.',
           model: imageResult.model,
           tokens: 0,
         };
