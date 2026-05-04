@@ -16,13 +16,15 @@ interface MockAuthRouterProps {
   loginRoute?: string;
   loadingComponent?: React.ComponentType;
   excludeRoutes?: string[];
+  guestRoutes?: string[];
 }
 
 export function MockAuthRouter({
   children,
   loginRoute = '/login',
   loadingComponent: LoadingComponent = DefaultMockLoadingScreen,
-  excludeRoutes = []
+  excludeRoutes = [],
+  guestRoutes = [],
 }: MockAuthRouterProps) {
   const { user, loading, initialized } = useMockAuth();
   const router = useRouter();
@@ -37,16 +39,21 @@ export function MockAuthRouter({
     const isExcludedRoute = excludeRoutes.some(route =>
       pathname.startsWith(route)
     );
+    const isGuestRoute = guestRoutes.some(route =>
+      pathname.startsWith(route)
+    );
 
-    const action = !user && !isLoginRoute && !isExcludedRoute ? 'redirect_to_login' :
-                   user && isLoginRoute ? 'redirect_to_home' : 'no_action';
+    const action = !user && !isLoginRoute && !isExcludedRoute && !isGuestRoute ? 'redirect_to_login' :
+                   user && isLoginRoute ? 'redirect_to_home' :
+                   user && isGuestRoute && pathname === '/' ? 'redirect_to_home' :
+                   'no_action';
 
     if (action === 'redirect_to_login') {
       router.push(loginRoute);
     } else if (action === 'redirect_to_home') {
-      router.replace('/');
+      router.replace('/home');
     }
-  }, [user, loading, initialized, pathname, loginRoute, excludeRoutes, router]);
+  }, [user, loading, initialized, pathname, loginRoute, excludeRoutes, guestRoutes, router]);
 
   if (loading || !initialized) {
     return <LoadingComponent />;
@@ -56,8 +63,11 @@ export function MockAuthRouter({
   const isExcludedRoute = excludeRoutes.some(route =>
     pathname.startsWith(route)
   );
+  const isGuestRoute = guestRoutes.some(route =>
+    pathname.startsWith(route)
+  );
 
-  if (isLoginRoute || isExcludedRoute || user) {
+  if (isLoginRoute || isExcludedRoute || isGuestRoute || user) {
     return <>{children}</>;
   }
 

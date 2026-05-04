@@ -15,13 +15,15 @@ interface AuthRouterProps {
   loginRoute?: string;
   loadingComponent?: React.ComponentType;
   excludeRoutes?: string[];
+  guestRoutes?: string[];
 }
 
 export function AuthRouter({
   children,
   loginRoute = '/login',
   loadingComponent: LoadingComponent = DefaultLoadingScreen,
-  excludeRoutes = []
+  excludeRoutes = [],
+  guestRoutes = [],
 }: AuthRouterProps) {
   const { user, loading, initialized } = useAuth();
   const router = useRouter();
@@ -36,16 +38,21 @@ export function AuthRouter({
     const isExcludedRoute = excludeRoutes.some(route => 
       pathname.startsWith(route)
     );
+    const isGuestRoute = guestRoutes.some(route =>
+      pathname.startsWith(route)
+    );
 
-    const action = !user && !isLoginRoute && !isExcludedRoute ? 'redirect_to_login' :
-                   user && isLoginRoute ? 'redirect_to_home' : 'no_action';
+    const action = !user && !isLoginRoute && !isExcludedRoute && !isGuestRoute ? 'redirect_to_login' :
+                   user && isLoginRoute ? 'redirect_to_home' :
+                   user && isGuestRoute && pathname === '/' ? 'redirect_to_home' :
+                   'no_action';
 
     if (action === 'redirect_to_login') {
       router.push(loginRoute);
     } else if (action === 'redirect_to_home') {
-      router.replace('/');
+      router.replace('/home');
     }
-  }, [user?.id, loading, initialized, pathname, loginRoute, excludeRoutes, router]);
+  }, [user?.id, loading, initialized, pathname, loginRoute, excludeRoutes, guestRoutes, router]);
 
   if (loading || !initialized) {
     return <LoadingComponent />;
@@ -55,8 +62,11 @@ export function AuthRouter({
   const isExcludedRoute = excludeRoutes.some(route => 
     pathname.startsWith(route)
   );
+  const isGuestRoute = guestRoutes.some(route =>
+    pathname.startsWith(route)
+  );
   
-  if (isLoginRoute || isExcludedRoute || user) {
+  if (isLoginRoute || isExcludedRoute || isGuestRoute || user) {
     return <>{children}</>;
   }
 

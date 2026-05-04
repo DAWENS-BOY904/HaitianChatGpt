@@ -9,8 +9,8 @@ import {
   ActivityIndicator,
   Image 
 } from 'react-native';
-import { useRouter, Redirect } from 'expo-router';
-import { useAuth, useAlert, getSupabaseClient } from '@/template';
+import { useRouter } from 'expo-router';
+import { AuthRouter, useAuth, useAlert, getSupabaseClient } from '@/template';
 import { useTheme } from '../hooks/useTheme';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -362,14 +362,36 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 16,
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#333333',
+  },
 });
 
+function AuthLoadingScreen() {
+  return (
+    <View style={styles.loadingContainer}>
+      <ActivityIndicator size="large" color="#007AFF" />
+      <Text style={styles.loadingText}>Checking authentication…</Text>
+    </View>
+  );
+}
+
 export default function RootScreen() {
-  const { user } = useAuth();
-
-  if (user) {
-    return <Redirect href="/home" />;
-  }
-
-  return <WelcomeScreen />;
+  return (
+    <AuthRouter
+      loginRoute="/login"
+      guestRoutes={['/']}
+      loadingComponent={AuthLoadingScreen}
+    >
+      <WelcomeScreen />
+    </AuthRouter>
+  );
 }
