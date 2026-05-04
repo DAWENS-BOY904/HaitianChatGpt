@@ -378,40 +378,42 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
   const loadConversations = async () => {
     if (!user) return;
     try {
-      // Load all non-archived conversations, including empty ones (for new group chats)
+      // Load all non-archived conversations that have at least one message
+      // Use a join-style query for efficiency
       const { data: allConvs, error } = await supabase
         .from('conversations')
         .select('id, title, created_at, updated_at, is_archived')
         .eq('user_id', user.id)
         .or('is_archived.is.null,is_archived.eq.false')
         .order('updated_at', { ascending: false })
-        .limit(100);
+        .limit(120);
 
       if (error || !allConvs) return;
 
-      // Show conversations that either have messages OR were created within the last 10 minutes (new group chats)
-      const tenMinAgo = Date.now() - 10 * 60 * 1000;
-      const validConversations = allConvs.filter((c: any) => {
-        const isNew = new Date(c.created_at).getTime() > tenMinAgo;
-        return isNew || true; // show all — filtering by messages happens lazily
-      });
+      if (allConvs.length === 0) { setConversations([]); return; }
 
-      // Separately check which ones actually have messages
+      // Check which conversation IDs have at least one message
       const convIds = allConvs.map((c: any) => c.id);
-      let convIdsWithMessages = new Set<string>();
-      if (convIds.length > 0) {
-        const { data: msgCheck } = await supabase
-          .from('messages')
-          .select('conversation_id')
-          .in('conversation_id', convIds);
-        if (msgCheck) {
-          msgCheck.forEach((m: any) => convIdsWithMessages.add(m.conversation_id));
-        }
-      }
+      const { data: msgRows } = await supabase
+        .from('messages')
+        .select('conversation_id')
+        .in('conversation_id', convIds);
+
+      const idsWithMessages = new Set((msgRows || []).map((m: any) => m.conversation_id));
+      // Also show conversations created within last 30 minutes (new chats before first message)
+      const thirtyMinAgo = Date.now() - 30 * 60 * 1000;
 
       const mapped = allConvs
-        .filter((c: any) => convIdsWithMessages.has(c.id) || new Date(c.created_at).getTime() > tenMinAgo)
-        .map((c: any) => ({ id: c.id, title: c.title || 'New Chat', createdAt: c.created_at, updatedAt: c.updated_at }));
+        .filter((c: any) =>
+          idsWithMessages.has(c.id) ||
+          new Date(c.created_at).getTime() > thirtyMinAgo
+        )
+        .map((c: any) => ({
+          id: c.id,
+          title: c.title || 'New Chat',
+          createdAt: c.created_at,
+          updatedAt: c.updated_at,
+        }));
 
       setConversations(mapped);
     } catch (err) {
