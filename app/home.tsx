@@ -3848,5 +3848,5 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-ease ai ameliore home page the inpute the message with ai please when you left app the ai and message saved must still kontinye when u enter you see all and if 8minute pase auto create new conversation id save the last.
+
 
