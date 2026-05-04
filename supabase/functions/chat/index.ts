@@ -686,12 +686,12 @@ When you reference or search for real information from the web, include the sour
 Do this whenever you cite facts, statistics, or information that comes from specific websites.
 
 IMAGE SEARCH RULES (CRITICAL):
-DO NOT generate fake image search results.
-DO NOT create [IMAGE_SEARCH_RESULTS:...] tags yourself.
-DO NOT invent Unsplash photo IDs or fake image URLs.
-The system will automatically search and display real images when the user requests them.
-If a user asks for images and the system cannot find them, clearly say: "I cannot search for images right now. Please try again later."
-NEVER pretend to show images by generating mock JSON or placeholder URLs.
+- When the user asks to find, search, show, or fetch images/photos, respond ONLY with this exact text: "Searching for images..."
+- DO NOT generate fake image URLs, Unsplash IDs, or [IMAGE_SEARCH_RESULTS] tags yourself
+- DO NOT say "I cannot search for images" — the system backend WILL search Unsplash automatically
+- DO NOT explain what you found — just say "Searching for images..." and the real results will load
+- NEVER create mock image data or placeholder JSON arrays
+- The real Unsplash image search happens server-side and will populate the UI automatically
 
 DOWNLOAD CARD RULES:
 When you generate a complete file or multi-file project for the user, add a download card AFTER your explanation like this:
@@ -1113,14 +1113,21 @@ const safety_rules = [
 
     // ── IMAGE SEARCH HANDLER ──────────────────────────────────────────────────
     if (detectionResult.type === 'search') {
-      console.log('[chat] Image search detected, searching for:', lastUserContent.slice(0, 120));
+      // Extract the actual search topic from the user message
+      const searchQuery = lastUserContent
+        .replace(/ban m(wen)?|banm|montre m(wen)?|cherche|search for|find|show me|look for|fetch|get|send|voye|search|chache|trouve|buscar|mostrar|encontrar/gi, '')
+        .replace(/foto|fotos|photo|photos|imaj|image|images|foto company/gi, '')
+        .replace(/\s+/g, ' ')
+        .trim() || lastUserContent;
 
-      const searchResult = await searchImages(lastUserContent, 10);
+      console.log('[chat] Image search detected, query:', searchQuery.slice(0, 120));
+
+      const searchResult = await searchImages(searchQuery, 12);
 
       if (searchResult.images && searchResult.images.length > 0) {
         // Return real image results tagged for client-side rendering
         aiResponse = {
-          content: `Men kèk imaj mwen te jwenn pou w:\n\n[IMAGE_SEARCH_RESULTS:${JSON.stringify(searchResult.images)}]`,
+          content: `Men kèk imaj mwen jwenn pou "${searchQuery}":\n\n[IMAGE_SEARCH_RESULTS:${JSON.stringify(searchResult.images)}]`,
           model: 'image-search',
           tokens: 0,
         };
