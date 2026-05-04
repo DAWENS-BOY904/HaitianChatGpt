@@ -3177,68 +3177,76 @@ Be thorough and cite specific facts.`;
                   </TouchableOpacity>
                 ) : null}
 
-               
-
-                  {sending ? (
+                {/* Input wrapper with media previews and text input */}
+                <Pressable style={styles.inputWrapper} onPress={() => inputRef.current?.focus()}>
+                  {renderInlineMediaPreviews()}
+                  {isRecording || isProcessing ? (
+                    <View style={styles.recordingContainer}>
+                      <WaveformAnimation isRecording={isRecording} />
+                      <Text style={styles.recordingDuration}>
+                        {isProcessing ? 'Processing...' : formatDuration(recordingDuration)}
+                      </Text>
+                      <TouchableOpacity onPress={toggleRecording} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                        <Ionicons name="stop-circle" size={28} color="#FF3B30" />
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <TextInput
+                      ref={inputRef}
+                      style={styles.input}
+                      value={inputText}
+                      onChangeText={handleInputChange}
+                      placeholder={deepResearchMode ? 'Enter research topic...' : 'Ask anything'}
+                      placeholderTextColor={colors.textSecondary}
+                      multiline
+                      returnKeyType="default"
+                      blurOnSubmit={false}
+                      scrollEnabled
+                      textAlignVertical="top"
+                    />
+                  )}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: selectedMedia.length > 0 ? 4 : 0 }}>
                     <TouchableOpacity
-                      style={[styles.sendButton, { backgroundColor: isDark ? '#3A3A3C' : '#E5E5EA' }]}
-                      onPress={handleStopGeneration}
+                      onPress={toggleRecording}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      style={{ opacity: isProcessing ? 0.5 : 1 }}
                     >
-                      <View style={{ width: 11, height: 11, backgroundColor: colors.text, borderRadius: 2 }} />
+                      <Ionicons
+                        name={isRecording ? 'stop-circle-outline' : 'mic-outline'}
+                        size={22}
+                        color={isRecording ? '#FF3B30' : colors.textSecondary}
+                      />
                     </TouchableOpacity>
-                  ) : showSendButton ? (
-                    <TouchableOpacity
-                      style={[styles.sendButton, { backgroundColor: deepResearchMode ? '#5AC8FA' : accentColor }]}
-                      onPress={handleSend}
-                      disabled={isRecording || isProcessing}
-                    >
-                      {deepResearchMode
-                        ? <Ionicons name="search" size={17} color="#FFFFFF" />
-                        : <Ionicons name="arrow-up" size={19} color="#FFFFFF" />}
-                    </TouchableOpacity>
-                  ) : null}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      {sending ? (
+                        <TouchableOpacity
+                          style={[styles.sendButton, { backgroundColor: isDark ? '#3A3A3C' : '#E5E5EA' }]}
+                          onPress={handleStopGeneration}
+                        >
+                          <View style={{ width: 11, height: 11, backgroundColor: colors.text, borderRadius: 2 }} />
+                        </TouchableOpacity>
+                      ) : showSendButton ? (
+                        <TouchableOpacity
+                          style={[styles.sendButton, { backgroundColor: deepResearchMode ? '#5AC8FA' : accentColor }]}
+                          onPress={handleSend}
+                          disabled={isRecording || isProcessing}
+                        >
+                          {deepResearchMode
+                            ? <Ionicons name="search" size={17} color="#FFFFFF" />
+                            : <Ionicons name="arrow-up" size={19} color="#FFFFFF" />}
+                        </TouchableOpacity>
+                      ) : (
+                        <TouchableOpacity
+                          style={[styles.voiceOrbBtn, { backgroundColor: accentColor }]}
+                          onPress={() => router.push('/voice-control')}
+                          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                        >
+                          <Ionicons name="pulse" size={18} color="#FFFFFF" />
+                        </TouchableOpacity>
+                      )}
+                    </View>
                   </View>
-                  </View>
-                )}
-
-                {groupChatMode && replyingTo ? (
-                <View style={{
-                  flexDirection: 'row', alignItems: 'center',
-                  paddingHorizontal: 10, paddingBottom: 6, gap: 8,
-                }}>
-                  <View style={{
-                    flex: 1,
-                    flexDirection: 'row', alignItems: 'center',
-                    backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)',
-                    borderRadius: 14,
-                    borderLeftWidth: 3,
-                    borderLeftColor: accentColor,
-                    paddingHorizontal: 10, paddingVertical: 7,
-                    gap: 6,
-                  }}>
-                    <Ionicons name="return-down-forward-outline" size={14} color={accentColor} />
-                    <Text style={{ color: accentColor, fontSize: 13, fontWeight: '600' }} numberOfLines={1}>
-                      {replyingTo.role === 'assistant' ? 'Dawinix' : 'You'}:
-                    </Text>
-                    <Text style={{ color: isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.55)', fontSize: 13, flex: 1 }} numberOfLines={1}>
-                      {(replyingTo.content || '').slice(0, 60)}
-                    </Text>
-                    <TouchableOpacity onPress={() => setReplyingTo(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                      <Ionicons name="close" size={16} color={isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.35)'} />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              ) : null}
-
-                {!showSendButton && !sending && !editingMessageId ? (
-                  <TouchableOpacity
-                    style={[styles.voiceOrbBtn, { backgroundColor: isRecording ? '#FF3B30' : accentColor }]}
-                    onPress={() => router.push('/voice-control')}
-                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                  >
-                    <Ionicons name="pulse" size={21} color="#FFFFFF" />
-                  </TouchableOpacity>
-                ) : null}
+                </Pressable>
               </View>
             </KeyboardAvoidingView>
 
