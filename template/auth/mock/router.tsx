@@ -16,15 +16,13 @@ interface MockAuthRouterProps {
   loginRoute?: string;
   loadingComponent?: React.ComponentType;
   excludeRoutes?: string[];
-  guestRoutes?: string[];
 }
 
 export function MockAuthRouter({
   children,
   loginRoute = '/login',
   loadingComponent: LoadingComponent = DefaultMockLoadingScreen,
-  excludeRoutes = [],
-  guestRoutes = [],
+  excludeRoutes = []
 }: MockAuthRouterProps) {
   const { user, loading, initialized } = useMockAuth();
   const router = useRouter();
@@ -35,53 +33,31 @@ export function MockAuthRouter({
       return;
     }
 
-    const matchesRoute = (route: string, path: string) => {
-      if (route === '/') {
-        return path === '/' || path === '';
-      }
-      return path === route || path === `${route}/index` || path.startsWith(`${route}/`);
-    };
-
-    const isLoginRoute = matchesRoute(loginRoute, pathname);
+    const isLoginRoute = pathname === loginRoute;
     const isExcludedRoute = excludeRoutes.some(route =>
-      matchesRoute(route, pathname)
-    );
-    const isGuestRoute = guestRoutes.some(route =>
-      matchesRoute(route, pathname)
+      pathname.startsWith(route)
     );
 
-    const action = !user && !isLoginRoute && !isExcludedRoute && !isGuestRoute ? 'redirect_to_login' :
-                   user && isLoginRoute ? 'redirect_to_home' :
-                   user && isGuestRoute && pathname === '/' ? 'redirect_to_home' :
-                   'no_action';
+    const action = !user && !isLoginRoute && !isExcludedRoute ? 'redirect_to_login' :
+                   user && isLoginRoute ? 'redirect_to_home' : 'no_action';
 
     if (action === 'redirect_to_login') {
       router.push(loginRoute);
     } else if (action === 'redirect_to_home') {
-      router.replace('/home');
+      router.replace('/');
     }
-  }, [user, loading, initialized, pathname, loginRoute, excludeRoutes, guestRoutes, router]);
+  }, [user, loading, initialized, pathname, loginRoute, excludeRoutes, router]);
 
   if (loading || !initialized) {
     return <LoadingComponent />;
   }
 
-  const matchesRoute = (route: string, path: string) => {
-    if (route === '/') {
-      return path === '/' || path === '';
-    }
-    return path === route || path === `${route}/index` || path.startsWith(`${route}/`);
-  };
-
-  const isLoginRoute = matchesRoute(loginRoute, pathname);
+  const isLoginRoute = pathname === loginRoute;
   const isExcludedRoute = excludeRoutes.some(route =>
-    matchesRoute(route, pathname)
-  );
-  const isGuestRoute = guestRoutes.some(route =>
-    matchesRoute(route, pathname)
+    pathname.startsWith(route)
   );
 
-  if (isLoginRoute || isExcludedRoute || isGuestRoute || user) {
+  if (isLoginRoute || isExcludedRoute || user) {
     return <>{children}</>;
   }
 
