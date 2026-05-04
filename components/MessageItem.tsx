@@ -1,4 +1,5 @@
-import React, { useState, useCallback, useRef, useEffect, memo } from 'react';
+fycking fix Element type is invalid: expected a string (for built-in components) or a class/function (for composite components)
+but got: undefined.import React, { useState, useCallback, useRef, useEffect, memo } from 'react';
 import {
   View,
   Text,
