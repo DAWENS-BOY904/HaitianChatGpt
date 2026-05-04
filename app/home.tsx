@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo, Component, memo } from 'react';
+when a photo is uploaded in the input area, make the image thumbnail smaller(full width of the input wrapper), and increase the text input area height so the user can type a longer message alongside the photo — matching the layout shown in the reference screenshots.import React, { useState, useRef, useEffect, useCallback, useMemo, Component, memo } from 'react';
 import { Image as ExpoImage } from 'expo-image';
 import { 
   View, 
