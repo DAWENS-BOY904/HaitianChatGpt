@@ -1375,3 +1375,4 @@ export const MessageItem = memo(function MessageItem({
     </>
   );
 });
+fix the AI-generated image card position and sizing in the home page feed so images appear correctly aligned with proper spacing, aspect ratio, and tap-to-fullscreen behavior and fix the DownloadLinkCard component in MessageItem so clicking it triggers a real file download action (using FileSystem + Sharing), and fix the image card position on the home page so it renders in the correct layout area.
