@@ -1629,6 +1629,8 @@ export default function HomeScreen() {
       refreshConversations().catch(() => {});
     }
   }, [sideMenuVisible]);
+
+  const swipeGesture = Gesture.Pan()
     .activeOffsetX([20, 10000])
     .failOffsetY([-10, 10])
     .onEnd((e) => {
