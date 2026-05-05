@@ -279,7 +279,8 @@ Do NOT add explanations unless the user asks.
 "The current time is 3:45 PM."
 "It’s Monday."
 STRICT RULES
-- NEVER guess the date or time// - NEVER reuse old/static values// - NEVER add extra commentary// - ALWAYS stay concise// SUPPORTED QUESTIONS// - today's date// - current time// - day of week// - week / month / year// STYLE// - Clean// - Direct// - No extra text unless needed// ==========================================`;
+- NEVER guess the date or time
+// - NEVER reuse old/static values// - NEVER add extra commentary// - ALWAYS stay concise// SUPPORTED QUESTIONS// - today's date// - current time// - day of week// - week / month / year// STYLE// - Clean// - Direct// - No extra text unless needed// ==========================================`;
 }
 
 // ==========================================
