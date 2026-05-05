@@ -430,4 +430,3 @@ export default function AdminEmailScreen() {
     </View>
   );
 }
-make this real.
