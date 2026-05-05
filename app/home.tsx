@@ -334,23 +334,39 @@ function RenameModal({ visible, currentTitle, onConfirm, onCancel }: {
   visible: boolean; currentTitle: string; onConfirm: (title: string) => void; onCancel: () => void;
 }) {
   const [text, setText] = useState(currentTitle);
+  const { isDark } = useTheme();
+  const textC = isDark ? '#FFF' : '#000';
+  const inputBg = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)';
+  const cardBg = isDark ? 'rgba(30,30,34,0.98)' : 'rgba(255,255,255,0.98)';
+  const divC = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)';
   useEffect(() => { if (visible) setText(currentTitle); }, [visible, currentTitle]);
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
       <View style={renameStyles.backdrop}>
-        <BlurView intensity={60} tint="dark" style={renameStyles.blurBg}>
+        <BlurView intensity={60} tint={isDark ? 'dark' : 'light'} style={renameStyles.blurBg}>
           <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onCancel} />
         </BlurView>
         <Animated.View style={renameStyles.card}>
-          <BlurView intensity={90} tint="dark" style={renameStyles.cardBlur}>
-            <Text style={renameStyles.title}>Rename chat</Text>
-            <TextInput style={renameStyles.input} value={text} onChangeText={setText} autoFocus selectTextOnFocus placeholderTextColor="rgba(255,255,255,0.4)" />
-            <View style={renameStyles.btnRow}>
-              <TouchableOpacity style={renameStyles.btn} onPress={onCancel}><Text style={renameStyles.btnLabel}>Cancel</Text></TouchableOpacity>
-              <View style={renameStyles.btnDivider} />
-              <TouchableOpacity style={renameStyles.btn} onPress={() => onConfirm(text.trim())}><Text style={[renameStyles.btnLabel, { fontWeight: '600' }]}>OK</Text></TouchableOpacity>
+          <View style={[renameStyles.cardInner, { backgroundColor: cardBg }]}>
+            <Text style={[renameStyles.title, { color: textC }]}>Rename chat</Text>
+            <TextInput
+              style={[renameStyles.input, { backgroundColor: inputBg, color: textC, borderColor: divC }]}
+              value={text}
+              onChangeText={setText}
+              autoFocus
+              selectTextOnFocus
+              placeholderTextColor={isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.35)'}
+            />
+            <View style={[renameStyles.btnRow, { borderTopColor: divC }]}>
+              <TouchableOpacity style={renameStyles.btn} onPress={onCancel}>
+                <Text style={[renameStyles.btnLabel, { color: textC }]}>Cancel</Text>
+              </TouchableOpacity>
+              <View style={[renameStyles.btnDivider, { backgroundColor: divC }]} />
+              <TouchableOpacity style={renameStyles.btn} onPress={() => onConfirm(text.trim())}>
+                <Text style={[renameStyles.btnLabel, { color: textC, fontWeight: '600' }]}>OK</Text>
+              </TouchableOpacity>
             </View>
-          </BlurView>
+          </View>
         </Animated.View>
       </View>
     </Modal>
@@ -361,13 +377,13 @@ const renameStyles = StyleSheet.create({
   backdrop: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   blurBg: { ...StyleSheet.absoluteFillObject },
   card: { position: 'absolute', width: '80%', borderRadius: 20, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.4, shadowRadius: 20, elevation: 20 },
-  cardBlur: { padding: 20, alignItems: 'center' },
-  title: { color: '#FFF', fontSize: 17, fontWeight: '600', marginBottom: 16 },
-  input: { width: '100%', backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 12, padding: 14, fontSize: 16, color: '#FFF', marginBottom: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
-  btnRow: { flexDirection: 'row', width: '100%' },
+  cardInner: { padding: 20, alignItems: 'center', borderRadius: 20 },
+  title: { fontSize: 17, fontWeight: '600', marginBottom: 16 },
+  input: { width: '100%', borderRadius: 12, padding: 14, fontSize: 16, marginBottom: 0, borderWidth: 1 },
+  btnRow: { flexDirection: 'row', width: '100%', borderTopWidth: StyleSheet.hairlineWidth, marginTop: 16, paddingTop: 4 },
   btn: { flex: 1, alignItems: 'center', paddingVertical: 12 },
-  btnLabel: { color: '#FFF', fontSize: 17 },
-  btnDivider: { width: 1, backgroundColor: 'rgba(255,255,255,0.15)' },
+  btnLabel: { fontSize: 17 },
+  btnDivider: { width: 1 },
 });
 
 function ArchiveConfirmModal({ visible, onConfirm, onCancel }: { visible: boolean; onConfirm: () => void; onCancel: () => void }) {
@@ -2657,7 +2673,8 @@ Be thorough and cite specific facts.`;
           />
         ) : null}
         {item.role === 'assistant' && detectedImageUrl && user?.id ? (
-          <View style={{ paddingHorizontal: 16, paddingBottom: 8 }}>
+          <View style={{ paddingHorizontal: 16, paddingBottom: 8, flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+            {/* Save to gallery */}
             <TouchableOpacity
               style={{
                 flexDirection: 'row',
@@ -2681,8 +2698,58 @@ Be thorough and cite specific facts.`;
                 <Ionicons name={alreadySaved ? 'checkmark-circle' : 'image-outline'} size={15} color={alreadySaved ? '#30D158' : colors.textSecondary} />
               )}
               <Text style={{ fontSize: 13, fontWeight: '600', color: alreadySaved ? '#30D158' : colors.textSecondary }}>
-                {alreadySaved ? 'Saved to My Images' : 'Save to My Images'}
+                {alreadySaved ? 'Saved' : 'Save'}
               </Text>
+            </TouchableOpacity>
+            {/* Send image to new message */}
+            <TouchableOpacity
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 6,
+                alignSelf: 'flex-start',
+                backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+                borderRadius: 20,
+                paddingHorizontal: 14,
+                paddingVertical: 8,
+                borderWidth: 1,
+                borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)',
+              }}
+              onPress={async () => {
+                // Download the AI image as base64 and attach it to the input
+                try {
+                  const resp = await fetch(detectedImageUrl);
+                  const blob = await resp.blob();
+                  const reader = new FileReader();
+                  reader.onloadend = () => {
+                    const base64 = (reader.result as string).split(',')[1];
+                    const media: MediaFile = {
+                      type: 'image',
+                      uri: detectedImageUrl,
+                      base64,
+                      name: 'ai-image.jpg',
+                      mimeType: 'image/jpeg',
+                    };
+                    setSelectedMedia(prev => [...prev, media]);
+                    inputRef.current?.focus();
+                  };
+                  reader.readAsDataURL(blob);
+                } catch (_e) {
+                  // Fallback: attach URL directly
+                  const media: MediaFile = {
+                    type: 'image',
+                    uri: detectedImageUrl,
+                    name: 'ai-image.jpg',
+                    mimeType: 'image/jpeg',
+                  };
+                  setSelectedMedia(prev => [...prev, media]);
+                  inputRef.current?.focus();
+                }
+              }}
+              activeOpacity={0.75}
+            >
+              <Ionicons name="share-outline" size={15} color={accentColor} />
+              <Text style={{ fontSize: 13, fontWeight: '600', color: accentColor }}>Send</Text>
             </TouchableOpacity>
           </View>
         ) : null}
@@ -3226,20 +3293,7 @@ Be thorough and cite specific facts.`;
                 </View>
               ) : null}
 
-              {quizMode ? (
-                <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 6 }}>
-                  <TouchableOpacity
-                    style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#1A1A2E', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1, borderColor: 'rgba(90,200,250,0.3)' }}
-                    onPress={() => setQuizConnectVisible(true)}
-                  >
-                    <Ionicons name="albums-outline" size={16} color="#5AC8FA" />
-                    <Text style={{ color: '#FFF', fontSize: 14, fontWeight: '600' }}>Quizzes</Text>
-                    <TouchableOpacity onPress={() => setQuizMode(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                      <Ionicons name="close" size={14} color="rgba(255,255,255,0.5)" />
-                    </TouchableOpacity>
-                  </TouchableOpacity>
-                </View>
-              ) : null}
+
 
               {/* Deep Research Steps */}
               {deepResearchActive && deepResearchSteps.length > 0 ? (
@@ -3274,7 +3328,7 @@ Be thorough and cite specific facts.`;
                   </TouchableOpacity>
                 ) : null}
 
-                {/* Input pill: media previews + text input + mic + send */}
+                {/* Input pill: media previews + quiz chip + text input + mic + send */}
                 <Pressable
                   style={[
                     styles.inputWrapper,
@@ -3282,6 +3336,28 @@ Be thorough and cite specific facts.`;
                   ]}
                   onPress={() => inputRef.current?.focus()}
                 >
+                  {/* Quiz chip inside input pill (like ChatGPT photo 4) */}
+                  {quizMode ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                      <View style={{
+                        flexDirection: 'row', alignItems: 'center', gap: 6,
+                        backgroundColor: isDark ? 'rgba(90,200,250,0.15)' : 'rgba(90,200,250,0.12)',
+                        borderRadius: 16, paddingHorizontal: 10, paddingVertical: 5,
+                        borderWidth: 1, borderColor: 'rgba(90,200,250,0.3)',
+                        alignSelf: 'flex-start',
+                      }}>
+                        <Ionicons name="albums-outline" size={14} color="#5AC8FA" />
+                        <Text style={{ color: '#5AC8FA', fontSize: 13, fontWeight: '700' }}>Quizzes</Text>
+                        <TouchableOpacity
+                          onPress={() => setQuizMode(false)}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                          <Ionicons name="close" size={12} color="#5AC8FA" />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ) : null}
+
                   {/* Media previews at top of pill */}
                   {renderInlineMediaPreviews()}
 
@@ -3321,7 +3397,7 @@ Be thorough and cite specific facts.`;
                           color={isRecording ? '#FF3B30' : colors.textSecondary}
                         />
                       </TouchableOpacity>
-                      {/* Send / Stop / Voice orb */}
+                      {/* Voice orb / send button */}
                       {sending ? (
                         <TouchableOpacity
                           style={[styles.sendButton, { backgroundColor: isDark ? '#3A3A3C' : '#DCDCDC' }]}
@@ -3339,10 +3415,10 @@ Be thorough and cite specific facts.`;
                         </TouchableOpacity>
                       ) : (
                         <TouchableOpacity
-                          style={[styles.voiceOrbBtn, { backgroundColor: isDark ? '#FFFFFF' : '#000000' }]}
+                          style={[styles.voiceOrbBtn, { backgroundColor: accentColor }]}
                           onPress={() => router.push('/voice-control')}
                         >
-                          <Ionicons name="pulse" size={17} color={isDark ? '#000000' : '#FFFFFF'} />
+                          <Ionicons name="pulse" size={17} color="#FFFFFF" />
                         </TouchableOpacity>
                       )}
                     </View>
