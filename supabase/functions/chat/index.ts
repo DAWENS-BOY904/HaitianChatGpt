@@ -2,6 +2,7 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
 import { callAI, detectContentType, generateImageSmart, searchImages } from '../_shared/ai-providers.ts';
+import { createStreamingResponse, createErrorStream } from '../_shared/streaming.ts';
 
 // ==========================================
 // RESPONSE CACHE FOR GRACEFUL DEGRADATION
@@ -1297,25 +1298,9 @@ const safety_rules = [
         }
       }
       
-      const encoder2 = new TextEncoder();
-      const fallbackStream = new ReadableStream({
-        start(controller) {
-          const words2 = fallbackContent.split(/( +)/);
-          let idx = 0;
-          function sendNext2() {
-            if (idx >= words2.length) {
-              controller.enqueue(encoder2.encode(`data: ${JSON.stringify({ done: true, imageUrl: null, thinkingMode: 'thinking', hasMessageCard: false })}\n\n`));
-              controller.close();
-              return;
-            }
-            const chunk2 = words2.slice(idx, idx + 2).join('');
-            idx += 2;
-            controller.enqueue(encoder2.encode(`data: ${JSON.stringify({ token: chunk2 })}\n\n`));
-            setTimeout(sendNext2, 12);
-          }
-          sendNext2();
-        },
-      });
+      // Use intelligent streaming for fallback messages too
+      const fallbackStream = createStreamingResponse(fallbackContent, 'fallback', 12);
+
       return new Response(fallbackStream, {
         headers: { ...corsHeaders, 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no' },
       });
@@ -1387,38 +1372,13 @@ const safety_rules = [
       }
     }
 
-    // ── Stream the response with shorter chunk intervals for poor connections ──
-    // Detect if client is on slow connection via a request header hint
+    // ── Stream the response with intelligent chunking ──
+    // Detect connection quality for adaptive streaming
     const connectionHint = req.headers.get('x-connection-quality') || 'normal';
-    const chunkDelayMs = connectionHint === 'slow' ? 8 : 12; // faster streaming for slow connections
+    const baseDelay = connectionHint === 'slow' ? 10 : 15;
 
-    const encoder = new TextEncoder();
-    const stream = new ReadableStream({
-      start(controller) {
-        const words = cleanMessage.split(/(\s+)/);
-        let i = 0;
-        function sendNext() {
-          if (i >= words.length) {
-            const donePayload = JSON.stringify({
-              done: true,
-              imageUrl: imageUrl || null,
-              thinkingMode: detectionResult.thinkingMode || 'thinking',
-              hasMessageCard,
-            });
-            controller.enqueue(encoder.encode(`data: ${donePayload}\n\n`));
-            controller.close();
-            return;
-          }
-          const chunkEnd = Math.min(i + 2, words.length);
-          const chunk = words.slice(i, chunkEnd).join('');
-          i = chunkEnd;
-          const payload = JSON.stringify({ token: chunk });
-          controller.enqueue(encoder.encode(`data: ${payload}\n\n`));
-          setTimeout(sendNext, chunkDelayMs);
-        }
-        sendNext();
-      },
-    });
+    // Use intelligent streaming with adaptive delays
+    const stream = createStreamingResponse(cleanMessage, aiResponse?.model || 'unknown', baseDelay);
 
     return new Response(stream, {
       headers: {

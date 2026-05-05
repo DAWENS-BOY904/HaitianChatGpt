@@ -688,8 +688,15 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
                 continue;
               }
 
-              if (parsed.token !== undefined) {
-                // Split token into individual words and queue them
+              // Handle new streaming format with direct content
+              if (parsed.content !== undefined) {
+                // Split content into words for smooth rendering
+                const words = parsed.content.match(/(\S+|\s+)/g) || [parsed.content];
+                pendingWords.push(...words);
+                scheduleTypewriter();
+              }
+              // Legacy support for old token format
+              else if (parsed.token !== undefined) {
                 const words = parsed.token.match(/(\S+|\s+)/g) || [parsed.token];
                 pendingWords.push(...words);
                 scheduleTypewriter();
@@ -729,7 +736,9 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
           try {
             const parsed = JSON.parse(trimmed.slice(5).trim());
             if (parsed.done && parsed.imageUrl) finalImageUrlFromResponse = parsed.imageUrl;
-            if (parsed.token) allTokens += parsed.token;
+            // Support both new content format and legacy token format
+            if (parsed.content) allTokens += parsed.content;
+            else if (parsed.token) allTokens += parsed.token;
           } catch (_e) {}
         }
         // Animate word by word for non-streaming path
