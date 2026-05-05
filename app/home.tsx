@@ -3316,9 +3316,9 @@ Be thorough and cite specific facts.`;
                         style={{ opacity: isProcessing ? 0.5 : 1, paddingHorizontal: 4 }}
                       >
                         <Ionicons
-                          name="mic-outline"
+                          name={isRecording ? 'stop-circle' : isProcessing ? 'hourglass-outline' : 'mic-outline'}
                           size={21}
-                          color={colors.textSecondary}
+                          color={isRecording ? '#FF3B30' : colors.textSecondary}
                         />
                       </TouchableOpacity>
                       {/* Send / Stop / Voice orb */}
@@ -3339,10 +3339,10 @@ Be thorough and cite specific facts.`;
                         </TouchableOpacity>
                       ) : (
                         <TouchableOpacity
-                          style={[styles.voiceOrbBtn, { backgroundColor: accentColor }]}
+                          style={[styles.voiceOrbBtn, { backgroundColor: isDark ? '#FFFFFF' : '#000000' }]}
                           onPress={() => router.push('/voice-control')}
                         >
-                          <Ionicons name="pulse" size={17} color="#FFFFFF" />
+                          <Ionicons name="pulse" size={17} color={isDark ? '#000000' : '#FFFFFF'} />
                         </TouchableOpacity>
                       )}
                     </View>
