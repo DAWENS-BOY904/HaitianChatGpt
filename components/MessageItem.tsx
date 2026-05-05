@@ -27,7 +27,7 @@ let WebView: any = null;
 try { WebView = require('react-native-webview').default; } catch (_e) {}
 import { BlurView } from 'expo-blur';
 import { CodeBlock } from './CodeBlock';
-import { SourcesModal } from './SourcesModal';
+import { SourcesListModal as SourcesModal } from './SourcesModal';
 import { LinkSafetyModal } from './LinkSafetyModal';
 import * as Clipboard from 'expo-clipboard';
 
