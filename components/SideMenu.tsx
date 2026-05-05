@@ -279,6 +279,7 @@ export function SideMenu({
     archiveAllConversations,
     deleteAllConversations,
     updateConversationTitle,
+    searchConversations,
   } = useConversation();
   const insets = useSafeAreaInsets();
   const supabase = getSupabaseClient();
@@ -369,7 +370,6 @@ export function SideMenu({
     return bPinned - aPinned;
   });
 
-  const { searchConversations } = useConversation();
   const filteredConversations = searchQuery.trim()
     ? searchConversations(searchQuery)
     : sortedConversations;
