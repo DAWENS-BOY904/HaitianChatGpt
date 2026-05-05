@@ -376,11 +376,21 @@ function GuestSettings() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// ACCENT COLOR PICKER
+// ACCENT COLOR PICKER — extended palette with names
 // ═══════════════════════════════════════════════════════════════════════════════
-const ACCENT_COLORS = [
-  '#10A37F', '#0A84FF', '#FF9F0A', '#FF453A', '#BF5AF2',
-  '#FF375F', '#30D158', '#5AC8FA', '#FFD60A', '#FF6B00',
+const ACCENT_COLORS: Array<{ hex: string; name: string }> = [
+  { hex: '#10A37F', name: 'Green'   },
+  { hex: '#0A84FF', name: 'Blue'    },
+  { hex: '#FF9F0A', name: 'Orange'  },
+  { hex: '#FF453A', name: 'Red'     },
+  { hex: '#BF5AF2', name: 'Purple'  },
+  { hex: '#FF375F', name: 'Pink'    },
+  { hex: '#30D158', name: 'Mint'    },
+  { hex: '#5AC8FA', name: 'Sky'     },
+  { hex: '#FFD60A', name: 'Yellow'  },
+  { hex: '#FF6B00', name: 'Amber'   },
+  { hex: '#64D2FF', name: 'Cyan'    },
+  { hex: '#FF2D55', name: 'Rose'    },
 ];
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -735,11 +745,8 @@ export default function SettingsScreen() {
   // ── Accent Color Row ─────────────────────────────────────────────────
   const AccentColorRow = () => {
     const current = settings.accentColor || '#10A37F';
-    const colorNames: Record<string, string> = {
-      '#10A37F': 'Green', '#0A84FF': 'Blue', '#FF9F0A': 'Orange',
-      '#FF453A': 'Red', '#BF5AF2': 'Purple', '#FF375F': 'Pink',
-      '#30D158': 'Mint', '#5AC8FA': 'Sky', '#FFD60A': 'Yellow', '#FF6B00': 'Orange',
-    };
+    const found = ACCENT_COLORS.find(c => c.hex === current);
+    const currentName = found?.name || 'Green';
     return (
       <TouchableOpacity
         style={{
@@ -759,8 +766,8 @@ export default function SettingsScreen() {
           <Text style={{ fontSize: 16, color: primaryText, fontWeight: '400' }}>Accent color</Text>
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: current }} />
-          <Text style={{ fontSize: 15, color: secondaryText }}>{colorNames[current] || 'Green'}</Text>
+          <View style={{ width: 18, height: 18, borderRadius: 9, backgroundColor: current, borderWidth: 1.5, borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.12)' }} />
+          <Text style={{ fontSize: 15, color: secondaryText }}>{currentName}</Text>
           <Ionicons name="chevron-forward" size={16} color={secondaryText} />
         </View>
       </TouchableOpacity>
@@ -1124,46 +1131,90 @@ export default function SettingsScreen() {
       </Modal>
 
       {/* ═══════════════════════════════════════════════════════════════
-          ACCENT COLOR PICKER MODAL
+          ACCENT COLOR PICKER MODAL — redesigned with labels & default
           ═══════════════════════════════════════════════════════════════ */}
-      <Modal visible={accentPickerVisible} transparent animationType="fade" onRequestClose={() => setAccentPickerVisible(false)}>
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 40, backgroundColor: isDark ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.3)' }}>
-          <TouchableOpacity style={{ flex: 1, width: '100%' }} activeOpacity={1} onPress={() => setAccentPickerVisible(false)} />
+      <Modal visible={accentPickerVisible} transparent animationType="slide" onRequestClose={() => setAccentPickerVisible(false)}>
+        <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.45)' }}>
+          <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setAccentPickerVisible(false)} />
           <View style={{
-            width: '100%',
-            maxWidth: 320,
-            borderRadius: 20,
-            overflow: 'hidden',
             backgroundColor: cardBg,
+            borderTopLeftRadius: 24,
+            borderTopRightRadius: 24,
+            paddingBottom: insets.bottom + 16,
           }}>
-            <View style={{ padding: 20, paddingBottom: insets.bottom > 0 ? insets.bottom + 12 : 20 }}>
-              <Text style={{ fontSize: 17, fontWeight: '600', color: primaryText, textAlign: 'center', marginBottom: 16 }}>
-                Choose Accent Color
-              </Text>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 14 }}>
-                {ACCENT_COLORS.map(color => {
-                  const isSelected = (settings.accentColor || '#10A37F') === color;
-                  return (
-                    <TouchableOpacity
-                      key={color}
-                      onPress={() => { updateSetting('accentColor', color); setAccentPickerVisible(false); }}
-                      activeOpacity={0.75}
-                      style={{
-                        width: 44, height: 44, borderRadius: 22,
-                        backgroundColor: color,
-                        alignItems: 'center', justifyContent: 'center',
-                        borderWidth: isSelected ? 3.5 : 0,
-                        borderColor: isDark ? '#FFF' : '#000',
-                      }}
-                    >
-                      {isSelected ? <Ionicons name="checkmark" size={20} color="#FFF" /> : null}
-                    </TouchableOpacity>
-                  );
-                })}
+            {/* Handle */}
+            <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)', alignSelf: 'center', marginTop: 12, marginBottom: 16 }} />
+
+            <Text style={{ fontSize: 18, fontWeight: '700', color: primaryText, textAlign: 'center', marginBottom: 4 }}>Accent Color</Text>
+            <Text style={{ fontSize: 13, color: secondaryText, textAlign: 'center', marginBottom: 20, paddingHorizontal: 24 }}>Choose a color that reflects your style</Text>
+
+            {/* Default badge */}
+            {(settings.accentColor || '#10A37F') === '#10A37F' ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 16 }}>
+                <View style={{ backgroundColor: '#10A37F22', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 5, borderWidth: 1, borderColor: '#10A37F55' }}>
+                  <Text style={{ color: '#10A37F', fontSize: 13, fontWeight: '600' }}>Default — Green</Text>
+                </View>
               </View>
+            ) : (
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 16 }}>
+                <View style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: settings.accentColor }} />
+                <Text style={{ color: primaryText, fontSize: 15, fontWeight: '600' }}>
+                  {ACCENT_COLORS.find(c => c.hex === settings.accentColor)?.name || 'Custom'}
+                </Text>
+                <TouchableOpacity
+                  onPress={() => { updateSetting('accentColor', '#10A37F'); }}
+                  style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.07)', borderRadius: 14, paddingHorizontal: 10, paddingVertical: 4 }}
+                >
+                  <Text style={{ color: secondaryText, fontSize: 12, fontWeight: '500' }}>Reset to default</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Color grid */}
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 16, paddingHorizontal: 24 }}>
+              {ACCENT_COLORS.map(item => {
+                const isSelected = (settings.accentColor || '#10A37F') === item.hex;
+                const isDefault = item.hex === '#10A37F';
+                return (
+                  <TouchableOpacity
+                    key={item.hex}
+                    onPress={() => { updateSetting('accentColor', item.hex); }}
+                    activeOpacity={0.75}
+                    style={{ alignItems: 'center', gap: 6 }}
+                  >
+                    <View style={{
+                      width: 52, height: 52, borderRadius: 26,
+                      backgroundColor: item.hex,
+                      alignItems: 'center', justifyContent: 'center',
+                      borderWidth: isSelected ? 3.5 : 0,
+                      borderColor: isDark ? '#FFF' : '#000',
+                      shadowColor: item.hex,
+                      shadowOffset: { width: 0, height: 2 },
+                      shadowOpacity: isSelected ? 0.5 : 0.15,
+                      shadowRadius: isSelected ? 8 : 3,
+                      elevation: isSelected ? 6 : 2,
+                    }}>
+                      {isSelected ? <Ionicons name="checkmark" size={22} color="#FFF" /> : null}
+                    </View>
+                    <Text style={{ fontSize: 11, color: isSelected ? primaryText : secondaryText, fontWeight: isSelected ? '600' : '400' }}>
+                      {isDefault ? 'Default' : item.name}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* Done */}
+            <View style={{ paddingHorizontal: 20, paddingTop: 24 }}>
+              <TouchableOpacity
+                style={{ backgroundColor: settings.accentColor || '#10A37F', borderRadius: 50, paddingVertical: 15, alignItems: 'center' }}
+                onPress={() => setAccentPickerVisible(false)}
+                activeOpacity={0.85}
+              >
+                <Text style={{ color: '#FFF', fontSize: 16, fontWeight: '700' }}>Done</Text>
+              </TouchableOpacity>
             </View>
           </View>
-          <TouchableOpacity style={{ flex: 1, width: '100%' }} activeOpacity={1} onPress={() => setAccentPickerVisible(false)} />
         </View>
       </Modal>
     </View>
