@@ -18,7 +18,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { useTheme } from '../hooks/useTheme';
-import WebView from 'react-native-webview';
+import { WebView } from 'react-native-webview';
 import { BlurView } from 'expo-blur';
 import { CodeBlock } from './CodeBlock';
 import { SourcesModal } from './SourcesModal';
