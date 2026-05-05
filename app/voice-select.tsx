@@ -634,5 +634,3 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 });
-
-remove all openai alloy voice leave only elevenlabs 
