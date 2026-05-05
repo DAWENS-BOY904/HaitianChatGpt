@@ -514,3 +514,5 @@ const s = StyleSheet.create({
   },
   historyScoreText: { fontSize: 16, fontWeight: '700' },
 });
+
+add dark/light system also in preset modal and fix voice read in message action.
