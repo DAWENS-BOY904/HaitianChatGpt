@@ -4233,5 +4233,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-
-
+fix edg error its tell me having trouble.
