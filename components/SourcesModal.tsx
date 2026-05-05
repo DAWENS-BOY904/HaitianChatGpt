@@ -632,3 +632,4 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
 });
+fix error in that page and when click a domain its must open via expo web in the app no outside in the app instead of webview.
