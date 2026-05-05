@@ -365,7 +365,16 @@ const styles = StyleSheet.create({
 });
 
 export default function RootScreen() {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
+
+  // Show nothing while auth state is loading — prevents login flash
+  if (loading) {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color="#10A37F" />
+      </View>
+    );
+  }
 
   if (user) {
     return <Redirect href="/home" />;
