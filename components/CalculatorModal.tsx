@@ -241,7 +241,7 @@ export function CalculatorModal({
   );
 }
 
-// ── Inline calculator card shown in chat ──
+// ── Inline calculator card shown in chat (ChatGPT-style) ──
 interface CalculatorCardProps {
   expression: string;
   result: string;
@@ -249,22 +249,108 @@ interface CalculatorCardProps {
 }
 
 export function CalculatorCard({ expression, result, onOpen }: CalculatorCardProps) {
+  const [expanded, setExpanded] = useState(false);
+  const [calcExpr, setCalcExpr] = useState(expression);
+  const [calcResult, setCalcResultState] = useState(result);
+  const [justEvaluated, setJustEvaluated] = useState(false);
+
+  const handleCalcPress = useCallback((key: string) => {
+    if (Platform.OS !== 'web') Vibration.vibrate(8);
+    if (key === 'C') { setCalcExpr(''); setCalcResultState(''); setJustEvaluated(false); return; }
+    if (key === '⌫') { setCalcExpr(prev => prev.slice(0, -1)); return; }
+    if (key === '=') {
+      try {
+        const sanitized = calcExpr.replace(/×/g, '*').replace(/÷/g, '/').replace(/−/g, '-');
+        const val = Function('"use strict"; return (' + sanitized + ')')();
+        const res = Number.isInteger(val) ? String(val) : parseFloat(val.toFixed(10)).toString();
+        setCalcResultState(res);
+        setCalcExpr(calcExpr + ' = ' + res);
+        setJustEvaluated(true);
+      } catch { setCalcResultState('Error'); setJustEvaluated(true); }
+      return;
+    }
+    if (justEvaluated && /[0-9.]/.test(key)) { setCalcExpr(key); setCalcResultState(''); setJustEvaluated(false); return; }
+    if (justEvaluated) {
+      setJustEvaluated(false);
+      setCalcExpr(calcResult + key);
+      setCalcResultState('');
+      return;
+    }
+    setCalcExpr(prev => prev + key);
+    try {
+      const sanitized = (calcExpr + key).replace(/×/g, '*').replace(/÷/g, '/').replace(/−/g, '-');
+      if (/[+\-*/]$/.test(sanitized.trim())) { setCalcResultState(''); return; }
+      const val = Function('"use strict"; return (' + sanitized + ')')();
+      if (!isNaN(val) && isFinite(val)) setCalcResultState(String(parseFloat(val.toFixed(10))));
+    } catch { setCalcResultState(''); }
+  }, [calcExpr, calcResult, justEvaluated]);
+
+  const INLINE_BUTTONS = [
+    ['f', '(', ')', 'C'],
+    ['7', '8', '9', '÷'],
+    ['4', '5', '6', '×'],
+    ['1', '2', '3', '−'],
+    ['0', '.', '=', '+'],
+  ];
+
+  const displayExpr = justEvaluated ? expression : calcExpr;
+  const displayResult = calcResult || result;
+
   return (
     <Animated.View entering={FadeIn.duration(300)} style={styles.card}>
-      <View style={styles.cardInner}>
-        <View style={styles.cardHeader}>
-          <Text style={styles.cardIcon}>▦</Text>
-          <Text style={styles.cardTitle}>Instruments</Text>
+      {/* Label above card */}
+      <Text style={styles.instantLabel}>Instant answer ›</Text>
+      {/* Dark header card */}
+      <View style={styles.cardDark}>
+        <View style={styles.cardDarkHeader}>
+          <View style={styles.cardCalcIconBox}>
+            <Text style={styles.cardCalcIconText}>⊞</Text>
+          </View>
+          <Text style={styles.cardDarkTitle}>Dawinix Instruments</Text>
         </View>
-        <View style={styles.cardContent}>
-          <TouchableOpacity onPress={onOpen} activeOpacity={0.8}>
-            <View style={[styles.calcPreview]}>
-              <Text style={styles.calcExpr}>{expression}</Text>
-              <Text style={styles.calcResult}>{result}</Text>
-            </View>
-          </TouchableOpacity>
+        <View style={styles.cardDarkDisplay}>
+          <Text style={styles.cardDarkExpr} numberOfLines={1} adjustsFontSizeToFit>{displayExpr || expression}</Text>
+          <Text style={styles.cardDarkResult}>{displayResult}</Text>
         </View>
+        {/* Tap to expand/collapse keypad */}
+        <TouchableOpacity
+          style={StyleSheet.absoluteFill}
+          onPress={() => setExpanded(v => !v)}
+          activeOpacity={1}
+        />
       </View>
+      {/* Inline keypad — shown when expanded */}
+      {expanded ? (
+        <View style={styles.inlineKeypad}>
+          {INLINE_BUTTONS.map((row, ri) => (
+            <View key={ri} style={styles.inlineRow}>
+              {row.map((key) => {
+                const isEquals = key === '=';
+                const isOp = ['÷', '×', '−', '+'].includes(key);
+                const isSpecial = ['f', '(', ')', 'C'].includes(key);
+                return (
+                  <TouchableOpacity
+                    key={key}
+                    style={[
+                      styles.inlineKey,
+                      isEquals && styles.inlineKeyEquals,
+                      isOp && styles.inlineKeyOp,
+                      isSpecial && styles.inlineKeySpecial,
+                    ]}
+                    onPress={() => handleCalcPress(key)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[
+                      styles.inlineKeyText,
+                      isEquals && styles.inlineKeyTextEquals,
+                    ]}>{key}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          ))}
+        </View>
+      ) : null}
     </Animated.View>
   );
 }
@@ -352,11 +438,82 @@ const styles = StyleSheet.create({
   keyText: { fontSize: 22, fontWeight: '400', color: '#FFFFFF' },
   keyTextOp: { color: '#FFFFFF', fontWeight: '500' },
   keyTextEquals: { color: '#FFFFFF', fontWeight: '600' },
-  // Card
+  // ── ChatGPT-style inline card ──
   card: {
-    marginVertical: 8,
-    marginHorizontal: 8,
+    marginVertical: 4,
+    marginHorizontal: 16,
   },
+  instantLabel: {
+    color: 'rgba(128,128,128,0.7)',
+    fontSize: 13,
+    fontWeight: '400',
+    marginBottom: 8,
+  },
+  cardDark: {
+    backgroundColor: '#1A1A1A',
+    borderRadius: 18,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 20,
+    minHeight: 120,
+    justifyContent: 'space-between',
+  },
+  cardDarkHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  cardCalcIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#2A3A2A',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(48,209,88,0.3)',
+  },
+  cardCalcIconText: { fontSize: 18, color: '#30D158' },
+  cardDarkTitle: { fontSize: 15, color: 'rgba(255,255,255,0.6)', fontWeight: '500' },
+  cardDarkDisplay: { alignItems: 'flex-end', paddingRight: 4 },
+  cardDarkExpr: { fontSize: 17, color: 'rgba(255,255,255,0.45)', fontWeight: '400', marginBottom: 2 },
+  cardDarkResult: { fontSize: 58, color: '#30D158', fontWeight: '300', letterSpacing: -2, lineHeight: 64 },
+  // Inline keypad
+  inlineKeypad: {
+    backgroundColor: '#f2f2f2',
+    borderBottomLeftRadius: 18,
+    borderBottomRightRadius: 18,
+    padding: 10,
+    gap: 8,
+    marginTop: -8,
+    borderWidth: 1,
+    borderTopWidth: 0,
+    borderColor: 'rgba(0,0,0,0.08)',
+  },
+  inlineRow: { flexDirection: 'row', gap: 8 },
+  inlineKey: {
+    flex: 1,
+    height: 62,
+    borderRadius: 14,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  inlineKeyOp: { backgroundColor: '#E8E8E8' },
+  inlineKeyEquals: { backgroundColor: '#30D158' },
+  inlineKeySpecial: { backgroundColor: '#E0E0E0', borderWidth: 1, borderColor: 'rgba(0,0,0,0.12)' },
+  inlineKeyText: { fontSize: 20, fontWeight: '500', color: '#1A1A1A' },
+  inlineKeyTextEquals: { color: '#FFFFFF', fontWeight: '700' },
+  // Legacy (kept for CalculatorModal sheet)
   cardInner: {
     backgroundColor: '#1C1C1E',
     borderRadius: 16,

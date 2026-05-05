@@ -1694,8 +1694,9 @@ export default function HomeScreen() {
         setIsAppActive(true);
         if (autoLockTimerRef.current) { clearTimeout(autoLockTimerRef.current); autoLockTimerRef.current = null; }
         Animated.timing(fadeAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start(() => setShowBlurOverlay(false));
-        // Always reload messages when returning from background to restore them
-        if (currentConversation?.id && !currentConversation.id.startsWith('guest-') && !currentConversation.id.startsWith('local-')) {
+        // Reload messages when returning from background, but NEVER while AI is streaming
+        // (prevents messages from disappearing during AI generation)
+        if (currentConversation?.id && !currentConversation.id.startsWith('guest-') && !currentConversation.id.startsWith('local-') && !streamingMessageId) {
           selectConversation(currentConversation.id);
         }
       }
@@ -3495,26 +3496,7 @@ Be thorough and cite specific facts.`;
                         </TouchableOpacity>
                       </View>
                     ) : null}
-                    {/* Model chip — show current AI model, tap to open model selector */}
-                    <TouchableOpacity
-                      style={{
-                        flexDirection: 'row', alignItems: 'center', gap: 5,
-                        backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
-                        borderRadius: 16, paddingHorizontal: 10, paddingVertical: 5,
-                        borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)',
-                      }}
-                      onPress={() => {
-                        if (isGuest) { setGuestLockFeature('model selection'); setGuestLockModal(true); return; }
-                        router.push('/model-selector');
-                      }}
-                      hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-                    >
-                      <Ionicons name="sparkles" size={12} color={accentColor} />
-                      <Text style={{ color: isDark ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.6)', fontSize: 12, fontWeight: '600' }}>
-                        {SUPPORTED_AI_MODELS[currentAIModel] || currentAIModel}
-                      </Text>
-                      <Ionicons name="chevron-down" size={11} color={isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.35)'} />
-                    </TouchableOpacity>
+                    {/* Model chip moved to ToolsModal */}
                   </View>
 
                   {/* Media previews at top of pill */}
