@@ -1292,6 +1292,9 @@ export default function HomeScreen() {
   const [guestLoginModal, setGuestLoginModal] = useState(false);
   const [guestLockModal, setGuestLockModal] = useState(false);
   const [guestLockFeature, setGuestLockFeature] = useState('');
+  // Guest photo upload limit: 3 per session (no files)
+  const [guestPhotoCount, setGuestPhotoCount] = useState(0);
+  const GUEST_PHOTO_LIMIT = 3;
   const [currentAIMode, setCurrentAIMode] = useState<AIMode>('instant');
   const [photoUploadCount, setPhotoUploadCount] = useState(0);
   const [photoUploadResetTime, setPhotoUploadResetTime] = useState<number>(0);
@@ -1736,12 +1739,17 @@ export default function HomeScreen() {
     }
   }, [searchQuery, messages]);
 
-  // Load shake setting from storage
+  // Load shake setting from storage — only when logged in
   useEffect(() => {
+    if (!user) {
+      setShakeEnabled(false);
+      return;
+    }
     AsyncStorage.getItem('shake_bug_enabled').then(v => {
       if (v !== null) setShakeEnabled(v === 'true');
+      else setShakeEnabled(true); // default on for logged-in users
     }).catch(() => {});
-  }, []);
+  }, [user?.id]);
 
   // Network connectivity monitor (no extra package)
   useEffect(() => {
@@ -1763,22 +1771,21 @@ export default function HomeScreen() {
   }, []);
 
   useEffect(() => {
-    if (Platform.OS === 'ios' || Platform.OS === 'android') {
-      const subscription = Accelerometer.addListener(({ x, y, z }) => {
-        const acceleration = Math.sqrt(x * x + y * y + z * z);
-        const now = Date.now();
-        if (shakeEnabled && acceleration > SHAKE_THRESHOLD && now - lastShake > SHAKE_COOLDOWN) {
-          setLastShake(now);
-          Vibration.vibrate(400);
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-          setShakeBugModalVisible(true);
-        }
-      });
-      Accelerometer.setUpdateInterval(100);
-      return () => subscription.remove();
-    }
-    return () => {};
-  }, [lastShake, shakeEnabled]);
+    // Shake-to-report only available for logged-in users
+    if (!user || (Platform.OS !== 'ios' && Platform.OS !== 'android')) return;
+    const subscription = Accelerometer.addListener(({ x, y, z }) => {
+      const acceleration = Math.sqrt(x * x + y * y + z * z);
+      const now = Date.now();
+      if (shakeEnabled && acceleration > SHAKE_THRESHOLD && now - lastShake > SHAKE_COOLDOWN) {
+        setLastShake(now);
+        Vibration.vibrate(400);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        setShakeBugModalVisible(true);
+      }
+    });
+    Accelerometer.setUpdateInterval(100);
+    return () => subscription.remove();
+  }, [lastShake, shakeEnabled, user?.id]);
 
   useEffect(() => {
     if (recordingState === 'recording') {
@@ -2123,28 +2130,39 @@ Be thorough and cite specific facts.`;
       return;
     }
 
-    if (isGuest && currentMedia.length > 0) {
-      setGuestLockFeature('file upload');
-      setGuestLockModal(true);
-      return;
+    const imageFiles = currentMedia.filter(m => m.type === 'image');
+    const docFiles2 = currentMedia.filter(m => m.type !== 'image');
+
+    // Guest mode: photos only, 3 per session, no documents
+    if (isGuest) {
+      if (docFiles2.length > 0) {
+        setGuestLockFeature('file upload');
+        setGuestLockModal(true);
+        return;
+      }
+      if (imageFiles.length > 0 && guestPhotoCount + imageFiles.length > GUEST_PHOTO_LIMIT) {
+        setGuestLockFeature('photo upload');
+        setGuestLoginModal(true);
+        return;
+      }
     }
 
-    // ── Photo upload limits: Pro = 10/session, Free = 4/24h ──
-    const imageFiles = currentMedia.filter(m => m.type === 'image');
+    // ── Photo upload limits: Pro/Plus = 10/session, Free = 4/hour ──
     if (imageFiles.length > 0 && !isGuest && !isAdmin) {
       if (isPro || isUnlimited) {
         if (photoUploadCount + imageFiles.length > 10) {
-          showAlert('Session Limit', `Pro plan allows 10 photo uploads per session. You've used ${photoUploadCount}. Start a new chat to reset.`, [{ text: 'OK', style: 'cancel' }]);
+          showAlert('Session Limit', `Pro/Plus plan allows 10 photo uploads per session. You have used ${photoUploadCount}. Start a new chat to reset.`, [{ text: 'OK', style: 'cancel' }]);
           return;
         }
         setPhotoUploadCount(prev => prev + imageFiles.length);
       } else {
+        // Free: 4 per hour (3600s window)
         const now = Date.now();
-        const isNewWindow = photoUploadResetTime === 0 || now - photoUploadResetTime > 24 * 60 * 60 * 1000;
+        const isNewWindow = photoUploadResetTime === 0 || now - photoUploadResetTime > 60 * 60 * 1000;
         const currentCount = isNewWindow ? 0 : photoUploadCount;
         if (currentCount + imageFiles.length > 4) {
-          const hoursLeft = isNewWindow ? 0 : Math.ceil((24 * 60 * 60 * 1000 - (now - photoUploadResetTime)) / (60 * 60 * 1000));
-          showAlert('Daily Photo Limit', `Free plan allows 4 photos per 24h.${hoursLeft > 0 ? ` Resets in ${hoursLeft}h.` : ''} Upgrade for 10/session.`, [{ text: 'Cancel', style: 'cancel' }, { text: 'Get Plus', onPress: () => router.push('/subscription') }]);
+          const minsLeft = isNewWindow ? 0 : Math.ceil((60 * 60 * 1000 - (now - photoUploadResetTime)) / 60000);
+          showAlert('Hourly Photo Limit', `Free plan allows 4 photos per hour.${minsLeft > 0 ? ` Resets in ${minsLeft} min.` : ''} Upgrade to Pro for 10/session.`, [{ text: 'Cancel', style: 'cancel' }, { text: 'Get Plus', onPress: () => router.push('/subscription') }]);
           return;
         }
         if (isNewWindow) setPhotoUploadResetTime(now);
@@ -2182,15 +2200,18 @@ Be thorough and cite specific facts.`;
 
     let conversationId = currentConversation?.id;
     if (!conversationId) {
-      try {
-        conversationId = await createConversation();
-      } catch (convErr) {
-        console.log('[Home] createConversation error:', convErr);
-      }
-      if (!conversationId) {
-        // Guest users and users without DB access — create a transient local ID
-        // Don't show an error — just proceed with a local ID that the edge function handles
-        conversationId = isGuest ? `guest-${Date.now()}` : `local-${Date.now()}`;
+      if (isGuest) {
+        // Guests always use a stable local ID (no DB)
+        conversationId = `guest-session-${Date.now()}`;
+      } else {
+        try {
+          conversationId = await createConversation();
+        } catch (convErr) {
+          console.log('[Home] createConversation error:', convErr);
+        }
+        if (!conversationId) {
+          conversationId = `local-${Date.now()}`;
+        }
       }
     }
 
@@ -2323,7 +2344,10 @@ Be thorough and cite specific facts.`;
     } finally {
       setSending(false);
       setGenerating(false);
-      if (isGuest) setGuestMessageCount(prev => prev + 1);
+      if (isGuest) {
+        setGuestMessageCount(prev => prev + 1);
+        if (imageFiles.length > 0) setGuestPhotoCount(prev => prev + imageFiles.length);
+      }
     }
   };
 
@@ -3035,29 +3059,48 @@ Be thorough and cite specific facts.`;
 
   const userName = user?.email?.split('@')[0] || 'You';
 
-  // Offline screen for free users (no internet + not pro/plus)
-  const showOfflineScreen = !isConnected && !isPro && !isUnlimited && !isGuest;
+  // Offline screen:
+  // - Free logged-in users: always show when offline
+  // - Guests: show when offline (limited splash)
+  // - Pro/Plus: never show (they can use offline)
+  const showOfflineScreen = !isConnected && !isPro && !isUnlimited;
 
   if (showOfflineScreen) {
+    // Splash like photo 1 (light) and photo 2 (dark) — logo centered
     return (
       <View style={{ flex: 1, backgroundColor: isDark ? '#000' : '#FFF', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40 }}>
-        <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
-        <View style={{ width: 100, height: 100, borderRadius: 28, backgroundColor: isDark ? '#1C1C1E' : '#F2F2F7', alignItems: 'center', justifyContent: 'center', marginBottom: 28, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }}>
-          <Ionicons name="cloud-offline-outline" size={52} color={isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.2)'} />
+        <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={isDark ? '#000' : '#FFF'} />
+        {/* Centered logo — same as splash screens in screenshots */}
+        <View style={{ alignItems: 'center', justifyContent: 'center', flex: 1 }}>
+          <Ionicons
+            name="logo-apple"
+            size={52}
+            color={isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.15)'}
+            style={{ marginBottom: 0 }}
+          />
         </View>
-        <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 22, fontWeight: '700', marginBottom: 10, textAlign: 'center' }}>No Internet Connection</Text>
-        <Text style={{ color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.45)', fontSize: 15, textAlign: 'center', lineHeight: 23, marginBottom: 32 }}>
-          {'A connection is required for the free plan. Upgrade to Pro or Plus to use Dawinix offline.'}
-        </Text>
-        <TouchableOpacity
-          style={{ backgroundColor: colors.primary, borderRadius: 30, paddingHorizontal: 36, paddingVertical: 15, marginBottom: 14 }}
-          onPress={() => router.push('/subscription')}
-        >
-          <Text style={{ color: '#FFF', fontSize: 16, fontWeight: '700' }}>Upgrade for Offline Access</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => { setIsConnected(true); }} style={{ paddingVertical: 12 }}>
-          <Text style={{ color: colors.textSecondary, fontSize: 14 }}>Try Again</Text>
-        </TouchableOpacity>
+        {/* Bottom section with message */}
+        <View style={{ paddingBottom: 60, alignItems: 'center', width: '100%' }}>
+          <Text style={{ color: isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.5)', fontSize: 15, textAlign: 'center', lineHeight: 22, marginBottom: 20 }}>
+            {isGuest
+              ? 'An internet connection is required to use Dawinix. Please check your connection.'
+              : 'A connection is required for the free plan. Upgrade to Pro for offline access.'}
+          </Text>
+          {!isGuest ? (
+            <TouchableOpacity
+              style={{ backgroundColor: colors.primary, borderRadius: 30, paddingHorizontal: 32, paddingVertical: 14, marginBottom: 12, width: '100%', alignItems: 'center' }}
+              onPress={() => router.push('/subscription')}
+            >
+              <Text style={{ color: '#FFF', fontSize: 16, fontWeight: '700' }}>Upgrade for Offline Access</Text>
+            </TouchableOpacity>
+          ) : null}
+          <TouchableOpacity
+            style={{ paddingVertical: 12, width: '100%', alignItems: 'center', backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)', borderRadius: 30 }}
+            onPress={() => setIsConnected(true)}
+          >
+            <Text style={{ color: isDark ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.6)', fontSize: 15, fontWeight: '600' }}>Try Again</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
   }
@@ -3434,27 +3477,45 @@ Be thorough and cite specific facts.`;
                   ]}
                   onPress={() => inputRef.current?.focus()}
                 >
-                  {/* Quiz chip inside input pill (like ChatGPT photo 4) */}
-                  {quizMode ? (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                  {/* Chips row: quiz mode chip + model chip */}
+                  {(quizMode || editingMessageId) ? null : null}
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: quizMode || currentAIModel !== 'gemini' ? 8 : 0 }}>
+                    {/* Quiz chip */}
+                    {quizMode ? (
                       <View style={{
                         flexDirection: 'row', alignItems: 'center', gap: 6,
                         backgroundColor: isDark ? 'rgba(90,200,250,0.15)' : 'rgba(90,200,250,0.12)',
                         borderRadius: 16, paddingHorizontal: 10, paddingVertical: 5,
                         borderWidth: 1, borderColor: 'rgba(90,200,250,0.3)',
-                        alignSelf: 'flex-start',
                       }}>
                         <Ionicons name="albums-outline" size={14} color="#5AC8FA" />
                         <Text style={{ color: '#5AC8FA', fontSize: 13, fontWeight: '700' }}>Quizzes</Text>
-                        <TouchableOpacity
-                          onPress={() => setQuizMode(false)}
-                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                        >
+                        <TouchableOpacity onPress={() => setQuizMode(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                           <Ionicons name="close" size={12} color="#5AC8FA" />
                         </TouchableOpacity>
                       </View>
-                    </View>
-                  ) : null}
+                    ) : null}
+                    {/* Model chip — show current AI model, tap to open model selector */}
+                    <TouchableOpacity
+                      style={{
+                        flexDirection: 'row', alignItems: 'center', gap: 5,
+                        backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+                        borderRadius: 16, paddingHorizontal: 10, paddingVertical: 5,
+                        borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)',
+                      }}
+                      onPress={() => {
+                        if (isGuest) { setGuestLockFeature('model selection'); setGuestLockModal(true); return; }
+                        router.push('/model-selector');
+                      }}
+                      hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+                    >
+                      <Ionicons name="sparkles" size={12} color={accentColor} />
+                      <Text style={{ color: isDark ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.6)', fontSize: 12, fontWeight: '600' }}>
+                        {SUPPORTED_AI_MODELS[currentAIModel] || currentAIModel}
+                      </Text>
+                      <Ionicons name="chevron-down" size={11} color={isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.35)'} />
+                    </TouchableOpacity>
+                  </View>
 
                   {/* Media previews at top of pill */}
                   {renderInlineMediaPreviews()}
@@ -3553,7 +3614,25 @@ Be thorough and cite specific facts.`;
               visible={toolsVisible}
               onClose={() => setToolsVisible(false)}
               onPickMedia={(media) => {
-                if (isGuest) { setToolsVisible(false); setGuestLockFeature('file upload'); setGuestLockModal(true); return; }
+                // Guests can pick photos only (no documents), max 3 per session
+                if (isGuest) {
+                  const imageFiles = media.filter(m => m.type === 'image');
+                  const docFiles = media.filter(m => m.type !== 'image');
+                  if (docFiles.length > 0) {
+                    setToolsVisible(false);
+                    setGuestLockFeature('file upload');
+                    setGuestLockModal(true);
+                    return;
+                  }
+                  if (guestPhotoCount + imageFiles.length > GUEST_PHOTO_LIMIT) {
+                    setToolsVisible(false);
+                    setGuestLoginModal(true);
+                    return;
+                  }
+                  setToolsVisible(false);
+                  handleMediaPicked(media);
+                  return;
+                }
                 handleMediaPicked(media);
               }}
               onSelectTool={(toolId) => {
@@ -3565,7 +3644,16 @@ Be thorough and cite specific facts.`;
                 handleAIModelSelect(model as AIModelKey);
               }}
               onOpenCamera={() => {
-                if (isGuest) { setToolsVisible(false); setGuestLockFeature('camera'); setGuestLockModal(true); return; }
+                if (isGuest) {
+                  if (guestPhotoCount >= GUEST_PHOTO_LIMIT) {
+                    setToolsVisible(false);
+                    setGuestLoginModal(true);
+                    return;
+                  }
+                  setToolsVisible(false);
+                  router.push('/camera');
+                  return;
+                }
                 router.push('/camera');
               }}
               currentModel={currentAIModel}
