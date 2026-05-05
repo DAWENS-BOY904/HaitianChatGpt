@@ -65,7 +65,6 @@ import { ImageViewerModal } from './ImageViewerModal';
 import * as Haptics from 'expo-haptics';
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import WebView from 'react-native-webview';
 
 // ── Deep Research Progress Card ──────────────────────────────────────────────
 const DeepResearchCard = memo(function DeepResearchCard({ step, label, done, colors }: { step: number; label: string; done: boolean; colors: any }) {
