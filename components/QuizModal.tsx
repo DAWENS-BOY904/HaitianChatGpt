@@ -5,24 +5,14 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
-  Platform,
+  Animated,
   Dimensions,
+  Platform,
 } from 'react-native';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withTiming,
-  withSpring,
-  withSequence,
-  withDelay,
-  runOnJS,
-  Easing as ReanimatedEasing,
-  ZoomIn,
-} from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
 
-const { width: SW, height: SH } = Dimensions.get('window');
+const { width: SW } = Dimensions.get('window');
 
 export interface QuizQuestion {
   question: string;
@@ -64,285 +54,10 @@ export interface QuizModalProps extends QuizViewProps {
 
 const OPTION_LABELS = ['A', 'B', 'C', 'D'];
 
-// ── Confetti Particle ─────────────────────────────────────────────────────────
-const CONFETTI_COLORS = [
-  '#FFD700', '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4',
-  '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE',
-  '#58D68D', '#F1948A', '#85C1E9', '#F8C471', '#82E0AA',
-];
-
-function ConfettiParticle({ index, total }: { index: number; total: number }) {
-  const color = CONFETTI_COLORS[index % CONFETTI_COLORS.length];
-  const isRect = index % 3 !== 0;
-
-  const startX = (SW / total) * index - SW / 2 + (Math.random() - 0.5) * 80;
-  const endX = startX + (Math.random() - 0.5) * 200;
-  const startY = -20;
-  const endY = SH * 0.85;
-
-  const translateX = useSharedValue(startX);
-  const translateY = useSharedValue(startY);
-  const rotate = useSharedValue(0);
-  const opacity = useSharedValue(1);
-  const scaleVal = useSharedValue(0.6 + Math.random() * 0.8);
-
-  useEffect(() => {
-    const delay = index * 35;
-    const duration = 1800 + Math.random() * 1000;
-
-    translateY.value = withDelay(
-      delay,
-      withTiming(endY, { duration, easing: ReanimatedEasing.in(ReanimatedEasing.quad) })
-    );
-    translateX.value = withDelay(
-      delay,
-      withTiming(endX, { duration: duration * 1.1 })
-    );
-    rotate.value = withDelay(
-      delay,
-      withTiming(360 * (Math.random() > 0.5 ? 3 : -3), { duration })
-    );
-    opacity.value = withDelay(
-      delay + duration * 0.6,
-      withTiming(0, { duration: duration * 0.4 })
-    );
-  }, []);
-
-  const style = useAnimatedStyle(() => ({
-    transform: [
-      { translateX: translateX.value },
-      { translateY: translateY.value },
-      { rotate: `${rotate.value}deg` },
-      { scale: scaleVal.value },
-    ],
-    opacity: opacity.value,
-  }));
-
-  return (
-    <Animated.View
-      style={[
-        style,
-        {
-          position: 'absolute',
-          width: isRect ? 10 : 8,
-          height: isRect ? 6 : 8,
-          borderRadius: isRect ? 1 : 4,
-          backgroundColor: color,
-          left: SW / 2,
-          top: 0,
-        },
-      ]}
-    />
-  );
-}
-
-// ── Confetti Overlay ──────────────────────────────────────────────────────────
-function ConfettiOverlay({ visible }: { visible: boolean }) {
-  const PARTICLE_COUNT = 60;
-  if (!visible) return null;
-  return (
-    <View
-      style={{
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        pointerEvents: 'none',
-        zIndex: 9999,
-        overflow: 'hidden',
-      }}
-      pointerEvents="none"
-    >
-      {Array.from({ length: PARTICLE_COUNT }).map((_, i) => (
-        <ConfettiParticle key={i} index={i} total={PARTICLE_COUNT} />
-      ))}
-    </View>
-  );
-}
-
-// ── Gold Trophy Card (Perfect Score) ─────────────────────────────────────────
-function ChampionCard({ score, total, isDark, textC, subC, onViewResults, onNextQuiz, onTryAnother, loadingNext, quizHistory, getDifficultyColor, formatDate, historyBg, historyBorder, historyTopicC, historyDateC }: {
-  score: number; total: number; isDark: boolean; textC: string; subC: string;
-  onViewResults: () => void; onNextQuiz?: () => Promise<void>; onTryAnother: () => void;
-  loadingNext: boolean; quizHistory?: QuizHistoryEntry[];
-  getDifficultyColor: (d: string) => string; formatDate: (iso: string) => string;
-  historyBg: string; historyBorder: string; historyTopicC: string; historyDateC: string;
-}) {
-  const scale = useSharedValue(0);
-  const glowOpacity = useSharedValue(0);
-  const trophyBounce = useSharedValue(0);
-  const starsRotate = useSharedValue(0);
-
-  useEffect(() => {
-    scale.value = withDelay(100, withSpring(1, { damping: 10, stiffness: 180 }));
-    glowOpacity.value = withDelay(400, withTiming(1, { duration: 600 }));
-    trophyBounce.value = withDelay(
-      600,
-      withSequence(
-        withSpring(-16, { damping: 8, stiffness: 200 }),
-        withSpring(0, { damping: 8, stiffness: 200 }),
-        withSpring(-8, { damping: 8, stiffness: 200 }),
-        withSpring(0, { damping: 8, stiffness: 200 }),
-      )
-    );
-    starsRotate.value = withDelay(500, withTiming(360, { duration: 1200 }));
-  }, []);
-
-  const cardStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
-  const glowStyle = useAnimatedStyle(() => ({
-    opacity: glowOpacity.value,
-  }));
-  const trophyStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: trophyBounce.value }],
-  }));
-  const starsStyle = useAnimatedStyle(() => ({
-    transform: [{ rotate: `${starsRotate.value}deg` }],
-  }));
-
-  const goldGradientBg = isDark
-    ? 'rgba(40, 32, 8, 0.98)'
-    : 'rgba(255, 250, 220, 0.98)';
-
-  return (
-    <Animated.View style={[cardStyle, { marginHorizontal: 12, marginBottom: 12 }]}>
-      {/* Gold glow background */}
-      <Animated.View style={[glowStyle, {
-        position: 'absolute', top: -20, left: -20, right: -20, bottom: -20,
-        borderRadius: 30, backgroundColor: 'rgba(255, 215, 0, 0.15)',
-        shadowColor: '#FFD700', shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 0.6, shadowRadius: 28, elevation: 12,
-      }]} />
-
-      <View style={{
-        borderRadius: 22, overflow: 'hidden', borderWidth: 2,
-        borderColor: '#FFD700',
-        backgroundColor: goldGradientBg,
-        shadowColor: '#FFD700', shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.5, shadowRadius: 16, elevation: 10,
-      }}>
-        {/* Gold header stripe */}
-        <View style={{
-          backgroundColor: '#FFD700', paddingVertical: 10,
-          alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8,
-        }}>
-          <Animated.View style={starsStyle}>
-            <Text style={{ fontSize: 16 }}>✨</Text>
-          </Animated.View>
-          <Text style={{ color: '#000', fontSize: 15, fontWeight: '800', letterSpacing: 1.5 }}>
-            CHAMPION!
-          </Text>
-          <Animated.View style={starsStyle}>
-            <Text style={{ fontSize: 16 }}>✨</Text>
-          </Animated.View>
-        </View>
-
-        <View style={{ alignItems: 'center', paddingTop: 28, paddingHorizontal: 20, paddingBottom: 16 }}>
-          {/* Animated Trophy */}
-          <Animated.View style={trophyStyle}>
-            <View style={{
-              width: 100, height: 100, borderRadius: 50,
-              backgroundColor: 'rgba(255, 215, 0, 0.2)',
-              alignItems: 'center', justifyContent: 'center',
-              borderWidth: 3, borderColor: 'rgba(255, 215, 0, 0.5)',
-              marginBottom: 16,
-              shadowColor: '#FFD700', shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: 0.4, shadowRadius: 12, elevation: 8,
-            }}>
-              <Text style={{ fontSize: 52 }}>🏆</Text>
-            </View>
-          </Animated.View>
-
-          {/* Score */}
-          <Text style={{ fontSize: 52, fontWeight: '900', color: '#FFD700', letterSpacing: -1, marginBottom: 4 }}>
-            {score}/{total}
-          </Text>
-          <Text style={{ fontSize: 20, fontWeight: '700', color: textC, marginBottom: 6 }}>
-            Perfect Score!
-          </Text>
-          <Text style={{ fontSize: 14, color: subC, textAlign: 'center', lineHeight: 20, marginBottom: 24 }}>
-            You answered every question correctly.{'\n'}Incredible performance! 🎉
-          </Text>
-
-          {/* Stars row */}
-          <View style={{ flexDirection: 'row', gap: 6, marginBottom: 24 }}>
-            {[0, 1, 2, 3, 4].map((_, i) => (
-              <Animated.View
-                key={i}
-                entering={ZoomIn.delay(800 + i * 120).springify()}
-              >
-                <Text style={{ fontSize: 24 }}>⭐</Text>
-              </Animated.View>
-            ))}
-          </View>
-        </View>
-
-        {/* Action buttons */}
-        <View style={{ paddingHorizontal: 16, paddingBottom: 20, gap: 10 }}>
-          <TouchableOpacity
-            style={{
-              backgroundColor: '#FFD700', borderRadius: 14, paddingVertical: 15,
-              alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8,
-            }}
-            onPress={onViewResults}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="trophy" size={18} color="#000" />
-            <Text style={{ fontSize: 16, fontWeight: '700', color: '#000' }}>View Results</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={{
-              backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
-              borderRadius: 14, paddingVertical: 13, alignItems: 'center',
-              borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)',
-            }}
-            disabled={loadingNext}
-            onPress={async () => {
-              if (onNextQuiz) { try { await onNextQuiz(); } catch {} }
-              else { onTryAnother(); }
-            }}
-            activeOpacity={0.75}
-          >
-            <Text style={{ fontSize: 14, fontWeight: '600', color: textC }}>
-              {loadingNext ? 'Generating…' : 'Try Another Quiz'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* History */}
-        {quizHistory && quizHistory.length > 0 && (
-          <View style={[s.historySection, { backgroundColor: historyBg, borderColor: historyBorder, marginHorizontal: 16, marginBottom: 16 }]}>
-            <Text style={[s.historySectionTitle, { color: subC }]}>My Quiz History</Text>
-            {quizHistory.slice(0, 5).map((entry, i) => (
-              <View key={i} style={[s.historyRow, { borderTopColor: historyBorder }]}>
-                <View style={s.historyLeft}>
-                  <Text style={[s.historyTopic, { color: historyTopicC }]} numberOfLines={1}>{entry.topic}</Text>
-                  <View style={s.historyMeta}>
-                    <View style={[s.diffBadge, { backgroundColor: getDifficultyColor(entry.difficulty) + '22', borderColor: getDifficultyColor(entry.difficulty) + '55' }]}>
-                      <Text style={[s.diffBadgeText, { color: getDifficultyColor(entry.difficulty) }]}>{entry.difficulty}</Text>
-                    </View>
-                    <Text style={[s.historyDate, { color: historyDateC }]}>{formatDate(entry.created_at)}</Text>
-                  </View>
-                </View>
-                <Text style={[s.historyScoreText, { color: entry.score / entry.total >= 0.7 ? '#34C759' : entry.score / entry.total >= 0.4 ? '#FF9F0A' : '#FF453A' }]}>
-                  {entry.score}/{entry.total}
-                </Text>
-              </View>
-            ))}
-          </View>
-        )}
-      </View>
-    </Animated.View>
-  );
-}
-
-// ── Main QuizView ─────────────────────────────────────────────────────────────
 export function QuizView({ questions, onClose, onViewResults, onTryAnother, onHarderQuiz, quizHistory, onComplete, preGeneratedQuestions, onNextQuiz }: QuizViewProps) {
   const { colors, isDark } = useTheme();
 
+  // Dynamic theme tokens
   const wrapBg = isDark ? '#111113' : '#F2F2F7';
   const cardBg = isDark ? 'rgba(28,28,32,0.98)' : 'rgba(255,255,255,0.98)';
   const cardBorder = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.08)';
@@ -374,12 +89,9 @@ export function QuizView({ questions, onClose, onViewResults, onTryAnother, onHa
   const [finished, setFinished] = useState(false);
   const [score, setScore] = useState(0);
   const [loadingNext, setLoadingNext] = useState(false);
-  const [showConfetti, setShowConfetti] = useState(false);
-  const [perfectScore, setPerfectScore] = useState(false);
-
-  // Reanimated values
-  const cardOpacity = useSharedValue(1);
-  const cardTranslateX = useSharedValue(0);
+  const fadeAnim = useRef(new Animated.Value(1)).current;
+  const shakeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(0)).current;
 
   const q = questions[currentQ] || null;
   const total = questions.length;
@@ -392,47 +104,37 @@ export function QuizView({ questions, onClose, onViewResults, onTryAnother, onHa
     setShowFeedback(null);
     setFinished(false);
     setScore(0);
-    setShowConfetti(false);
-    setPerfectScore(false);
-    cardOpacity.value = 1;
-    cardTranslateX.value = 0;
+    fadeAnim.setValue(1);
+    slideAnim.setValue(0);
   }, [questions]);
 
   const shake = () => {
-    cardTranslateX.value = withSequence(
-      withTiming(12, { duration: 60 }),
-      withTiming(-12, { duration: 60 }),
-      withTiming(8, { duration: 60 }),
-      withTiming(-8, { duration: 60 }),
-      withTiming(0, { duration: 60 }),
-    );
+    shakeAnim.setValue(0);
+    Animated.sequence([
+      Animated.timing(shakeAnim, { toValue: 10, duration: 60, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -10, duration: 60, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 7, duration: 60, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -7, duration: 60, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 0, duration: 60, useNativeDriver: true }),
+    ]).start();
   };
 
   const nextQuestion = (ans: QuizAnswer) => {
     const newAnswers = [...answers, ans];
     setAnswers(newAnswers);
-    const newScore = ans.correct ? score + 1 : score;
     if (ans.correct) setScore(s => s + 1);
-
     setTimeout(() => {
       const nextIdx = currentQ + 1;
       if (nextIdx >= total) {
-        const finalScore = newScore;
-        const isPerfect = finalScore === total;
-        setPerfectScore(isPerfect);
         setFinished(true);
         onComplete?.();
-        if (isPerfect) {
-          setTimeout(() => setShowConfetti(true), 300);
-          setTimeout(() => setShowConfetti(false), 3500);
-        }
       } else {
-        cardOpacity.value = withTiming(0, { duration: 180 }, () => {
-          runOnJS(setCurrentQ)(nextIdx);
-          runOnJS(setSelectedOption)(null);
-          runOnJS(setWrongAttempts)(0);
-          runOnJS(setShowFeedback)(null);
-          cardOpacity.value = withTiming(1, { duration: 220 });
+        Animated.timing(fadeAnim, { toValue: 0, duration: 180, useNativeDriver: true }).start(() => {
+          setCurrentQ(nextIdx);
+          setSelectedOption(null);
+          setWrongAttempts(0);
+          setShowFeedback(null);
+          Animated.timing(fadeAnim, { toValue: 1, duration: 220, useNativeDriver: true }).start();
         });
       }
     }, 750);
@@ -461,6 +163,7 @@ export function QuizView({ questions, onClose, onViewResults, onTryAnother, onHa
 
   const getScoreMessage = () => {
     const pct = score / total;
+    if (pct === 1) return 'Perfect score! 🎉';
     if (pct >= 0.8) return `Great job! ${score}/${total} correct.`;
     if (pct >= 0.6) return `Good work! ${score}/${total} correct.`;
     if (pct >= 0.4) return `Keep practicing! ${score}/${total} correct.`;
@@ -489,16 +192,8 @@ export function QuizView({ questions, onClose, onViewResults, onTryAnother, onHa
     return letterBg;
   };
 
-  const cardAnimStyle = useAnimatedStyle(() => ({
-    opacity: cardOpacity.value,
-    transform: [{ translateX: cardTranslateX.value }],
-  }));
-
   return (
     <View style={[s.wrapper, { backgroundColor: wrapBg }]}>
-      {/* Confetti overlay */}
-      <ConfettiOverlay visible={showConfetti} />
-
       {/* Header */}
       <View style={s.header}>
         <View style={s.closeBtn} />
@@ -515,7 +210,7 @@ export function QuizView({ questions, onClose, onViewResults, onTryAnother, onHa
 
       {/* Card */}
       {!finished ? (
-        <Animated.View style={[s.card, cardAnimStyle, { backgroundColor: cardBg, borderColor: cardBorder }]}>
+        <Animated.View style={[s.card, { opacity: fadeAnim, transform: [{ translateX: shakeAnim }], backgroundColor: cardBg, borderColor: cardBorder }]}>
           <View style={[s.progressBar, { backgroundColor: progressBg }]}>
             <View style={[s.progressFill, { width: `${((currentQ) / total) * 100}%` }]} />
           </View>
@@ -552,28 +247,7 @@ export function QuizView({ questions, onClose, onViewResults, onTryAnother, onHa
             <Text style={s.hintText}>{'⚠️ 1 chance left — choose carefully!'}</Text>
           )}
         </Animated.View>
-      ) : perfectScore ? (
-        // ── Perfect Score: Gold Trophy Card ──
-        <ChampionCard
-          score={score}
-          total={total}
-          isDark={isDark}
-          textC={textC}
-          subC={subC}
-          onViewResults={() => onViewResults(answers, questions)}
-          onNextQuiz={onNextQuiz}
-          onTryAnother={onTryAnother}
-          loadingNext={loadingNext}
-          quizHistory={quizHistory}
-          getDifficultyColor={getDifficultyColor}
-          formatDate={formatDate}
-          historyBg={historyBg}
-          historyBorder={historyBorder}
-          historyTopicC={historyTopicC}
-          historyDateC={historyDateC}
-        />
       ) : (
-        // ── Normal completion card ──
         <View style={[s.card, { backgroundColor: cardBg, borderColor: cardBorder }]}>
           <View style={s.completionTop}>
             <Text style={[s.scoreLabel, { color: textC }]}>{score} / {total}</Text>
