@@ -58,6 +58,7 @@ import { BlurView } from 'expo-blur';
 import * as FileSystem from 'expo-file-system';
 import { SideMenu } from '../components/SideMenu';
 import { ChatHistoryModal } from '../components/ChatHistoryModal';
+import { ImageSearchResults } from '../components/ImageSearchResults';
 import { AIMode } from '../components/AIModeSelectorModal';
 import { CalculatorModal, CalculatorCard, detectMathExpression } from '../components/CalculatorModal';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -2627,16 +2628,39 @@ Be thorough and cite specific facts.`;
     setMsgMenuVisible(true);
   }, [groupChatMode]);
 
+  // ── Parse IMAGE_SEARCH_RESULTS tag from AI message content ────────────────
+  const parseImageSearchResults = useCallback((content: string): { cleanContent: string; searchImages: Array<{ url: string; title?: string; source?: string }> | null } => {
+    const match = content.match(/\[IMAGE_SEARCH_RESULTS:([\s\S]*?)\]/);
+    if (!match) return { cleanContent: content, searchImages: null };
+    try {
+      const parsed = JSON.parse(match[1]);
+      const cleanContent = content.replace(/\[IMAGE_SEARCH_RESULTS:[\s\S]*?\]/, '').trim();
+      return { cleanContent, searchImages: Array.isArray(parsed) ? parsed : null };
+    } catch {
+      return { cleanContent: content, searchImages: null };
+    }
+  }, []);
+
   const renderMessage = useCallback(({ item }: { item: any }) => {
     const isStreaming = streamingMessageId === item.id;
     const mathData = item.role === 'assistant' ? detectMathExpression(item.content) : null;
+
+    // Parse image search results from content
+    const { cleanContent: msgCleanContent, searchImages: msgSearchImages } = item.role === 'assistant'
+      ? parseImageSearchResults(item.content || '')
+      : { cleanContent: item.content, searchImages: null };
+
     const imageUrlMatch = item.role === 'assistant'
-      ? (item.content || '').match(/https?:\/\/[^\s"')]+\.(?:jpg|jpeg|png|webp|gif)/i)
+      ? (msgCleanContent || '').match(/https?:\/\/[^\s"')]+\.(?:jpg|jpeg|png|webp|gif)/i)
       : null;
     const detectedImageUrl: string | null = imageUrlMatch ? imageUrlMatch[0] : (item.imageUrl || null);
     const alreadySaved = detectedImageUrl ? savedImageUrls.has(detectedImageUrl) : false;
     const isSavingThis = savingImageId === item.id;
     const isUserMsg = item.role === 'user';
+
+    // Create a modified item with clean content for MessageItem
+    const displayItem = msgSearchImages ? { ...item, content: msgCleanContent } : item;
+
     return (
       <View>
         <Pressable
@@ -2645,7 +2669,7 @@ Be thorough and cite specific facts.`;
           delayLongPress={450}
         >
         <MessageItem
-          message={item}
+          message={displayItem}
           onCancel={handleCancelGeneration}
           onEdit={handleEditMessage}
           onCopy={() => handleCopyMessage(item.content)}
@@ -2665,6 +2689,80 @@ Be thorough and cite specific facts.`;
           onOpenActions={handleOpenMessageActions}
         />
         </Pressable>
+        {/* Image search results grid — horizontal scroll */}
+        {msgSearchImages && msgSearchImages.length > 0 ? (
+          <View style={{ marginTop: 4, marginBottom: 8 }}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ paddingHorizontal: 16, gap: 10, paddingBottom: 4 }}
+            >
+              {msgSearchImages.slice(0, 10).map((img, imgIdx) => (
+                <View key={`search-img-${imgIdx}`} style={{
+                  width: 160, borderRadius: 16, overflow: 'hidden',
+                  backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA',
+                  shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.15, shadowRadius: 6, elevation: 3,
+                }}>
+                  <TouchableOpacity
+                    activeOpacity={0.88}
+                    onPress={() => {
+                      // Open fullscreen viewer
+                      const allUrls = msgSearchImages.map((i: any) => i.url);
+                      // Use the MessageItem image viewer via state — just set media
+                      const mediaFile: MediaFile = { type: 'image', uri: img.url, name: img.title || 'photo' };
+                      // Simple approach: copy URL and show it directly
+                      Clipboard.setStringAsync(img.url).catch(() => {});
+                      showAlert('Image URL Copied', 'Tap \'Send\' button to use this image in chat.');
+                    }}
+                  >
+                    <ExpoImage
+                      source={{ uri: img.url }}
+                      style={{ width: 160, height: 120 }}
+                      contentFit="cover"
+                      transition={200}
+                    />
+                  </TouchableOpacity>
+                  <View style={{ padding: 8 }}>
+                    {img.title ? (
+                      <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 11, fontWeight: '600', lineHeight: 15 }} numberOfLines={2}>
+                        {img.title}
+                      </Text>
+                    ) : null}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 6 }}>
+                      {img.source ? (
+                        <Text style={{ color: colors.textSecondary, fontSize: 10 }} numberOfLines={1}>{img.source}</Text>
+                      ) : <View />}
+                      {/* Send to input button */}
+                      <TouchableOpacity
+                        onPress={async () => {
+                          try {
+                            const media: MediaFile = { type: 'image', uri: img.url, name: img.title || 'photo.jpg', mimeType: 'image/jpeg' };
+                            setSelectedMedia(prev => [...prev, media]);
+                            inputRef.current?.focus();
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          } catch (_e) {}
+                        }}
+                        style={{
+                          width: 28, height: 28, borderRadius: 14,
+                          backgroundColor: accentColor + '22',
+                          alignItems: 'center', justifyContent: 'center',
+                          borderWidth: 1, borderColor: accentColor + '44',
+                        }}
+                        hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                      >
+                        <Ionicons name="send" size={12} color={accentColor} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </View>
+              ))}
+            </ScrollView>
+            <Text style={{ color: colors.textSecondary, fontSize: 11, paddingHorizontal: 16, marginTop: 4 }}>
+              {msgSearchImages.length} photo{msgSearchImages.length !== 1 ? 's' : ''} • Tap send to add to message
+            </Text>
+          </View>
+        ) : null}
         {mathData ? (
           <CalculatorCard
             expression={mathData.expression}
