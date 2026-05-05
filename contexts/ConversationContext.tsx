@@ -404,7 +404,10 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
       const thirtyMinAgo = Date.now() - 30 * 60 * 1000;
 
       const mapped = allConvs
-        .filter((c: any) => idsWithMessages.has(c.id))
+        .filter((c: any) =>
+          idsWithMessages.has(c.id) ||
+          new Date(c.created_at).getTime() > thirtyMinAgo
+        )
         .map((c: any) => ({
           id: c.id,
           title: c.title || 'New Chat',
@@ -452,7 +455,8 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
       const newConv: Conversation = { id: data.id, title: data.title, createdAt: data.created_at, updatedAt: data.updated_at };
       setCurrentConversation(newConv);
       setMessages([]);
-      // Do NOT add to conversations list yet — only add once first message is sent
+      // Add to conversations list immediately for real-time side menu
+      setConversations(prev => [newConv, ...prev.filter(c => c.id !== data.id)]);
       return data.id;
     } catch (err) {
       console.error('Error creating conversation:', err);
@@ -461,25 +465,11 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
   };
 
   const selectConversation = async (id: string) => {
-    if (!id || id.startsWith('guest-') || id.startsWith('local-')) return;
     setLoading(true);
     try {
-      // Find or fetch conversation metadata
-      let conv = conversations.find(c => c.id === id);
-      if (!conv) {
-        const { data: convData } = await supabase.from('conversations').select('*').eq('id', id).single();
-        if (convData) {
-          conv = { id: convData.id, title: convData.title, createdAt: convData.created_at, updatedAt: convData.updated_at };
-          setConversations(prev => prev.some(c => c.id === id) ? prev : [conv!, ...prev]);
-        }
-      }
+      const conv = conversations.find(c => c.id === id);
       if (conv) setCurrentConversation(conv);
-      // Always reload messages from DB to ensure they are current
-      const { data, error } = await supabase
-        .from('messages')
-        .select('*')
-        .eq('conversation_id', id)
-        .order('created_at', { ascending: true });
+      const { data, error } = await supabase.from('messages').select('*').eq('conversation_id', id).order('created_at', { ascending: true });
       if (!error && data) setMessages(data);
     } catch (err) {
       console.error('Error selecting conversation:', err);
@@ -810,7 +800,6 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
             createdAt: currentConversation?.createdAt || new Date().toISOString(),
             updatedAt: new Date().toISOString(),
           };
-          // ADD to sidebar now that it has a message
           setConversations(prev => [newConv, ...prev.filter(c => c.id !== conversationId)]);
         } else {
           await supabase.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id', conversationId);

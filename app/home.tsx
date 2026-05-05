@@ -1276,8 +1276,6 @@ export default function HomeScreen() {
   const [guestLockModal, setGuestLockModal] = useState(false);
   const [guestLockFeature, setGuestLockFeature] = useState('');
   const [currentAIMode, setCurrentAIMode] = useState<AIMode>('instant');
-  const [photoUploadCount, setPhotoUploadCount] = useState(0);
-  const [photoUploadResetTime, setPhotoUploadResetTime] = useState<number>(0);
   const [sending, setSending] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [selectedMedia, setSelectedMedia] = useState<MediaFile[]>([]);
@@ -1663,10 +1661,7 @@ export default function HomeScreen() {
         setIsAppActive(true);
         if (autoLockTimerRef.current) { clearTimeout(autoLockTimerRef.current); autoLockTimerRef.current = null; }
         Animated.timing(fadeAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start(() => setShowBlurOverlay(false));
-        // Always reload messages when returning from background to restore them
-        if (currentConversation?.id && !currentConversation.id.startsWith('guest-') && !currentConversation.id.startsWith('local-')) {
-          selectConversation(currentConversation.id);
-        }
+        if (currentConversation?.id) selectConversation(currentConversation.id);
       }
     });
     return () => subscription.remove();
@@ -2075,39 +2070,29 @@ Be thorough and cite specific facts.`;
       return;
     }
 
-    // ── Photo upload limits: Pro = 10/session, Free = 4/24h ──
-    const imageFiles = currentMedia.filter(m => m.type === 'image');
-    if (imageFiles.length > 0 && !isGuest && !isAdmin) {
-      if (isPro || isUnlimited) {
-        if (photoUploadCount + imageFiles.length > 10) {
-          showAlert('Session Limit', `Pro plan allows 10 photo uploads per session. You've used ${photoUploadCount}. Start a new chat to reset.`, [{ text: 'OK', style: 'cancel' }]);
-          return;
-        }
-        setPhotoUploadCount(prev => prev + imageFiles.length);
-      } else {
-        const now = Date.now();
-        const isNewWindow = photoUploadResetTime === 0 || now - photoUploadResetTime > 24 * 60 * 60 * 1000;
-        const currentCount = isNewWindow ? 0 : photoUploadCount;
-        if (currentCount + imageFiles.length > 4) {
-          const hoursLeft = isNewWindow ? 0 : Math.ceil((24 * 60 * 60 * 1000 - (now - photoUploadResetTime)) / (60 * 60 * 1000));
-          showAlert('Daily Photo Limit', `Free plan allows 4 photos per 24h.${hoursLeft > 0 ? ` Resets in ${hoursLeft}h.` : ''} Upgrade for 10/session.`, [{ text: 'Cancel', style: 'cancel' }, { text: 'Get Plus', onPress: () => router.push('/subscription') }]);
-          return;
-        }
-        if (isNewWindow) setPhotoUploadResetTime(now);
-        setPhotoUploadCount(currentCount + imageFiles.length);
-      }
-    }
-
-    // ── Free user file limits: 1 doc, 5MB max ──
-    const docFiles = currentMedia.filter(m => m.type !== 'image');
-    if (!isGuest && !isPro && !isUnlimited && !isAdmin && docFiles.length > 0) {
-      if (docFiles.length > 1) {
-        showAlert('File Limit', 'Free plan allows 1 file per message. Upgrade to Plus for unlimited.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Get Plus', onPress: () => router.push('/subscription') }]);
+    // ── Free user file limits: 1 file, 5MB max ──────────────────────────────
+    if (!isGuest && !isPro && !isUnlimited && !isAdmin && currentMedia.length > 0) {
+      if (currentMedia.length > 1) {
+        showAlert(
+          'File Limit',
+          'Free plan allows 1 file per message. Upgrade to Plus for unlimited files.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Get Plus', onPress: () => router.push('/subscription') },
+          ]
+        );
         return;
       }
-      const file = docFiles[0];
+      const file = currentMedia[0];
       if (file.size && file.size > 5 * 1024 * 1024) {
-        showAlert('File Too Large', 'Free plan supports files up to 5MB. Upgrade to Plus for larger files.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Get Plus', onPress: () => router.push('/subscription') }]);
+        showAlert(
+          'File Too Large',
+          'Free plan supports files up to 5MB. Upgrade to Plus for larger files.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Get Plus', onPress: () => router.push('/subscription') },
+          ]
+        );
         return;
       }
     }
@@ -2432,10 +2417,8 @@ Be thorough and cite specific facts.`;
     if ((messages || []).length > 0) await createConversation();
     setInputText(''); setSelectedMedia([]); setEditingMessageId(null);
     setGroupChatMode(false); setTemporaryChatMode(false);
-    // Reset photo upload count for new session (Pro plan: 10/session)
-    if (isPro || isUnlimited) setPhotoUploadCount(0);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-  }, [createConversation, messages, isPro, isUnlimited]);
+  }, [createConversation, messages]);
 
   const handleDeleteConversation = useCallback(async () => {
     if (!currentConversation) return;
