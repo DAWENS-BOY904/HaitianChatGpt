@@ -59,12 +59,6 @@ interface MessageItemProps {
   onReply?: (message: Message) => void;
   onDelete?: (messageId: string) => void;
   onChunkRendered?: () => void;
-  // Like/unlike state for inline action row
-  isLiked?: boolean;
-  isUnliked?: boolean;
-  onLike?: (messageId: string) => void;
-  onUnlike?: (messageId: string) => void;
-  onOpenActions?: (message: Message) => void;
 }
 
 // ── Safety keywords ──────────────────────────────────────────────────────────
@@ -500,11 +494,6 @@ export const MessageItem = memo(function MessageItem({
   onReply,
   onDelete,
   onChunkRendered,
-  isLiked = false,
-  isUnliked = false,
-  onLike,
-  onUnlike,
-  onOpenActions,
 }: MessageItemProps) {
   const { colors, isDark } = useTheme();
   const { settings } = useSettings();
@@ -865,51 +854,48 @@ export const MessageItem = memo(function MessageItem({
             </TouchableOpacity>
           ) : null}
 
-          {/* Action row: copy, like, unlike, ... */}
+          {/* Action row */}
           {!isGenerating && !streaming && content ? (
             <View style={assistantStyles.actionRow}>
-              {/* Copy */}
               <TouchableOpacity
                 onPress={onCopy}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 style={assistantStyles.actionBtn}
               >
-                <Ionicons name="copy-outline" size={18} color={colors.textSecondary} />
+                <Ionicons name="copy-outline" size={17} color={colors.textSecondary} />
               </TouchableOpacity>
-              {/* Like 👍 */}
+              {/* Read aloud using user-selected ElevenLabs voice */}
               <TouchableOpacity
-                onPress={() => onLike?.(message.id)}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                onPress={handleReadAloud}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 style={assistantStyles.actionBtn}
               >
-                <Ionicons
-                  name={isLiked ? 'thumbs-up' : 'thumbs-up-outline'}
-                  size={18}
-                  color={isLiked ? '#10A37F' : colors.textSecondary}
-                />
+                {ttsLoading ? (
+                  <ActivityIndicator size="small" color={colors.textSecondary} />
+                ) : (
+                  <Ionicons name={ttsPlaying ? 'stop-circle-outline' : 'volume-high-outline'} size={17} color={ttsPlaying ? '#10A37F' : colors.textSecondary} />
+                )}
               </TouchableOpacity>
-              {/* Unlike 👎 — hidden when liked */}
-              {!isLiked ? (
+              <TouchableOpacity
+                onPress={async () => {
+                  try {
+                    await Share.share({ message: content });
+                  } catch (_e) {}
+                }}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                style={assistantStyles.actionBtn}
+              >
+                <Ionicons name="share-outline" size={17} color={colors.textSecondary} />
+              </TouchableOpacity>
+              {onReply ? (
                 <TouchableOpacity
-                  onPress={() => onUnlike?.(message.id)}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  onPress={() => onReply(message)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   style={assistantStyles.actionBtn}
                 >
-                  <Ionicons
-                    name={isUnliked ? 'thumbs-down' : 'thumbs-down-outline'}
-                    size={18}
-                    color={isUnliked ? '#FF453A' : colors.textSecondary}
-                  />
+                  <Ionicons name="return-down-forward-outline" size={17} color={colors.textSecondary} />
                 </TouchableOpacity>
               ) : null}
-              {/* Three dots — opens message action modal */}
-              <TouchableOpacity
-                onPress={() => onOpenActions?.(message)}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                style={assistantStyles.actionBtn}
-              >
-                <Ionicons name="ellipsis-horizontal" size={18} color={colors.textSecondary} />
-              </TouchableOpacity>
             </View>
           ) : null}
         </View>
