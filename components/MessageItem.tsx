@@ -98,78 +98,47 @@ interface UnsplashResult {
   links?: { html?: string };
 }
 
-// ── Horizontal scrollable image grid (web search / AI image results) ──────────
-const ImageGrid = memo(function ImageGrid({ images, onPress, onSendToChat }: {
+// ── Inline image grid (from AI image search results) ─────────────────────────
+const ImageGrid = memo(function ImageGrid({ images, onPress }: {
   images: Array<{ url: string; title?: string; link?: string }>;
   onPress: (url: string, index: number) => void;
-  onSendToChat?: (url: string) => void;
 }) {
   const { isDark } = useTheme();
   if (!images || images.length === 0) return null;
-
-  const CARD_W = images.length === 1 ? Math.min(Dimensions.get('window').width - 64, 280) : 150;
-  const CARD_H = images.length === 1 ? CARD_W * 0.65 : 110;
+  const cols = images.length === 1 ? 1 : 2;
+  const { width: screenW } = Dimensions.get('window');
+  const imgW = images.length === 1 ? Math.min(screenW - 64, 320) : (Math.min(screenW - 64, 320) - 8) / 2;
+  const imgH = images.length === 1 ? imgW * 0.65 : imgW * 0.75;
 
   return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={{ paddingVertical: 8, gap: 10, paddingRight: 4 }}
-      style={{ marginTop: 8, marginBottom: 4 }}
-    >
-      {images.slice(0, 8).map((img, i) => (
-        <View
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10, marginBottom: 4 }}>
+      {images.slice(0, 6).map((img, i) => (
+        <TouchableOpacity
           key={`img-${i}-${img.url}`}
+          onPress={() => onPress(img.url, i)}
+          activeOpacity={0.85}
           style={{
-            width: CARD_W,
-            borderRadius: 16,
+            width: imgW,
+            height: imgH,
+            borderRadius: 14,
             overflow: 'hidden',
             backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA',
-            borderWidth: 1,
-            borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: 0.15,
-            shadowRadius: 6,
-            elevation: 3,
           }}
         >
-          <TouchableOpacity onPress={() => onPress(img.url, i)} activeOpacity={0.88}>
-            <Image
-              source={{ uri: img.url }}
-              style={{ width: CARD_W, height: CARD_H }}
-              contentFit="cover"
-              transition={200}
-            />
-          </TouchableOpacity>
+          <Image
+            source={{ uri: img.url }}
+            style={{ width: imgW, height: imgH }}
+            contentFit="cover"
+            transition={200}
+          />
           {img.title ? (
-            <View style={{ paddingHorizontal: 8, paddingVertical: 6 }}>
-              <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 11, fontWeight: '600' }} numberOfLines={1}>{img.title}</Text>
+            <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.48)', padding: 6 }}>
+              <Text style={{ color: '#FFF', fontSize: 11, fontWeight: '600' }} numberOfLines={1}>{img.title}</Text>
             </View>
           ) : null}
-          {/* Send to chat button */}
-          {onSendToChat ? (
-            <TouchableOpacity
-              onPress={() => onSendToChat(img.url)}
-              activeOpacity={0.75}
-              style={{
-                position: 'absolute',
-                top: 6,
-                right: 6,
-                width: 28,
-                height: 28,
-                borderRadius: 14,
-                backgroundColor: 'rgba(0,0,0,0.55)',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Ionicons name="send" size={13} color="#FFF" />
-            </TouchableOpacity>
-          ) : null}
-        </View>
+        </TouchableOpacity>
       ))}
-    </ScrollView>
+    </View>
   );
 });
 
@@ -627,14 +596,6 @@ export const MessageItem = memo(function MessageItem({
     }
   }
 
-  // Send image from grid to parent chat as an attachment
-  const handleSendImageToChat = useCallback((url: string) => {
-    // Navigate back and attach; we pass via a global event approach
-    // Just open fullscreen + copy URL for now — caller handles attach
-    Clipboard.setStringAsync(url).catch(() => {});
-    Alert.alert('Image URL Copied', 'Paste it or the parent will attach it automatically.');
-  }, []);
-
   const handlePhonePress = useCallback((num: string) => {
     setPendingPhone(num);
     setPhoneModalVisible(true);
@@ -858,45 +819,19 @@ export const MessageItem = memo(function MessageItem({
                 );
               }
 
-              // Native text selection via selectable Text — works on both iOS & Android
-              const hasLinks = block.content.match(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)|https?:\/\/\S+/g);
-              if (hasLinks) {
-                // Render with inline links (non-selectable mode for rich content)
-                return (
-                  <View key={bi} style={{ marginVertical: 3 }}>
-                    <Text
-                      selectable
-                      selectionColor={colors.primary + '55'}
-                      style={{ fontSize: 16, color: colors.text, lineHeight: 25 }}
-                    >
-                      {parseInlineMarkdown(block.content).map((seg, si) => {
-                        if (seg.type === 'bold') return <Text key={si} style={{ fontWeight: '700' }}>{seg.content}</Text>;
-                        if (seg.type === 'italic') return <Text key={si} style={{ fontStyle: 'italic' }}>{seg.content}</Text>;
-                        if (seg.type === 'code_inline') return <Text key={si} style={{ fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', backgroundColor: 'rgba(128,128,128,0.15)', borderRadius: 4 }}>{' '}{seg.content}{' '}</Text>;
-                        if (seg.type === 'phone') return <Text key={si} style={{ color: '#34C759', textDecorationLine: 'underline' }} onPress={() => handlePhonePress(seg.content)}>{seg.content}</Text>;
-                        if (seg.type === 'link') return <Text key={si} style={{ color: '#007AFF', textDecorationLine: 'underline' }} onPress={() => handleLinkPress(seg.url || seg.content)}>{seg.content}</Text>;
-                        return <Text key={si}>{seg.content}</Text>;
-                      })}
-                    </Text>
-                  </View>
-                );
-              }
-
-              // Plain text paragraph — use selectable Text for full native selection
               return (
                 <View key={bi} style={{ marginVertical: 3 }}>
                   <Text
                     selectable
-                    selectionColor={colors.primary + '55'}
                     style={{ fontSize: 16, color: colors.text, lineHeight: 25 }}
                   >
-                    {parseInlineMarkdown(block.content).map((seg, si) => {
-                      if (seg.type === 'bold') return <Text key={si} style={{ fontWeight: '700' }}>{seg.content}</Text>;
-                      if (seg.type === 'italic') return <Text key={si} style={{ fontStyle: 'italic' }}>{seg.content}</Text>;
-                      if (seg.type === 'code_inline') return <Text key={si} style={{ fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', backgroundColor: 'rgba(128,128,128,0.15)', borderRadius: 4 }}>{' '}{seg.content}{' '}</Text>;
-                      if (seg.type === 'phone') return <Text key={si} style={{ color: '#34C759', textDecorationLine: 'underline' }} onPress={() => handlePhonePress(seg.content)}>{seg.content}</Text>;
-                      if (seg.type === 'link') return <Text key={si} style={{ color: '#007AFF', textDecorationLine: 'underline' }} onPress={() => handleLinkPress(seg.url || seg.content)}>{seg.content}</Text>;
-                      return <Text key={si}>{seg.content}</Text>;
+                    {parseInlineMarkdown(block.content).map((seg, i) => {
+                      if (seg.type === 'bold') return <Text key={i} style={{ fontWeight: '700' }}>{seg.content}</Text>;
+                      if (seg.type === 'italic') return <Text key={i} style={{ fontStyle: 'italic' }}>{seg.content}</Text>;
+                      if (seg.type === 'code_inline') return <Text key={i} style={{ fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', backgroundColor: 'rgba(128,128,128,0.15)', borderRadius: 4 }}>{' '}{seg.content}{' '}</Text>;
+                      if (seg.type === 'phone') return <Text key={i} style={{ color: '#34C759', textDecorationLine: 'underline' }} onPress={() => handlePhonePress(seg.content)}>{seg.content}</Text>;
+                      if (seg.type === 'link') return <Text key={i} style={{ color: '#007AFF', textDecorationLine: 'underline' }} onPress={() => handleLinkPress(seg.url || seg.content)}>{seg.content}</Text>;
+                      return <Text key={i}>{seg.content}</Text>;
                     })}
                   </Text>
                 </View>
@@ -906,12 +841,11 @@ export const MessageItem = memo(function MessageItem({
             return null;
           })}
 
-          {/* Horizontal scrollable image grid for images found in content */}
+          {/* Inline image grid for images found in content */}
           {embeddedImages.length > 0 ? (
             <ImageGrid
               images={embeddedImages}
               onPress={(url, idx) => handleImagePress(url, allImageUrls, idx)}
-              onSendToChat={handleSendImageToChat}
             />
           ) : null}
 
