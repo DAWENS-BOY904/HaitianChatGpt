@@ -11,7 +11,6 @@ import {
   Pressable,
   Platform,
   ScrollView,
-  Clipboard,
   Share,
   ActivityIndicator,
   Dimensions,
@@ -24,7 +23,7 @@ import { BlurView } from 'expo-blur';
 import { CodeBlock } from './CodeBlock';
 import { SourcesModal } from './SourcesModal';
 import { LinkSafetyModal } from './LinkSafetyModal';
-import * as Clipboard2 from 'expo-clipboard';
+import * as Clipboard from 'expo-clipboard';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 

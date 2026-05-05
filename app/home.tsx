@@ -2747,16 +2747,18 @@ Be thorough and cite specific facts.`;
     blurContent: { alignItems: 'center', justifyContent: 'center' },
     blurText: { fontSize: 24, fontWeight: 'bold', color: 'white', marginTop: 16 },
     messagesContainer: { flex: 1 },
-    inputContainer: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 10, paddingBottom: Platform.select({ ios: insets.bottom + 8, android: insets.bottom + 8, default: 8 }), paddingTop: 8, gap: 8, backgroundColor: Platform.OS === 'ios' ? 'transparent' : colors.background },
-    inputWrapper: { flex: 1, backgroundColor: isDark ? '#1C1C1E' : '#F0F0F5', borderRadius: 26, paddingHorizontal: 14, paddingVertical: 10, minHeight: 52, maxHeight: 420, gap: 0 },
-    input: { fontSize: 16, color: colors.text, paddingVertical: 6, maxHeight: 160, minHeight: 34 },
-    recordingContainer: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8 },
+    inputContainer: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 10, paddingBottom: Platform.select({ ios: insets.bottom + 6, android: insets.bottom + 6, default: 6 }), paddingTop: 6, gap: 8, backgroundColor: Platform.OS === 'ios' ? 'transparent' : colors.background },
+    inputWrapper: { flex: 1, borderRadius: 28, paddingHorizontal: 14, paddingTop: 10, paddingBottom: 8, minHeight: 50, maxHeight: 420, borderWidth: 1 },
+    inputRow: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 32 },
+    input: { flex: 1, fontSize: 16, color: colors.text, paddingVertical: 0, maxHeight: 160, minHeight: 22, lineHeight: 22 },
+    recordingRow: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 36 },
     recordingDuration: { color: '#FF3B30', fontSize: 13, fontWeight: '600', minWidth: 36 },
-    addBtn: { width: 42, height: 42, borderRadius: 21, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', marginBottom: 2 },
-    micBtn: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
-    sendButton: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', marginRight: 2 },
-    stopButton: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#FF3B30', alignItems: 'center', justifyContent: 'center' },
-    voiceOrbBtn: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center', marginBottom: 2, shadowColor: colors.primary, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.4, shadowRadius: 6, elevation: 4 },
+    addBtn: { alignItems: 'center', justifyContent: 'center', marginBottom: 2 },
+    addBtnCircle: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
+    micBtn: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+    sendButton: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
+    stopButton: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#FF3B30', alignItems: 'center', justifyContent: 'center' },
+    voiceOrbBtn: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', shadowColor: colors.primary, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.35, shadowRadius: 5, elevation: 4 },
     emptyState: { flex: 1 },
     loadingContainer: { padding: Spacing.md, alignItems: 'center' },
     documentPreview: { width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', padding: 4 },
@@ -3175,72 +3177,78 @@ Be thorough and cite specific facts.`;
               ) : null}
 
               {/* Input Area */}
+              {/* ── ChatGPT-style input bar ── */}
               <View style={[styles.inputContainer, Platform.OS === 'ios' && { backgroundColor: 'transparent' }]}>
-
+                {/* + Add button — outside the input pill */}
                 {!editingMessageId && !isRecording && !isProcessing ? (
                   <TouchableOpacity
                     style={styles.addBtn}
                     onPress={() => setToolsVisible(true)}
+                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                   >
-                    {Platform.OS === 'ios' ? (
-                      <BlurView intensity={60} tint={isDark ? 'dark' : 'light'} style={{ width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' }}>
-                        <Ionicons name="add" size={24} color={colors.text} />
-                      </BlurView>
-                    ) : (
-                      <View style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA', alignItems: 'center', justifyContent: 'center' }}>
-                        <Ionicons name="add" size={24} color={colors.text} />
-                      </View>
-                    )}
+                    <View style={[
+                      styles.addBtnCircle,
+                      { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)', borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)' },
+                    ]}>
+                      <Ionicons name="add" size={22} color={colors.text} />
+                    </View>
                   </TouchableOpacity>
                 ) : null}
 
-                {/* Input wrapper with media previews and text input */}
-                <Pressable style={styles.inputWrapper} onPress={() => inputRef.current?.focus()}>
+                {/* Input pill: media previews + text input + mic + send */}
+                <Pressable
+                  style={[
+                    styles.inputWrapper,
+                    { backgroundColor: isDark ? '#1C1C1E' : '#EFEFEF', borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)' },
+                  ]}
+                  onPress={() => inputRef.current?.focus()}
+                >
+                  {/* Media previews at top of pill */}
                   {renderInlineMediaPreviews()}
+
+                  {/* Recording state */}
                   {isRecording || isProcessing ? (
-                    <View style={styles.recordingContainer}>
+                    <View style={styles.recordingRow}>
                       <WaveformAnimation isRecording={isRecording} />
                       <Text style={styles.recordingDuration}>
                         {isProcessing ? 'Processing...' : formatDuration(recordingDuration)}
                       </Text>
-                      <TouchableOpacity onPress={toggleRecording} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                        <Ionicons name="stop-circle" size={28} color="#FF3B30" />
-                      </TouchableOpacity>
                     </View>
                   ) : (
-                    <TextInput
-                      ref={inputRef}
-                      style={styles.input}
-                      value={inputText}
-                      onChangeText={handleInputChange}
-                      placeholder={deepResearchMode ? 'Enter research topic...' : 'Ask anything'}
-                      placeholderTextColor={colors.textSecondary}
-                      multiline
-                      returnKeyType="default"
-                      blurOnSubmit={false}
-                      scrollEnabled
-                      textAlignVertical="top"
-                    />
-                  )}
-                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: selectedMedia.length > 0 ? 4 : 0 }}>
-                    <TouchableOpacity
-                      onPress={toggleRecording}
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                      style={{ opacity: isProcessing ? 0.5 : 1 }}
-                    >
-                      <Ionicons
-                        name={isRecording ? 'stop-circle-outline' : 'mic-outline'}
-                        size={22}
-                        color={isRecording ? '#FF3B30' : colors.textSecondary}
+                    /* Single-row: text + mic + send */
+                    <View style={styles.inputRow}>
+                      <TextInput
+                        ref={inputRef}
+                        style={styles.input}
+                        value={inputText}
+                        onChangeText={handleInputChange}
+                        placeholder={deepResearchMode ? 'Research topic...' : 'Ask anything'}
+                        placeholderTextColor={colors.textSecondary}
+                        multiline
+                        returnKeyType="default"
+                        blurOnSubmit={false}
+                        scrollEnabled
+                        textAlignVertical="center"
                       />
-                    </TouchableOpacity>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      {/* Mic button */}
+                      <TouchableOpacity
+                        onPress={toggleRecording}
+                        hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
+                        style={{ opacity: isProcessing ? 0.5 : 1, paddingHorizontal: 4 }}
+                      >
+                        <Ionicons
+                          name="mic-outline"
+                          size={21}
+                          color={colors.textSecondary}
+                        />
+                      </TouchableOpacity>
+                      {/* Send / Stop / Voice orb */}
                       {sending ? (
                         <TouchableOpacity
-                          style={[styles.sendButton, { backgroundColor: isDark ? '#3A3A3C' : '#E5E5EA' }]}
+                          style={[styles.sendButton, { backgroundColor: isDark ? '#3A3A3C' : '#DCDCDC' }]}
                           onPress={handleStopGeneration}
                         >
-                          <View style={{ width: 11, height: 11, backgroundColor: colors.text, borderRadius: 2 }} />
+                          <View style={{ width: 10, height: 10, backgroundColor: colors.text, borderRadius: 2 }} />
                         </TouchableOpacity>
                       ) : showSendButton ? (
                         <TouchableOpacity
@@ -3248,21 +3256,18 @@ Be thorough and cite specific facts.`;
                           onPress={handleSend}
                           disabled={isRecording || isProcessing}
                         >
-                          {deepResearchMode
-                            ? <Ionicons name="search" size={17} color="#FFFFFF" />
-                            : <Ionicons name="arrow-up" size={19} color="#FFFFFF" />}
+                          <Ionicons name="arrow-up" size={18} color="#FFFFFF" />
                         </TouchableOpacity>
                       ) : (
                         <TouchableOpacity
                           style={[styles.voiceOrbBtn, { backgroundColor: accentColor }]}
                           onPress={() => router.push('/voice-control')}
-                          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                         >
-                          <Ionicons name="pulse" size={18} color="#FFFFFF" />
+                          <Ionicons name="pulse" size={17} color="#FFFFFF" />
                         </TouchableOpacity>
                       )}
                     </View>
-                  </View>
+                  )}
                 </Pressable>
               </View>
             </KeyboardAvoidingView>
