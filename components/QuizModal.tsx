@@ -10,14 +10,13 @@ import {
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '../hooks/useTheme';
 
 const { width: SW } = Dimensions.get('window');
 
 export interface QuizQuestion {
   question: string;
   options: string[];
-  answer: number;
+  answer: number; // index of correct option (0-A, 1-B, 2-C, 3-D)
   explanation?: string;
 }
 
@@ -44,9 +43,10 @@ interface QuizViewProps {
   quizHistory?: QuizHistoryEntry[];
   onComplete?: () => void;
   preGeneratedQuestions?: QuizQuestion[] | null;
-  onNextQuiz?: () => Promise<void>;
+  onNextQuiz?: () => Promise<void>; // instant next quiz — no topic picker
 }
 
+// ── Export for compatibility ──
 export interface QuizModalProps extends QuizViewProps {
   visible: boolean;
   quizHistory?: QuizHistoryEntry[];
@@ -54,33 +54,8 @@ export interface QuizModalProps extends QuizViewProps {
 
 const OPTION_LABELS = ['A', 'B', 'C', 'D'];
 
+// ── Inline quiz widget that renders directly in the chat page ──
 export function QuizView({ questions, onClose, onViewResults, onTryAnother, onHarderQuiz, quizHistory, onComplete, preGeneratedQuestions, onNextQuiz }: QuizViewProps) {
-  const { colors, isDark } = useTheme();
-
-  // Dynamic theme tokens
-  const wrapBg = isDark ? '#111113' : '#F2F2F7';
-  const cardBg = isDark ? 'rgba(28,28,32,0.98)' : 'rgba(255,255,255,0.98)';
-  const cardBorder = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.08)';
-  const textC = isDark ? '#FFFFFF' : '#000000';
-  const subC = isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.5)';
-  const headerTitleC = isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.45)';
-  const progressBg = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)';
-  const qBoxBorder = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)';
-  const optionBorder = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)';
-  const letterBg = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.07)';
-  const letterTextC = isDark ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.6)';
-  const optionTextC = isDark ? 'rgba(255,255,255,0.88)' : 'rgba(0,0,0,0.82)';
-  const viewResultsBg = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.07)';
-  const viewResultsBorder = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)';
-  const nextBg = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)';
-  const nextBorder = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.06)';
-  const nextSubC = isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.38)';
-  const historyBg = isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)';
-  const historyBorder = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)';
-  const historyTopicC = isDark ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.8)';
-  const historyDateC = isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)';
-  const aiMsgC = isDark ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.6)';
-
   const [currentQ, setCurrentQ] = useState(0);
   const [answers, setAnswers] = useState<QuizAnswer[]>([]);
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
@@ -97,6 +72,7 @@ export function QuizView({ questions, onClose, onViewResults, onTryAnother, onHa
   const total = questions.length;
 
   useEffect(() => {
+    // Reset on new questions
     setCurrentQ(0);
     setAnswers([]);
     setSelectedOption(null);
@@ -123,6 +99,7 @@ export function QuizView({ questions, onClose, onViewResults, onTryAnother, onHa
     const newAnswers = [...answers, ans];
     setAnswers(newAnswers);
     if (ans.correct) setScore(s => s + 1);
+
     setTimeout(() => {
       const nextIdx = currentQ + 1;
       if (nextIdx >= total) {
@@ -143,8 +120,10 @@ export function QuizView({ questions, onClose, onViewResults, onTryAnother, onHa
   const handleOptionSelect = (optionIdx: number) => {
     if (showFeedback === 'correct') return;
     if (!q) return;
+
     setSelectedOption(optionIdx);
     const isCorrect = optionIdx === q.answer;
+
     if (isCorrect) {
       setShowFeedback('correct');
       nextQuestion({ questionIndex: currentQ, chosenIndex: optionIdx, correct: true });
@@ -154,9 +133,14 @@ export function QuizView({ questions, onClose, onViewResults, onTryAnother, onHa
       const newWrong = wrongAttempts + 1;
       setWrongAttempts(newWrong);
       if (newWrong >= 2) {
-        setTimeout(() => { nextQuestion({ questionIndex: currentQ, chosenIndex: optionIdx, correct: false }); }, 800);
+        setTimeout(() => {
+          nextQuestion({ questionIndex: currentQ, chosenIndex: optionIdx, correct: false });
+        }, 800);
       } else {
-        setTimeout(() => { setSelectedOption(null); setShowFeedback(null); }, 700);
+        setTimeout(() => {
+          setSelectedOption(null);
+          setShowFeedback(null);
+        }, 700);
       }
     }
   };
@@ -171,13 +155,22 @@ export function QuizView({ questions, onClose, onViewResults, onTryAnother, onHa
   };
 
   const getDifficultyColor = (diff: string) => {
-    const map: Record<string, string> = { Easy: '#34C759', Medium: '#5AC8FA', Hard: '#FF9F0A', Expert: '#FF453A' };
+    const map: Record<string, string> = {
+      Easy: '#34C759',
+      Medium: '#5AC8FA',
+      Hard: '#FF9F0A',
+      Expert: '#FF453A',
+    };
     return map[diff] || '#8E8E93';
   };
 
   const formatDate = (iso: string) => {
-    try { return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); }
-    catch { return ''; }
+    try {
+      const d = new Date(iso);
+      return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    } catch {
+      return '';
+    }
   };
 
   const getOptionBg = (idx: number) => {
@@ -189,42 +182,45 @@ export function QuizView({ questions, onClose, onViewResults, onTryAnother, onHa
   const getLetterBg = (idx: number) => {
     if (showFeedback === 'correct' && selectedOption === idx) return '#34C759';
     if (showFeedback === 'wrong' && selectedOption === idx) return '#FF453A';
-    return letterBg;
+    return 'rgba(255,255,255,0.12)';
   };
 
   return (
-    <View style={[s.wrapper, { backgroundColor: wrapBg }]}>
-      {/* Header */}
+    <View style={s.wrapper}>
+      {/* Header — no X button; quiz stays until results are viewed */}
       <View style={s.header}>
         <View style={s.closeBtn} />
-        <Text style={[s.headerTitle, { color: headerTitleC }]}>Quizzes</Text>
+        <Text style={s.headerTitle}>Quizzes</Text>
         <View style={s.thumbsRow}>
           <TouchableOpacity style={s.thumbBtn}>
-            <Ionicons name="thumbs-up-outline" size={18} color={subC} />
+            <Ionicons name="thumbs-up-outline" size={18} color="rgba(255,255,255,0.55)" />
           </TouchableOpacity>
           <TouchableOpacity style={s.thumbBtn}>
-            <Ionicons name="thumbs-down-outline" size={18} color={subC} />
+            <Ionicons name="thumbs-down-outline" size={18} color="rgba(255,255,255,0.55)" />
           </TouchableOpacity>
         </View>
       </View>
 
       {/* Card */}
       {!finished ? (
-        <Animated.View style={[s.card, { opacity: fadeAnim, transform: [{ translateX: shakeAnim }], backgroundColor: cardBg, borderColor: cardBorder }]}>
-          <View style={[s.progressBar, { backgroundColor: progressBg }]}>
+        <Animated.View style={[s.card, { opacity: fadeAnim, transform: [{ translateX: shakeAnim }] }]}>
+          {/* Gradient-like top bar */}
+          <View style={s.progressBar}>
             <View style={[s.progressFill, { width: `${((currentQ) / total) * 100}%` }]} />
           </View>
-          <Text style={[s.progressText, { color: subC }]}>{currentQ + 1} / {total}</Text>
+          <Text style={s.progressText}>{currentQ + 1} / {total}</Text>
 
-          <View style={[s.questionBox, { borderBottomColor: qBoxBorder }]}>
-            <Text style={[s.questionText, { color: textC }]}>{q?.question}</Text>
+          {/* Question */}
+          <View style={s.questionBox}>
+            <Text style={s.questionText}>{q?.question}</Text>
           </View>
 
+          {/* Options */}
           <View style={s.optionsWrap}>
             {q?.options.map((opt, idx) => (
               <TouchableOpacity
                 key={idx}
-                style={[s.option, { backgroundColor: getOptionBg(idx), borderBottomColor: optionBorder }]}
+                style={[s.option, { backgroundColor: getOptionBg(idx) }]}
                 onPress={() => handleOptionSelect(idx)}
                 activeOpacity={0.75}
                 disabled={showFeedback === 'correct'}
@@ -235,10 +231,10 @@ export function QuizView({ questions, onClose, onViewResults, onTryAnother, onHa
                   ) : showFeedback === 'wrong' && selectedOption === idx ? (
                     <Ionicons name="close" size={14} color="#FFF" />
                   ) : (
-                    <Text style={[s.optionLetterText, { color: letterTextC }]}>{OPTION_LABELS[idx]}</Text>
+                    <Text style={s.optionLetterText}>{OPTION_LABELS[idx]}</Text>
                   )}
                 </View>
-                <Text style={[s.optionText, { color: optionTextC }]}>{opt}</Text>
+                <Text style={s.optionText}>{opt}</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -248,50 +244,59 @@ export function QuizView({ questions, onClose, onViewResults, onTryAnother, onHa
           )}
         </Animated.View>
       ) : (
-        <View style={[s.card, { backgroundColor: cardBg, borderColor: cardBorder }]}>
+        /* Completion Card */
+        <View style={s.card}>
           <View style={s.completionTop}>
-            <Text style={[s.scoreLabel, { color: textC }]}>{score} / {total}</Text>
-            <Text style={[s.scoreMessage, { color: subC }]}>{getScoreMessage()}</Text>
+            <Text style={s.scoreLabel}>{score} / {total}</Text>
+            <Text style={s.scoreMessage}>{getScoreMessage()}</Text>
           </View>
 
-          <TouchableOpacity style={[s.viewResultsBtn, { backgroundColor: viewResultsBg, borderColor: viewResultsBorder }]} onPress={() => onViewResults(answers, questions)}>
-            <Text style={[s.viewResultsBtnText, { color: textC }]}>View results</Text>
+          <TouchableOpacity style={s.viewResultsBtn} onPress={() => onViewResults(answers, questions)}>
+            <Text style={s.viewResultsBtnText}>View results</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[s.nextQuizBtn, { backgroundColor: nextBg, borderColor: nextBorder }, loadingNext && { opacity: 0.6 }]}
+            style={[s.nextQuizBtn, loadingNext && { opacity: 0.6 }]}
             disabled={loadingNext}
             onPress={async () => {
-              if (onNextQuiz) { setLoadingNext(true); try { await onNextQuiz(); } finally { setLoadingNext(false); } }
-              else { onTryAnother(); }
+              if (onNextQuiz) {
+                setLoadingNext(true);
+                try { await onNextQuiz(); } finally { setLoadingNext(false); }
+              } else {
+                onTryAnother();
+              }
             }}
           >
             {loadingNext ? (
-              <Text style={[s.nextQuizLabel, { color: textC }]}>Generating quiz…</Text>
+              <Text style={s.nextQuizLabel}>Generating quiz…</Text>
             ) : (
               <>
-                <Text style={[s.nextQuizLabel, { color: textC }]}>Next quiz</Text>
-                <Text style={[s.nextQuizSub, { color: nextSubC }]}>Try another general knowledge quiz</Text>
+                <Text style={s.nextQuizLabel}>Next quiz</Text>
+                <Text style={s.nextQuizSub}>Try another general knowledge quiz</Text>
               </>
             )}
           </TouchableOpacity>
 
+          {/* Quiz History */}
           {quizHistory && quizHistory.length > 0 && (
-            <View style={[s.historySection, { backgroundColor: historyBg, borderColor: historyBorder }]}>
-              <Text style={[s.historySectionTitle, { color: subC }]}>My Quiz History</Text>
+            <View style={s.historySection}>
+              <Text style={s.historySectionTitle}>My Quiz History</Text>
               {quizHistory.slice(0, 5).map((entry, i) => (
-                <View key={i} style={[s.historyRow, { borderTopColor: historyBorder }]}>
+                <View key={i} style={s.historyRow}>
                   <View style={s.historyLeft}>
-                    <Text style={[s.historyTopic, { color: historyTopicC }]} numberOfLines={1}>{entry.topic}</Text>
+                    <Text style={s.historyTopic} numberOfLines={1}>{entry.topic}</Text>
                     <View style={s.historyMeta}>
                       <View style={[s.diffBadge, { backgroundColor: getDifficultyColor(entry.difficulty) + '22', borderColor: getDifficultyColor(entry.difficulty) + '55' }]}>
                         <Text style={[s.diffBadgeText, { color: getDifficultyColor(entry.difficulty) }]}>{entry.difficulty}</Text>
                       </View>
-                      <Text style={[s.historyDate, { color: historyDateC }]}>{formatDate(entry.created_at)}</Text>
+                      <Text style={s.historyDate}>{formatDate(entry.created_at)}</Text>
                     </View>
                   </View>
                   <View style={s.historyScore}>
-                    <Text style={[s.historyScoreText, { color: entry.score / entry.total >= 0.7 ? '#34C759' : entry.score / entry.total >= 0.4 ? '#FF9F0A' : '#FF453A' }]}>{entry.score}/{entry.total}</Text>
+                    <Text style={[
+                      s.historyScoreText,
+                      { color: entry.score / entry.total >= 0.7 ? '#34C759' : entry.score / entry.total >= 0.4 ? '#FF9F0A' : '#FF453A' }
+                    ]}>{entry.score}/{entry.total}</Text>
                   </View>
                 </View>
               ))}
@@ -300,9 +305,10 @@ export function QuizView({ questions, onClose, onViewResults, onTryAnother, onHa
         </View>
       )}
 
+      {/* AI message + harder quiz link */}
       {!finished && (
         <View style={s.aiMsg}>
-          <Text style={[s.aiMsgText, { color: aiMsgC }]}>
+          <Text style={s.aiMsgText}>
             {"I've created a quiz for you 👆\nGo ahead and start answering the questions!\n\nIf you want a different type "}
             <Text style={s.harderLink} onPress={onHarderQuiz}>make a harder quiz</Text>
             {' or one focused on a topic you like 👍'}
@@ -313,52 +319,198 @@ export function QuizView({ questions, onClose, onViewResults, onTryAnother, onHa
   );
 }
 
+// ── Backward compat wrapper (no-op modal, renders inline when visible) ──
 export function QuizModal({ visible, questions, onClose, onViewResults, onTryAnother, onHarderQuiz, quizHistory }: QuizModalProps) {
   if (!visible) return null;
   return (
-    <QuizView questions={questions} onClose={onClose} onViewResults={onViewResults} onTryAnother={onTryAnother} onHarderQuiz={onHarderQuiz} quizHistory={quizHistory} />
+    <QuizView
+      questions={questions}
+      onClose={onClose}
+      onViewResults={onViewResults}
+      onTryAnother={onTryAnother}
+      onHarderQuiz={onHarderQuiz}
+      quizHistory={quizHistory}
+    />
   );
 }
 
 const s = StyleSheet.create({
-  wrapper: { borderRadius: 20, overflow: 'hidden', marginHorizontal: 0, marginVertical: 8 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 16, paddingBottom: 10 },
+  wrapper: {
+    backgroundColor: '#000',
+    borderRadius: 20,
+    overflow: 'hidden',
+    marginHorizontal: 0,
+    marginVertical: 8,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 10,
+  },
   closeBtn: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { fontSize: 15, fontWeight: '500' },
+  headerTitle: { color: 'rgba(255,255,255,0.6)', fontSize: 15, fontWeight: '500' },
   thumbsRow: { flexDirection: 'row', gap: 6 },
   thumbBtn: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
-  card: { marginHorizontal: 12, marginBottom: 12, borderRadius: 20, overflow: 'hidden', borderWidth: 1 },
-  progressBar: { height: 3 },
-  progressFill: { height: 3, backgroundColor: '#5AC8FA', borderRadius: 2 },
-  progressText: { fontSize: 12, fontWeight: '500', textAlign: 'center', paddingTop: 10, paddingBottom: 4 },
-  questionBox: { minHeight: 100, padding: 20, paddingTop: 10, justifyContent: 'center', borderBottomWidth: StyleSheet.hairlineWidth },
-  questionText: { fontSize: 18, fontWeight: '700', lineHeight: 26 },
-  optionsWrap: { paddingBottom: 8 },
-  option: { flexDirection: 'row', alignItems: 'center', paddingVertical: 15, paddingHorizontal: 16, gap: 14, borderBottomWidth: StyleSheet.hairlineWidth },
-  optionLetter: { width: 30, height: 30, borderRadius: 9, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  optionLetterText: { fontSize: 13, fontWeight: '700' },
-  optionText: { fontSize: 15, flex: 1, lineHeight: 21 },
-  hintText: { color: '#FF9F0A', fontSize: 13, textAlign: 'center', paddingVertical: 10, paddingHorizontal: 16 },
-  completionTop: { alignItems: 'center', paddingVertical: 32, paddingHorizontal: 20 },
-  scoreLabel: { fontSize: 40, fontWeight: '700', marginBottom: 10 },
-  scoreMessage: { fontSize: 17, textAlign: 'center', lineHeight: 24 },
-  viewResultsBtn: { marginHorizontal: 16, marginBottom: 10, borderRadius: 14, paddingVertical: 16, alignItems: 'center', borderWidth: 1 },
-  viewResultsBtnText: { fontSize: 16, fontWeight: '600' },
-  nextQuizBtn: { marginHorizontal: 16, marginBottom: 16, borderRadius: 14, paddingVertical: 14, alignItems: 'center', borderWidth: 1 },
-  nextQuizLabel: { fontSize: 14, fontWeight: '600' },
-  nextQuizSub: { fontSize: 12, marginTop: 2 },
-  aiMsg: { padding: 16, paddingBottom: 20 },
-  aiMsgText: { fontSize: 14, lineHeight: 21 },
+  card: {
+    marginHorizontal: 12,
+    marginBottom: 12,
+    backgroundColor: 'rgba(28,28,32,0.95)',
+    borderRadius: 20,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.07)',
+  },
+  progressBar: {
+    height: 3,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  progressFill: {
+    height: 3,
+    backgroundColor: '#5AC8FA',
+    borderRadius: 2,
+  },
+  progressText: {
+    color: 'rgba(255,255,255,0.45)',
+    fontSize: 12,
+    fontWeight: '500',
+    textAlign: 'center',
+    paddingTop: 10,
+    paddingBottom: 4,
+  },
+  questionBox: {
+    minHeight: 100,
+    padding: 20,
+    paddingTop: 10,
+    justifyContent: 'center',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(255,255,255,0.08)',
+  },
+  questionText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '700',
+    lineHeight: 26,
+  },
+  optionsWrap: {
+    paddingBottom: 8,
+  },
+  option: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 15,
+    paddingHorizontal: 16,
+    gap: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(255,255,255,0.07)',
+  },
+  optionLetter: {
+    width: 30,
+    height: 30,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  optionLetterText: { color: 'rgba(255,255,255,0.75)', fontSize: 13, fontWeight: '700' },
+  optionText: { color: 'rgba(255,255,255,0.88)', fontSize: 15, flex: 1, lineHeight: 21 },
+  hintText: {
+    color: '#FF9F0A',
+    fontSize: 13,
+    textAlign: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+  },
+  completionTop: {
+    alignItems: 'center',
+    paddingVertical: 32,
+    paddingHorizontal: 20,
+  },
+  scoreLabel: {
+    color: '#FFFFFF',
+    fontSize: 40,
+    fontWeight: '700',
+    marginBottom: 10,
+  },
+  scoreMessage: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 17,
+    textAlign: 'center',
+    lineHeight: 24,
+  },
+  viewResultsBtn: {
+    marginHorizontal: 16,
+    marginBottom: 10,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 14,
+    paddingVertical: 16,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  viewResultsBtnText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
+  nextQuizBtn: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.05)',
+  },
+  nextQuizLabel: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
+  nextQuizSub: { color: 'rgba(255,255,255,0.4)', fontSize: 12, marginTop: 2 },
+  aiMsg: {
+    padding: 16,
+    paddingBottom: 20,
+  },
+  aiMsgText: { color: 'rgba(255,255,255,0.7)', fontSize: 14, lineHeight: 21 },
   harderLink: { color: '#5AC8FA', textDecorationLine: 'underline', fontWeight: '600' },
-  historySection: { marginHorizontal: 16, marginBottom: 16, borderRadius: 14, overflow: 'hidden', borderWidth: 1 },
-  historySectionTitle: { fontSize: 12, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5, paddingHorizontal: 14, paddingTop: 14, paddingBottom: 8 },
-  historyRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 10, borderTopWidth: StyleSheet.hairlineWidth },
+  historySection: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderRadius: 14,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.07)',
+  },
+  historySectionTitle: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    paddingHorizontal: 14,
+    paddingTop: 14,
+    paddingBottom: 8,
+  },
+  historyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(255,255,255,0.07)',
+  },
   historyLeft: { flex: 1, marginRight: 10 },
-  historyTopic: { fontSize: 14, fontWeight: '500' },
+  historyTopic: { color: 'rgba(255,255,255,0.85)', fontSize: 14, fontWeight: '500' },
   historyMeta: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 3 },
-  diffBadge: { borderRadius: 20, paddingHorizontal: 7, paddingVertical: 2, borderWidth: 1 },
+  diffBadge: {
+    borderRadius: 20,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderWidth: 1,
+  },
   diffBadgeText: { fontSize: 11, fontWeight: '600' },
-  historyDate: { fontSize: 12 },
-  historyScore: { minWidth: 44, alignItems: 'flex-end' },
+  historyDate: { color: 'rgba(255,255,255,0.35)', fontSize: 12 },
+  historyScore: {
+    minWidth: 44,
+    alignItems: 'flex-end',
+  },
   historyScoreText: { fontSize: 16, fontWeight: '700' },
 });
