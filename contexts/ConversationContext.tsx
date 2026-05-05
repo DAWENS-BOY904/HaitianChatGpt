@@ -554,8 +554,6 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
     setMessages(prev => [...prev, placeholderAIMessage]);
     setStreamingMessageId(aiMessageId);
 
-    let hardTimeoutId: ReturnType<typeof setTimeout> | null = null;
-
     try {
       // Build conversation context
       const contextMessages = [...messages, tempUserMessage].map(m => ({
@@ -589,16 +587,11 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
       const abortController = new AbortController();
       abortControllerRef.current = abortController;
 
-      // Hard 60-second timeout — prevents hanging on 504 Gateway Timeout
-      hardTimeoutId = setTimeout(() => {
-        if (!abortController.signal.aborted) abortController.abort();
-      }, 60000);
-
       let streamedContent = '';
       let finalImageUrlFromResponse: string | undefined;
 
       // ── Resilient fetch with retry for poor internet connections (Haiti & low-bandwidth areas) ──
-      const MAX_SEND_RETRIES = 5;
+      const MAX_SEND_RETRIES = 3;
       let response: Response | null = null;
       let lastFetchError: Error | null = null;
 
@@ -617,9 +610,9 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
             signal: abortController.signal,
           });
 
-          // Retry on server errors, rate-limit and gateway timeouts
+          // Retry on server errors or rate-limit, not on client errors
           if ((response.status === 429 || response.status >= 500) && attempt < MAX_SEND_RETRIES) {
-            const delay = Math.min(1000 * Math.pow(2, attempt), 16000); // 1s, 2s, 4s, 8s, 16s
+            const delay = 1000 * Math.pow(2, attempt); // 1s, 2s, 4s
             console.log(`[sendMessage] Server error ${response.status}, retrying in ${delay}ms (attempt ${attempt + 1})...`);
             await new Promise(r => setTimeout(r, delay));
             continue;
@@ -636,20 +629,10 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      if (!response) {
-        const isTimeout = lastFetchError?.message?.includes('timeout') || lastFetchError?.message?.includes('timed out') || lastFetchError?.name === 'AbortError';
-        throw new Error(
-          isTimeout
-            ? 'The AI is taking too long to respond (likely a 504 Gateway Timeout). Please try again — if this keeps happening, try a shorter message.'
-            : 'Unable to reach the AI server after multiple attempts. Please check your internet connection and try again.'
-        );
-      }
+      if (!response) throw lastFetchError || new Error('Network error: could not reach the server. Please check your internet connection and try again.');
 
       if (!response.ok) {
         const errText = await response.text().catch(() => String(response!.status));
-        if (response.status === 504 || response.status === 502 || response.status === 503) {
-          throw new Error('The AI server is temporarily unavailable (Gateway Timeout). Please wait a moment and try again.');
-        }
         throw new Error(`Chat function error: ${response.status} ${errText}`);
       }
 
@@ -769,7 +752,6 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      if (hardTimeoutId) { clearTimeout(hardTimeoutId); hardTimeoutId = null; }
       abortControllerRef.current = null;
 
       // Clean streamed content
@@ -851,7 +833,6 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
       }
 
     } catch (error: any) {
-      if (hardTimeoutId) { clearTimeout(hardTimeoutId); hardTimeoutId = null; }
       abortControllerRef.current = null;
 
       // Remove temp messages on abort or error
