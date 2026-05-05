@@ -60,7 +60,7 @@ export function MessageActionsModal({
   const router = useRouter();
   const accentColor = settings.accentColor || colors.primary;
 
-  // TTS state
+  // TTS state — persists beyond modal close so audio keeps playing
   const [isSpeaking, setIsSpeaking] = useState(false);
   const soundRef = useRef<Audio.Sound | null>(null);
 
@@ -78,8 +78,7 @@ export function MessageActionsModal({
     setIsSpeaking(false);
   }, []);
 
-  useEffect(() => { if (!visible && isSpeaking) stopTTS(); }, [visible]);
-  useEffect(() => { if (visible) stopTTS(); }, [visible]);
+  // Do NOT stop on close — audio persists; user must tap Stop inside modal
   useEffect(() => () => { stopTTS(); }, []);
 
   const handleReadAloud = useCallback(async () => {
@@ -90,9 +89,11 @@ export function MessageActionsModal({
       .replace(/[*_`~]/g, '')
       .replace(/\[.*?\]\(.*?\)/g, 'link')
       .slice(0, 3000);
+    // Use the voice the user selected in voice-settings
+    const selectedVoice = (settings as any).voiceSelection || (settings as any).voice_selection || 'pNInz6obpgDQGcFmaJgB';
     try {
       const { data, error } = await supabase.functions.invoke('generate-tts', {
-        body: { text: cleanText, voice: 'alloy' },
+        body: { text: cleanText, voice: selectedVoice },
       });
       if (error || !data?.audioUrl) throw new Error(error?.message || 'TTS failed');
       await Audio.setAudioModeAsync({
@@ -189,10 +190,10 @@ export function MessageActionsModal({
     }, 150);
   }, [handleUnlikeMessage, onLike, message.id, onClose, router]);
 
+  // Close modal WITHOUT stopping audio — user controls audio via the Stop button
   const handleClose = useCallback(() => {
-    if (isSpeaking) stopTTS();
     onClose();
-  }, [isSpeaking, stopTTS, onClose]);
+  }, [onClose]);
 
   return (
     <>
