@@ -3362,7 +3362,7 @@ Be thorough and cite specific facts.`;
                               preGeneratedQuestions={preGeneratedQuestions}
                             />
                           ) : null}
-                          {streamingMessageId ? null : generating ? (
+                          {(sending || generating) && !streamingMessageId ? (
                             <ThinkingIndicator
                               userMessage={(messages || []).length > 0 ? (messages || [])[(messages || []).length - 1].content : inputText}
                               completed={showCompletionStatus}
