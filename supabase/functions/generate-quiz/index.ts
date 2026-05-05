@@ -10,28 +10,28 @@ const CONFIG = {
     KEY:     Deno.env.get('OPENAI_API_KEY') ?? '',
     URL:     'https://api.openai.com/v1/chat/completions',
     MODEL:   'gpt-4o-mini',
-    TIMEOUT: 15000, // 15s
-    RETRIES: 2,
+    TIMEOUT: 12000, // 12s — tight so fallback is fast
+    RETRIES: 1,
   },
   GROQ: {
     KEY:     Deno.env.get('GROQ_API_KEY') ?? '',
     URL:     'https://api.groq.com/openai/v1/chat/completions',
     MODEL:   'llama3-8b-8192',
-    TIMEOUT: 15000,
-    RETRIES: 2,
+    TIMEOUT: 10000, // 10s
+    RETRIES: 1,
   },
   ONSPACE: {
     KEY:     Deno.env.get('ONSPACE_AI_API_KEY') ?? '',
     URL:     Deno.env.get('ONSPACE_AI_BASE_URL') ?? 'https://api.onspace.ai/v1',
     MODEL:   'gemini-2.0-flash',
-    TIMEOUT: 15000,
-    RETRIES: 2,
+    TIMEOUT: 12000,
+    RETRIES: 1,
   },
   QUIZ: {
     QUESTION_COUNT: 10,
     OPTION_COUNT:   4,
-    MAX_TOKENS:     2500,
-    TEMPERATURE:    0.7,
+    MAX_TOKENS:     2000,
+    TEMPERATURE:    0.8,
   },
 } as const;
 
@@ -475,23 +475,39 @@ serve(async (req: Request) => {
     // ── Build prompt ───────────────────────────────────────────────────────
     const prompt = buildPrompt(topic, difficulty, count, language);
 
-    // ── Try providers with failover ────────────────────────────────────────
-    const providers = [tryOpenAI, tryGroq, tryOnspace];
+    // ── Try providers concurrently (race) for speed, with sequential fallback ─
+    const providers = [
+      { fn: tryOnspace, name: 'OnSpace' },
+      { fn: tryGroq,    name: 'Groq'    },
+      { fn: tryOpenAI,  name: 'OpenAI'  },
+    ];
     const results: ProviderResult[] = [];
     let finalResult: ProviderResult | null = null;
 
-    for (const providerFn of providers) {
-      const result = await providerFn(prompt);
-      results.push(result);
-
-      if (result.questions && result.questions.length >= count) {
-        finalResult = result;
-        console.log(`[${requestId}] ✓ Provider "${result.provider}" succeeded with ${result.questions.length} questions`);
-        break;
+    // Run all providers concurrently, take first success
+    const providerPromises = providers.map(async ({ fn, name }) => {
+      try {
+        const result = await fn(prompt);
+        return result;
+      } catch (e: any) {
+        return { questions: null, provider: name, duration: 0, error: e.message } as ProviderResult;
       }
+    });
 
-      if (result.questions && result.questions.length > 0 && result.questions.length < count) {
-        console.log(`[${requestId}] ⚠ Provider "${result.provider}" returned only ${result.questions.length}/${count} questions`);
+    // Race with a global 18s timeout
+    const raceTimeout = new Promise<ProviderResult>((resolve) =>
+      setTimeout(() => resolve({ questions: null, provider: 'timeout', duration: 18000, error: 'All providers timed out' }), 18000)
+    );
+
+    // Settle all providers concurrently
+    const settled = await Promise.allSettled(providerPromises);
+    for (const s of settled) {
+      if (s.status === 'fulfilled') {
+        results.push(s.value);
+        if (!finalResult && s.value.questions && s.value.questions.length > 0) {
+          finalResult = s.value;
+          console.log(`[${requestId}] ✓ Provider "${s.value.provider}" succeeded with ${s.value.questions.length} questions`);
+        }
       }
     }
 
