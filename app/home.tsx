@@ -61,10 +61,10 @@ import { AIMode } from '../components/AIModeSelectorModal';
 import { CalculatorModal, CalculatorCard, detectMathExpression } from '../components/CalculatorModal';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
+import { ImageViewerModal } from './ImageViewerModal';
 import * as Haptics from 'expo-haptics';
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-// Network connectivity — no extra package needed
 
 // ── Deep Research Progress Card ──────────────────────────────────────────────
 const DeepResearchCard = memo(function DeepResearchCard({ step, label, done, colors }: { step: number; label: string; done: boolean; colors: any }) {
@@ -1288,9 +1288,6 @@ export default function HomeScreen() {
   const badWordViolationsRef = useRef(0);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [lastShake, setLastShake] = useState(0);
-  const [isConnected, setIsConnected] = useState<boolean>(true);
-  const [shakeEnabled, setShakeEnabled] = useState(true);
-  const [shakeBugModalVisible, setShakeBugModalVisible] = useState(false);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [calcVisible, setCalcVisible] = useState(false);
   const [calcExpression, setCalcExpression] = useState('');
@@ -1710,49 +1707,23 @@ export default function HomeScreen() {
     }
   }, [searchQuery, messages]);
 
-  // Load shake setting from storage
-  useEffect(() => {
-    AsyncStorage.getItem('shake_bug_enabled').then(v => {
-      if (v !== null) setShakeEnabled(v === 'true');
-    }).catch(() => {});
-  }, []);
-
-  // Network connectivity monitor (no extra package)
-  useEffect(() => {
-    let mounted = true;
-    const check = async () => {
-      try {
-        const r = await Promise.race([
-          fetch('https://www.google.com/generate_204', { method: 'HEAD', cache: 'no-cache' }),
-          new Promise<Response>((_, rej) => setTimeout(() => rej(new Error('timeout')), 5000)),
-        ]) as Response;
-        if (mounted) setIsConnected(r.status < 500);
-      } catch {
-        if (mounted) setIsConnected(false);
-      }
-    };
-    check();
-    const interval = setInterval(check, 10000);
-    return () => { mounted = false; clearInterval(interval); };
-  }, []);
-
   useEffect(() => {
     if (Platform.OS === 'ios' || Platform.OS === 'android') {
       const subscription = Accelerometer.addListener(({ x, y, z }) => {
         const acceleration = Math.sqrt(x * x + y * y + z * z);
         const now = Date.now();
-        if (shakeEnabled && acceleration > SHAKE_THRESHOLD && now - lastShake > SHAKE_COOLDOWN) {
+        if (acceleration > SHAKE_THRESHOLD && now - lastShake > SHAKE_COOLDOWN) {
           setLastShake(now);
-          Vibration.vibrate(400);
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-          setShakeBugModalVisible(true);
+          Vibration.vibrate(500);
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          router.push('/bugreport');
         }
       });
       Accelerometer.setUpdateInterval(100);
       return () => subscription.remove();
     }
     return () => {};
-  }, [lastShake, shakeEnabled]);
+  }, [lastShake, router]);
 
   useEffect(() => {
     if (recordingState === 'recording') {
@@ -2846,33 +2817,6 @@ Be thorough and cite specific facts.`;
 
   const userName = user?.email?.split('@')[0] || 'You';
 
-  // Offline screen for free users (no internet + not pro/plus)
-  const showOfflineScreen = !isConnected && !isPro && !isUnlimited && !isGuest;
-
-  if (showOfflineScreen) {
-    return (
-      <View style={{ flex: 1, backgroundColor: isDark ? '#000' : '#FFF', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40 }}>
-        <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
-        <View style={{ width: 100, height: 100, borderRadius: 28, backgroundColor: isDark ? '#1C1C1E' : '#F2F2F7', alignItems: 'center', justifyContent: 'center', marginBottom: 28, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }}>
-          <Ionicons name="cloud-offline-outline" size={52} color={isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.2)'} />
-        </View>
-        <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 22, fontWeight: '700', marginBottom: 10, textAlign: 'center' }}>No Internet Connection</Text>
-        <Text style={{ color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.45)', fontSize: 15, textAlign: 'center', lineHeight: 23, marginBottom: 32 }}>
-          {'A connection is required for the free plan. Upgrade to Pro or Plus to use Dawinix offline.'}
-        </Text>
-        <TouchableOpacity
-          style={{ backgroundColor: colors.primary, borderRadius: 30, paddingHorizontal: 36, paddingVertical: 15, marginBottom: 14 }}
-          onPress={() => router.push('/subscription')}
-        >
-          <Text style={{ color: '#FFF', fontSize: 16, fontWeight: '700' }}>Upgrade for Offline Access</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => { setIsConnected(true); }} style={{ paddingVertical: 12 }}>
-          <Text style={{ color: colors.textSecondary, fontSize: 14 }}>Try Again</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
   return (
     <ErrorBoundary>
       <GestureHandlerRootView style={{ flex: 1 }}>
@@ -3662,86 +3606,6 @@ Be thorough and cite specific facts.`;
             <CustomizeAIModal visible={customizeAIVisible} onClose={() => setCustomizeAIVisible(false)} onSave={(instructions, respondAuto) => { setGroupCustomInstructions(instructions); setGroupRespondAuto(respondAuto); }} initialInstructions={groupCustomInstructions} initialRespondAuto={groupRespondAuto} />
             <InviteLinkModal visible={inviteLinkVisible} onClose={() => setInviteLinkVisible(false)} isPlus={isUnlimited} isDark={isDark} />
             <NotificationPermissionModal visible={notifPermModalVisible} onAllow={handleAllowNotifications} onSkip={() => setNotifPermModalVisible(false)} />
-
-            {/* Shake to report bug modal */}
-            <Modal visible={shakeBugModalVisible} transparent animationType="none" onRequestClose={() => setShakeBugModalVisible(false)}>
-              <View style={{ flex: 1, justifyContent: 'flex-end' }}>
-                {Platform.OS === 'ios' ? (
-                  <BlurView intensity={isDark ? 70 : 55} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
-                ) : (
-                  <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.55)' }]} />
-                )}
-                <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setShakeBugModalVisible(false)} />
-                <View style={{
-                  borderTopLeftRadius: 28, borderTopRightRadius: 28, overflow: 'hidden',
-                  shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.3, shadowRadius: 20, elevation: 20,
-                }}>
-                  {Platform.OS === 'ios' ? (
-                    <BlurView intensity={isDark ? 92 : 78} tint={isDark ? 'dark' : 'extraLight'} style={{ padding: 28, paddingBottom: insets.bottom + 28 }}>
-                      <View style={{ width: 38, height: 4, borderRadius: 2, backgroundColor: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.18)', alignSelf: 'center', marginBottom: 24 }} />
-                      <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 22, fontWeight: '800', marginBottom: 10 }}>Report a bug?</Text>
-                      <Text style={{ color: isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.5)', fontSize: 15, lineHeight: 22, marginBottom: 28 }}>
-                        {'If something is not working correctly, you can report it to help improve Dawinix for everyone.'}
-                      </Text>
-                      <TouchableOpacity
-                        style={{ backgroundColor: isDark ? '#FFF' : '#000', borderRadius: 50, paddingVertical: 17, alignItems: 'center', marginBottom: 16 }}
-                        onPress={() => { setShakeBugModalVisible(false); setTimeout(() => router.push('/bugreport'), 200); }}
-                      >
-                        <Text style={{ color: isDark ? '#000' : '#FFF', fontSize: 17, fontWeight: '700' }}>Report bug</Text>
-                      </TouchableOpacity>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 6 }}>
-                        <View>
-                          <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 15, fontWeight: '600' }}>
-                            {Platform.OS === 'ios' ? 'Shake iPhone to report a bug' : 'Shake Android to report a bug'}
-                          </Text>
-                          <Text style={{ color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)', fontSize: 13, marginTop: 3 }}>Toggle off to disable</Text>
-                        </View>
-                        <Switch
-                          value={shakeEnabled}
-                          onValueChange={async (v) => {
-                            setShakeEnabled(v);
-                            await AsyncStorage.setItem('shake_bug_enabled', v ? 'true' : 'false');
-                          }}
-                          trackColor={{ true: '#34C759', false: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)' }}
-                          thumbColor="#FFF"
-                        />
-                      </View>
-                    </BlurView>
-                  ) : (
-                    <View style={{ backgroundColor: isDark ? '#1C1C1E' : '#FFF', padding: 28, paddingBottom: insets.bottom + 28, borderTopLeftRadius: 28, borderTopRightRadius: 28 }}>
-                      <View style={{ width: 38, height: 4, borderRadius: 2, backgroundColor: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.18)', alignSelf: 'center', marginBottom: 24 }} />
-                      <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 22, fontWeight: '800', marginBottom: 10 }}>Report a bug?</Text>
-                      <Text style={{ color: isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.5)', fontSize: 15, lineHeight: 22, marginBottom: 28 }}>
-                        {'If something is not working correctly, you can report it to help improve Dawinix for everyone.'}
-                      </Text>
-                      <TouchableOpacity
-                        style={{ backgroundColor: isDark ? '#FFF' : '#000', borderRadius: 50, paddingVertical: 17, alignItems: 'center', marginBottom: 16 }}
-                        onPress={() => { setShakeBugModalVisible(false); setTimeout(() => router.push('/bugreport'), 200); }}
-                      >
-                        <Text style={{ color: isDark ? '#000' : '#FFF', fontSize: 17, fontWeight: '700' }}>Report bug</Text>
-                      </TouchableOpacity>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 6 }}>
-                        <View>
-                          <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 15, fontWeight: '600' }}>
-                            {Platform.OS === 'ios' ? 'Shake iPhone to report a bug' : 'Shake Android to report a bug'}
-                          </Text>
-                          <Text style={{ color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)', fontSize: 13, marginTop: 3 }}>Toggle off to disable</Text>
-                        </View>
-                        <Switch
-                          value={shakeEnabled}
-                          onValueChange={async (v) => {
-                            setShakeEnabled(v);
-                            await AsyncStorage.setItem('shake_bug_enabled', v ? 'true' : 'false');
-                          }}
-                          trackColor={{ true: '#34C759', false: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)' }}
-                          thumbColor="#FFF"
-                        />
-                      </View>
-                    </View>
-                  )}
-                </View>
-              </View>
-            </Modal>
 
             {msgMenuVisible && msgMenuMsg ? (() => {
               const menuBg = isDark ? 'rgba(36,36,40,0.98)' : 'rgba(255,255,255,0.97)';

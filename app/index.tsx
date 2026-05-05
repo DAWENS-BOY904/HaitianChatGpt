@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   View, 
   Text, 
@@ -7,7 +7,6 @@ import {
   StatusBar, 
   Platform, 
   ActivityIndicator,
-  Animated,
   Image 
 } from 'react-native';
 import { useRouter, Redirect } from 'expo-router';
@@ -25,7 +24,7 @@ const WELCOME_PHRASES = [
   "What's on your mind?",
 ];
 
-// AI Logo URL
+// AI Logo URL - won gradient logo
 const AI_LOGO_URL = 'https://uzxmmddivzqjhcnnrkns.supabase.co/storage/v1/object/public/logo/WhatsApp%20Image%202026-04-18%20at%202.58.46%20AM.jpeg';
 
 // ── Helper: send login confirmation email (non-blocking) ──
@@ -51,6 +50,7 @@ function getAppleSupabaseClient() {
   const supabaseKey = process.env.MY_SUPABASE_ANON_KEY || process.env.EXPO_PUBLIC_MY_SUPABASE_ANON_KEY;
   
   if (!supabaseUrl || !supabaseKey) {
+    console.error('MY_SUPABASE_URL or MY_SUPABASE_ANON_KEY not configured');
     return getSupabaseClient();
   }
   
@@ -118,98 +118,60 @@ async function performAppleSignIn(
   }
 }
 
-// ── Branded splash logo ──
-function BrandedLogo({ isDark }: { isDark?: boolean }) {
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 1.06, duration: 1200, useNativeDriver: true }),
-        Animated.timing(pulseAnim, { toValue: 1, duration: 1200, useNativeDriver: true }),
-      ])
-    );
-    loop.start();
-    return () => loop.stop();
-  }, []);
-
+// ── Static AI Logo (no animation) ──
+function AILogo({ size = 100 }: { size?: number }) {
   return (
-    <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
-      <View style={{
-        width: 80, height: 80, borderRadius: 22,
-        overflow: 'hidden',
-        backgroundColor: isDark ? '#1C1C1E' : '#F2F2F7',
-        borderWidth: 1.5,
-        borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)',
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}>
+    <View style={[logoStyles.logoContainer, { width: size, height: size }]}>
+      <View 
+        style={[
+          logoStyles.logoWrapper,
+          {
+            width: size,
+            height: size,
+            borderRadius: size / 2,
+          }
+        ]}
+      >
         <Image
           source={{ uri: AI_LOGO_URL }}
-          style={{ width: 80, height: 80, borderRadius: 20 }}
+          style={{
+            width: size,
+            height: size,
+            borderRadius: size / 2,
+          }}
           resizeMode="cover"
         />
       </View>
-    </Animated.View>
-  );
-}
-
-// ── Branded loading screen (photos 3 & 4) ──
-function SplashScreen() {
-  const { isDark } = useTheme();
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
-  }, []);
-
-  const bg = isDark ? '#000' : '#FFFFFF';
-
-  return (
-    <View style={{ flex: 1, backgroundColor: bg, alignItems: 'center', justifyContent: 'center' }}>
-      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={bg} />
-      <Animated.View style={{ opacity: fadeAnim, alignItems: 'center' }}>
-        <BrandedLogo isDark={isDark} />
-      </Animated.View>
     </View>
   );
 }
 
-// ── Static AI Logo ──
-function AILogo({ size = 100 }: { size?: number }) {
-  return (
-    <View style={{ width: size, height: size, borderRadius: size * 0.25, overflow: 'hidden', borderWidth: 2, borderColor: 'rgba(0,150,255,0.2)' }}>
-      <Image
-        source={{ uri: AI_LOGO_URL }}
-        style={{ width: size, height: size }}
-        resizeMode="cover"
-      />
-    </View>
-  );
-}
+const logoStyles = StyleSheet.create({
+  logoContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  logoWrapper: {
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: 'rgba(0, 150, 255, 0.3)',
+  },
+});
 
 function WelcomeScreen() {
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   const { signInWithGoogle } = useAuth();
   const { showAlert } = useAlert();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [phraseIndex, setPhraseIndex] = useState(0);
   const [loading, setLoading] = useState<'apple' | 'google' | null>(null);
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(40)).current;
 
   useEffect(() => {
     const interval = setInterval(() => {
       setPhraseIndex(prev => (prev + 1) % WELCOME_PHRASES.length);
     }, 3000);
     return () => clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
-      Animated.timing(slideAnim, { toValue: 0, duration: 500, useNativeDriver: true }),
-    ]).start();
   }, []);
 
   const handleApple = async () => {
@@ -247,33 +209,35 @@ function WelcomeScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
+      <StatusBar barStyle={colors.text === '#FFFFFF' ? 'light-content' : 'dark-content'} />
       
-      <Animated.View style={[styles.topSection, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
-        <AILogo size={90} />
+      {/* Top Section - Logo + Title */}
+      <View style={styles.topSection}>
+        <AILogo size={100} />
         <Text style={[styles.title, { color: colors.text }]}>
           {WELCOME_PHRASES[phraseIndex]}
         </Text>
         <Text style={[styles.subtitle, { color: colors.textSecondary || '#666' }]}>
           Your AI Assistant
         </Text>
-      </Animated.View>
+      </View>
       
-      <Animated.View style={[styles.bottomSection, { paddingBottom: Math.max(insets.bottom, 20) + 20, opacity: fadeAnim }]}>
-        {/* Apple Sign-In — iOS only */}
+      {/* Bottom Section - Buttons */}
+      <View style={[styles.bottomSection, { paddingBottom: Math.max(insets.bottom, 20) + 20 }]}>
+        {/* Apple Sign-In */}
         {Platform.OS === 'ios' ? (
           <TouchableOpacity
-            style={[styles.appleButton, { backgroundColor: isDark ? '#FFFFFF' : '#000000' }]}
+            style={styles.appleButton}
             onPress={handleApple}
             disabled={loading !== null}
-            activeOpacity={0.82}
+            activeOpacity={0.8}
           >
             {loading === 'apple' ? (
-              <ActivityIndicator size="small" color={isDark ? '#000' : '#FFF'} />
+              <ActivityIndicator size="small" color="#000" />
             ) : (
-              <Ionicons name="logo-apple" size={20} color={isDark ? '#000000' : '#FFFFFF'} />
+              <Ionicons name="logo-apple" size={20} color="#000000" />
             )}
-            <Text style={[styles.appleButtonText, { color: isDark ? '#000' : '#FFF' }]}>
+            <Text style={styles.appleButtonText}>
               {loading === 'apple' ? 'Signing in...' : 'Continue with Apple'}
             </Text>
           </TouchableOpacity>
@@ -284,7 +248,7 @@ function WelcomeScreen() {
           style={styles.googleButton}
           onPress={handleGoogle}
           disabled={loading !== null}
-          activeOpacity={0.82}
+          activeOpacity={0.8}
         >
           {loading === 'google' ? (
             <ActivityIndicator size="small" color="#FFF" />
@@ -296,24 +260,24 @@ function WelcomeScreen() {
           </Text>
         </TouchableOpacity>
 
-        {/* Email */}
+        {/* Email sign-up */}
         <TouchableOpacity 
-          style={[styles.emailButton, { backgroundColor: colors.primary || '#10A37F' }]} 
+          style={[styles.emailButton, { backgroundColor: colors.primary || '#007AFF' }]} 
           onPress={() => router.push('/login')}
-          activeOpacity={0.82}
+          activeOpacity={0.8}
         >
           <Text style={styles.emailButtonText}>Continue with Email</Text>
         </TouchableOpacity>
 
         {/* Log in */}
         <TouchableOpacity 
-          style={[styles.loginButton, { borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)' }]} 
+          style={[styles.loginButton, { borderColor: colors.border }]} 
           onPress={() => router.push('/login')}
-          activeOpacity={0.82}
+          activeOpacity={0.8}
         >
           <Text style={[styles.loginButtonText, { color: colors.text }]}>Log in</Text>
         </TouchableOpacity>
-      </Animated.View>
+      </View>
     </View>
   );
 }
@@ -328,21 +292,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 32,
     paddingTop: 60,
-    gap: 16,
   },
   title: {
-    fontSize: 30,
+    fontSize: 32,
     fontWeight: '700',
+    marginTop: 24,
+    marginBottom: 8,
     textAlign: 'center',
-    lineHeight: 38,
   },
   subtitle: {
-    fontSize: 15,
+    fontSize: 16,
     textAlign: 'center',
   },
   bottomSection: {
     width: '100%',
-    paddingHorizontal: 20,
+    paddingHorizontal: 24,
     paddingTop: 20,
     gap: 12,
   },
@@ -350,12 +314,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 50,
-    paddingVertical: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    paddingVertical: 14,
     gap: 10,
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
   },
   appleButtonText: {
-    fontWeight: '700',
+    color: '#000000',
+    fontWeight: '600',
     fontSize: 16,
   },
   googleButton: {
@@ -363,31 +331,31 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#4A4A4A',
-    borderRadius: 50,
-    paddingVertical: 16,
+    borderRadius: 12,
+    paddingVertical: 14,
     gap: 10,
   },
   googleButtonText: {
     color: '#FFFFFF',
-    fontWeight: '700',
+    fontWeight: '600',
     fontSize: 16,
   },
   emailButton: {
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 50,
-    paddingVertical: 16,
+    borderRadius: 12,
+    paddingVertical: 14,
   },
   emailButtonText: {
     color: '#FFFFFF',
-    fontWeight: '700',
+    fontWeight: '600',
     fontSize: 16,
   },
   loginButton: {
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 50,
-    paddingVertical: 16,
+    borderRadius: 12,
+    paddingVertical: 14,
     borderWidth: 1,
   },
   loginButtonText: {
@@ -398,11 +366,14 @@ const styles = StyleSheet.create({
 
 export default function RootScreen() {
   const { user, loading } = useAuth();
-  const { isDark } = useTheme();
 
-  // Show branded splash while auth loads — prevents login flash + white/black screens
+  // Show nothing while auth state is loading — prevents login flash
   if (loading) {
-    return <SplashScreen />;
+    return (
+      <View style={{ flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color="#10A37F" />
+      </View>
+    );
   }
 
   if (user) {

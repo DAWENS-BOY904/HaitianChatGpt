@@ -529,9 +529,6 @@ const pillStyles = StyleSheet.create({
 });
 
 // ── Parse [SOURCES] blocks ──
-// Alias so MessageItem can import SourcesModal by name
-export const SourcesModal = SourcesListModal;
-
 export function parseSources(content: string): { text: string; sources: Source[] } {
   const startTag = '[SOURCES]';
   const endTag = '[/SOURCES]';
