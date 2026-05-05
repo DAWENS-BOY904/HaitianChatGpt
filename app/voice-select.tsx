@@ -18,7 +18,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Audio } from 'expo-av';
 import * as Speech from 'expo-speech';
 import { useSettings } from '../hooks/useSettings';
-import { useTheme } from '../hooks/useTheme';
 import { useAlert } from '@/template';
 import { getSupabaseClient } from '@/template';
 
@@ -245,7 +244,6 @@ export default function VoiceSelectScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { settings, updateSetting } = useSettings();
-  const { isDark } = useTheme();
   const { showAlert } = useAlert();
   const supabase = getSupabaseClient();
 
@@ -373,27 +371,14 @@ export default function VoiceSelectScreen() {
     }
   }, [currentIndex, playVoiceSample]);
 
-  // Theme-aware colors
-  const rootBg = isDark ? '#000000' : '#F2F2F7';
-  const cardBg = isDark ? '#111113' : '#FFFFFF';
-  const textColor = isDark ? '#FFFFFF' : '#000000';
-  const subTextColor = isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.5)';
-  const cancelBg = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)';
-  const adjNameColor = isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.25)';
-  const dotBg = isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.15)';
-  const dotActiveBg = isDark ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.7)';
-  const doneBtnBg = isDark ? '#FFFFFF' : '#000000';
-  const doneBtnText = isDark ? '#000000' : '#FFFFFF';
-  const replayTextColor = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.4)';
-
   return (
-    <View style={[styles.root, { backgroundColor: rootBg }]}>
+    <View style={styles.root}>
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 14 }]}>
-        <TouchableOpacity style={[styles.cancelBtn, { backgroundColor: cancelBg }]} onPress={handleCancel} activeOpacity={0.7}>
-          <Text style={[styles.cancelText, { color: textColor }]}>Cancel</Text>
+        <TouchableOpacity style={styles.cancelBtn} onPress={handleCancel} activeOpacity={0.7}>
+          <Text style={styles.cancelText}>Cancel</Text>
         </TouchableOpacity>
-        <Text style={[styles.title, { color: textColor }]}>Choose a voice</Text>
+        <Text style={styles.title}>Choose a voice</Text>
         <View style={{ width: 80 }} />
       </View>
 
@@ -416,12 +401,12 @@ export default function VoiceSelectScreen() {
               <View style={styles.adjacentRow}>
                 {idx > 0 ? (
                   <TouchableOpacity onPress={() => goTo(idx - 1)} style={styles.adjBtn} activeOpacity={0.7}>
-                    <Text style={[styles.adjText, { color: adjNameColor }]}>{REAL_VOICES[idx - 1].name}</Text>
+                    <Text style={styles.adjText}>{REAL_VOICES[idx - 1].name}</Text>
                   </TouchableOpacity>
                 ) : <View style={{ width: 80 }} />}
                 {idx < REAL_VOICES.length - 1 ? (
                   <TouchableOpacity onPress={() => goTo(idx + 1)} style={styles.adjBtn} activeOpacity={0.7}>
-                    <Text style={[styles.adjText, { color: adjNameColor }]}>{REAL_VOICES[idx + 1].name}</Text>
+                    <Text style={styles.adjText}>{REAL_VOICES[idx + 1].name}</Text>
                   </TouchableOpacity>
                 ) : <View style={{ width: 80 }} />}
               </View>
@@ -441,8 +426,8 @@ export default function VoiceSelectScreen() {
 
               {/* Voice info */}
               <View style={styles.voiceInfo}>
-                <Text style={[styles.voiceName, { color: textColor }]}>{voice.name}</Text>
-                <Text style={[styles.voiceTagline, { color: subTextColor }]}>{voice.tagline}</Text>
+                <Text style={styles.voiceName}>{voice.name}</Text>
+                <Text style={styles.voiceTagline}>{voice.tagline}</Text>
               </View>
 
               {/* Replay button */}
@@ -452,11 +437,11 @@ export default function VoiceSelectScreen() {
                 activeOpacity={0.7}
               >
                 {playingId === voice.id ? (
-                  <ActivityIndicator size="small" color={subTextColor} />
+                  <ActivityIndicator size="small" color="rgba(255,255,255,0.6)" />
                 ) : (
-                  <Ionicons name="play-circle-outline" size={28} color={subTextColor} />
+                  <Ionicons name="play-circle-outline" size={28} color="rgba(255,255,255,0.5)" />
                 )}
-                <Text style={[styles.replayText, { color: replayTextColor }]}>
+                <Text style={styles.replayText}>
                   {playingId === voice.id ? 'Playing...' : 'Play sample'}
                 </Text>
               </TouchableOpacity>
@@ -471,8 +456,7 @@ export default function VoiceSelectScreen() {
           <TouchableOpacity key={idx} onPress={() => goTo(idx)} hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}>
             <View style={[
               styles.dot,
-              { backgroundColor: dotBg },
-              idx === currentIndex && { backgroundColor: dotActiveBg, width: 9, height: 9, borderRadius: 4.5 },
+              idx === currentIndex && styles.dotActive,
             ]} />
           </TouchableOpacity>
         ))}
@@ -481,15 +465,15 @@ export default function VoiceSelectScreen() {
       {/* Done button */}
       <View style={[styles.doneWrap, { paddingBottom: insets.bottom + 16 }]}>
         <TouchableOpacity
-          style={[styles.doneBtn, { backgroundColor: doneBtnBg }, saving && { opacity: 0.7 }]}
+          style={[styles.doneBtn, saving && { opacity: 0.7 }]}
           onPress={handleDone}
           disabled={saving}
           activeOpacity={0.85}
         >
           {saving ? (
-            <ActivityIndicator color={doneBtnText} />
+            <ActivityIndicator color="#000" />
           ) : (
-            <Text style={[styles.doneBtnText, { color: doneBtnText }]}>Done</Text>
+            <Text style={styles.doneBtnText}>Done</Text>
           )}
         </TouchableOpacity>
       </View>
@@ -516,6 +500,7 @@ function SpeakingDot() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
+    backgroundColor: '#000000',
   },
   header: {
     flexDirection: 'row',
@@ -525,6 +510,7 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
   },
   cancelBtn: {
+    backgroundColor: 'rgba(255,255,255,0.12)',
     borderRadius: 22,
     paddingHorizontal: 18,
     paddingVertical: 9,
@@ -532,10 +518,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   cancelText: {
+    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '500',
   },
   title: {
+    color: '#FFFFFF',
     fontSize: 18,
     fontWeight: '600',
     textAlign: 'center',
@@ -559,6 +547,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   adjText: {
+    color: 'rgba(255,255,255,0.35)',
     fontSize: 18,
     fontWeight: '500',
   },
@@ -587,12 +576,14 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   voiceName: {
+    color: '#FFFFFF',
     fontSize: 28,
     fontWeight: '700',
     textAlign: 'center',
     marginBottom: 6,
   },
   voiceTagline: {
+    color: 'rgba(255,255,255,0.55)',
     fontSize: 16,
     textAlign: 'center',
   },
@@ -604,6 +595,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   replayText: {
+    color: 'rgba(255,255,255,0.5)',
     fontSize: 15,
   },
   dotsRow: {
@@ -617,18 +609,27 @@ const styles = StyleSheet.create({
     width: 7,
     height: 7,
     borderRadius: 3.5,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+  },
+  dotActive: {
+    backgroundColor: 'rgba(255,255,255,0.85)',
+    width: 9,
+    height: 9,
+    borderRadius: 4.5,
   },
   doneWrap: {
     paddingHorizontal: 20,
     paddingTop: 4,
   },
   doneBtn: {
+    backgroundColor: '#FFFFFF',
     borderRadius: 50,
     paddingVertical: 17,
     alignItems: 'center',
     justifyContent: 'center',
   },
   doneBtnText: {
+    color: '#000000',
     fontSize: 17,
     fontWeight: '700',
   },
