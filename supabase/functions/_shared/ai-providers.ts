@@ -1085,7 +1085,7 @@ export async function callAI(modelId: string, messages: AIMessage[], isImageTask
   // HARD FALLBACK
   console.log('All AI providers failed — returning guaranteed fallback response');
   return {
-    content: "I'm sorry, I'm having trouble connecting right now. Please try again in a moment. If the issue persists, try rephrasing your question.",
+    content: "I'm experiencing connectivity issues with all my AI services right now. This could be due to:\n\n• Network problems on my end\n• Temporary service maintenance\n• High server load\n\nPlease try again in a few moments. If you're in an area with poor internet, the issue might resolve when you have a better connection.",
     model: 'fallback',
     error: undefined,
   };

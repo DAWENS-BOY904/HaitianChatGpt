@@ -4,6 +4,66 @@ import { corsHeaders } from '../_shared/cors.ts';
 import { callAI, detectContentType, generateImageSmart, searchImages } from '../_shared/ai-providers.ts';
 
 // ==========================================
+// RESPONSE CACHE FOR GRACEFUL DEGRADATION
+// ==========================================
+
+interface CachedResponse {
+  content: string;
+  timestamp: number;
+  query: string;
+}
+
+const responseCache = new Map<string, CachedResponse>();
+const CACHE_MAX_SIZE = 100;
+const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+
+function getCacheKey(messages: any[]): string {
+  // Create a simple hash of the last user message
+  const lastUserMessage = messages.filter(m => m.role === 'user').slice(-1)[0];
+  if (!lastUserMessage) return '';
+  
+  const content = typeof lastUserMessage.content === 'string' 
+    ? lastUserMessage.content 
+    : JSON.stringify(lastUserMessage.content);
+  
+  // Simple hash function
+  let hash = 0;
+  for (let i = 0; i < content.length; i++) {
+    const char = content.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32-bit integer
+  }
+  return Math.abs(hash).toString();
+}
+
+function getCachedResponse(cacheKey: string): string | null {
+  const cached = responseCache.get(cacheKey);
+  if (!cached) return null;
+  
+  // Check if cache is expired
+  if (Date.now() - cached.timestamp > CACHE_TTL_MS) {
+    responseCache.delete(cacheKey);
+    return null;
+  }
+  
+  return cached.content;
+}
+
+function setCachedResponse(cacheKey: string, content: string, query: string) {
+  // Clean up old entries if cache is full
+  if (responseCache.size >= CACHE_MAX_SIZE) {
+    const oldestKey = responseCache.keys().next().value;
+    responseCache.delete(oldestKey);
+  }
+  
+  responseCache.set(cacheKey, {
+    content,
+    timestamp: Date.now(),
+    query
+  });
+}
+
+// ==========================================
 // ADVANCED SAFETY MODULE (SELF-HARM DETECTION)
 // ==========================================
 
@@ -1215,8 +1275,28 @@ const safety_rules = [
 
     if (!aiResponse || (!aiResponse.content && aiResponse.error)) {
       console.error('AI Error:', aiResponse?.error);
-      // Return a guaranteed fallback rather than a 500 error
-      const fallbackContent = "I'm sorry, I'm having trouble responding right now. Please try again in a moment.";
+      
+      // Try to get a cached response for graceful degradation
+      const cacheKey = getCacheKey(aiMessages);
+      const cachedResponse = getCachedResponse(cacheKey);
+      
+      let fallbackContent: string;
+      if (cachedResponse) {
+        console.log('[chat] Using cached response for graceful degradation');
+        fallbackContent = `⚠️ I'm experiencing connectivity issues right now, but here's a previous response that might help:\n\n${cachedResponse}\n\n*This is a cached response from an earlier conversation. Please try again when my connection improves.*`;
+      } else {
+        // Check network connectivity hints
+        const isLikelyNetworkIssue = aiResponse?.error?.includes('fetch') || 
+                                   aiResponse?.error?.includes('network') || 
+                                   aiResponse?.error?.includes('timeout');
+        
+        if (isLikelyNetworkIssue) {
+          fallbackContent = "🌐 I'm having trouble connecting to my AI services right now. This might be due to network issues or service maintenance. Please check your internet connection and try again in a few moments.\n\nIf the problem persists, you can:\n• Try rephrasing your question\n• Use a different AI model\n• Contact support if needed";
+        } else {
+          fallbackContent = "🤖 I'm experiencing technical difficulties with my AI providers at the moment. All my backup services are also unavailable. Please try again in a few minutes.\n\nIn the meantime, you might want to:\n• Check if other apps are working on your device\n• Try a simpler question\n• Come back later when services are restored";
+        }
+      }
+      
       const encoder2 = new TextEncoder();
       const fallbackStream = new ReadableStream({
         start(controller) {
@@ -1257,6 +1337,14 @@ const safety_rules = [
     // Final safety net — never send empty content to client
     if (!cleanMessage || cleanMessage.length < 3) {
       cleanMessage = "I'm sorry, I couldn't generate a response right now. Please try again.";
+    }
+
+    // Cache successful responses for graceful degradation
+    if (aiResponse && aiResponse.content && !aiResponse.error) {
+      const cacheKey = getCacheKey(aiMessages);
+      const lastUserMessage = messages.filter(m => m.role === 'user').slice(-1)[0];
+      const query = typeof lastUserMessage?.content === 'string' ? lastUserMessage.content : '';
+      setCachedResponse(cacheKey, cleanMessage, query);
     }
 
     const hasMessageCard = cleanMessage.includes('[MESSAGE_CARD]') && cleanMessage.includes('[/MESSAGE_CARD]');
