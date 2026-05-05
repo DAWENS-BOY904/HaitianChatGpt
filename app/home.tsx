@@ -42,7 +42,8 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Clipboard from 'expo-clipboard';
 import * as DocumentPicker from 'expo-document-picker';
 import { QuizModal, QuizView, QuizQuestion, QuizHistoryEntry } from '../components/QuizModal';
-import { PresetsModal } from '../components/PresetsModal';
+import { PresetsModal, loadBehaviorPresets } from '../components/PresetsModal';
+import { MessageActionsModal } from '../components/MessageActionsModal';
 import { StreamingText } from '../components/StreamingText';
 import { ConversationMenuModal } from '../components/ConversationMenuModal';
 import { MessageItem } from '../components/MessageItem';
@@ -1364,6 +1365,13 @@ export default function HomeScreen() {
   const [msgMenuVisible, setMsgMenuVisible] = useState(false);
   const [msgMenuMsg, setMsgMenuMsg] = useState<any>(null);
   const [msgMenuPageY, setMsgMenuPageY] = useState(0);
+  const [msgActionsVisible, setMsgActionsVisible] = useState(false);
+  const [msgActionsMsg, setMsgActionsMsg] = useState<any>(null);
+
+  const handleOpenMessageActions = useCallback((msg: any) => {
+    setMsgActionsMsg(msg);
+    setMsgActionsVisible(true);
+  }, []);
   const wasGeneratingRef = useRef(false);
   const appStateForNotifRef = useRef(AppState.currentState);
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -1635,10 +1643,11 @@ export default function HomeScreen() {
   }, [sideMenuVisible]);
 
   const swipeGesture = Gesture.Pan()
-    .activeOffsetX([20, 10000])
-    .failOffsetY([-10, 10])
+    .activeOffsetX([55, 10000])
+    .failOffsetY([-25, 25])
+    .minDistance(55)
     .onEnd((e) => {
-      if (e.translationX > 60 && e.velocityX > 100 && !sideMenuVisible) {
+      if (e.translationX > 110 && e.velocityX > 250 && !sideMenuVisible) {
         runOnJS(setSideMenuVisible)(true);
       }
     });
@@ -2258,7 +2267,17 @@ Be thorough and cite specific facts.`;
         setReplyingTo(null);
       }
 
-      const prefixedText = systemPrefixForGroup + replyContext + finalText;
+      let prefixedText = systemPrefixForGroup + replyContext + finalText;
+
+      // ── Inject behavior presets as system instructions ──
+      try {
+        const behaviorRules = await loadBehaviorPresets();
+        if (behaviorRules.length > 0) {
+          const rulesBlock = `[SYSTEM RULES — always follow these user-defined rules:\n${behaviorRules.map((r, i) => `${i + 1}. ${r}`).join('\n')}]\n\n`;
+          prefixedText = rulesBlock + prefixedText;
+        }
+      } catch (_e) {}
+
       // Pass fileContents for document/video so edge function can analyse them
       await sendMessage(
         prefixedText,
@@ -2623,6 +2642,11 @@ Be thorough and cite specific facts.`;
           onReply={groupChatMode ? (msg) => setReplyingTo(msg) : undefined}
           onDelete={(msgId) => {}}
           onChunkRendered={() => { if (isAtBottom) flatListRef.current?.scrollToEnd({ animated: false }); }}
+          isLiked={messageLikes[item.id] === 'like'}
+          isUnliked={messageLikes[item.id] === 'dislike'}
+          onLike={handleLikeMessage}
+          onUnlike={handleUnlikeMessage}
+          onOpenActions={handleOpenMessageActions}
         />
         </Pressable>
         {mathData ? (
@@ -3878,6 +3902,21 @@ Be thorough and cite specific facts.`;
             {/* Image creation is shown inline in chat via InlineImageCreatingPlaceholder in MessageItem */}
 
             {/* Image analyzing overlay */}
+            <MessageActionsModal
+              visible={msgActionsVisible}
+              onClose={() => setMsgActionsVisible(false)}
+              message={msgActionsMsg || { id: '', role: 'assistant', content: '', created_at: new Date().toISOString() }}
+              handleLikeMessage={handleLikeMessage}
+              handleUnlikeMessage={handleUnlikeMessage}
+              isLiked={msgActionsMsg ? messageLikes[msgActionsMsg.id] === 'like' : false}
+              isUnliked={msgActionsMsg ? messageLikes[msgActionsMsg.id] === 'dislike' : false}
+            />
+
+            {/* Image creating overlay — during AI image generation */}
+            {thinkingMode === 'creating_image' && (generating || sending) ? (
+              <ImageCreatingOverlay />
+            ) : null}
+
             {imageAnalyzingOverlay ? (
               <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.78)', zIndex: 9998, alignItems: 'center', justifyContent: 'center' }}>
                 <BlurView intensity={70} tint="dark" style={StyleSheet.absoluteFill} />

@@ -78,8 +78,7 @@ export function MessageActionsModal({
     setIsSpeaking(false);
   }, []);
 
-  useEffect(() => { if (!visible && isSpeaking) stopTTS(); }, [visible]);
-  useEffect(() => { if (visible) stopTTS(); }, [visible]);
+  // Do NOT stop TTS when modal closes — user can stop it by reopening & pressing Stop
   useEffect(() => () => { stopTTS(); }, []);
 
   const handleReadAloud = useCallback(async () => {
@@ -90,9 +89,11 @@ export function MessageActionsModal({
       .replace(/[*_`~]/g, '')
       .replace(/\[.*?\]\(.*?\)/g, 'link')
       .slice(0, 3000);
+    // Use the user-selected voice from settings
+    const selectedVoice = (settings as any).voiceSelection || (settings as any).voice_selection || 'pNInz6obpgDQGcFmaJgB';
     try {
       const { data, error } = await supabase.functions.invoke('generate-tts', {
-        body: { text: cleanText, voice: 'alloy' },
+        body: { text: cleanText, voice: selectedVoice },
       });
       if (error || !data?.audioUrl) throw new Error(error?.message || 'TTS failed');
       await Audio.setAudioModeAsync({
