@@ -4215,4 +4215,3 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-fix when ai thinking you stop the message never disappeared the message conversatuion id must create fast saved the message if user want to edit it.
