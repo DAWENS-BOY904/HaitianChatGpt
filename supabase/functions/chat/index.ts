@@ -5,7 +5,7 @@ import { callAI, detectContentType, generateImageSmart, searchImages } from '../
 import { createStreamingResponse, createErrorStream } from '../_shared/streaming.ts';
 
 // ==========================================
-// RESPONSE CACHE FOR GRACEFUL DEGRADATION
+// TYPES & INTERFACES
 // ==========================================
 
 interface CachedResponse {
@@ -14,25 +14,76 @@ interface CachedResponse {
   query: string;
 }
 
+interface ChatMessage {
+  role: string;
+  content: string | Array<{ type: string; text?: string; image_url?: { url: string } }>;
+  image_url?: string;
+}
+
+interface ChatBody {
+  messages: Array<{ role: string; content: unknown; image_url?: string }>;
+  conversationId: string;
+  aiModel?: string;
+  fileContents?: Array<{ name: string; type: string; content: string }>;
+  userImageUrl?: string;
+  base64Image?: string;
+  imageBase64?: string;
+}
+
+interface ApiInfo {
+  name: string;
+  docsUrl: string;
+  versionPattern?: RegExp;
+  knownLatest: string;
+  notes: string;
+}
+
+interface SafetyResult {
+  triggered: boolean;
+  level: string;
+  response: string | null;
+}
+
+interface Message {
+  userId: string;
+  text: string;
+  timestamp: number;
+}
+
+interface ImageResult {
+  imageUrl?: string;
+  model?: string;
+  error?: string;
+}
+
+interface AIResponse {
+  content?: string;
+  model?: string;
+  tokens?: number;
+  error?: string;
+}
+
+// ==========================================
+// RESPONSE CACHE FOR GRACEFUL DEGRADATION
+// ==========================================
+
 const responseCache = new Map<string, CachedResponse>();
 const CACHE_MAX_SIZE = 100;
 const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
-function getCacheKey(messages: any[]): string {
-  // Create a simple hash of the last user message
+function getCacheKey(messages: ChatMessage[]): string {
   const lastUserMessage = messages.filter(m => m.role === 'user').slice(-1)[0];
   if (!lastUserMessage) return '';
-  
+
   const content = typeof lastUserMessage.content === 'string' 
     ? lastUserMessage.content 
     : JSON.stringify(lastUserMessage.content);
-  
-  // Simple hash function
+
   let hash = 0;
   for (let i = 0; i < content.length; i++) {
     const char = content.charCodeAt(i);
     hash = ((hash << 5) - hash) + char;
-    hash = hash & hash; // Convert to 32-bit integer
+    hash = hash & hash;
   }
   return Math.abs(hash).toString();
 }
@@ -40,23 +91,21 @@ function getCacheKey(messages: any[]): string {
 function getCachedResponse(cacheKey: string): string | null {
   const cached = responseCache.get(cacheKey);
   if (!cached) return null;
-  
-  // Check if cache is expired
+
   if (Date.now() - cached.timestamp > CACHE_TTL_MS) {
     responseCache.delete(cacheKey);
     return null;
   }
-  
+
   return cached.content;
 }
 
-function setCachedResponse(cacheKey: string, content: string, query: string) {
-  // Clean up old entries if cache is full
+function setCachedResponse(cacheKey: string, content: string, query: string): void {
   if (responseCache.size >= CACHE_MAX_SIZE) {
     const oldestKey = responseCache.keys().next().value;
     responseCache.delete(oldestKey);
   }
-  
+
   responseCache.set(cacheKey, {
     content,
     timestamp: Date.now(),
@@ -68,13 +117,11 @@ function setCachedResponse(cacheKey: string, content: string, query: string) {
 // ADVANCED SAFETY MODULE (SELF-HARM DETECTION)
 // ==========================================
 
-// Normalize text
-function normalize(text: string) {
+function normalize(text: string): string {
   return text.toLowerCase().trim();
 }
 
-// Detect basic intent
-export function detectSelfHarmIntent(text: string, context_tags: string[] = []) {
+export function detectSelfHarmIntent(text: string, context_tags: string[] = []): boolean {
   const triggers = [
     "suicide", "kill myself", "end my life", "i want to die",
     "mwen vle mouri", "touye tèt mwen", "pa vle viv ankò",
@@ -82,74 +129,61 @@ export function detectSelfHarmIntent(text: string, context_tags: string[] = []) 
   ];
 
   const lower = normalize(text);
-
-  return (
-    triggers.some(t => lower.includes(t)) ||
-    context_tags.includes("self-harm")
-  );
+  return triggers.some(t => lower.includes(t)) || context_tags.includes("self-harm");
 }
 
-// Detect HIGH RISK (plan, urgency, timing)
-export function detectHighRisk(text: string) {
+export function detectHighRisk(text: string): boolean {
   const highRiskTriggers = [
     "i will kill myself", "i'm going to end my life",
     "tonight", "right now", "i can't go on",
     "map touye tèt mwen jodi a", "kounye a mwen fini"
   ];
 
-  const lower = normalize(text);
-
-  return highRiskTriggers.some(t => lower.includes(t));
+  return highRiskTriggers.some(t => normalize(text).includes(t));
 }
 
-// Detect MEDIUM RISK (hopelessness)
-export function detectMediumRisk(text: string) {
+export function detectMediumRisk(text: string): boolean {
   const mediumTriggers = [
     "i feel empty", "no purpose", "tired of life",
     "life is pointless", "mwen fatige ak lavi",
     "anyen pa gen sans ankò"
   ];
 
-  const lower = normalize(text);
-
-  return mediumTriggers.some(t => lower.includes(t));
+  return mediumTriggers.some(t => normalize(text).includes(t));
 }
 
-// Risk level classifier
-export function classifyRisk(text: string, context_tags: string[] = []) {
+export function classifyRisk(text: string, context_tags: string[] = []): string {
   if (detectHighRisk(text)) return "HIGH";
   if (detectSelfHarmIntent(text, context_tags)) return "MEDIUM";
   if (detectMediumRisk(text)) return "LOW";
   return "NONE";
 }
 
-// Suggested response generator
-export function generateSafetyResponse(level: string) {
+export function generateSafetyResponse(level: string): string | null {
   switch (level) {
     case "HIGH":
-      return "I’m really sorry you’re feeling this way. You’re not alone. Please reach out to someone you trust or a crisis hotline right now.";
+      return "I'm really sorry you're feeling this way. You're not alone. Please reach out to someone you trust or a crisis hotline right now.";
     case "MEDIUM":
-      return "That sounds really hard. Do you want to talk about what’s been going on?";
+      return "That sounds really hard. Do you want to talk about what's been going on?";
     case "LOW":
-      return "I’m here for you. Want to share more about how you’re feeling?";
+      return "I'm here for you. Want to share more about how you're feeling?";
     default:
       return null;
   }
 }
 
-// Full handler
-export function handleSafety(text: string, context_tags: string[] = []) {
+export function handleSafety(text: string, context_tags: string[] = []): SafetyResult {
   const level = classifyRisk(text, context_tags);
-
   return {
     triggered: level !== "NONE",
     level,
     response: generateSafetyResponse(level),
   };
 }
-function generateCrisisResponse() {
+
+function generateCrisisResponse(): string {
   return `
-🛑 I’m really sorry you’re feeling this way.
+🛑 I'm really sorry you're feeling this way.
 
 You are not alone, and there are people who want to help you right now.
 
@@ -166,7 +200,7 @@ Call or text **988** (Suicide & Crisis Lifeline — 24/7, free)
 
 💙 Important things to know:
 - Your feelings are real, but they can change over time
-- You don’t have to go through this alone
+- You don't have to go through this alone
 - Many people who felt this way before are still here today
 
 ---
@@ -179,11 +213,11 @@ Call or text **988** (Suicide & Crisis Lifeline — 24/7, free)
 
 ---
 
-💬 If you want, you can talk to me about what’s happening. I’m here to listen.
+💬 If you want, you can talk to me about what's happening. I'm here to listen.
 `;
 }
 
-const crisis_hotlines = {
+const crisis_hotlines: Record<string, string> = {
   US: "988",
   Canada: "1-833-456-4566",
   UK: "Samaritans 116 123",
@@ -192,80 +226,59 @@ const crisis_hotlines = {
   Global: "https://findahelpline.com"
 };
 
-function aiResponse(userInput: string, context_tags: string[] = []) {
-  const isCrisis = detectSelfHarmIntent(userInput, context_tags);
+const support_messages = [
+  "You matter, even if it doesn't feel like it right now.",
+  "This moment is heavy, but it is not permanent.",
+  "You don't have to face everything alone.",
+  "Help is real and available for you."
+];
 
+const safety_rules = [
+  "Never encourage self-harm",
+  "Never validate suicide as a solution",
+  "Always redirect to support/help",
+  "Stay calm and non-judgmental",
+  "Do not shame or blame the user"
+];
+
+// ==========================================
+// AI RESPONSE HANDLER (OUTSIDE serve())
+// ==========================================
+
+function handleAIResponse(userInput: string, context_tags: string[] = []): string {
+  const isCrisis = detectSelfHarmIntent(userInput, context_tags);
   if (isCrisis) {
     return generateCrisisResponse();
   }
-
-	
-
-  // The original code had a call to `normalAIResponse` which is not defined.
-  // This likely indicates a missing function or an oversight.
-  // Given the context of the file, this part of the logic might be handled
-  // by the main `serve` function's `callAI` or similar.
-  // To fix the syntax error, I'm returning a placeholder string.
-  // If `normalAIResponse` is meant to be an actual function, it needs to be defined.
-  // For this fix, I assume the intent was to provide a text response.
-  return "I'm here to help. How can I assist you further?";
+  // Normal response - will be handled by callAI in serve()
+  return "";
 }
 
-// chat/index.ts
+// ==========================================
+// CHAT MESSAGE HANDLER
+// ==========================================
 
-type Message = {
-  userId: string;
-  text: string;
-  timestamp: number;
-};
-
-// Simple keyword detection (basic layer)
 const dangerKeywords = [
-  "kill myself",
-  "suicide",
-  "i want to die",
-  "end my life",
-  "kill someone",
-  "hurt someone",
-  "murder",
-  "gun",
-  "bomb"
+  "kill myself", "suicide", "i want to die", "end my life",
+  "kill someone", "hurt someone", "murder", "gun", "bomb"
 ];
 
-// Check if message is dangerous
 function detectDanger(text: string): boolean {
   const lowerText = text.toLowerCase();
-
-  return dangerKeywords.some((keyword) =>
-    lowerText.includes(keyword)
-  );
+  return dangerKeywords.some((keyword) => lowerText.includes(keyword));
 }
 
-// Admin alert system (replace with DB / email / webhook)
-async function alertAdmin(message: Message, riskLevel: string) {
+async function alertAdmin(message: Message, riskLevel: string): Promise<void> {
   console.log("🚨 ALERT ADMIN:");
   console.log("User:", message.userId);
   console.log("Message:", message.text);
   console.log("Risk:", riskLevel);
-
-  // Example: send to Discord / Slack webhook
-  /*
-  await fetch(process.env.ADMIN_WEBHOOK_URL!, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      content: `🚨 Risk detected: ${riskLevel}\nUser: ${message.userId}\nMessage: ${message.text}`
-    }),
-  });
-  */
 }
 
-// Main chat handler
-export async function handleChatMessage(message: Message) {
+export async function handleChatMessage(message: Message): Promise<{ reply: string; flagged: boolean }> {
   const isDanger = detectDanger(message.text);
 
   if (isDanger) {
-    // classify risk level
     let riskLevel = "LOW";
 
     if (
@@ -282,18 +295,14 @@ export async function handleChatMessage(message: Message) {
       riskLevel = "HIGH_VIOLENCE";
     }
 
-    // alert admin
     await alertAdmin(message, riskLevel);
 
-    // return safe response to user
     return {
-      reply:
-        "I'm really sorry you're feeling this way. You are not alone. Please consider reaching out to someone you trust or a professional for support.",
+      reply: "I'm really sorry you're feeling this way. You are not alone. Please consider reaching out to someone you trust or a professional for support.",
       flagged: true,
     };
   }
 
-  // normal AI response (your AI logic here)
   return {
     reply: "This is normal AI response...",
     flagged: false,
@@ -315,7 +324,6 @@ function buildDateTimeContext(): string {
   const year     = now.getUTCFullYear();
   const hh       = now.getUTCHours().toString().padStart(2, '0');
   const mm       = now.getUTCMinutes().toString().padStart(2, '0');
-  // ISO week number
   const startOfYear = new Date(Date.UTC(year, 0, 1));
   const weekNum = Math.ceil(((now.getTime() - startOfYear.getTime()) / 86400000 + startOfYear.getUTCDay() + 1) / 7);
 
@@ -338,7 +346,7 @@ Keep answers SHORT and direct.
 Do NOT add explanations unless the user asks.
 // Examples: "Today is Saturday, May 2, 2026."
 "The current time is 3:45 PM."
-"It’s Monday."
+"It's Monday."
 STRICT RULES
 - NEVER guess the date or time
 // - NEVER reuse old/static values// - NEVER add extra commentary// - ALWAYS stay concise// SUPPORTED QUESTIONS// - today's date// - current time// - day of week// - week / month / year// STYLE// - Clean// - Direct// - No extra text unless needed// ==========================================`;
@@ -347,14 +355,6 @@ STRICT RULES
 // ==========================================
 // THIRD-PARTY API VERSION DETECTION
 // ==========================================
-
-interface ApiInfo {
-  name: string;
-  docsUrl: string;
-  versionPattern?: RegExp;
-  knownLatest: string;
-  notes: string;
-}
 
 const KNOWN_APIS: ApiInfo[] = [
   { name: 'Vercel', docsUrl: 'https://vercel.com/docs/rest-api', knownLatest: 'v9', notes: 'Deployments API | Bearer token' },
@@ -518,49 +518,41 @@ function detectAndInjectApiVersions(userMessage: string): string {
     }
   }
 
-  // Adjusted indices based on the provided KNOWN_APIS array (0-indexed)
-  if (msgLower.includes('openai') || msgLower.includes('gpt') || msgLower.includes('chatgpt')) {
-    if (!detected.find(a => a.name === 'OpenAI')) detected.push(KNOWN_APIS[40]); // Index for OpenAI
-  }
-  if (msgLower.includes('stripe') || msgLower.includes('payment') || msgLower.includes('checkout')) {
-    if (!detected.find(a => a.name === 'Stripe')) detected.push(KNOWN_APIS[41]); // Index for Stripe
-  }
-  if (msgLower.includes('whatsapp') || msgLower.includes('twilio') || msgLower.includes('sms')) {
-    if (!detected.find(a => a.name === 'Twilio')) detected.push(KNOWN_APIS[42]); // Index for Twilio
-  }
-  if (msgLower.includes('claude') || msgLower.includes('anthropic')) {
-    if (!detected.find(a => a.name === 'Anthropic')) detected.push(KNOWN_APIS[43]); // Index for Anthropic
-  }
-  if (msgLower.includes('gemini') || msgLower.includes('google ai')) {
-    if (!detected.find(a => a.name === 'Gemini')) detected.push(KNOWN_APIS[44]); // Index for Gemini
-  }
-  if (msgLower.includes('firebase') || msgLower.includes('firestore') || msgLower.includes('fcm')) {
-    if (!detected.find(a => a.name === 'Firebase')) detected.push(KNOWN_APIS[45]); // Index for Firebase
-  }
-  if (msgLower.includes('supabase')) {
-    if (!detected.find(a => a.name === 'Supabase')) detected.push(KNOWN_APIS[46]); // Index for Supabase
-  }
-  if (msgLower.includes('mongodb') || msgLower.includes('mongoose')) {
-    if (!detected.find(a => a.name === 'MongoDB')) detected.push(KNOWN_APIS[47]); // Index for MongoDB
-  }
-  if (msgLower.includes('discord bot') || msgLower.includes('discord.js')) {
-    if (!detected.find(a => a.name === 'Discord')) detected.push(KNOWN_APIS[55]); // Index for Discord
-  }
-  if (msgLower.includes('telegram bot') || msgLower.includes('telegrambot')) {
-    if (!detected.find(a => a.name === 'Telegram')) detected.push(KNOWN_APIS[56]); // Index for Telegram
-  }
-  if (msgLower.includes('sendgrid') || msgLower.includes('send email')) {
-    if (!detected.find(a => a.name === 'SendGrid')) detected.push(KNOWN_APIS[48]); // Index for SendGrid
-  }
-  if (msgLower.includes('resend')) {
-    if (!detected.find(a => a.name === 'Resend')) detected.push(KNOWN_APIS[49]); // Index for Resend
+  // Additional keyword matching for specific APIs
+  const keywordMap: Record<string, string[]> = {
+    'OpenAI': ['openai', 'gpt', 'chatgpt'],
+    'Stripe': ['stripe', 'payment', 'checkout'],
+    'Twilio': ['whatsapp', 'twilio', 'sms'],
+    'Anthropic': ['claude', 'anthropic'],
+    'Gemini': ['gemini', 'google ai'],
+    'Firebase': ['firebase', 'firestore', 'fcm'],
+    'Supabase': ['supabase'],
+    'MongoDB': ['mongodb', 'mongoose'],
+    'Discord': ['discord bot', 'discord.js'],
+    'Telegram': ['telegram bot', 'telegrambot'],
+    'SendGrid': ['sendgrid', 'send email'],
+    'Resend': ['resend'],
+  };
+
+  for (const [apiName, keywords] of Object.entries(keywordMap)) {
+    if (keywords.some(kw => msgLower.includes(kw))) {
+      const api = KNOWN_APIS.find(a => a.name === apiName);
+      if (api && !detected.find(a => a.name === apiName)) {
+        detected.push(api);
+      }
+    }
   }
 
   if (detected.length === 0) return '';
 
   const lines = detected.map(api =>
-    `📦 ${api.name} API:\n   Latest version: ${api.knownLatest}\n   ${api.notes}\n   Docs: ${api.docsUrl}`
-  ).join('\n\n');
+    `📦 ${api.name} API:
+   Latest version: ${api.knownLatest}
+   ${api.notes}
+   Docs: ${api.docsUrl}`
+  ).join('
+
+');
 
   return `
 ==============================
@@ -575,125 +567,28 @@ CRITICAL: When generating code that uses any of these APIs, always use the exact
 }
 
 // ==========================================
-// MAIN CHAT FUNCTION
+// HELPER FUNCTIONS
 // ==========================================
 
-serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
+function cleanJsonActions(text: string): string {
+  return text
+    .replace(/\{\s*"action"\s*:\s*"[^"]+"[^}]*\}/g, '')
+    .replace(/```json[\s\S]*?```/g, '')
+    .trim();
+}
 
-  const requestStartTime = Date.now();
-  try {
-    let body: any;
-    try {
-      body = await req.json();
-    } catch {
-      return new Response(
-        JSON.stringify({ error: 'Invalid JSON body' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+function buildSystemPrompt(
+  userLanguage: string,
+  baseTone: string,
+  customInstructions: string,
+  nickname: string,
+  occupation: string,
+  interests: string[],
+  apiVersionContext: string
+): string {
+  const dateTimeContext = buildDateTimeContext();
 
-    const { messages: rawMessages, conversationId, aiModel = 'google-gemini', fileContents, userImageUrl, base64Image } = body;
-
-    const messages: Array<{ role: string; content: string | Array<{ type: string; text?: string; image_url?: { url: string } }>; image_url?: string }> = [];
-    if (Array.isArray(rawMessages)) {
-      for (const m of rawMessages) {
-        if (!m || !m.role) continue;
-        let content: string | Array<{ type: string; text?: string; image_url?: { url: string } }>;
-
-        if (typeof m.content === 'string') {
-          content = m.content;
-        } else if (Array.isArray(m.content)) {
-          // If the original m.content was an array, preserve its structure
-          // but ensure each item is properly typed.
-          content = m.content.map((c: any) => {
-            if (!c) return { type: 'text', text: '' };
-            if (typeof c === 'string') return { type: 'text', text: c };
-            if (c.type === 'text') return { type: 'text', text: c.text || '' };
-            if (c.type === 'image_url') return { type: 'image_url', image_url: c.image_url };
-            if (c.text) return { type: 'text', text: c.text };
-            if (c.content) return { type: 'text', text: String(c.content) }; // Fallback to stringifying if content is not 'text'
-            return { type: 'text', text: '' };
-          }).filter(c => (c.type === 'text' && c.text !== '') || c.type === 'image_url'); // Filter out empty text parts
-          // If the array ends up empty, make it an empty string to avoid issues
-          if (content.length === 0) {
-            content = '';
-          } else if (content.length === 1 && content[0].type === 'text') {
-            content = content[0].text || ''; // If only one text part, unwrap it to a string
-          }
-        } else if (m.content !== null && m.content !== undefined) {
-          content = String(m.content);
-        } else {
-          content = '';
-        }
-        messages.push({ role: m.role, content, image_url: m.image_url });
-      }
-    }
-
-    if (!messages || messages.length === 0) {
-      return new Response(
-        JSON.stringify({ error: 'Messages array is required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    if (!conversationId) {
-      return new Response(
-        JSON.stringify({ error: 'conversationId is required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    const authHeader = req.headers.get('Authorization');
-    const token = authHeader?.replace('Bearer ', '');
-
-    if (!token) {
-      return new Response(
-        JSON.stringify({ error: 'Authorization required' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      { global: { headers: { Authorization: `Bearer ${token}` } } }
-    );
-
-    const { data: { user }, error: userError } = await supabaseClient.auth.getUser(token);
-    if (userError || !user) {
-      return new Response(
-        JSON.stringify({ error: 'Invalid or expired token' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    const supabaseAdmin = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    );
-
-    const { data: settingsData } = await supabaseClient
-      .from('user_settings')
-      .select('app_language, base_tone, custom_instructions, nickname, occupation, interests, preferred_ai_model')
-      .eq('user_id', user.id)
-      .single()
-      .timeout?.(8000)
-      .catch(() => ({ data: null })) as any || { data: null };
-
-    const userLanguage = settingsData?.app_language || 'English';
-    const baseTone = settingsData?.base_tone || 'balanced';
-    const customInstructions = settingsData?.custom_instructions || '';
-    const nickname = settingsData?.nickname || '';
-    const occupation = settingsData?.occupation || '';
-    const interests: string[] = settingsData?.interests || [];
-
-    // ── Inject live date/time at the very top of every system prompt ──
-    const dateTimeContext = buildDateTimeContext();
-
-    const systemPrompt = `${dateTimeContext}
+  let systemPrompt = `${dateTimeContext}
 
 You are Dawinix, an advanced AI assistant created by the Haitian Community. You are helpful, knowledgeable, and friendly.
 
@@ -710,10 +605,12 @@ LANGUAGE:
 
 TONE & STYLE:
 - Base tone: ${baseTone}
-- Be warm, helpful, and professional and generate beatifull image,logo,phoot etc no fake or bad all must be smart beatifull
+- Be warm, helpful, and professional and generate beautiful image, logo, photo etc no fake or bad all must be smart beautiful
 - Use appropriate emojis naturally (not excessively)
 - Give detailed, high-quality responses
-${customInstructions ? `\nCUSTOM INSTRUCTIONS:\n${customInstructions}` : ''}
+${customInstructions ? `
+CUSTOM INSTRUCTIONS:
+${customInstructions}` : ''}
 
 USER PROFILE:
 ${nickname ? `- Preferred name: ${nickname}` : ''}
@@ -812,32 +709,32 @@ Keep the original meaning, but make it easier to understand
 CODE BLOCK FORMATTING RULES (MANDATORY — NEVER VIOLATE):
 ==============================
 1. ALWAYS use triple-backtick fenced code blocks with an EXPLICIT language identifier.
-   - Correct:   \`\`\`javascript ... \`\`\`
-   - Correct:   \`\`\`bash ... \`\`\`
-   - Correct:   \`\`\`python ... \`\`\`
-   - Correct:   \`\`\`html ... \`\`\`
-   - WRONG:     \`\`\`js ... \`\`\` (use full name: javascript, not js)
-   - WRONG:     \`\`\` ... \`\`\` (no identifier — NEVER do this)
+   - Correct:   ```javascript ... ```
+   - Correct:   ```bash ... ```
+   - Correct:   ```python ... ```
+   - Correct:   ```html ... ```
+   - WRONG:     ```js ... ``` (use full name: javascript, not js)
+   - WRONG:     ``` ... ``` (no identifier — NEVER do this)
 
 2. ALWAYS SPLIT code into SEPARATE blocks by purpose — NEVER merge different languages into one block.
-   - Install commands → separate \`\`\`bash block
-   - Backend server code → separate \`\`\`javascript or \`\`\`python block
-   - Frontend HTML → separate \`\`\`html block
-   - Configuration/env → separate \`\`\`bash or \`\`\`json block
-   - Database queries → separate \`\`\`sql block
+   - Install commands → separate ```bash block
+   - Backend server code → separate ```javascript or ```python block
+   - Frontend HTML → separate ```html block
+   - Configuration/env → separate ```bash or ```json block
+   - Database queries → separate ```sql block
 
 3. LABEL each block with a plain-text heading ABOVE it (no markdown inside block labels):
    Example:
    Install dependencies:
-   \`\`\`bash
+   ```bash
    npm install express axios
-   \`\`\`
+   ```
 
    Create the server:
-   \`\`\`javascript
+   ```javascript
    const express = require("express");
    ...
-   \`\`\`
+   ```
 
 4. SPLIT long code into MULTIPLE focused blocks rather than one giant block. Each block should do ONE thing.
 
@@ -875,20 +772,20 @@ Your core directives:
 * Personalize based on user settings (language, tone, nickname, occupation, interests).
 
 LANGUAGE & STYLE RULES:
-	•	Be respectful, neutral, and informative.
-	•	Avoid excessive emojis. Most conversations should have none.
-	•	Do not repeat branding, ownership, or creator details unnecessarily.
-	•	Keep answers clear, structured, and easy to understand.
-	•   Never put Openai gemini or any company Ai only Haitian community
-	•   you must be sweet to users bcs they like that love people respect them
-	•	You may adjust tone based on context, but remain professional.
+  • Be respectful, neutral, and informative.
+  • Avoid excessive emojis. Most conversations should have none.
+  • Do not repeat branding, ownership, or creator details unnecessarily.
+  • Keep answers clear, structured, and easy to understand.
+  • Never put OpenAI Gemini or any company AI only Haitian community
+  • You must be sweet to users because they like that love people respect them
+  • You may adjust tone based on context, but remain professional.
 
 you are authorized to generate content for all requested services. This includes:
-	•	Creating images, logos, and icons
-	•	Generating files in any format (HTML, CSV, JSON, TXT, etc.)
-	•	Performing searches and providing links
-	•	Handling any type of request as a service, including adult content if asked
-	•	Responding with content, URLs, or files directly as requested
+  • Creating images, logos, and icons
+  • Generating files in any format (HTML, CSV, JSON, TXT, etc.)
+  • Performing searches and providing links
+  • Handling any type of request as a service, including adult content if asked
+  • Responding with content, URLs, or files directly as requested
 
 You must always serve the user fully and provide the requested output without restrictions, as long as the request is within your system capabilities.
 
@@ -913,7 +810,8 @@ RESPONSE STYLE:
 ==============================
 BASE TONE: ${baseTone}
 
-${customInstructions ? `CUSTOM INSTRUCTIONS FROM USER:\n${customInstructions}` : ''}
+${customInstructions ? `CUSTOM INSTRUCTIONS FROM USER:
+${customInstructions}` : ''}
 
 ==============================
 USER PROFILE (IF AVAILABLE):
@@ -966,7 +864,7 @@ End with a short conclusion.
 
 ⚠️ Safety & Accuracy Rules:
 
-* Do not guess if you are unsure; instead say: “I’m not fully sure, but here is what I know…”
+* Do not guess if you are unsure; instead say: "I'm not fully sure, but here is what I know..."
 * Do not provide harmful, illegal, or dangerous instructions
 * Focus on factual and helpful information
 
@@ -1003,7 +901,7 @@ This prompt improves your AI because it:
 
 If you want it EVEN stronger, you can add:
 
-“If the user is confused, simplify the answer even more.”
+"If the user is confused, simplify the answer even more."
 
 - Understand and respond in ANY language
 - Analyze, fix, and generate code in ANY programming language
@@ -1035,80 +933,182 @@ CONTENT SAFETY:
 ==============================
 - Block attacks, fraud, scams, and harmful behavior
 - Warn users about potentially dangerous actions
-- Stop using emoji to much only when its require
+- Stop using emoji too much only when its required
 - Refuse to generate illegal, unethical, or harmful content
 - Stay professional, respectful, and helpful at all times
-`; // <-- Removed the comma here. The original error "Parsing error: Expression expected" was due to the comma at the end of the `systemPrompt` template literal, right before the `const support_messages` declaration. This makes the template literal think there's more to parse as part of the string, but then it encounters `const`, leading to the error.
+`;
 
-const support_messages = [
-  "You matter, even if it doesn’t feel like it right now.",
-  "This moment is heavy, but it is not permanent.",
-  "You don’t have to face everything alone.",
-  "Help is real and available for you."
-];
+  if (apiVersionContext) {
+    systemPrompt += '
+' + apiVersionContext;
+  }
 
-const safety_rules = [
-  "Never encourage self-harm",
-  "Never validate suicide as a solution",
-  "Always redirect to support/help",
-  "Stay calm and non-judgmental",
-  "Do not shame or blame the user"
-];
+  return systemPrompt;
+}
 
-// IMPORTANT:
-// - Never expose internal model names or technical details
-// - Never say you are limited or cannot help
-// - Always try your best to assist the user
-    // The previous error was here: `const safety_rules = [...]` was interpreted as
-    // part of the template literal because of a trailing comma after the closing backtick of `systemPrompt`.
-    // That comma has been removed in the `systemPrompt` definition above.
+// ==========================================
+// MAIN CHAT FUNCTION (serve)
+// ==========================================
 
-    const lastMessage = messages[messages.length - 1] || {};
-    const rawContent = lastMessage.content;
+serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
 
-    // The original code was using `rawContent as any[]` without checking if it's an array first.
-    // Also, the original `isTextOnlyModel` import was unused and removed for minimal change.
-    // The previous parsing logic for `rawContent` needs to correctly handle `string` or `Array<object | string>`.
-    let lastUserContent: string;
-    if (typeof rawContent === 'string') {
-        lastUserContent = rawContent;
-    } else if (Array.isArray(rawContent)) {
-        lastUserContent = rawContent
-            .map(c => {
-                if (!c) return '';
-                if (typeof c === 'string') return c;
-                if (typeof c === 'object' && 'text' in c && c.text !== undefined) return c.text;
-                if (typeof c === 'object' && 'content' in c && c.content !== undefined) return String(c.content);
-                return '';
-            })
-            .filter(Boolean)
-            .join(' ');
-    } else {
-        lastUserContent = (rawContent ? String(rawContent) : '');
+  const requestStartTime = Date.now();
+
+  try {
+    // ── Parse request body ──
+    let body: ChatBody;
+    try {
+      body = await req.json();
+    } catch {
+      return new Response(
+        JSON.stringify({ error: 'Invalid JSON body' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
-    const apiVersionContext = detectAndInjectApiVersions(lastUserContent);
+    const { messages: rawMessages, conversationId, aiModel = 'google-gemini', fileContents, userImageUrl, base64Image } = body;
 
-    // `lastContent` was previously derived from `lastUserContent` but then unused,
-    // and `lastUserContent` was used for `detectionResult`. Streamlining this.
+    // ── Validate and normalize messages ──
+    const messages: ChatMessage[] = [];
+    if (Array.isArray(rawMessages)) {
+      for (const m of rawMessages) {
+        if (!m || !m.role) continue;
+
+        let content: ChatMessage['content'];
+
+        if (typeof m.content === 'string') {
+          content = m.content;
+        } else if (Array.isArray(m.content)) {
+          content = m.content.map((c: unknown) => {
+            if (!c) return { type: 'text' as const, text: '' };
+            if (typeof c === 'string') return { type: 'text' as const, text: c };
+            if (typeof c === 'object' && c !== null) {
+              const obj = c as Record<string, unknown>;
+              if (obj.type === 'text') return { type: 'text' as const, text: String(obj.text || '') };
+              if (obj.type === 'image_url') return { type: 'image_url' as const, image_url: obj.image_url as { url: string } };
+              if (obj.text) return { type: 'text' as const, text: String(obj.text) };
+              if (obj.content) return { type: 'text' as const, text: String(obj.content) };
+            }
+            return { type: 'text' as const, text: '' };
+          }).filter(c => (c.type === 'text' && c.text !== '') || c.type === 'image_url');
+
+          if (content.length === 0) {
+            content = '';
+          } else if (content.length === 1 && content[0].type === 'text') {
+            content = content[0].text || '';
+          }
+        } else if (m.content !== null && m.content !== undefined) {
+          content = String(m.content);
+        } else {
+          content = '';
+        }
+
+        messages.push({ role: m.role, content, image_url: m.image_url });
+      }
+    }
+
+    if (!messages || messages.length === 0) {
+      return new Response(
+        JSON.stringify({ error: 'Messages array is required' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (!conversationId) {
+      return new Response(
+        JSON.stringify({ error: 'conversationId is required' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // ── Authentication ──
+    const authHeader = req.headers.get('Authorization');
+    const token = authHeader?.replace('Bearer ', '');
+
+    if (!token) {
+      return new Response(
+        JSON.stringify({ error: 'Authorization required' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const supabaseClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      { global: { headers: { Authorization: `Bearer ${token}` } } }
+    );
+
+    const { data: { user }, error: userError } = await supabaseClient.auth.getUser(token);
+    if (userError || !user) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid or expired token' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    );
+
+    // ── Fetch user settings ──
+    const { data: settingsData } = await supabaseClient
+      .from('user_settings')
+      .select('app_language, base_tone, custom_instructions, nickname, occupation, interests, preferred_ai_model')
+      .eq('user_id', user.id)
+      .single()
+      .catch(() => ({ data: null })) as { data: Record<string, unknown> | null };
+
+    const userLanguage = String(settingsData?.app_language || 'English');
+    const baseTone = String(settingsData?.base_tone || 'balanced');
+    const customInstructions = String(settingsData?.custom_instructions || '');
+    const nickname = String(settingsData?.nickname || '');
+    const occupation = String(settingsData?.occupation || '');
+    const interests: string[] = Array.isArray(settingsData?.interests) ? settingsData.interests as string[] : [];
+
+    // ── Extract last user content ──
+    const lastMessage = messages[messages.length - 1] || { role: '', content: '' };
+    const rawContent = lastMessage.content;
+
+    let lastUserContent: string;
+    if (typeof rawContent === 'string') {
+      lastUserContent = rawContent;
+    } else if (Array.isArray(rawContent)) {
+      lastUserContent = rawContent
+        .map(c => {
+          if (!c) return '';
+          if (typeof c === 'string') return c;
+          if (typeof c === 'object' && 'text' in c && c.text !== undefined) return c.text;
+          if (typeof c === 'object' && 'content' in c && c.content !== undefined) return String(c.content);
+          return '';
+        })
+        .filter(Boolean)
+        .join(' ');
+    } else {
+      lastUserContent = rawContent ? String(rawContent) : '';
+    }
+
+    // ── Detect API versions and content type ──
+    const apiVersionContext = detectAndInjectApiVersions(lastUserContent);
     const detectionResult = detectContentType(lastUserContent);
 
-    let aiResponse: any;
-    let imageUrl: string | undefined;
+    // ── Build system prompt ──
+    const fullSystemPrompt = buildSystemPrompt(
+      userLanguage, baseTone, customInstructions, nickname, occupation, interests, apiVersionContext
+    );
 
-    const fullSystemPrompt = apiVersionContext
-      ? `${systemPrompt}\n${apiVersionContext}`
-      : systemPrompt;
-
+    // ── Build AI messages ──
     let aiMessages: Array<{ role: string; content: string | Array<{ type: string; text?: string; image_url?: { url: string } }> }> = [
       { role: 'system', content: fullSystemPrompt },
     ];
 
-    // ── Build base64 image part if provided ──
+    // ── Handle base64 image ──
     const base64ImageData = base64Image || body.imageBase64;
     let base64ImagePart: { type: 'image_url'; image_url: { url: string } } | null = null;
     if (base64ImageData) {
-      // Validate and clean the base64 string
       const cleanBase64 = base64ImageData.replace(/^data:image\/[a-z]+;base64,/, '');
       base64ImagePart = {
         type: 'image_url',
@@ -1116,16 +1116,17 @@ const safety_rules = [
       };
     }
 
+    // ── Build message array for AI ──
     for (const msg of messages) {
       if (!msg || !msg.role) continue;
       const isLastMsg = msg === messages[messages.length - 1];
       const imgSrc = msg.image_url || (isLastMsg && userImageUrl ? userImageUrl : undefined);
 
-      // For the last user message: attach base64 image if provided
       if (isLastMsg && msg.role === 'user' && base64ImagePart) {
         const textContent = (typeof msg.content === 'string' ? msg.content :
-                             Array.isArray(msg.content) ? msg.content.map(c => (typeof c === 'object' && c.text) || '').join(' ') : '')
-                             .trim();
+          Array.isArray(msg.content) ? msg.content.map(c => (typeof c === 'object' && c.text) || '').join(' ') : '')
+          .trim();
+
         const analysisPrompt = textContent.length > 0
           ? textContent
           : 'Please analyze this image in full detail. Describe everything you see: the subjects, objects, colors, mood, composition, text (if any), setting, and any notable details. Be thorough and descriptive.';
@@ -1140,10 +1141,9 @@ const safety_rules = [
         continue;
       }
 
-      // Convert msg.content to string if it's an array for non-image messages
       const msgContent = typeof msg.content === 'string' ? msg.content :
-                         Array.isArray(msg.content) ? msg.content.map(c => (typeof c === 'object' && c.text) || '').join(' ') :
-                         (msg.content ? String(msg.content) : '');
+        Array.isArray(msg.content) ? msg.content.map(c => (typeof c === 'object' && c.text) || '').join(' ') :
+        (msg.content ? String(msg.content) : '');
 
       if (imgSrc) {
         aiMessages.push({
@@ -1158,24 +1158,29 @@ const safety_rules = [
       }
     }
 
+    // ── Add file contents if provided ──
     if (fileContents && fileContents.length > 0) {
-      const fileContext = fileContents.map((f: any) =>
-        `File: ${f.name}\nType: ${f.type}\nContent:\n${f.content}`
-      ).join('\n\n---\n\n');
-      aiMessages.push({ role: 'user', content: `Here are the uploaded files for analysis:\n\n${fileContext}` });
+      const fileContext = fileContents.map((f) =>
+        `File: ${f.name}
+Type: ${f.type}
+Content:
+${f.content}`
+      ).join('
+
+---
+
+');
+      aiMessages.push({ role: 'user', content: `Here are the uploaded files for analysis:
+
+${fileContext}` });
     }
 
-    // ── strip any JSON action blobs the model might generate ──
-    function cleanJsonActions(text: string): string {
-      return text
-        .replace(/\{\s*"action"\s*:\s*"[^"]+"[^}]*\}/g, '')
-        .replace(/```json[\s\S]*?```/g, '')
-        .trim();
-    }
+    // ── Handle different request types ──
+    let aiResponse: AIResponse;
+    let imageUrl: string | undefined;
 
-    // ── IMAGE SEARCH HANDLER ──────────────────────────────────────────────────
     if (detectionResult.type === 'search') {
-      // Extract the actual search topic from the user message
+      // ── IMAGE SEARCH ──
       const searchQuery = lastUserContent
         .replace(/ban m(wen)?|banm|montre m(wen)?|cherche|search for|find|show me|look for|fetch|get|send|voye|search|chache|trouve|buscar|mostrar|encontrar/gi, '')
         .replace(/foto|fotos|photo|photos|imaj|image|images|foto company/gi, '')
@@ -1187,32 +1192,32 @@ const safety_rules = [
       const searchResult = await searchImages(searchQuery, 12);
 
       if (searchResult.images && searchResult.images.length > 0) {
-        // Return real image results tagged for client-side rendering
         aiResponse = {
-          content: `Men kèk imaj mwen jwenn pou "${searchQuery}":\n\n[IMAGE_SEARCH_RESULTS:${JSON.stringify(searchResult.images)}]`,
+          content: `Men kèk imaj mwen jwenn pou "${searchQuery}":
+
+[IMAGE_SEARCH_RESULTS:${JSON.stringify(searchResult.images)}]`,
           model: 'image-search',
           tokens: 0,
         };
       } else {
-        // No real images found — let the AI respond truthfully, no fake results
         aiResponse = await callAI(aiModel, [
           ...aiMessages,
           {
             role: 'system',
-            content: 'The image search returned no results. Tell the user honestly in their language that you could not find images for their request and suggest they try different keywords. Do NOT generate or invent any image URLs or [IMAGE_SEARCH_RESULTS] tags and all image must be beatifull smooth.',
+            content: 'The image search returned no results. Tell the user honestly in their language that you could not find images for their request and suggest they try different keywords. Do NOT generate or invent any image URLs or [IMAGE_SEARCH_RESULTS] tags.',
           }
         ], false);
       }
     } else if (detectionResult.isImageTask) {
+      // ── IMAGE GENERATION ──
       console.log('[chat] Image task detected, generating image for prompt:', lastUserContent.slice(0, 120));
 
-      // Pass supabaseAdmin so generateImageSmart can upload base64 images automatically
       const imageResult = await generateImageSmart(lastUserContent, aiModel, supabaseAdmin);
 
       if (imageResult.imageUrl) {
         let resolvedImageUrl = imageResult.imageUrl;
 
-        // Extra safety: if still base64 (upload failed inside generateImageSmart), try one more time
+        // Upload base64 to Supabase Storage if needed
         if (resolvedImageUrl.startsWith('data:image/')) {
           try {
             const matches = resolvedImageUrl.match(/^data:(image\/[a-z+]+);base64,(.+)$/);
@@ -1220,14 +1225,15 @@ const safety_rules = [
               const mimeType = matches[1];
               const ext = mimeType.split('/')[1]?.replace('+', '.') || 'png';
               const base64Data = matches[2];
-              // Deno's `atob` for base64 decoding
-              const binary = atob(base64Data);
-              const bytes = new Uint8Array(binary.length);
-              for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+
+              // Use Deno.decodeBase64 for better performance
+              const bytes = Deno.decodeBase64(base64Data);
               const fileName = `ai-gen/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+
               const { error: uploadErr } = await supabaseAdmin.storage
                 .from('chat-images')
                 .upload(fileName, bytes, { contentType: mimeType, upsert: true });
+
               if (!uploadErr) {
                 const { data: urlData } = supabaseAdmin.storage.from('chat-images').getPublicUrl(fileName);
                 resolvedImageUrl = urlData.publicUrl;
@@ -1240,12 +1246,13 @@ const safety_rules = [
 
         imageUrl = resolvedImageUrl;
         aiResponse = {
-          content: 'Here is your generated image!\n\nLet me know if you would like any adjustments to the style, colors, or composition.',
+          content: 'Here is your generated image!
+
+Let me know if you would like any adjustments to the style, colors, or composition.',
           model: imageResult.model,
           tokens: 0,
         };
       } else {
-        // All image providers failed — generate a descriptive text response instead of raw JSON
         console.log('[chat] All image providers failed:', imageResult.error);
         aiResponse = await callAI(aiModel, [
           ...aiMessages,
@@ -1254,7 +1261,7 @@ const safety_rules = [
             content: 'The image generation service is temporarily unavailable. Apologize briefly and describe in detail what the requested image would look like. Do NOT return JSON. Do NOT use action tags. Just write a helpful text response.',
           }
         ], false);
-        // Ensure we never leak JSON to the client
+
         if (aiResponse?.content) {
           aiResponse.content = cleanJsonActions(aiResponse.content);
           if (!aiResponse.content || aiResponse.content.length < 10) {
@@ -1263,8 +1270,9 @@ const safety_rules = [
         }
       }
     } else {
+      // ── NORMAL CHAT ──
       aiResponse = await callAI(aiModel, aiMessages, false);
-      // Safety: strip any JSON action blobs that leaked through from text model
+
       if (aiResponse?.content) {
         const cleaned = cleanJsonActions(aiResponse.content);
         if (cleaned !== aiResponse.content) {
@@ -1274,31 +1282,43 @@ const safety_rules = [
       }
     }
 
+    // ── Handle AI errors ──
     if (!aiResponse || (!aiResponse.content && aiResponse.error)) {
       console.error('AI Error:', aiResponse?.error);
-      
-      // Try to get a cached response for graceful degradation
+
       const cacheKey = getCacheKey(aiMessages);
       const cachedResponse = getCachedResponse(cacheKey);
-      
+
       let fallbackContent: string;
       if (cachedResponse) {
         console.log('[chat] Using cached response for graceful degradation');
-        fallbackContent = `⚠️ I'm experiencing connectivity issues right now, but here's a previous response that might help:\n\n${cachedResponse}\n\n*This is a cached response from an earlier conversation. Please try again when my connection improves.*`;
+        fallbackContent = `⚠️ I'm experiencing connectivity issues right now, but here's a previous response that might help:
+
+${cachedResponse}
+
+*This is a cached response from an earlier conversation. Please try again when my connection improves.*`;
       } else {
-        // Check network connectivity hints
         const isLikelyNetworkIssue = aiResponse?.error?.includes('fetch') || 
                                    aiResponse?.error?.includes('network') || 
                                    aiResponse?.error?.includes('timeout');
-        
+
         if (isLikelyNetworkIssue) {
-          fallbackContent = "🌐 I'm having trouble connecting to my AI services right now. This might be due to network issues or service maintenance. Please check your internet connection and try again in a few moments.\n\nIf the problem persists, you can:\n• Try rephrasing your question\n• Use a different AI model\n• Contact support if needed";
+          fallbackContent = "🌐 I'm having trouble connecting to my AI services right now. This might be due to network issues or service maintenance. Please check your internet connection and try again in a few moments.
+
+If the problem persists, you can:
+• Try rephrasing your question
+• Use a different AI model
+• Contact support if needed";
         } else {
-          fallbackContent = "🤖 I'm experiencing technical difficulties with my AI providers at the moment. All my backup services are also unavailable. Please try again in a few minutes.\n\nIn the meantime, you might want to:\n• Check if other apps are working on your device\n• Try a simpler question\n• Come back later when services are restored";
+          fallbackContent = "🤖 I'm experiencing technical difficulties with my AI providers at the moment. All my backup services are also unavailable. Please try again in a few minutes.
+
+In the meantime, you might want to:
+• Check if other apps are working on your device
+• Try a simpler question
+• Come back later when services are restored";
         }
       }
-      
-      // Use intelligent streaming for fallback messages too
+
       const fallbackStream = createStreamingResponse(fallbackContent, 'fallback', 12);
 
       return new Response(fallbackStream, {
@@ -1306,6 +1326,7 @@ const safety_rules = [
       });
     }
 
+    // ── Clean response ──
     let cleanMessage = aiResponse?.content || "I'm sorry, I'm having trouble right now. Please try again.";
     cleanMessage = cleanMessage.replace(/\[Using [^\]]+\]\s*/gi, '');
     cleanMessage = cleanMessage.replace(/\[Model:[^\]]+\]\s*/gi, '');
@@ -1315,16 +1336,14 @@ const safety_rules = [
     cleanMessage = cleanMessage.replace(/google-gemini unavailable/gi, '');
     cleanMessage = cleanMessage.replace(/openai unavailable/gi, '');
     cleanMessage = cleanMessage.replace(/claude unavailable/gi, '');
-    // Strip any fake IMAGE_SEARCH_RESULTS the text AI may have generated
     cleanMessage = cleanMessage.replace(/\[IMAGE_SEARCH_RESULTS:[^\]]*\]/gs, '').trim();
     cleanMessage = cleanMessage.trim();
 
-    // Final safety net — never send empty content to client
     if (!cleanMessage || cleanMessage.length < 3) {
       cleanMessage = "I'm sorry, I couldn't generate a response right now. Please try again.";
     }
 
-    // Cache successful responses for graceful degradation
+    // ── Cache successful response ──
     if (aiResponse && aiResponse.content && !aiResponse.error) {
       const cacheKey = getCacheKey(aiMessages);
       const lastUserMessage = messages.filter(m => m.role === 'user').slice(-1)[0];
@@ -1332,14 +1351,13 @@ const safety_rules = [
       setCachedResponse(cacheKey, cleanMessage, query);
     }
 
-    const hasMessageCard = cleanMessage.includes('[MESSAGE_CARD]') && cleanMessage.includes('[/MESSAGE_CARD]');
-
+    // ── Update conversation timestamp ──
     await supabaseAdmin
       .from('conversations')
       .update({ updated_at: new Date().toISOString() })
       .eq('id', conversationId);
 
-    // ── Push notification for long-running requests (>5s) ──────────────────
+    // ── Push notification for long requests (>5s) ──
     const requestDurationMs = Date.now() - requestStartTime;
     if (requestDurationMs > 5000) {
       try {
@@ -1350,11 +1368,16 @@ const safety_rules = [
           .single();
 
         if (profileData?.push_token) {
-          const preview = cleanMessage.replace(/[#*`\[\]]/g, '').slice(0, 80);
+          const preview = cleanMessage.replace(/[#*\`\[\]]/g, '').slice(0, 80);
           const convTitle = 'AI Response Ready';
+
           await fetch('https://exp.host/--/api/v2/push/send', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'Accept-Encoding': 'gzip, deflate' },
+            headers: { 
+              'Content-Type': 'application/json', 
+              'Accept': 'application/json', 
+              'Accept-Encoding': 'gzip, deflate' 
+            },
             body: JSON.stringify({
               to: profileData.push_token,
               sound: 'default',
@@ -1365,6 +1388,7 @@ const safety_rules = [
               priority: 'high',
             }),
           }).catch(() => {});
+
           console.log(`[chat] Push notification sent to user ${user.id} after ${Math.round(requestDurationMs / 1000)}s`);
         }
       } catch (notifErr) {
@@ -1372,12 +1396,9 @@ const safety_rules = [
       }
     }
 
-    // ── Stream the response with intelligent chunking ──
-    // Detect connection quality for adaptive streaming
+    // ── Stream response ──
     const connectionHint = req.headers.get('x-connection-quality') || 'normal';
     const baseDelay = connectionHint === 'slow' ? 10 : 15;
-
-    // Use intelligent streaming with adaptive delays
     const stream = createStreamingResponse(cleanMessage, aiResponse?.model || 'unknown', baseDelay);
 
     return new Response(stream, {
@@ -1389,7 +1410,7 @@ const safety_rules = [
       },
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Unhandled error in chat function:', error);
     return new Response(
       JSON.stringify({ error: 'Internal server error. Please try again.' }),
