@@ -15,7 +15,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { BlurView } from 'expo-blur';
 import { useTheme } from '../hooks/useTheme';
-import { Spacing, BorderRadius, Typography } from '../constants/theme';
 import { WebViewModal } from './WebViewModal';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -30,13 +29,38 @@ export interface Source {
 }
 
 interface SourcesButtonProps {
-  sources: Source[];
+  sources: Source[] | string[];
 }
 
 interface SourcesModalProps {
   visible: boolean;
-  sources: Source[];
+  sources: Source[] | string[];
   onClose: () => void;
+}
+
+// ── Normalize: accepts both string[] and Source[] safely ──
+function normalizeSources(sources: any): Source[] {
+  if (!Array.isArray(sources)) return [];
+  return sources
+    .map((s: any) => {
+      if (!s) return null;
+      if (typeof s === 'string') {
+        const urlMatch = s.match(/https?:\/\/[^\s)]+/);
+        const url = urlMatch ? urlMatch[0] : '';
+        const title = s.replace(url, '').replace(/[-–:]/g, '').trim() || url || s;
+        return { title: title || s, url: url || s };
+      }
+      // Already a Source object
+      return {
+        title: s.title || s.url || 'Source',
+        url: s.url || '',
+        snippet: s.snippet,
+        favicon: s.favicon,
+        date: s.date,
+        domain: s.domain,
+      };
+    })
+    .filter((s: any) => s && (s.title || s.url)) as Source[];
 }
 
 // ── Helpers ──
@@ -45,7 +69,8 @@ function getDomain(url: string): string {
     const u = new URL(url);
     return u.hostname.replace('www.', '');
   } catch {
-    return url.slice(0, 30);
+    const m = url.match(/^(?:https?:\/\/)?([^\/]+)/);
+    return m ? m[1].replace('www.', '') : url.slice(0, 24);
   }
 }
 
@@ -91,27 +116,19 @@ const SourceCard = memo(function SourceCard({
   isDark: boolean;
   colors: any;
 }) {
-  const domain = item.domain || getDomain(item.url);
-  const faviconUrl = item.favicon || getFaviconUrl(item.url);
+  const domain = item.domain || getDomain(item.url || '');
+  const faviconUrl = item.favicon || getFaviconUrl(item.url || '');
   const tint = getDomainTint(domain);
   const formattedDate = formatDate(item.date);
 
   const scaleAnim = useMemo(() => new Animated.Value(1), []);
 
   const onPressIn = useCallback(() => {
-    Animated.spring(scaleAnim, {
-      toValue: 0.97,
-      useNativeDriver: true,
-      friction: 8,
-    }).start();
+    Animated.spring(scaleAnim, { toValue: 0.97, useNativeDriver: true, friction: 8 }).start();
   }, [scaleAnim]);
 
   const onPressOut = useCallback(() => {
-    Animated.spring(scaleAnim, {
-      toValue: 1,
-      useNativeDriver: true,
-      friction: 5,
-    }).start();
+    Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, friction: 5 }).start();
   }, [scaleAnim]);
 
   return (
@@ -159,7 +176,7 @@ const SourceCard = memo(function SourceCard({
           </View>
 
           <Text style={[cardStyles.cardTitle, { color: colors.text }]} numberOfLines={2}>
-            {item.title}
+            {item.title || domain}
           </Text>
 
           {item.snippet ? (
@@ -202,14 +219,8 @@ const cardStyles = StyleSheet.create({
     overflow: 'hidden',
     flexShrink: 0,
   },
-  faviconImg: {
-    width: 30,
-    height: 30,
-  },
-  cardContent: {
-    flex: 1,
-    gap: 5,
-  },
+  faviconImg: { width: 30, height: 30 },
+  cardContent: { flex: 1, gap: 5 },
   domainRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -223,25 +234,10 @@ const cardStyles = StyleSheet.create({
     letterSpacing: 0.5,
     flex: 1,
   },
-  cardDate: {
-    fontSize: 10,
-    fontWeight: '500',
-  },
-  cardTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    lineHeight: 20,
-  },
-  snippetChip: {
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    marginTop: 2,
-  },
-  snippetText: {
-    fontSize: 12,
-    lineHeight: 17,
-  },
+  cardDate: { fontSize: 10, fontWeight: '500' },
+  cardTitle: { fontSize: 14, fontWeight: '600', lineHeight: 20 },
+  snippetChip: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, marginTop: 2 },
+  snippetText: { fontSize: 12, lineHeight: 17 },
   arrowBadge: {
     width: 28,
     height: 28,
@@ -255,48 +251,35 @@ const cardStyles = StyleSheet.create({
 // ── Sources List Modal ──
 export const SourcesListModal = memo(function SourcesListModal({
   visible,
-  sources,
+  sources: rawSources,
   onClose,
 }: SourcesModalProps) {
   const { colors, isDark } = useTheme();
+  // Normalize to always be Source[]
+  const sources = useMemo(() => normalizeSources(rawSources), [rawSources]);
+
   const [selectedUrl, setSelectedUrl] = useState('');
   const [webViewVisible, setWebViewVisible] = useState(false);
   const translateY = useMemo(() => new Animated.Value(SCREEN_HEIGHT), []);
   const opacity = useMemo(() => new Animated.Value(0), []);
 
-  // Animate in/out
   React.useEffect(() => {
     if (visible) {
       Animated.parallel([
-        Animated.spring(translateY, {
-          toValue: 0,
-          useNativeDriver: true,
-          friction: 9,
-          tension: 50,
-        }),
-        Animated.timing(opacity, {
-          toValue: 1,
-          duration: 200,
-          useNativeDriver: true,
-        }),
+        Animated.spring(translateY, { toValue: 0, useNativeDriver: true, friction: 9, tension: 50 }),
+        Animated.timing(opacity, { toValue: 1, duration: 200, useNativeDriver: true }),
       ]).start();
     } else {
       Animated.parallel([
-        Animated.spring(translateY, {
-          toValue: SCREEN_HEIGHT,
-          useNativeDriver: true,
-          friction: 9,
-        }),
-        Animated.timing(opacity, {
-          toValue: 0,
-          duration: 200,
-          useNativeDriver: true,
-        }),
+        Animated.spring(translateY, { toValue: SCREEN_HEIGHT, useNativeDriver: true, friction: 9 }),
+        Animated.timing(opacity, { toValue: 0, duration: 200, useNativeDriver: true }),
       ]).start();
     }
   }, [visible, translateY, opacity]);
 
+  // Always open inside the app via WebViewModal — never Linking.openURL
   const handleOpenUrl = useCallback((url: string) => {
+    if (!url) return;
     setSelectedUrl(url);
     setWebViewVisible(true);
   }, []);
@@ -324,9 +307,7 @@ export const SourcesListModal = memo(function SourcesListModal({
     () => (
       <View style={styles.emptyContainer}>
         <Ionicons name="document-text-outline" size={48} color={colors.textSecondary} />
-        <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-          No sources available
-        </Text>
+        <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No sources available</Text>
       </View>
     ),
     [colors.textSecondary]
@@ -342,9 +323,7 @@ export const SourcesListModal = memo(function SourcesListModal({
               <Ionicons name="link" size={16} color={colors.primary} />
             </View>
             <View>
-              <Text style={[styles.headerTitle, { color: colors.text }]}>
-                Sources
-              </Text>
+              <Text style={[styles.headerTitle, { color: colors.text }]}>Sources</Text>
               <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>
                 {sources.length} {sources.length === 1 ? 'reference' : 'references'} found
               </Text>
@@ -377,11 +356,11 @@ export const SourcesListModal = memo(function SourcesListModal({
         <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} translucent backgroundColor="transparent" />
 
         <Animated.View style={[styles.backdrop, { opacity }]}>
-          <BlurView
-            intensity={isDark ? 70 : 50}
-            tint={isDark ? 'dark' : 'light'}
-            style={StyleSheet.absoluteFill}
-          />
+          {Platform.OS === 'ios' ? (
+            <BlurView intensity={isDark ? 70 : 50} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
+          ) : (
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.4)' }]} />
+          )}
           <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={onClose} />
         </Animated.View>
 
@@ -395,13 +374,8 @@ export const SourcesListModal = memo(function SourcesListModal({
           ]}
         >
           {Platform.OS === 'ios' && (
-            <BlurView
-              intensity={isDark ? 20 : 15}
-              tint={isDark ? 'dark' : 'light'}
-              style={StyleSheet.absoluteFill}
-            />
+            <BlurView intensity={isDark ? 20 : 15} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
           )}
-
           <FlatList
             data={sources}
             renderItem={renderItem}
@@ -415,7 +389,7 @@ export const SourcesListModal = memo(function SourcesListModal({
         </Animated.View>
       </Modal>
 
-      {/* WebView opens INSIDE the app - never Safari */}
+      {/* WebView always opens IN-APP — never Linking/Safari */}
       <WebViewModal
         visible={webViewVisible}
         url={selectedUrl}
@@ -426,9 +400,10 @@ export const SourcesListModal = memo(function SourcesListModal({
 });
 
 // ── Sources Button (Pill) ──
-export const SourcesButton = memo(function SourcesButton({ sources }: SourcesButtonProps) {
+export const SourcesButton = memo(function SourcesButton({ sources: rawSources }: SourcesButtonProps) {
   const { colors, isDark } = useTheme();
   const [modalVisible, setModalVisible] = useState(false);
+  const sources = useMemo(() => normalizeSources(rawSources), [rawSources]);
 
   if (!sources || sources.length === 0) return null;
 
@@ -449,8 +424,8 @@ export const SourcesButton = memo(function SourcesButton({ sources }: SourcesBut
       >
         <View style={pillStyles.faviconStack}>
           {firstThree.map((s, i) => {
-            const faviconUrl = s.favicon || getFaviconUrl(s.url);
-            const domain = s.domain || getDomain(s.url);
+            const faviconUrl = s.favicon || getFaviconUrl(s.url || '');
+            const domain = s.domain || getDomain(s.url || '');
             const tint = getDomainTint(domain);
             return (
               <View
@@ -466,12 +441,7 @@ export const SourcesButton = memo(function SourcesButton({ sources }: SourcesBut
                 ]}
               >
                 {faviconUrl ? (
-                  <Image
-                    source={{ uri: faviconUrl }}
-                    style={{ width: 18, height: 18 }}
-                    contentFit="contain"
-                    cachePolicy="memory"
-                  />
+                  <Image source={{ uri: faviconUrl }} style={{ width: 18, height: 18 }} contentFit="contain" cachePolicy="memory" />
                 ) : (
                   <Ionicons name="globe-outline" size={10} color={tint} />
                 )}
@@ -509,10 +479,7 @@ const pillStyles = StyleSheet.create({
     marginTop: 8,
     marginBottom: 2,
   },
-  faviconStack: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
+  faviconStack: { flexDirection: 'row', alignItems: 'center' },
   faviconCircle: {
     width: 24,
     height: 24,
@@ -522,17 +489,15 @@ const pillStyles = StyleSheet.create({
     justifyContent: 'center',
     overflow: 'hidden',
   },
-  pillText: {
-    fontSize: 13,
-    fontWeight: '500',
-  },
+  pillText: { fontSize: 13, fontWeight: '500' },
 });
 
-// ── Parse [SOURCES] blocks ──
-// Alias so MessageItem can import SourcesModal by name
+// ── Alias ──
 export const SourcesModal = SourcesListModal;
 
+// ── parseSources ──
 export function parseSources(content: string): { text: string; sources: Source[] } {
+  if (!content) return { text: '', sources: [] };
   const startTag = '[SOURCES]';
   const endTag = '[/SOURCES]';
   const start = content.indexOf(startTag);
@@ -545,12 +510,12 @@ export function parseSources(content: string): { text: string; sources: Source[]
   const sourcesJson = content.substring(start + startTag.length, end).trim();
   const textBefore = content.substring(0, start).trim();
   const textAfter = content.substring(end + endTag.length).trim();
-  const text = [textBefore, textAfter].filter(Boolean).join('\\n\\n');
+  const text = [textBefore, textAfter].filter(Boolean).join('\n\n');
 
   try {
-    const sources: Source[] = JSON.parse(sourcesJson);
-    if (!Array.isArray(sources)) return { text: content, sources: [] };
-    return { text, sources };
+    const parsed = JSON.parse(sourcesJson);
+    if (!Array.isArray(parsed)) return { text: content, sources: [] };
+    return { text, sources: normalizeSources(parsed) };
   } catch {
     return { text: content, sources: [] };
   }
@@ -601,15 +566,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  headerSubtitle: {
-    fontSize: 12,
-    fontWeight: '500',
-    marginTop: 1,
-  },
+  headerTitle: { fontSize: 18, fontWeight: '700' },
+  headerSubtitle: { fontSize: 12, fontWeight: '500', marginTop: 1 },
   closeBtn: {
     width: 32,
     height: 32,
@@ -627,8 +585,5 @@ const styles = StyleSheet.create({
     paddingVertical: 60,
     gap: 12,
   },
-  emptyText: {
-    fontSize: 15,
-    fontWeight: '500',
-  },
+  emptyText: { fontSize: 15, fontWeight: '500' },
 });
