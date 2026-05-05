@@ -16,6 +16,7 @@ import Animated, {
   withTiming,
   FadeIn,
 } from 'react-native-reanimated';
+import Icon from 'react-native-vector-icons/MaterialIcons';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -183,8 +184,8 @@ export function CalculatorModal({
           {/* Header */}
           <View style={styles.header}>
             <View style={styles.iconBox}>
-              <Text style={styles.iconText}>▦</Text>
-            </View>
+  <Icon name="dialpad" size={24} color="#000" />
+</View>
             <View style={styles.displayArea}>
               <Text style={styles.exprText} numberOfLines={1} adjustsFontSizeToFit>
                 {displayExpr || '0'}
