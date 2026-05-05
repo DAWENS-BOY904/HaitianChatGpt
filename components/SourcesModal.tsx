@@ -632,4 +632,3 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
 });
-please allow via expo web in the app instead of webview
