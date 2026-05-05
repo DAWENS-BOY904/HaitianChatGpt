@@ -65,7 +65,7 @@ import { ImageViewerModal } from './ImageViewerModal';
 import * as Haptics from 'expo-haptics';
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { WebView } from 'react-native-webview';
+import WebView from 'react-native-webview';
 
 // ── Deep Research Progress Card ──────────────────────────────────────────────
 const DeepResearchCard = memo(function DeepResearchCard({ step, label, done, colors }: { step: number; label: string; done: boolean; colors: any }) {
@@ -2899,8 +2899,8 @@ Be thorough and cite specific facts.`;
                             <Ionicons name="person-add-outline" size={18} color={colors.text} />
                           </TouchableOpacity>
                           <View style={[headerIconGroupStyles.divider, { backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)' }]} />
-                          <TouchableOpacity style={headerIconGroupStyles.iconBtn} onPress={() => { setTemporaryChatMode(true); setGroupChatMode(false); }}>
-                            <Ionicons name="timer-outline" size={18} color={colors.text} />
+                          <TouchableOpacity style={headerIconGroupStyles.iconBtn} onPress={() => { setTemporaryChatMode(!temporaryChatMode); setGroupChatMode(false); }}>
+                            <Ionicons name="timer-outline" size={18} color={temporaryChatMode ? accentColor : colors.text} />
                           </TouchableOpacity>
                         </BlurView>
                       ) : (
@@ -2909,7 +2909,7 @@ Be thorough and cite specific facts.`;
                             <Ionicons name="person-add-outline" size={18} color={colors.text} />
                           </TouchableOpacity>
                           <View style={[headerIconGroupStyles.divider, { backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)' }]} />
-                          <TouchableOpacity style={headerIconGroupStyles.iconBtn} onPress={() => { setTemporaryChatMode(true); setGroupChatMode(false); }}>
+                          <TouchableOpacity style={headerIconGroupStyles.iconBtn} onPress={() => { setTemporaryChatMode(!temporaryChatMode); setGroupChatMode(false); }}>
                             <Ionicons name="timer-outline" size={18} color={colors.text} />
                           </TouchableOpacity>
                         </View>

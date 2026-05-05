@@ -92,7 +92,7 @@ export function MessageActionsModal({
       .slice(0, 3000);
     try {
       const { data, error } = await supabase.functions.invoke('generate-tts', {
-        body: { text: cleanText, voice: 'alloy' },
+        body: { text: cleanText, voice: 'Rachel', provider: 'elevenlabs' },
       });
       if (error || !data?.audioUrl) throw new Error(error?.message || 'TTS failed');
       await Audio.setAudioModeAsync({
