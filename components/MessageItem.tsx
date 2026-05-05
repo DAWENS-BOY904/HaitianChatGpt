@@ -550,7 +550,7 @@ export const MessageItem = memo(function MessageItem({
   const [viewerImages, setViewerImages] = useState<string[]>([]);
   const [viewerIndex, setViewerIndex] = useState(0);
   const [sourcesModalVisible, setSourcesModalVisible] = useState(false);
-  const [sourcesData, setSourcesData] = useState<Array<{ title: string; url: string; snippet?: string }>>([]);
+  const [sourcesData, setSourcesData] = useState<string[]>([]);
   const [linkSafetyVisible, setLinkSafetyVisible] = useState(false);
   const [pendingLink, setPendingLink] = useState('');
   const [webViewVisible, setWebViewVisible] = useState(false);
@@ -832,21 +832,7 @@ export const MessageItem = memo(function MessageItem({
                 <SourcesBadge
                   key={bi}
                   sources={block.sources}
-                  onPress={() => {
-                    // Convert string[] sources to Source[] objects for the modal
-                    const srcObjs = block.sources!.map(s => {
-                      if (typeof s === 'string') {
-                        // Try to extract URL from string
-                        const urlMatch = s.match(/https?:\/\/[^\s)]+/);
-                        const url = urlMatch ? urlMatch[0] : '';
-                        const title = s.replace(url, '').replace(/[-–:]/g, '').trim() || url;
-                        return { title: title || url, url: url || s };
-                      }
-                      return s as any;
-                    });
-                    setSourcesData(srcObjs);
-                    setSourcesModalVisible(true);
-                  }}
+                  onPress={() => { setSourcesData(block.sources!); setSourcesModalVisible(true); }}
                 />
               );
             }
