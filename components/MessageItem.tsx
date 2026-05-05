@@ -18,13 +18,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { useTheme } from '../hooks/useTheme';
-import { useSettings } from '../hooks/useSettings';
-import { getSupabaseClient } from '@/template';
-import { Audio } from 'expo-av';
-import * as Speech from 'expo-speech';
-// WebView loaded lazily to avoid undefined crash if module not linked
-let WebView: any = null;
-try { WebView = require('react-native-webview').default; } catch (_e) {}
+import WebView from 'react-native-webview';
 import { BlurView } from 'expo-blur';
 import { CodeBlock } from './CodeBlock';
 import { SourcesModal } from './SourcesModal';
@@ -496,11 +490,7 @@ export const MessageItem = memo(function MessageItem({
   onChunkRendered,
 }: MessageItemProps) {
   const { colors, isDark } = useTheme();
-  const { settings } = useSettings();
   const isUser = message.role === 'user';
-  const supabase = getSupabaseClient();
-  const ttsSound = useRef<any>(null);
-  const [ttsPlaying, setTtsPlaying] = useState(false);
 
   const [phoneModalVisible, setPhoneModalVisible] = useState(false);
   const [pendingPhone, setPendingPhone] = useState('');
@@ -513,61 +503,6 @@ export const MessageItem = memo(function MessageItem({
   const [pendingLink, setPendingLink] = useState('');
   const [webViewVisible, setWebViewVisible] = useState(false);
   const [webViewUrl, setWebViewUrl] = useState('');
-  const [ttsLoading, setTtsLoading] = useState(false);
-
-  // ── TTS: read message aloud using user-selected voice ─────────────────────
-  const handleReadAloud = useCallback(async () => {
-    if (ttsPlaying || ttsLoading) {
-      // Stop current playback
-      try { ttsSound.current?.stopAsync(); ttsSound.current?.unloadAsync(); } catch {}
-      ttsSound.current = null;
-      try { Speech.stop(); } catch {}
-      setTtsPlaying(false);
-      setTtsLoading(false);
-      return;
-    }
-    const text = (message.content || '').replace(/[#*`>]/g, '').slice(0, 2000);
-    if (!text.trim()) return;
-    setTtsLoading(true);
-    const selectedVoice = (settings as any).voiceSelection || (settings as any).voice_selection || 'pNInz6obpgDQGcFmaJgB';
-    try {
-      const { data, error } = await supabase.functions.invoke('generate-tts', {
-        body: { text, voice: selectedVoice, speed: 1.0 },
-      });
-      setTtsLoading(false);
-      if (error || !data) throw new Error('TTS failed');
-      if (data.fallback === true || data.code === 'USE_DEVICE_TTS') {
-        // Device TTS fallback
-        try { Speech.stop(); } catch {}
-        setTtsPlaying(true);
-        Speech.speak(text, { language: data.lang || 'en-US', rate: 1.0, onDone: () => setTtsPlaying(false), onError: () => setTtsPlaying(false) });
-        return;
-      }
-      const audioUrl = data.audioUrl || data.audio_url;
-      if (!audioUrl) throw new Error('No audio URL');
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true, staysActiveInBackground: false });
-      const { sound } = await Audio.Sound.createAsync({ uri: audioUrl }, { shouldPlay: true, volume: 1.0 });
-      ttsSound.current = sound;
-      setTtsPlaying(true);
-      sound.setOnPlaybackStatusUpdate((s: any) => {
-        if (s.isLoaded && s.didJustFinish) { sound.unloadAsync().catch(() => {}); ttsSound.current = null; setTtsPlaying(false); }
-      });
-    } catch (_e) {
-      setTtsLoading(false);
-      // Device TTS as final fallback
-      try { Speech.stop(); } catch {}
-      setTtsPlaying(true);
-      Speech.speak(text, { language: 'en-US', rate: 1.0, onDone: () => setTtsPlaying(false), onError: () => setTtsPlaying(false) });
-    }
-  }, [message.content, settings, supabase, ttsPlaying, ttsLoading]);
-
-  // Cleanup TTS on unmount
-  useEffect(() => {
-    return () => {
-      try { ttsSound.current?.stopAsync(); ttsSound.current?.unloadAsync(); } catch {}
-      try { Speech.stop(); } catch {}
-    };
-  }, []);
 
   const content = message.content || '';
   const isSelfHarm = isUser && containsSelfHarm(content);
@@ -810,19 +745,12 @@ export const MessageItem = memo(function MessageItem({
 
               return (
                 <View key={bi} style={{ marginVertical: 3 }}>
-                  <Text
-                    selectable
-                    style={{ fontSize: 16, color: colors.text, lineHeight: 25 }}
-                  >
-                    {parseInlineMarkdown(block.content).map((seg, i) => {
-                      if (seg.type === 'bold') return <Text key={i} style={{ fontWeight: '700' }}>{seg.content}</Text>;
-                      if (seg.type === 'italic') return <Text key={i} style={{ fontStyle: 'italic' }}>{seg.content}</Text>;
-                      if (seg.type === 'code_inline') return <Text key={i} style={{ fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', backgroundColor: 'rgba(128,128,128,0.15)', borderRadius: 4 }}>{' '}{seg.content}{' '}</Text>;
-                      if (seg.type === 'phone') return <Text key={i} style={{ color: '#34C759', textDecorationLine: 'underline' }} onPress={() => handlePhonePress(seg.content)}>{seg.content}</Text>;
-                      if (seg.type === 'link') return <Text key={i} style={{ color: '#007AFF', textDecorationLine: 'underline' }} onPress={() => handleLinkPress(seg.url || seg.content)}>{seg.content}</Text>;
-                      return <Text key={i}>{seg.content}</Text>;
-                    })}
-                  </Text>
+                  <InlineText
+                    text={block.content}
+                    textStyle={{ fontSize: 16, color: colors.text, lineHeight: 25 } as any}
+                    onPhonePress={handlePhonePress}
+                    onLinkPress={handleLinkPress}
+                  />
                 </View>
               );
             }
@@ -863,18 +791,6 @@ export const MessageItem = memo(function MessageItem({
                 style={assistantStyles.actionBtn}
               >
                 <Ionicons name="copy-outline" size={17} color={colors.textSecondary} />
-              </TouchableOpacity>
-              {/* Read aloud using user-selected ElevenLabs voice */}
-              <TouchableOpacity
-                onPress={handleReadAloud}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                style={assistantStyles.actionBtn}
-              >
-                {ttsLoading ? (
-                  <ActivityIndicator size="small" color={colors.textSecondary} />
-                ) : (
-                  <Ionicons name={ttsPlaying ? 'stop-circle-outline' : 'volume-high-outline'} size={17} color={ttsPlaying ? '#10A37F' : colors.textSecondary} />
-                )}
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={async () => {
@@ -942,20 +858,18 @@ export const MessageItem = memo(function MessageItem({
         onConfirm={handleLinkConfirm}
       />
 
-      {/* In-app WebView modal — only render if WebView is available */}
-      {WebView ? (
-        <Modal visible={webViewVisible} animationType="slide" onRequestClose={() => setWebViewVisible(false)}>
-          <View style={{ flex: 1, backgroundColor: '#000' }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', padding: 14, paddingTop: Platform.OS === 'ios' ? 56 : 14, backgroundColor: '#1C1C1E' }}>
-              <TouchableOpacity onPress={() => setWebViewVisible(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Ionicons name="close" size={24} color="#FFF" />
-              </TouchableOpacity>
-              <Text style={{ flex: 1, color: '#FFF', fontSize: 15, fontWeight: '600', marginLeft: 12 }} numberOfLines={1}>{webViewUrl}</Text>
-            </View>
-            <WebView source={{ uri: webViewUrl }} style={{ flex: 1 }} />
+      {/* In-app WebView modal */}
+      <Modal visible={webViewVisible} animationType="slide" onRequestClose={() => setWebViewVisible(false)}>
+        <View style={{ flex: 1, backgroundColor: '#000' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', padding: 14, paddingTop: Platform.OS === 'ios' ? 56 : 14, backgroundColor: '#1C1C1E' }}>
+            <TouchableOpacity onPress={() => setWebViewVisible(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <Ionicons name="close" size={24} color="#FFF" />
+            </TouchableOpacity>
+            <Text style={{ flex: 1, color: '#FFF', fontSize: 15, fontWeight: '600', marginLeft: 12 }} numberOfLines={1}>{webViewUrl}</Text>
           </View>
-        </Modal>
-      ) : null}
+          <WebView source={{ uri: webViewUrl }} style={{ flex: 1 }} />
+        </View>
+      </Modal>
     </>
   );
 });
