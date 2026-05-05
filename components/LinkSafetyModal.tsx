@@ -5,11 +5,11 @@ import {
   TouchableOpacity,
   StyleSheet,
   Modal,
+  Linking,
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
-import * as WebBrowser from 'expo-web-browser';
 import { useTheme } from '../hooks/useTheme';
 
 interface LinkSafetyModalProps {
@@ -27,24 +27,11 @@ export function LinkSafetyModal({
 }: LinkSafetyModalProps) {
   const { colors, isDark } = useTheme();
 
-  const handleOpen = useCallback(async () => {
+  const handleOpen = useCallback(() => {
     onConfirm();
     onClose();
-    try {
-      // Open inside the app using Expo WebBrowser — never leaves the app
-      await WebBrowser.openBrowserAsync(url, {
-        presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
-        toolbarColor: isDark ? '#000000' : '#FFFFFF',
-        controlsColor: '#10A37F',
-        dismissButtonStyle: 'close',
-        showTitle: true,
-        enableBarCollapsing: true,
-      });
-    } catch {
-      // Fallback: open in-app browser with default options
-      try { await WebBrowser.openBrowserAsync(url); } catch {}
-    }
-  }, [url, onConfirm, onClose, isDark]);
+    Linking.openURL(url).catch(() => {});
+  }, [url, onConfirm, onClose]);
 
   const displayUrl = url.length > 60 ? url.slice(0, 57) + '...' : url;
 
