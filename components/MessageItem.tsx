@@ -1079,7 +1079,3 @@ const assistantStyles = StyleSheet.create({
     borderRadius: 10,
   },
 });
-fix error edg Chat function error: 500
-{"msg": "InvalidWorkerCreation: worker boot error: failed to create the graph:
-The module's source code could not be parsed: Expected', got'string literal (;, '';' at file:///models/ njpuoozygątpvlzhnjpu/chat/
-index.ts:547:1\n\n ")i\n ~~~"}.
