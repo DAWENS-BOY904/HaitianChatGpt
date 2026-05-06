@@ -937,6 +937,7 @@ export default function VoiceControlScreen() {
           voice: selectedVoice,
           speed: speechRate,
           detectedLanguage: detectedLangRef.current,
+          userId: user?.id,
         }),
         signal: AbortSignal.timeout ? AbortSignal.timeout(35000) : undefined,
       }).catch((fetchErr) => {
