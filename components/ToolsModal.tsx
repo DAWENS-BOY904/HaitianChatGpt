@@ -1,4 +1,4 @@
-fix the carousel must be for free plan remove for pro.import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -32,6 +32,8 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as MediaLibrary from 'expo-media-library';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSubscription } from '../hooks/useSubscription';
+import { useAuth } from '@/template';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -72,6 +74,12 @@ export function ToolsModal({
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { isDark } = useTheme();
+  const { tier } = useSubscription();
+  const { user } = useAuth();
+  const ADMIN_EMAILS = ['berryxoe@gmail.com', 'newdawens@gmail.com', 'kontgithub@gmail.com'];
+  const isAdminUser = user?.email ? ADMIN_EMAILS.includes(user.email.toLowerCase()) : false;
+  // Carousel is only for free plan users — Pro/Plus/Admin see standard picker
+  const showCarousel = !isAdminUser && tier !== 'plus' && tier !== 'go';
   const [showWebOptions, setShowWebOptions] = useState(false);
   const [webMode, setWebMode] = useState<'auto' | 'off'>('auto');
   const [loading, setLoading] = useState<string | null>(null);
@@ -366,8 +374,8 @@ export function ToolsModal({
         bounces={false}
         contentContainerStyle={styles.scrollContent}
       >
-        {/* Recent Photos Carousel */}
-        {recentPhotos.length > 0 ? (
+        {/* Recent Photos Carousel — free plan only */}
+        {showCarousel && recentPhotos.length > 0 ? (
           <View style={{ marginBottom: 14 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, paddingHorizontal: 2 }}>
               <Text style={{ fontSize: 15, fontWeight: '700', color: isDark ? '#FFF' : THEME.text }}>Photos</Text>
