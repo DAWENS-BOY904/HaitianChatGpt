@@ -120,6 +120,8 @@ export default function RootLayout() {
                     <Stack.Screen name="ad-interests" />
                     <Stack.Screen name="ads-off" />
                     <Stack.Screen name="AppleGenerateJWTkey" />
+                    <Stack.Screen name="app-connect" />
+                    <Stack.Screen name="spotify-connect" />
                     <Stack.Screen name="subscription-success" />
                     </Stack>
                   </ConversationProvider>
