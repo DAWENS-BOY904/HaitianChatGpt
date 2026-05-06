@@ -4,9 +4,8 @@ import { corsHeaders } from '../_shared/cors.ts';
 import { callAI, detectContentType, generateImageSmart, searchImages } from '../_shared/ai-providers.ts';
 import { createStreamingResponse } from '../_shared/streaming.ts';
 
-// ==========================================
-// TYPES
-// ==========================================
+// ── Types ──────────────────────────────────────────────────────────────────
+
 interface ChatMessage {
   role: string;
   content: string | Array<{ type: string; text?: string; image_url?: { url: string } }>;
@@ -30,21 +29,27 @@ interface AIResponse {
   error?: string;
 }
 
-// ==========================================
-// RESPONSE CACHE
-// ==========================================
 interface CachedResponse {
   content: string;
   timestamp: number;
   query: string;
 }
 
+interface ApiInfo {
+  name: string;
+  docsUrl: string;
+  knownLatest: string;
+  notes: string;
+}
+
+// ── Response Cache ─────────────────────────────────────────────────────────
+
 const responseCache = new Map<string, CachedResponse>();
 const CACHE_MAX_SIZE = 100;
 const CACHE_TTL_MS = 30 * 60 * 1000;
 
 function getCacheKey(messages: ChatMessage[]): string {
-  const lastUserMessage = messages.filter(m => m.role === 'user').slice(-1)[0];
+  const lastUserMessage = messages.filter(function(m) { return m.role === 'user'; }).slice(-1)[0];
   if (!lastUserMessage) return '';
   const content = typeof lastUserMessage.content === 'string'
     ? lastUserMessage.content
@@ -73,12 +78,11 @@ function setCachedResponse(cacheKey: string, content: string, query: string): vo
     const oldestKey = responseCache.keys().next().value;
     responseCache.delete(oldestKey);
   }
-  responseCache.set(cacheKey, { content, timestamp: Date.now(), query });
+  responseCache.set(cacheKey, { content: content, timestamp: Date.now(), query: query });
 }
 
-// ==========================================
-// SAFETY MODULE
-// ==========================================
+// ── Safety Module ──────────────────────────────────────────────────────────
+
 function detectSelfHarm(text: string): boolean {
   const triggers = [
     'suicide', 'kill myself', 'end my life', 'i want to die',
@@ -86,11 +90,11 @@ function detectSelfHarm(text: string): boolean {
     'end it all', 'no reason to live',
   ];
   const lower = text.toLowerCase();
-  return triggers.some(t => lower.includes(t));
+  return triggers.some(function(t) { return lower.includes(t); });
 }
 
 function generateCrisisResponse(): string {
-  return [
+  const lines = [
     'I am really sorry you are feeling this way.',
     '',
     'You are not alone, and there are people who want to help you right now.',
@@ -105,12 +109,12 @@ function generateCrisisResponse(): string {
     '- Many people who felt this way before are still here today',
     '',
     'If you want, you can talk to me about what is happening. I am here to listen.',
-  ].join('\n');
+  ];
+  return lines.join('\n');
 }
 
-// ==========================================
-// DATE/TIME CONTEXT
-// ==========================================
+// ── Date/Time Context ──────────────────────────────────────────────────────
+
 function buildDateTimeContext(): string {
   const now = new Date();
   const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -122,29 +126,22 @@ function buildDateTimeContext(): string {
   const year = now.getUTCFullYear();
   const hh = now.getUTCHours().toString().padStart(2, '0');
   const mm = now.getUTCMinutes().toString().padStart(2, '0');
-  return [
+  const lines = [
     '==============================',
     'REAL-TIME DATE & TIME (AUTHORITATIVE):',
     '==============================',
-    `Today: ${dayName}, ${month} ${day}, ${year}`,
-    `Time (UTC): ${hh}:${mm}`,
-    `Day of week: ${dayName}`,
+    'Today: ' + dayName + ', ' + month + ' ' + day + ', ' + year,
+    'Time (UTC): ' + hh + ':' + mm,
+    'Day of week: ' + dayName,
     '',
     'RULES: Always use these system-provided values. Never guess or hardcode dates.',
     'Only mention date/time when user explicitly asks or it is clearly needed.',
     '==============================',
-  ].join('\n');
+  ];
+  return lines.join('\n');
 }
 
-// ==========================================
-// API VERSION DETECTION
-// ==========================================
-interface ApiInfo {
-  name: string;
-  docsUrl: string;
-  knownLatest: string;
-  notes: string;
-}
+// ── Known APIs ─────────────────────────────────────────────────────────────
 
 const KNOWN_APIS: ApiInfo[] = [
   { name: 'OpenAI', docsUrl: 'https://platform.openai.com/docs/api-reference', knownLatest: 'gpt-4o', notes: 'Base URL: https://api.openai.com/v1 | Header: Authorization: Bearer YOUR_API_KEY' },
@@ -176,12 +173,14 @@ const KNOWN_APIS: ApiInfo[] = [
 function detectAndInjectApiVersions(userMessage: string): string {
   const msgLower = userMessage.toLowerCase();
   const detected: ApiInfo[] = [];
+
   for (const api of KNOWN_APIS) {
     const nameLower = api.name.toLowerCase();
-    if (msgLower.includes(nameLower) || msgLower.includes(`${nameLower} api`)) {
+    if (msgLower.includes(nameLower) || msgLower.includes(nameLower + ' api')) {
       detected.push(api);
     }
   }
+
   const keywordMap: Record<string, string[]> = {
     'OpenAI': ['openai', 'gpt', 'chatgpt'],
     'Stripe': ['stripe', 'payment', 'checkout'],
@@ -194,22 +193,28 @@ function detectAndInjectApiVersions(userMessage: string): string {
     'Telegram': ['telegram bot'],
     'Resend': ['resend'],
   };
-  for (const [apiName, keywords] of Object.entries(keywordMap)) {
-    if (keywords.some(kw => msgLower.includes(kw))) {
-      const api = KNOWN_APIS.find(a => a.name === apiName);
-      if (api && !detected.find(a => a.name === apiName)) detected.push(api);
+
+  for (const apiName of Object.keys(keywordMap)) {
+    const keywords = keywordMap[apiName];
+    if (keywords.some(function(kw) { return msgLower.includes(kw); })) {
+      const api = KNOWN_APIS.find(function(a) { return a.name === apiName; });
+      if (api && !detected.find(function(a) { return a.name === apiName; })) {
+        detected.push(api);
+      }
     }
   }
+
   if (detected.length === 0) return '';
-  const lines = detected.map(api =>
-    `${api.name} API: Latest version: ${api.knownLatest} | ${api.notes} | Docs: ${api.docsUrl}`
-  ).join('\n');
-  return `\n==============================\nDETECTED THIRD-PARTY APIs:\n${lines}\nCRITICAL: Use ONLY these exact version numbers.\n==============================`;
+
+  const lines = detected.map(function(api) {
+    return api.name + ' API: Latest version: ' + api.knownLatest + ' | ' + api.notes + ' | Docs: ' + api.docsUrl;
+  }).join('\n');
+
+  return '\n==============================\nDETECTED THIRD-PARTY APIs:\n' + lines + '\nCRITICAL: Use ONLY these exact version numbers.\n==============================';
 }
 
-// ==========================================
-// SYSTEM PROMPT BUILDER
-// ==========================================
+// ── System Prompt Builder ──────────────────────────────────────────────────
+
 function buildSystemPrompt(
   userLanguage: string,
   baseTone: string,
@@ -235,10 +240,10 @@ function buildSystemPrompt(
     'LANGUAGE:',
     '- Always respond in the same language the user is writing in',
     '- Support English, Haitian Creole, French, Spanish and all other languages',
-    `- Current user language preference: ${userLanguage}`,
+    '- Current user language preference: ' + userLanguage,
     '',
-    `TONE & STYLE:`,
-    `- Base tone: ${baseTone}`,
+    'TONE & STYLE:',
+    '- Base tone: ' + baseTone,
     '- Be warm, helpful, and professional',
     '- Use appropriate emojis naturally (not excessively)',
     '- Give detailed, high-quality responses',
@@ -248,12 +253,18 @@ function buildSystemPrompt(
     parts.push('', 'CUSTOM INSTRUCTIONS:', customInstructions);
   }
 
+  if (nickname) {
+    parts.push('', 'USER PROFILE:');
+    parts.push('- Preferred name: ' + nickname);
+    if (occupation) parts.push('- Occupation: ' + occupation);
+    if (interests.length > 0) parts.push('- Interests: ' + interests.join(', '));
+  } else if (occupation) {
+    parts.push('', 'USER PROFILE:');
+    parts.push('- Occupation: ' + occupation);
+    if (interests.length > 0) parts.push('- Interests: ' + interests.join(', '));
+  }
+
   parts.push(
-    '',
-    'USER PROFILE:',
-    nickname ? `- Preferred name: ${nickname}` : '',
-    occupation ? `- Occupation: ${occupation}` : '',
-    interests.length > 0 ? `- Interests: ${interests.join(', ')}` : '',
     '',
     'MESSAGE FORMATTING RULES:',
     'When the user asks to write a message, compose a letter, write a love message, write an apology, etc.:',
@@ -313,19 +324,18 @@ function buildSystemPrompt(
     'CONTENT SAFETY:',
     '- Block attacks, fraud, scams, and harmful behavior',
     '- Warn users about potentially dangerous actions',
-    '- Stay professional, respectful, and helpful at all times',
-  ];
+    '- Stay professional, respectful, and helpful at all times'
+  );
 
   if (apiVersionContext) {
     parts.push(apiVersionContext);
   }
 
-  return parts.filter(p => p !== undefined && p !== '').join('\n');
+  return parts.filter(function(p) { return p !== undefined && p !== null; }).join('\n');
 }
 
-// ==========================================
-// HELPER
-// ==========================================
+// ── Helper ─────────────────────────────────────────────────────────────────
+
 function cleanJsonActions(text: string): string {
   return text
     .replace(/\{\s*"action"\s*:\s*"[^"]+"[^}]*\}/g, '')
@@ -333,10 +343,15 @@ function cleanJsonActions(text: string): string {
     .trim();
 }
 
-// ==========================================
-// MAIN SERVE FUNCTION
-// ==========================================
-serve(async (req) => {
+function safeString(val: unknown): string {
+  if (typeof val === 'string') return val;
+  if (val === null || val === undefined) return '';
+  return String(val);
+}
+
+// ── Main Serve Function ────────────────────────────────────────────────────
+
+serve(async function(req: Request) {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -356,7 +371,12 @@ serve(async (req) => {
       );
     }
 
-    const { messages: rawMessages, conversationId, aiModel = 'onspace-ai', fileContents, userImageUrl, base64Image } = body;
+    const rawMessages = body.messages;
+    const conversationId = body.conversationId;
+    const aiModel = body.aiModel || 'onspace-ai';
+    const fileContents = body.fileContents;
+    const userImageUrl = body.userImageUrl;
+    const base64Image = body.base64Image;
 
     // Validate messages
     const messages: ChatMessage[] = [];
@@ -367,25 +387,49 @@ serve(async (req) => {
         if (typeof m.content === 'string') {
           content = m.content;
         } else if (Array.isArray(m.content)) {
-          const mapped = m.content.map((c: unknown) => {
-            if (!c) return { type: 'text' as const, text: '' };
-            if (typeof c === 'string') return { type: 'text' as const, text: c };
+          const mapped: Array<{ type: string; text?: string; image_url?: { url: string } }> = [];
+          for (const c of m.content) {
+            if (!c) {
+              mapped.push({ type: 'text', text: '' });
+              continue;
+            }
+            if (typeof c === 'string') {
+              mapped.push({ type: 'text', text: c });
+              continue;
+            }
             if (typeof c === 'object' && c !== null) {
               const obj = c as Record<string, unknown>;
-              if (obj.type === 'text') return { type: 'text' as const, text: String(obj.text || '') };
-              if (obj.type === 'image_url') return { type: 'image_url' as const, image_url: obj.image_url as { url: string } };
-              if (obj.text) return { type: 'text' as const, text: String(obj.text) };
-              if (obj.content) return { type: 'text' as const, text: String(obj.content) };
+              if (obj.type === 'text') {
+                mapped.push({ type: 'text', text: safeString(obj.text) });
+              } else if (obj.type === 'image_url') {
+                mapped.push({ type: 'image_url', image_url: obj.image_url as { url: string } });
+              } else if (obj.text) {
+                mapped.push({ type: 'text', text: safeString(obj.text) });
+              } else if (obj.content) {
+                mapped.push({ type: 'text', text: safeString(obj.content) });
+              } else {
+                mapped.push({ type: 'text', text: '' });
+              }
+              continue;
             }
-            return { type: 'text' as const, text: '' };
-          }).filter((c: any) => (c.type === 'text' && c.text !== '') || c.type === 'image_url');
-          content = mapped.length === 0 ? '' : mapped.length === 1 && mapped[0].type === 'text' ? (mapped[0].text || '') : mapped;
+            mapped.push({ type: 'text', text: '' });
+          }
+          const filtered = mapped.filter(function(c) {
+            return (c.type === 'text' && c.text !== '') || c.type === 'image_url';
+          });
+          if (filtered.length === 0) {
+            content = '';
+          } else if (filtered.length === 1 && filtered[0].type === 'text') {
+            content = filtered[0].text || '';
+          } else {
+            content = filtered;
+          }
         } else if (m.content !== null && m.content !== undefined) {
-          content = String(m.content);
+          content = safeString(m.content);
         } else {
           content = '';
         }
-        messages.push({ role: m.role, content, image_url: m.image_url });
+        messages.push({ role: m.role, content: content, image_url: m.image_url });
       }
     }
 
@@ -405,7 +449,7 @@ serve(async (req) => {
 
     // Auth
     const authHeader = req.headers.get('Authorization');
-    const token = authHeader?.replace('Bearer ', '');
+    const token = authHeader ? authHeader.replace('Bearer ', '') : null;
     if (!token) {
       return new Response(
         JSON.stringify({ error: 'Authorization required' }),
@@ -427,37 +471,47 @@ serve(async (req) => {
     }
 
     const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: `Bearer ${token}` } }
+      global: { headers: { Authorization: 'Bearer ' + token } }
     });
 
-    const { data: { user }, error: userError } = await supabaseClient.auth.getUser(token);
-    if (userError || !user) {
-      console.error('[chat] Auth error:', userError?.message);
+    const authResult = await supabaseClient.auth.getUser(token);
+    if (authResult.error || !authResult.data.user) {
+      console.error('[chat] Auth error:', authResult.error?.message);
       return new Response(
         JSON.stringify({ error: 'Invalid or expired token' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+    const user = authResult.data.user;
 
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey);
 
-    // Fetch user settings
-    const { data: settingsData, error: settingsError } = await supabaseClient
-      .from('user_settings')
-      .select('app_language, base_tone, custom_instructions, nickname, occupation, interests, preferred_ai_model')
-      .eq('user_id', user.id)
-      .single()
-      .catch((e) => {
-        console.log('[chat] Settings fetch error (non-fatal):', e?.message);
-        return { data: null, error: e };
-      });
+    // Fetch user settings (non-fatal)
+    let userLanguage = 'English';
+    let baseTone = 'balanced';
+    let customInstructions = '';
+    let nickname = '';
+    let occupation = '';
+    let interests: string[] = [];
 
-    const userLanguage = String(settingsData?.app_language || 'English');
-    const baseTone = String(settingsData?.base_tone || 'balanced');
-    const customInstructions = String(settingsData?.custom_instructions || '');
-    const nickname = String(settingsData?.nickname || '');
-    const occupation = String(settingsData?.occupation || '');
-    const interests: string[] = Array.isArray(settingsData?.interests) ? settingsData.interests as string[] : [];
+    try {
+      const settingsResult = await supabaseClient
+        .from('user_settings')
+        .select('app_language, base_tone, custom_instructions, nickname, occupation, interests, preferred_ai_model')
+        .eq('user_id', user.id)
+        .single();
+      if (!settingsResult.error && settingsResult.data) {
+        const d = settingsResult.data;
+        userLanguage = safeString(d.app_language) || 'English';
+        baseTone = safeString(d.base_tone) || 'balanced';
+        customInstructions = safeString(d.custom_instructions) || '';
+        nickname = safeString(d.nickname) || '';
+        occupation = safeString(d.occupation) || '';
+        interests = Array.isArray(d.interests) ? d.interests as string[] : [];
+      }
+    } catch (settingsErr) {
+      console.log('[chat] Settings fetch error (non-fatal):', settingsErr);
+    }
 
     // Extract last user content
     const lastMessage = messages[messages.length - 1] || { role: '', content: '' };
@@ -466,18 +520,18 @@ serve(async (req) => {
     if (typeof rawContent === 'string') {
       lastUserContent = rawContent;
     } else if (Array.isArray(rawContent)) {
-      lastUserContent = rawContent
-        .map(c => {
-          if (!c) return '';
-          if (typeof c === 'string') return c;
-          if (typeof c === 'object' && 'text' in c && c.text !== undefined) return String(c.text || '');
-          if (typeof c === 'object' && 'content' in c && c.content !== undefined) return String(c.content);
-          return '';
-        })
-        .filter(Boolean)
-        .join(' ');
+      lastUserContent = rawContent.map(function(c) {
+        if (!c) return '';
+        if (typeof c === 'string') return c;
+        if (typeof c === 'object') {
+          const obj = c as Record<string, unknown>;
+          if (obj.text !== undefined) return safeString(obj.text);
+          if (obj.content !== undefined) return safeString(obj.content);
+        }
+        return '';
+      }).filter(Boolean).join(' ');
     } else {
-      lastUserContent = rawContent ? String(rawContent) : '';
+      lastUserContent = rawContent ? safeString(rawContent) : '';
     }
 
     // Safety check
@@ -489,14 +543,14 @@ serve(async (req) => {
       });
     }
 
-    // Detect content type and build system prompt
+    // Build system prompt
     const apiVersionContext = detectAndInjectApiVersions(lastUserContent);
     const detectionResult = detectContentType(lastUserContent);
     const fullSystemPrompt = buildSystemPrompt(
       userLanguage, baseTone, customInstructions, nickname, occupation, interests, apiVersionContext
     );
 
-    // Build AI messages
+    // Build AI messages array
     const aiMessages: Array<{ role: string; content: string | Array<{ type: string; text?: string; image_url?: { url: string } }> }> = [
       { role: 'system', content: fullSystemPrompt },
     ];
@@ -508,20 +562,26 @@ serve(async (req) => {
       const cleanBase64 = base64ImageData.replace(/^data:image\/[a-z+]+;base64,/, '');
       base64ImagePart = {
         type: 'image_url',
-        image_url: { url: `data:image/jpeg;base64,${cleanBase64}` }
+        image_url: { url: 'data:image/jpeg;base64,' + cleanBase64 },
       };
     }
 
-    // Build message array
+    // Build conversation message array
     for (const msg of messages) {
       if (!msg || !msg.role) continue;
       const isLastMsg = msg === messages[messages.length - 1];
       const imgSrc = msg.image_url || (isLastMsg && userImageUrl ? userImageUrl : undefined);
 
       if (isLastMsg && msg.role === 'user' && base64ImagePart) {
-        const textContent = (typeof msg.content === 'string' ? msg.content :
-          Array.isArray(msg.content) ? msg.content.map((c: any) => (typeof c === 'object' && c.text) || '').join(' ') : '')
-          .trim();
+        let textContent = '';
+        if (typeof msg.content === 'string') {
+          textContent = msg.content.trim();
+        } else if (Array.isArray(msg.content)) {
+          textContent = msg.content.map(function(c: any) {
+            if (typeof c === 'object' && c && c.text) return c.text;
+            return '';
+          }).join(' ').trim();
+        }
         const analysisPrompt = textContent.length > 0
           ? textContent
           : 'Please analyze this image in full detail. Describe everything you see: subjects, objects, colors, mood, composition, text (if any), setting, and any notable details.';
@@ -530,22 +590,30 @@ serve(async (req) => {
           content: [
             { type: 'text', text: analysisPrompt },
             base64ImagePart,
-          ]
+          ],
         });
         continue;
       }
 
-      const msgContent = typeof msg.content === 'string' ? msg.content :
-        Array.isArray(msg.content) ? msg.content.map((c: any) => (typeof c === 'object' && c.text) || '').join(' ') :
-        (msg.content ? String(msg.content) : '');
+      let msgContent = '';
+      if (typeof msg.content === 'string') {
+        msgContent = msg.content;
+      } else if (Array.isArray(msg.content)) {
+        msgContent = msg.content.map(function(c: any) {
+          if (typeof c === 'object' && c && c.text) return c.text;
+          return '';
+        }).join(' ');
+      } else if (msg.content) {
+        msgContent = safeString(msg.content);
+      }
 
       if (imgSrc) {
         aiMessages.push({
           role: msg.role,
           content: [
             { type: 'text', text: msgContent || 'Please analyze this image' },
-            { type: 'image_url', image_url: { url: imgSrc } }
-          ]
+            { type: 'image_url', image_url: { url: imgSrc } },
+          ],
         });
       } else {
         aiMessages.push({ role: msg.role, content: msgContent });
@@ -554,13 +622,13 @@ serve(async (req) => {
 
     // Add file contents
     if (fileContents && fileContents.length > 0) {
-      const fileContext = fileContents.map((f) =>
-        `File: ${f.name}\nType: ${f.type}\nContent:\n${f.content}`
-      ).join('\n\n---\n\n');
-      aiMessages.push({ role: 'user', content: `Here are the uploaded files for analysis:\n\n${fileContext}` });
+      const fileContext = fileContents.map(function(f) {
+        return 'File: ' + f.name + '\nType: ' + f.type + '\nContent:\n' + f.content;
+      }).join('\n\n---\n\n');
+      aiMessages.push({ role: 'user', content: 'Here are the uploaded files for analysis:\n\n' + fileContext });
     }
 
-    // Handle request types
+    // Handle different request types
     let aiResponse: AIResponse;
     let imageUrl: string | undefined;
 
@@ -577,14 +645,14 @@ serve(async (req) => {
 
       if (searchResult.images && searchResult.images.length > 0) {
         aiResponse = {
-          content: `Men kek imaj mwen jwenn pou "${searchQuery}":\n\n[IMAGE_SEARCH_RESULTS:${JSON.stringify(searchResult.images)}]`,
+          content: 'Men kek imaj mwen jwenn pou "' + searchQuery + '":\n\n[IMAGE_SEARCH_RESULTS:' + JSON.stringify(searchResult.images) + ']',
           model: 'image-search',
           tokens: 0,
         };
       } else {
         aiResponse = await callAI(aiModel, [
           ...aiMessages,
-          { role: 'system', content: 'The image search returned no results. Tell the user honestly in their language that you could not find images for their request and suggest they try different keywords.' }
+          { role: 'system', content: 'The image search returned no results. Tell the user honestly in their language that you could not find images for their request and suggest they try different keywords.' },
         ], false);
       }
     } else if (detectionResult.isImageTask) {
@@ -594,31 +662,34 @@ serve(async (req) => {
 
       if (imageResult.imageUrl) {
         let resolvedImageUrl = imageResult.imageUrl;
+
         // Upload base64 to storage if needed
         if (resolvedImageUrl.startsWith('data:image/')) {
           try {
             const matches = resolvedImageUrl.match(/^data:(image\/[a-z+]+);base64,(.+)$/);
             if (matches) {
               const mimeType = matches[1];
-              const ext = mimeType.split('/')[1]?.replace('+', '.') || 'png';
+              const ext = (mimeType.split('/')[1] || 'png').replace('+', '.');
               const base64Data = matches[2];
-              // Safe base64 decode — works across all Deno runtime versions
               const binaryStr = atob(base64Data);
               const bytes = new Uint8Array(binaryStr.length);
-              for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
-              const fileName = `ai-gen/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-              const { error: uploadErr } = await supabaseAdmin.storage
+              for (let i = 0; i < binaryStr.length; i++) {
+                bytes[i] = binaryStr.charCodeAt(i);
+              }
+              const fileName = 'ai-gen/' + Date.now() + '-' + Math.random().toString(36).slice(2) + '.' + ext;
+              const uploadResult = await supabaseAdmin.storage
                 .from('chat-images')
                 .upload(fileName, bytes, { contentType: mimeType, upsert: true });
-              if (!uploadErr) {
-                const { data: urlData } = supabaseAdmin.storage.from('chat-images').getPublicUrl(fileName);
-                resolvedImageUrl = urlData.publicUrl;
+              if (!uploadResult.error) {
+                const urlData = supabaseAdmin.storage.from('chat-images').getPublicUrl(fileName);
+                resolvedImageUrl = urlData.data.publicUrl;
               }
             }
           } catch (uploadErr) {
             console.error('[chat] Failed to upload base64 image:', uploadErr);
           }
         }
+
         imageUrl = resolvedImageUrl;
         aiResponse = {
           content: 'Here is your generated image!\n\nLet me know if you would like any adjustments to the style, colors, or composition.',
@@ -629,9 +700,9 @@ serve(async (req) => {
         console.log('[chat] All image providers failed:', imageResult.error);
         aiResponse = await callAI(aiModel, [
           ...aiMessages,
-          { role: 'system', content: 'The image generation service is temporarily unavailable. Apologize briefly and describe in detail what the requested image would look like. Do NOT return JSON. Just write a helpful text response.' }
+          { role: 'system', content: 'The image generation service is temporarily unavailable. Apologize briefly and describe in detail what the requested image would look like. Do NOT return JSON. Just write a helpful text response.' },
         ], false);
-        if (aiResponse?.content) {
+        if (aiResponse && aiResponse.content) {
           aiResponse.content = cleanJsonActions(aiResponse.content);
           if (!aiResponse.content || aiResponse.content.length < 10) {
             aiResponse.content = 'I could not generate the image right now. Please try again in a moment.';
@@ -641,7 +712,7 @@ serve(async (req) => {
     } else {
       // Normal chat
       aiResponse = await callAI(aiModel, aiMessages, false);
-      if (aiResponse?.content) {
+      if (aiResponse && aiResponse.content) {
         const cleaned = cleanJsonActions(aiResponse.content);
         if (cleaned !== aiResponse.content) {
           aiResponse.content = cleaned || aiResponse.content;
@@ -651,12 +722,12 @@ serve(async (req) => {
 
     // Handle AI errors with cache fallback
     if (!aiResponse || (!aiResponse.content && aiResponse.error)) {
-      console.error('AI Error:', aiResponse?.error);
+      console.error('[chat] AI Error:', aiResponse ? aiResponse.error : 'no response');
       const cacheKey = getCacheKey(aiMessages);
       const cachedResponse = getCachedResponse(cacheKey);
       let fallbackContent: string;
       if (cachedResponse) {
-        fallbackContent = `I am experiencing connectivity issues right now, but here is a previous response that might help:\n\n${cachedResponse}\n\n*This is a cached response. Please try again when my connection improves.*`;
+        fallbackContent = 'I am experiencing connectivity issues right now, but here is a previous response that might help:\n\n' + cachedResponse + '\n\n*This is a cached response. Please try again when my connection improves.*';
       } else {
         fallbackContent = 'I am experiencing technical difficulties with my AI providers at the moment. Please try again in a few minutes.';
       }
@@ -667,7 +738,7 @@ serve(async (req) => {
     }
 
     // Clean response
-    let cleanMessage = aiResponse?.content || "I am sorry, I am having trouble right now. Please try again.";
+    let cleanMessage = aiResponse.content || 'I am sorry, I am having trouble right now. Please try again.';
     cleanMessage = cleanMessage
       .replace(/\[Using [^\]]+\]\s*/gi, '')
       .replace(/\[Model:[^\]]+\]\s*/gi, '')
@@ -680,76 +751,74 @@ serve(async (req) => {
       .trim();
 
     if (!cleanMessage || cleanMessage.length < 3) {
-      cleanMessage = "I am sorry, I could not generate a response right now. Please try again.";
+      cleanMessage = 'I am sorry, I could not generate a response right now. Please try again.';
     }
 
     // Cache successful response
     if (aiResponse && aiResponse.content && !aiResponse.error) {
       const cacheKey = getCacheKey(aiMessages);
-      const lastUserMsg = messages.filter(m => m.role === 'user').slice(-1)[0];
+      const lastUserMsg = messages.filter(function(m) { return m.role === 'user'; }).slice(-1)[0];
       const query = typeof lastUserMsg?.content === 'string' ? lastUserMsg.content : '';
       setCachedResponse(cacheKey, cleanMessage, query);
     }
 
-    // Update conversation timestamp
-    await supabaseAdmin
+    // Update conversation timestamp (non-fatal)
+    supabaseAdmin
       .from('conversations')
       .update({ updated_at: new Date().toISOString() })
       .eq('id', conversationId)
-      .catch((e) => {
+      .catch(function(e: any) {
         console.log('[chat] Conversation update error (non-fatal):', e?.message);
       });
 
     // Auto-save AI-generated image URLs to media_files
-    if (imageUrl && user?.id) {
-      try {
-        await supabaseAdmin.from('media_files').insert({
-          user_id: user.id,
-          file_type: 'image',
-          file_url: imageUrl,
-          file_name: `ai-image-${Date.now()}.jpg`,
-          file_size: 0,
-        });
+    if (imageUrl && user.id) {
+      supabaseAdmin.from('media_files').insert({
+        user_id: user.id,
+        file_type: 'image',
+        file_url: imageUrl,
+        file_name: 'ai-image-' + Date.now() + '.jpg',
+        file_size: 0,
+      }).then(function() {
         console.log('[chat] AI image auto-saved to media_files');
-      } catch (saveErr: any) {
+      }).catch(function(saveErr: any) {
         console.log('[chat] Could not auto-save AI image:', saveErr?.message);
-      }
+      });
     }
 
-    // Push notification for long requests (>5s)
+    // Push notification for long requests (>5s) — non-fatal
     const requestDurationMs = Date.now() - requestStartTime;
     if (requestDurationMs > 5000) {
-      try {
-        const { data: profileData } = await supabaseAdmin
-          .from('user_profiles')
-          .select('push_token')
-          .eq('id', user.id)
-          .single();
-        if (profileData?.push_token) {
+      supabaseAdmin
+        .from('user_profiles')
+        .select('push_token')
+        .eq('id', user.id)
+        .single()
+        .then(function(profileResult: any) {
+          const pushToken = profileResult.data?.push_token;
+          if (!pushToken) return;
           const preview = cleanMessage.replace(/[#*`\[\]]/g, '').slice(0, 80);
-          await fetch('https://exp.host/--/api/v2/push/send', {
+          fetch('https://exp.host/--/api/v2/push/send', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'Accept-Encoding': 'gzip, deflate' },
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
             body: JSON.stringify({
-              to: profileData.push_token,
+              to: pushToken,
               sound: 'default',
               title: 'AI Response Ready',
               body: preview + (cleanMessage.length > 80 ? '...' : ''),
-              data: { conversationId, screen: 'home' },
+              data: { conversationId: conversationId, screen: 'home' },
               badge: 1,
               priority: 'high',
             }),
-          }).catch(() => {});
-        }
-      } catch (notifErr) {
-        console.log('[chat] Push notification error (non-fatal):', notifErr);
-      }
+          }).catch(function() {});
+        })
+        .catch(function() {});
     }
 
     // Stream response
     const connectionHint = req.headers.get('x-connection-quality') || 'normal';
     const baseDelay = connectionHint === 'slow' ? 10 : 15;
-    const stream = createStreamingResponse(cleanMessage, aiResponse?.model || 'unknown', baseDelay);
+    const stream = createStreamingResponse(cleanMessage, aiResponse.model || 'unknown', baseDelay);
 
     return new Response(stream, {
       headers: {
@@ -762,13 +831,10 @@ serve(async (req) => {
 
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    const errorStack = error instanceof Error ? error.stack : '';
     console.error('[chat] Unhandled error:', errorMessage);
-    console.error('[chat] Stack trace:', errorStack);
     return new Response(
       JSON.stringify({ error: 'Internal server error. Please try again.' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });
-

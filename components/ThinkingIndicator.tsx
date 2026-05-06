@@ -511,11 +511,13 @@ export function ThinkingIndicator({
   }
 
   // ── Default: message thinking ──
-  const iconColor = isDark ? '#A8A8B3' : '#666';
-  const bgColor = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.05)';
-  const borderColor = isDark ? 'rgba(16,163,127,0.2)' : 'rgba(16,163,127,0.3)';
-  // Dots are white in dark mode, dark gray in light mode — always visible against the background
-  const dotsColor = isDark ? 'rgba(255,255,255,0.85)' : '#333333';
+  const iconColor = isDark ? '#A8A8B3' : '#888';
+  const bgColor = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)';
+  const borderColor = isDark ? 'rgba(16,163,127,0.25)' : 'rgba(16,163,127,0.35)';
+  // Card background — dark enough in both modes so white dots are visible
+  const cardBg = isDark ? 'rgba(28,28,30,0.96)' : 'rgba(50,50,50,0.88)';
+  // Dots are always white — they show on the dark card background
+  const dotsColor = '#FFFFFF';
 
   // Group mode — ChatGPT-style inline text indicator
   if (isGroupMode) {
@@ -528,7 +530,7 @@ export function ThinkingIndicator({
 
   return (
     <AnimatedEntry>
-      <View style={[styles.containerCard, { borderColor }, style]}>
+      <View style={[styles.containerCard, { borderColor, backgroundColor: cardBg }, style]}>
         <ShimmerGlowBorder color={accentColor} visible />
         <View style={styles.rowContent}>
           <SpinningBadge icon="sparkles-outline" iconColor={iconColor} ringColor={accentColor + '55'} bgColor={bgColor} />
