@@ -314,13 +314,13 @@ function buildSystemPrompt(
     '- Block attacks, fraud, scams, and harmful behavior',
     '- Warn users about potentially dangerous actions',
     '- Stay professional, respectful, and helpful at all times',
-  );
+  ];
 
   if (apiVersionContext) {
     parts.push(apiVersionContext);
   }
 
-  return parts.filter(p => p !== undefined).join('\n');
+  return parts.filter(p => p !== undefined && p !== '').join('\n');
 }
 
 // ==========================================
@@ -348,7 +348,8 @@ serve(async (req) => {
     let body: ChatBody;
     try {
       body = await req.json();
-    } catch {
+    } catch (e) {
+      console.error('[chat] JSON parse error:', e);
       return new Response(
         JSON.stringify({ error: 'Invalid JSON body' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -412,32 +413,44 @@ serve(async (req) => {
       );
     }
 
-    const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      { global: { headers: { Authorization: `Bearer ${token}` } } }
-    );
+    // Check env variables
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
+    const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+
+    if (!supabaseUrl || !supabaseAnonKey || !supabaseServiceRoleKey) {
+      console.error('[chat] Missing Supabase environment variables');
+      return new Response(
+        JSON.stringify({ error: 'Server configuration error' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: `Bearer ${token}` } }
+    });
 
     const { data: { user }, error: userError } = await supabaseClient.auth.getUser(token);
     if (userError || !user) {
+      console.error('[chat] Auth error:', userError?.message);
       return new Response(
         JSON.stringify({ error: 'Invalid or expired token' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    const supabaseAdmin = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    );
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey);
 
     // Fetch user settings
-    const { data: settingsData } = await supabaseClient
+    const { data: settingsData, error: settingsError } = await supabaseClient
       .from('user_settings')
       .select('app_language, base_tone, custom_instructions, nickname, occupation, interests, preferred_ai_model')
       .eq('user_id', user.id)
       .single()
-      .catch(() => ({ data: null })) as { data: Record<string, unknown> | null };
+      .catch((e) => {
+        console.log('[chat] Settings fetch error (non-fatal):', e?.message);
+        return { data: null, error: e };
+      });
 
     const userLanguage = String(settingsData?.app_language || 'English');
     const baseTone = String(settingsData?.base_tone || 'balanced');
@@ -457,7 +470,7 @@ serve(async (req) => {
         .map(c => {
           if (!c) return '';
           if (typeof c === 'string') return c;
-          if (typeof c === 'object' && 'text' in c && c.text !== undefined) return c.text;
+          if (typeof c === 'object' && 'text' in c && c.text !== undefined) return String(c.text || '');
           if (typeof c === 'object' && 'content' in c && c.content !== undefined) return String(c.content);
           return '';
         })
@@ -492,7 +505,7 @@ serve(async (req) => {
     const base64ImageData = base64Image || body.imageBase64;
     let base64ImagePart: { type: 'image_url'; image_url: { url: string } } | null = null;
     if (base64ImageData) {
-      const cleanBase64 = base64ImageData.replace(/^data:image\/[a-z]+;base64,/, '');
+      const cleanBase64 = base64ImageData.replace(/^data:image\/[a-z+]+;base64,/, '');
       base64ImagePart = {
         type: 'image_url',
         image_url: { url: `data:image/jpeg;base64,${cleanBase64}` }
@@ -590,9 +603,9 @@ serve(async (req) => {
               const ext = mimeType.split('/')[1]?.replace('+', '.') || 'png';
               const base64Data = matches[2];
               // Safe base64 decode — works across all Deno runtime versions
-      const binaryStr = atob(base64Data);
-      const bytes = new Uint8Array(binaryStr.length);
-      for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+              const binaryStr = atob(base64Data);
+              const bytes = new Uint8Array(binaryStr.length);
+              for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
               const fileName = `ai-gen/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
               const { error: uploadErr } = await supabaseAdmin.storage
                 .from('chat-images')
@@ -683,7 +696,9 @@ serve(async (req) => {
       .from('conversations')
       .update({ updated_at: new Date().toISOString() })
       .eq('id', conversationId)
-      .catch(() => {});
+      .catch((e) => {
+        console.log('[chat] Conversation update error (non-fatal):', e?.message);
+      });
 
     // Auto-save AI-generated image URLs to media_files
     if (imageUrl && user?.id) {
@@ -697,7 +712,7 @@ serve(async (req) => {
         });
         console.log('[chat] AI image auto-saved to media_files');
       } catch (saveErr: any) {
-        console.log('[chat] Could not auto-save AI image:', saveErr.message);
+        console.log('[chat] Could not auto-save AI image:', saveErr?.message);
       }
     }
 
@@ -746,10 +761,14 @@ serve(async (req) => {
     });
 
   } catch (error: unknown) {
-    console.error('Unhandled error in chat function:', error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorStack = error instanceof Error ? error.stack : '';
+    console.error('[chat] Unhandled error:', errorMessage);
+    console.error('[chat] Stack trace:', errorStack);
     return new Response(
       JSON.stringify({ error: 'Internal server error. Please try again.' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });
+
