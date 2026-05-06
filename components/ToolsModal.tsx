@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+fix the carousel must be for free plan remove for pro.import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
