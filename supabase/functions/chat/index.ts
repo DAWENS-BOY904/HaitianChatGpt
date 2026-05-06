@@ -1,5 +1,5 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
 import { callAI, detectContentType, generateImageSmart, searchImages } from '../_shared/ai-providers.ts';
 import { createStreamingResponse } from '../_shared/streaming.ts';
@@ -589,10 +589,7 @@ serve(async (req) => {
               const mimeType = matches[1];
               const ext = mimeType.split('/')[1]?.replace('+', '.') || 'png';
               const base64Data = matches[2];
-              // Safe base64 decode — works across all Deno runtime versions
-      const binaryStr = atob(base64Data);
-      const bytes = new Uint8Array(binaryStr.length);
-      for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+              const bytes = Deno.decodeBase64(base64Data);
               const fileName = `ai-gen/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
               const { error: uploadErr } = await supabaseAdmin.storage
                 .from('chat-images')
