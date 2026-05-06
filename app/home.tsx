@@ -66,6 +66,7 @@ import { runOnJS } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+// Network connectivity — no extra package needed
 
 // ── Deep Research Progress Card ──────────────────────────────────────────────
 const DeepResearchCard = memo(function DeepResearchCard({ step, label, done, colors }: { step: number; label: string; done: boolean; colors: any }) {
@@ -90,6 +91,7 @@ const DeepResearchCard = memo(function DeepResearchCard({ step, label, done, col
   );
 });
 
+// Custom base64 validator for React Native (atob not available)
 function isValidBase64(str: string): boolean {
   try {
     const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
@@ -100,9 +102,12 @@ function isValidBase64(str: string): boolean {
       if (chars.indexOf(padded[i]) === -1 && padded[i] !== '=') return false;
     }
     return true;
-  } catch (_e) { return false; }
+  } catch (_e) {
+    return false;
+  }
 }
 
+// Input persistence helpers (8-minute TTL)
 const INPUT_PERSIST_KEY = 'home_input_draft';
 const CONV_PERSIST_KEY = 'home_current_conv_id';
 const INPUT_PERSIST_TTL = 8 * 60 * 1000;
@@ -147,7 +152,9 @@ async function registerForPushNotifications(): Promise<string | null> {
     if (finalStatus !== 'granted') return null;
     const tokenData = await Notifications.getExpoPushTokenAsync();
     return tokenData.data;
-  } catch (e) { return null; }
+  } catch (e) {
+    return null;
+  }
 }
 
 async function sendLocalNotification(title: string, body: string) {
@@ -177,8 +184,6 @@ interface Message {
   role: 'user' | 'assistant';
   createdAt: string;
   imageUrl?: string;
-  image_url?: string;
-  file_url?: string;
   isEdited?: boolean;
   isDeleted?: boolean;
   reactions?: string[];
@@ -242,8 +247,16 @@ const headerIconGroupStyles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(255,255,255,0.12)',
   },
-  iconBtn: { width: 38, height: 36, alignItems: 'center', justifyContent: 'center' },
-  divider: { width: StyleSheet.hairlineWidth, height: 18 },
+  iconBtn: {
+    width: 38,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  divider: {
+    width: StyleSheet.hairlineWidth,
+    height: 18,
+  },
 });
 
 const mentionStyles = StyleSheet.create({
@@ -265,6 +278,46 @@ const SUPPORTED_AI_MODELS = {
 } as const;
 
 type AIModelKey = keyof typeof SUPPORTED_AI_MODELS;
+
+function BlurContextMenu({ visible, title, items, onClose }: {
+  visible: boolean; title?: string;
+  items: Array<{ label: string; icon: string; color?: string; destructive?: boolean; onPress: () => void }>;
+  onClose: () => void;
+}) {
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.8)).current;
+  useEffect(() => {
+    if (visible) {
+      Animated.parallel([
+        Animated.timing(fadeAnim, { toValue: 1, duration: 180, useNativeDriver: true }),
+        Animated.spring(scaleAnim, { toValue: 1, tension: 300, friction: 25, useNativeDriver: true }),
+      ]).start();
+    } else {
+      Animated.parallel([
+        Animated.timing(fadeAnim, { toValue: 0, duration: 120, useNativeDriver: true }),
+        Animated.timing(scaleAnim, { toValue: 0.85, duration: 120, useNativeDriver: true }),
+      ]).start();
+    }
+  }, [visible]);
+  if (!visible) return null;
+  return (
+    <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
+      <TouchableOpacity style={ctxStyles.backdrop} activeOpacity={1} onPress={onClose}>
+        <Animated.View style={[ctxStyles.menuWrap, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}>
+          <BlurView intensity={80} tint="dark" style={ctxStyles.blurBox}>
+            {title ? (<View style={ctxStyles.titleRow}><Text style={ctxStyles.titleText} numberOfLines={1}>{title}</Text></View>) : null}
+            {items.map((item, i) => (
+              <TouchableOpacity key={item.label} style={[ctxStyles.menuItem, i > 0 && ctxStyles.menuItemBorder]} activeOpacity={0.6} onPress={() => { onClose(); setTimeout(item.onPress, 50); }}>
+                <Text style={[ctxStyles.menuItemLabel, item.destructive && ctxStyles.destructiveLabel]}>{item.label}</Text>
+                <Ionicons name={item.icon as any} size={20} color={item.destructive ? '#FF453A' : 'rgba(255,255,255,0.85)'} />
+              </TouchableOpacity>
+            ))}
+          </BlurView>
+        </Animated.View>
+      </TouchableOpacity>
+    </Modal>
+  );
+}
 
 const ctxStyles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', alignItems: 'center' },
@@ -361,6 +414,7 @@ const archStyles = StyleSheet.create({
   archBtnText: { color: '#FF453A', fontSize: 17, fontWeight: '600' },
 });
 
+// ── Profile Edit Modal (Photo 2) ──
 function ProfileEditModal({ visible, user, profilePhotoUrl, onClose, onSave, isDark }: {
   visible: boolean; user: any; profilePhotoUrl: string | null; onClose: () => void;
   onSave: (name: string, username: string, photo?: string) => void; isDark: boolean;
@@ -413,7 +467,7 @@ function ProfileEditModal({ visible, user, profilePhotoUrl, onClose, onSave, isD
           <View style={{ backgroundColor: inputBg, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 13, marginBottom: 20 }}>
             <TextInput style={{ color: textC, fontSize: 16 }} value={username} onChangeText={setUsername} placeholderTextColor={subC} autoCapitalize="none" />
           </View>
-          <Text style={{ color: subC, fontSize: 12, textAlign: 'center', lineHeight: 18, marginBottom: 24 }}>{'Your profile helps people recognize you.'}</Text>
+          <Text style={{ color: subC, fontSize: 12, textAlign: 'center', lineHeight: 18, marginBottom: 24 }}>{'Your profile helps people recognize you. Your name and username are also used in the Dawinix app.'}</Text>
           <TouchableOpacity style={{ backgroundColor: textC, borderRadius: 30, paddingVertical: 15, alignItems: 'center', marginBottom: 12 }} onPress={() => { onSave(name, username, photoUri || undefined); onClose(); }}>
             <Text style={{ color: isDark ? '#000' : '#FFF', fontSize: 17, fontWeight: '700' }}>Save profile</Text>
           </TouchableOpacity>
@@ -425,7 +479,7 @@ function ProfileEditModal({ visible, user, profilePhotoUrl, onClose, onSave, isD
     </Modal>
   );
 }
-
+// ── Group Start Modal (Photo 1) with dark/light + blur ──
 function GroupStartModal({ visible, user, profilePhotoUrl, onClose, onStartGroup, isDark, onSetupProfile }: {
   visible: boolean; user: any; profilePhotoUrl: string | null; onClose: () => void; onStartGroup: () => void;
   isDark?: boolean; onSetupProfile?: () => void;
@@ -446,11 +500,18 @@ function GroupStartModal({ visible, user, profilePhotoUrl, onClose, onStartGroup
           <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20, paddingVertical: 40 }}>
             <Text style={{ color: textC, fontSize: 26, fontWeight: '700', textAlign: 'center', marginBottom: 12 }}>Use Dawinix together</Text>
             <Text style={{ color: subC, fontSize: 15, textAlign: 'center', lineHeight: 22, marginBottom: 36 }}>Add people to your chats to plan, share ideas, and get creative.</Text>
-            <TouchableOpacity style={{ backgroundColor: textC, borderRadius: 30, paddingHorizontal: 48, paddingVertical: 17, width: '100%', alignItems: 'center' }} onPress={() => { onClose(); onStartGroup(); }}>
+            <TouchableOpacity
+              style={{ backgroundColor: textC, borderRadius: 30, paddingHorizontal: 48, paddingVertical: 17, width: '100%', alignItems: 'center' }}
+              onPress={() => { onClose(); onStartGroup(); }}
+            >
               <Text style={{ color: isDark ? '#000' : '#FFF', fontSize: 17, fontWeight: '700' }}>Start group chat</Text>
             </TouchableOpacity>
           </View>
-          <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: profileRowBg, borderRadius: 18, padding: 14, gap: 12 }} onPress={() => { onClose(); setTimeout(() => onSetupProfile?.(), 200); }} activeOpacity={0.75}>
+          <TouchableOpacity
+            style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: profileRowBg, borderRadius: 18, padding: 14, gap: 12 }}
+            onPress={() => { onClose(); setTimeout(() => onSetupProfile?.(), 200); }}
+            activeOpacity={0.75}
+          >
             {profilePhotoUrl ? (
               <ExpoImage source={{ uri: profilePhotoUrl }} style={{ width: 44, height: 44, borderRadius: 22 }} contentFit="cover" />
             ) : (
@@ -470,6 +531,21 @@ function GroupStartModal({ visible, user, profilePhotoUrl, onClose, onStartGroup
   );
 }
 
+const grpStartStyles = StyleSheet.create({
+  closeX: { position: 'absolute', top: 60, right: 20, zIndex: 10 },
+  closeXCircle: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40 },
+  title: { color: '#FFF', fontSize: 24, fontWeight: '700', textAlign: 'center', marginBottom: 12 },
+  subtitle: { color: 'rgba(255,255,255,0.55)', fontSize: 15, textAlign: 'center', lineHeight: 22, marginBottom: 32 },
+  startBtn: { backgroundColor: '#FFF', borderRadius: 30, paddingHorizontal: 40, paddingVertical: 16 },
+  startBtnText: { color: '#000', fontSize: 17, fontWeight: '700' },
+  profileRow: { flexDirection: 'row', alignItems: 'center', margin: 16, marginBottom: 40, backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 16, padding: 14, gap: 12 },
+  profileAvatar: { marginRight: 4 },
+  profileTitle: { color: '#FFF', fontSize: 16, fontWeight: '600' },
+  profileSub: { color: 'rgba(255,255,255,0.5)', fontSize: 13, marginTop: 2 },
+});
+
+// ── Group Chat Actions Dropdown (Photo 4) ──
 function GroupChatActionsMenu({ visible, onClose, onPeople, onAddPeople, onManageLink, onRenameGroup, onCustomize, onMute, onReport, onDeleteGroup, isDark }: {
   visible: boolean; onClose: () => void; onPeople: () => void; onAddPeople: () => void;
   onManageLink: () => void; onRenameGroup: () => void; onCustomize: () => void;
@@ -528,49 +604,77 @@ function GroupChatActionsMenu({ visible, onClose, onPeople, onAddPeople, onManag
   );
 }
 
+// ── People Modal (Photo 6) ──
 function PeopleModal({ visible, onClose, groupName, userName, profilePhotoUrl, isDark, isAdmin }: {
   visible: boolean; onClose: () => void; groupName: string; userName: string;
   profilePhotoUrl: string | null; isDark: boolean; isAdmin: boolean;
 }) {
   const textC = isDark ? '#FFF' : '#000';
   const subC = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.45)';
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={{ flex: 1, justifyContent: 'flex-end' }}>
         {Platform.OS === 'ios' ? <BlurView intensity={40} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} /> : <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.4)' }]} />}
         <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onClose} />
         <View style={{ borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: 'hidden', minHeight: '55%' }}>
-          <View style={{ backgroundColor: isDark ? '#1C1C1E' : '#F2F2F7', paddingBottom: 40, minHeight: '100%' }}>
-            <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(128,128,128,0.4)', alignSelf: 'center', marginTop: 10, marginBottom: 16 }} />
-            <Text style={{ color: textC, fontSize: 18, fontWeight: '700', textAlign: 'center', marginBottom: 16 }}>People</Text>
-            <View style={{ paddingHorizontal: 16 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12, gap: 12 }}>
-                {profilePhotoUrl ? (
-                  <ExpoImage source={{ uri: profilePhotoUrl }} style={{ width: 44, height: 44, borderRadius: 22 }} contentFit="cover" />
-                ) : (
-                  <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: isDark ? '#3A3A3C' : '#E5E5EA', alignItems: 'center', justifyContent: 'center' }}>
-                    <Ionicons name="person" size={22} color={isDark ? '#888' : '#999'} />
+          {Platform.OS === 'ios' ? (
+            <BlurView intensity={isDark ? 80 : 70} tint={isDark ? 'dark' : 'extraLight'} style={{ paddingBottom: 40, minHeight: '100%' }}>
+              <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(128,128,128,0.4)', alignSelf: 'center', marginTop: 10, marginBottom: 16 }} />
+              <Text style={{ color: textC, fontSize: 18, fontWeight: '700', textAlign: 'center', marginBottom: 16 }}>People</Text>
+              <View style={{ paddingHorizontal: 16 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12, gap: 12 }}>
+                  {profilePhotoUrl ? (
+                    <ExpoImage source={{ uri: profilePhotoUrl }} style={{ width: 44, height: 44, borderRadius: 22 }} contentFit="cover" />
+                  ) : (
+                    <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: isDark ? '#3A3A3C' : '#E5E5EA', alignItems: 'center', justifyContent: 'center' }}>
+                      <Ionicons name="person" size={22} color={isDark ? '#888' : '#999'} />
+                    </View>
+                  )}
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: textC, fontSize: 16, fontWeight: '600' }}>{userName}</Text>
+                    <Text style={{ color: subC, fontSize: 13, marginTop: 2 }}>{userName.toLowerCase().replace(/\s/g, '')} {String.fromCharCode(183)} you{isAdmin ? ` ${String.fromCharCode(183)} admin` : ''}</Text>
                   </View>
-                )}
-                <View style={{ flex: 1 }}>
-                  <Text style={{ color: textC, fontSize: 16, fontWeight: '600' }}>{userName}</Text>
-                  <Text style={{ color: subC, fontSize: 13, marginTop: 2 }}>{userName.toLowerCase().replace(/\s/g, '')} {String.fromCharCode(183)} you{isAdmin ? ` ${String.fromCharCode(183)} admin` : ''}</Text>
+                </View>
+              </View>
+            </BlurView>
+          ) : (
+            <View style={{ backgroundColor: isDark ? '#1C1C1E' : '#F2F2F7', paddingBottom: 40, minHeight: '100%' }}>
+              <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(128,128,128,0.4)', alignSelf: 'center', marginTop: 10, marginBottom: 16 }} />
+              <Text style={{ color: textC, fontSize: 18, fontWeight: '700', textAlign: 'center', marginBottom: 16 }}>People</Text>
+              <View style={{ paddingHorizontal: 16 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12, gap: 12 }}>
+                  {profilePhotoUrl ? (
+                    <ExpoImage source={{ uri: profilePhotoUrl }} style={{ width: 44, height: 44, borderRadius: 22 }} contentFit="cover" />
+                  ) : (
+                    <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: isDark ? '#3A3A3C' : '#E5E5EA', alignItems: 'center', justifyContent: 'center' }}>
+                      <Ionicons name="person" size={22} color={isDark ? '#888' : '#999'} />
+                    </View>
+                  )}
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: textC, fontSize: 16, fontWeight: '600' }}>{userName}</Text>
+                    <Text style={{ color: subC, fontSize: 13, marginTop: 2 }}>{userName.toLowerCase().replace(/\s/g, '')} {String.fromCharCode(183)} you{isAdmin ? ` ${String.fromCharCode(183)} admin` : ''}</Text>
+                  </View>
                 </View>
               </View>
             </View>
-          </View>
+          )}
         </View>
       </View>
     </Modal>
   );
 }
 
+// ── Report Group Modal (Photo 7, 8, 9) ──
 const GROUP_REPORT_CATEGORIES = [
-  { label: 'Violence & self-harm', subs: ['Threats or incitement to violence', 'Weapons', 'Suicide & self-harm', 'Human trafficking', 'Terrorism'] },
-  { label: 'Sexual exploitation & abuse', subs: ['Non-consensual intimate images', 'Sexual extortion'] },
+  { label: 'Violence & self-harm', subs: ['Threats or incitement to violence', 'Gender-based violence', 'Sexual violence', 'Weapons', 'Suicide & self-harm', 'Eating disorders', 'Human trafficking', 'Terrorism'] },
+  { label: 'Sexual exploitation & abuse', subs: ['Child sexual abuse material', 'Non-consensual intimate images', 'Sexual extortion'] },
+  { label: 'Child/teen exploitation', subs: ['Child grooming', 'Minor solicitation'] },
   { label: 'Bullying & harassment', subs: ['Targeted harassment', 'Hate speech', 'Doxxing'] },
   { label: 'Spam, fraud & deception', subs: ['Phishing', 'Scams', 'Misinformation'] },
   { label: 'Privacy violation', subs: ['Sharing personal info', 'Non-consensual recording'] },
+  { label: 'Intellectual property', subs: ['Copyright infringement', 'Trademark violation'] },
+  { label: 'Age-inappropriate content', subs: ['Adult content to minors'] },
   { label: 'Something else', subs: ['Other concern'] },
 ];
 
@@ -621,7 +725,8 @@ function ReportGroupModal({ visible, onClose, isDark }: { visible: boolean; onCl
         )}
         {step === 'sub' && selCategory && (
           <>
-            <Text style={{ color: textC, fontSize: 17, fontWeight: '600', textAlign: 'center', marginBottom: 20 }}>{selCategory.label}</Text>
+            <Text style={{ color: textC, fontSize: 17, fontWeight: '600', textAlign: 'center', marginBottom: 4 }}>{selCategory.label}</Text>
+            <Text style={{ color: subC, fontSize: 14, textAlign: 'center', marginBottom: 20 }}>Please provide more details</Text>
             <View style={{ marginHorizontal: 16, borderRadius: 18, overflow: 'hidden', backgroundColor: cardBg }}>
               {selCategory.subs.map((sub, i) => (
                 <TouchableOpacity key={sub} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingVertical: 16, borderTopWidth: i > 0 ? StyleSheet.hairlineWidth : 0, borderTopColor: borderC }} onPress={() => { setSelSub(sub); setStep('detail'); }}>
@@ -645,23 +750,40 @@ function ReportGroupModal({ visible, onClose, isDark }: { visible: boolean; onCl
   );
 }
 
+// ── Rename Group Box (blur modal, Photo 5) ──
 function RenameGroupBox({ isDark, currentName, onSave, onCancel }: { isDark: boolean; currentName: string; onSave: (n: string) => void; onCancel: () => void }) {
   const [text, setText] = useState(currentName);
   useEffect(() => { setText(currentName); }, [currentName]);
   const textC = isDark ? '#FFF' : '#000';
   const inputBg = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)';
+  const subC = isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.4)';
   return (
     <View style={{ width: '82%', borderRadius: 22, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.35, shadowRadius: 22, elevation: 22 }}>
-      <View style={{ backgroundColor: isDark ? '#2C2C2E' : '#FFF', padding: 22, borderRadius: 22 }}>
-        <Text style={{ color: textC, fontSize: 18, fontWeight: '700', marginBottom: 16 }}>Rename group</Text>
-        <View style={{ backgroundColor: inputBg, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 16 }}>
-          <TextInput style={{ color: textC, fontSize: 16 }} value={text} onChangeText={setText} autoFocus selectTextOnFocus />
+      {Platform.OS === 'ios' ? (
+        <BlurView intensity={92} tint={isDark ? 'dark' : 'extraLight'} style={{ padding: 22 }}>
+          <Text style={{ color: textC, fontSize: 18, fontWeight: '700', marginBottom: 4 }}>Rename group</Text>
+          <Text style={{ color: subC, fontSize: 13, marginBottom: 16 }}>Enter a new name for the group.</Text>
+          <View style={{ backgroundColor: inputBg, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 16 }}>
+            <TextInput style={{ color: textC, fontSize: 16 }} value={text} onChangeText={setText} autoFocus selectTextOnFocus />
+          </View>
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            <TouchableOpacity style={{ flex: 1, backgroundColor: inputBg, borderRadius: 14, paddingVertical: 13, alignItems: 'center' }} onPress={onCancel}><Text style={{ color: textC, fontSize: 16, fontWeight: '600' }}>Cancel</Text></TouchableOpacity>
+            <TouchableOpacity style={{ flex: 1, backgroundColor: inputBg, borderRadius: 14, paddingVertical: 13, alignItems: 'center' }} onPress={() => onSave(text.trim())}><Text style={{ color: textC, fontSize: 16, fontWeight: '600' }}>Save</Text></TouchableOpacity>
+          </View>
+        </BlurView>
+      ) : (
+        <View style={{ backgroundColor: isDark ? '#2C2C2E' : '#FFF', padding: 22, borderRadius: 22 }}>
+          <Text style={{ color: textC, fontSize: 18, fontWeight: '700', marginBottom: 4 }}>Rename group</Text>
+          <Text style={{ color: subC, fontSize: 13, marginBottom: 16 }}>Enter a new name for the group.</Text>
+          <View style={{ backgroundColor: inputBg, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 16 }}>
+            <TextInput style={{ color: textC, fontSize: 16 }} value={text} onChangeText={setText} autoFocus selectTextOnFocus />
+          </View>
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            <TouchableOpacity style={{ flex: 1, backgroundColor: inputBg, borderRadius: 14, paddingVertical: 13, alignItems: 'center' }} onPress={onCancel}><Text style={{ color: textC, fontSize: 16, fontWeight: '600' }}>Cancel</Text></TouchableOpacity>
+            <TouchableOpacity style={{ flex: 1, backgroundColor: inputBg, borderRadius: 14, paddingVertical: 13, alignItems: 'center' }} onPress={() => onSave(text.trim())}><Text style={{ color: textC, fontSize: 16, fontWeight: '600' }}>Save</Text></TouchableOpacity>
+          </View>
         </View>
-        <View style={{ flexDirection: 'row', gap: 10 }}>
-          <TouchableOpacity style={{ flex: 1, backgroundColor: inputBg, borderRadius: 14, paddingVertical: 13, alignItems: 'center' }} onPress={onCancel}><Text style={{ color: textC, fontSize: 16, fontWeight: '600' }}>Cancel</Text></TouchableOpacity>
-          <TouchableOpacity style={{ flex: 1, backgroundColor: inputBg, borderRadius: 14, paddingVertical: 13, alignItems: 'center' }} onPress={() => onSave(text.trim())}><Text style={{ color: textC, fontSize: 16, fontWeight: '600' }}>Save</Text></TouchableOpacity>
-        </View>
-      </View>
+      )}
     </View>
   );
 }
@@ -718,11 +840,11 @@ const customStyles = StyleSheet.create({
 });
 
 function InviteLinkModal({ visible, onClose, isPlus, isDark }: { visible: boolean; onClose: () => void; isPlus: boolean; isDark?: boolean }) {
-  const token = Math.random().toString(36).substring(2, 15);
+  const token = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 8);
   const id = Math.random().toString(36).substring(2, 14);
   const link = `https://dawinix.com/gg/v/${id}?token=${token}`;
   const textC = isDark !== false ? '#FFF' : '#000';
-  const handleShare = async () => { try { await Share.share({ message: `Join my Dawinix group chat!\n\n${link}`, url: link }); } catch (e) {} onClose(); };
+  const handleShare = async () => { try { await Share.share({ message: `Join my Dawinix group chat!\\n\\n${link}`, url: link }); } catch (e) {} onClose(); };
   const handleCopy = () => { Clipboard.setStringAsync(link); onClose(); };
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -844,11 +966,13 @@ function ImageCreatingOverlay() {
   const scaleAnim = useRef(new Animated.Value(0.92)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
   const shimmerX = useRef(new Animated.Value(-300)).current;
+
   useEffect(() => {
     Animated.parallel([
       Animated.timing(opacityAnim, { toValue: 1, duration: 280, useNativeDriver: true }),
       Animated.spring(scaleAnim, { toValue: 1, tension: 200, friction: 20, useNativeDriver: true }),
     ]).start();
+
     const animations = anims.map((anim, i) => {
       const row = Math.floor(i / 8);
       const col = i % 8;
@@ -862,6 +986,7 @@ function ImageCreatingOverlay() {
       );
     });
     animations.forEach(a => a.start());
+
     const shimmerLoop = Animated.loop(
       Animated.sequence([
         Animated.timing(shimmerX, { toValue: 400, duration: 1800, useNativeDriver: true }),
@@ -870,21 +995,45 @@ function ImageCreatingOverlay() {
       ])
     );
     shimmerLoop.start();
-    return () => { animations.forEach(a => a.stop()); shimmerLoop.stop(); };
+
+    return () => {
+      animations.forEach(a => a.stop());
+      shimmerLoop.stop();
+    };
   }, []);
+
   const { width: screenW } = Dimensions.get('window');
   const cardW = Math.min(screenW - 64, 320);
   const cardH = cardW * 1.1;
+
   return (
-    <Animated.View style={[StyleSheet.absoluteFillObject, { zIndex: 999, backgroundColor: 'rgba(0,0,0,0.72)', justifyContent: 'center', alignItems: 'center', opacity: opacityAnim }]}>
+    <Animated.View style={[
+      StyleSheet.absoluteFillObject,
+      { zIndex: 999, backgroundColor: 'rgba(0,0,0,0.72)', justifyContent: 'center', alignItems: 'center', opacity: opacityAnim }
+    ]}>
       <BlurView intensity={60} tint="dark" style={StyleSheet.absoluteFill} />
-      <Animated.View style={[imgOverlayStyles.card, { width: cardW, height: cardH, transform: [{ scale: scaleAnim }] }]}>
+      <Animated.View style={[
+        imgOverlayStyles.card,
+        { width: cardW, height: cardH, transform: [{ scale: scaleAnim }] }
+      ]}>
         <View style={imgOverlayStyles.dotGrid}>
           {anims.map((anim, i) => (
-            <Animated.View key={i} style={[imgOverlayStyles.dot, { opacity: anim.interpolate({ inputRange: [0, 1], outputRange: [0.12, 0.65] }), transform: [{ scale: anim.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1.3] }) }] }]} />
+            <Animated.View
+              key={i}
+              style={[
+                imgOverlayStyles.dot,
+                {
+                  opacity: anim.interpolate({ inputRange: [0, 1], outputRange: [0.12, 0.65] }),
+                  transform: [{ scale: anim.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1.3] }) }],
+                },
+              ]}
+            />
           ))}
         </View>
-        <Animated.View style={[imgOverlayStyles.shimmer, { transform: [{ translateX: shimmerX }] }]} />
+        <Animated.View style={[
+          imgOverlayStyles.shimmer,
+          { transform: [{ translateX: shimmerX }] },
+        ]} />
         <View style={imgOverlayStyles.textRow}>
           <ActivityIndicator size="small" color="rgba(255,255,255,0.7)" style={{ marginRight: 8 }} />
           <Text style={imgOverlayStyles.label}>Creating image</Text>
@@ -895,12 +1044,213 @@ function ImageCreatingOverlay() {
 }
 
 const imgOverlayStyles = StyleSheet.create({
-  card: { borderRadius: 28, backgroundColor: '#111113', overflow: 'hidden', justifyContent: 'flex-end', padding: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.07)', shadowColor: '#000', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.55, shadowRadius: 28, elevation: 28 },
-  dotGrid: { position: 'absolute', top: 20, left: 20, right: 20, bottom: 60, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: 8 },
-  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.75)' },
-  shimmer: { position: 'absolute', top: 0, bottom: 0, width: 80, backgroundColor: 'rgba(255,255,255,0.04)' },
-  textRow: { flexDirection: 'row', alignItems: 'center', paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.08)' },
-  label: { color: 'rgba(255,255,255,0.82)', fontSize: 16, fontWeight: '500', letterSpacing: 0.2 },
+  card: {
+    borderRadius: 28,
+    backgroundColor: '#111113',
+    overflow: 'hidden',
+    justifyContent: 'flex-end',
+    padding: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.07)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.55,
+    shadowRadius: 28,
+    elevation: 28,
+  },
+  dotGrid: {
+    position: 'absolute',
+    top: 20,
+    left: 20,
+    right: 20,
+    bottom: 60,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255,255,255,0.75)',
+  },
+  shimmer: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    width: 80,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+  },
+  textRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(255,255,255,0.08)',
+  },
+  label: {
+    color: 'rgba(255,255,255,0.82)',
+    fontSize: 16,
+    fontWeight: '500',
+    letterSpacing: 0.2,
+  },
+});
+
+// ============================================================================
+// FIXED MEDIA PREVIEW STYLES - Define BEFORE component
+// ============================================================================
+
+const mediaPreviewStyles = StyleSheet.create({
+  container: {
+    marginTop: 6,
+    marginBottom: 4,
+  },
+  scrollView: {
+    maxHeight: 100,
+  },
+  scrollContent: {
+    paddingHorizontal: 2,
+    paddingBottom: 8,
+    alignItems: 'flex-start',
+  },
+  rowContent: {
+    flexDirection: 'row',
+    paddingHorizontal: 2,
+    paddingBottom: 8,
+    flexWrap: 'nowrap',
+  },
+  itemContainer: {
+    position: 'relative',
+    marginRight: 10,
+  },
+  imageWrapper: {
+    width: 80,
+    height: 80,
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(128,128,128,0.2)',
+  },
+  imageThumb: {
+    width: 80,
+    height: 80,
+  },
+  videoWrapper: {
+    backgroundColor: 'rgba(128,128,128,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  videoLabel: {
+    fontSize: 9,
+    marginTop: 4,
+    fontWeight: '700',
+    color: 'rgba(128,128,128,0.7)',
+  },
+  docPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(128,128,128,0.12)',
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    maxWidth: 200,
+    borderWidth: 1,
+    borderColor: 'rgba(128,128,128,0.15)',
+  },
+  docIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  docTextBox: {
+    flex: 1,
+    minWidth: 0,
+    marginLeft: 8,
+  },
+  docName: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  docType: {
+    fontSize: 10,
+    marginTop: 2,
+  },
+  removeBtn: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    zIndex: 10,
+    padding: 4,
+  },
+  removeBtnInner: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#FFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.3,
+    shadowRadius: 2,
+    elevation: 3,
+  },
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    marginHorizontal: 0,
+    marginTop: 4,
+  },
+});
+
+// ============================================================================
+// FIXED ADDITIONAL STYLES
+// ============================================================================
+
+const additionalStyles = StyleSheet.create({
+  addBtnBlur: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  researchBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(90,200,250,0.18)',
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    gap: 5,
+    borderWidth: 1,
+    borderColor: 'rgba(90,200,250,0.42)',
+  },
+  researchBadgeText: {
+    color: '#5AC8FA',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  saveImageBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderWidth: 1,
+  },
+  saveImageText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
 });
 
 export default function HomeScreen() {
@@ -942,6 +1292,7 @@ export default function HomeScreen() {
   const [guestLoginModal, setGuestLoginModal] = useState(false);
   const [guestLockModal, setGuestLockModal] = useState(false);
   const [guestLockFeature, setGuestLockFeature] = useState('');
+  // Guest photo upload limit: 3 per session (no files)
   const [guestPhotoCount, setGuestPhotoCount] = useState(0);
   const GUEST_PHOTO_LIMIT = 3;
   const [currentAIMode, setCurrentAIMode] = useState<AIMode>('instant');
@@ -965,12 +1316,14 @@ export default function HomeScreen() {
   const [calcVisible, setCalcVisible] = useState(false);
   const [calcExpression, setCalcExpression] = useState('');
   const [calcResult, setCalcResult] = useState('');
+  const [quizModalVisible, setQuizModalVisible] = useState(false);
   const [quizConnectVisible, setQuizConnectVisible] = useState(false);
   const [quizConnectDetailVisible, setQuizConnectDetailVisible] = useState(false);
   const [quizTopicVisible, setQuizTopicVisible] = useState(false);
   const [selectedQuizTopic, setSelectedQuizTopic] = useState('');
   const [quizGenerating, setQuizGenerating] = useState(false);
   const [quizMode, setQuizMode] = useState(false);
+  const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([]);
   const [selectedDifficulty, setSelectedDifficulty] = useState('Medium');
   const [customTopicInput, setCustomTopicInput] = useState('');
   const [quizHistory, setQuizHistory] = useState<QuizHistoryEntry[]>([]);
@@ -1017,6 +1370,8 @@ export default function HomeScreen() {
   const [profileEditModalVisible, setProfileEditModalVisible] = useState(false);
   const [deleteGroupConfirm, setDeleteGroupConfirm] = useState(false);
   const [replyingTo, setReplyingTo] = useState<any>(null);
+  const [expandInputVisible, setExpandInputVisible] = useState(false);
+  const [expandedText, setExpandedText] = useState('');
   const [mentionQuery, setMentionQuery] = useState('');
   const [showMentionPopup, setShowMentionPopup] = useState(false);
   const [filteredMentionMembers, setFilteredMentionMembers] = useState<GroupMember[]>([]);
@@ -1037,7 +1392,6 @@ export default function HomeScreen() {
     setMsgActionsMsg(msg);
     setMsgActionsVisible(true);
   }, []);
-
   const wasGeneratingRef = useRef(false);
   const appStateForNotifRef = useRef(AppState.currentState);
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -1052,12 +1406,13 @@ export default function HomeScreen() {
   const appStateRef = useRef(AppState.currentState);
   const autoLockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const processingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const inactivityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // ── Handle incoming image from images page ──
   useEffect(() => {
     if (params.fromImages === '1' && params.imageBase64) {
       setImageAnalyzingOverlay(true);
       const base64 = params.imageBase64;
+      // If no explicit prompt, auto-detect + analyze
       const promptText = (params.imagePrompt || '').trim() ||
         'Please analyze this image in full detail. Describe everything you see including subjects, colors, text, mood, and any important details.';
       (async () => {
@@ -1080,6 +1435,7 @@ export default function HomeScreen() {
     }
   }, [params.fromImages]);
 
+  // ── Save AI-generated image to My Images gallery ──
   const handleSaveToMyImages = useCallback(async (imageUrl: string, messageId: string) => {
     if (!user?.id || savingImageId) return;
     setSavingImageId(messageId);
@@ -1100,8 +1456,21 @@ export default function HomeScreen() {
     }
   }, [user?.id, supabase, showAlert, savingImageId]);
 
+  // ── 8-minute inactivity timer: auto-create new conversation ──
+  const inactivityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const resetInactivityTimer = useCallback(() => {
+    if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
+    inactivityTimerRef.current = setTimeout(async () => {
+      if ((messages || []).length > 0) {
+        try { await createConversation(); } catch (_e) {}
+      }
+    }, INPUT_PERSIST_TTL);
+  }, [messages, createConversation]);
+
+  // Load persisted draft + conversation ID on mount
   useEffect(() => {
     loadDraft().then(draft => { if (draft) setInputText(draft); });
+    // Restore last conversation
     AsyncStorage.getItem(CONV_PERSIST_KEY).then(savedId => {
       if (savedId && selectConversation) {
         selectConversation(savedId).catch(() => {});
@@ -1114,6 +1483,7 @@ export default function HomeScreen() {
     };
   }, []);
 
+  // Save conversation ID whenever it changes
   useEffect(() => {
     if (currentConversation?.id) {
       AsyncStorage.setItem(CONV_PERSIST_KEY, currentConversation.id).catch(() => {});
@@ -1122,6 +1492,27 @@ export default function HomeScreen() {
 
   const handleInputChange = useCallback(async (txt: string) => {
     const safeTxt = txt ?? '';
+    const byteLength = new Blob([safeTxt]).size;
+    const codePatterns = /^(\s*(import|from|const|let|var|function|class|interface|type|export|async|await|if|for|while|return|try|catch|\{|\}|\(|\)|\[|\]|=>|:|;|,|\.|\+|\-|\*|\/|=|!|&|\||<|>|\d+|\s+|\/\/|\/\*|\*|#).*)+$/s;
+    const hasNaturalLanguage = /\b(the|and|is|are|was|were|be|been|have|has|had|do|does|did|will|would|could|should|may|might|can|shall|this|that|these|those|with|for|from|about|into|through|during|before|after|above|below|between|under|again|further|then|once|here|there|when|where|why|how|all|each|few|more|most|other|some|such|no|nor|not|only|own|same|so|than|too|very|just|now|also|back|down|off|over|out|up|any|both|each|few|more|most|other|some|such|what|which|who|whom|whose|why|how|where|when)\b/gi.test(safeTxt);
+    const looksLikeCodeOnly = codePatterns.test(safeTxt) && !hasNaturalLanguage && safeTxt.length > 50;
+
+    if (byteLength > 4000 && looksLikeCodeOnly) {
+      try {
+        const fileName = `code_${Date.now()}.txt`;
+        const filePath = (FileSystem.cacheDirectory || '') + fileName;
+        await FileSystem.writeAsStringAsync(filePath, safeTxt, { encoding: FileSystem.EncodingType.UTF8 });
+        const newFile: MediaFile = { type: 'document', uri: filePath, name: fileName, mimeType: 'text/plain' };
+        setSelectedMedia(prev => [...prev, newFile]);
+        setInputText('');
+        showAlert('Code file created', `Code saved as "${fileName}" and attached. You can now send it.`);
+      } catch (e) { 
+        console.error('Failed to create code file:', e);
+        setInputText(safeTxt); 
+      }
+      return;
+    }
+
     setInputText(safeTxt);
     if (draftSaveTimer.current) clearTimeout(draftSaveTimer.current);
     draftSaveTimer.current = setTimeout(() => saveDraft(safeTxt), 300);
@@ -1131,7 +1522,7 @@ export default function HomeScreen() {
       if (atMatch !== null) { setMentionQuery(atMatch[1] || ''); setShowMentionPopup(true); }
       else { setShowMentionPopup(false); setMentionQuery(''); }
     }
-  }, [groupChatMode]);
+  }, [groupChatMode, showAlert]);
 
   useEffect(() => {
     if (user?.id) {
@@ -1141,11 +1532,14 @@ export default function HomeScreen() {
     }
   }, [user?.id]);
 
+  // ── Notification deep-link handler ──────────────────────────────────────
   useEffect(() => {
+    // Handle tap on notification when app is already open
     const sub = Notifications.addNotificationResponseReceivedListener(response => {
       const convId = response.notification.request.content.data?.conversationId as string | undefined;
       if (convId) setPendingNotifConvId(convId);
     });
+    // Handle tap when app was killed / background (initial notification) — web not supported
     if (Platform.OS !== 'web') {
       Notifications.getLastNotificationResponseAsync().then(response => {
         if (response) {
@@ -1157,6 +1551,7 @@ export default function HomeScreen() {
     return () => sub.remove();
   }, []);
 
+  // Navigate to conversation once it's loaded
   useEffect(() => {
     if (!pendingNotifConvId) return;
     const conv = conversations?.find((c: any) => c.id === pendingNotifConvId);
@@ -1231,7 +1626,25 @@ export default function HomeScreen() {
     ];
     try {
       if (!user?.id) { setSmartSuggestions(fallback); return; }
-      setSmartSuggestions(fallback);
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      const { data: recentConvs } = await supabase.from('conversations').select('id').eq('user_id', user.id).gte('updated_at', sevenDaysAgo).limit(10);
+      if (!recentConvs || recentConvs.length === 0) { setSmartSuggestions(fallback); return; }
+      const convIds = recentConvs.map((c: any) => c.id);
+      const { data: recentMsgs } = await supabase.from('messages').select('content').in('conversation_id', convIds).eq('role', 'user').gte('created_at', sevenDaysAgo).order('created_at', { ascending: false }).limit(20);
+      if (!recentMsgs || recentMsgs.length === 0) { setSmartSuggestions(fallback); return; }
+      const topics = recentMsgs.map((m: any) => (m.content || '').slice(0, 60)).filter(Boolean);
+      const generated: Array<{title: string; sub: string}> = [];
+      const allText = topics.join(' ').toLowerCase();
+      if (allText.includes('html') || allText.includes('web')) generated.push({ title: 'Improve my HTML', sub: 'continue where we left off' });
+      if (allText.includes('python') || allText.includes('script')) generated.push({ title: 'Write a Python script', sub: 'to automate your task' });
+      if (allText.includes('translate') || allText.includes('tradiksyon')) generated.push({ title: 'Translate to English', sub: 'from Haitian Creole' });
+      if (allText.includes('image') || allText.includes('logo')) generated.push({ title: 'Create an image', sub: 'like we discussed' });
+      if (generated.length < 4 && topics.length > 0) {
+        const t = topics[0].slice(0, 30);
+        if (t.length > 5) generated.push({ title: 'Continue: ' + t, sub: 'pick up from last time' });
+      }
+      const merged = [...generated, ...fallback].slice(0, 4);
+      setSmartSuggestions(merged.length > 0 ? merged : fallback);
     } catch (e) { setSmartSuggestions(fallback); }
   };
 
@@ -1251,6 +1664,7 @@ export default function HomeScreen() {
     return () => clearInterval(interval);
   }, [computeTimeUntilMidnight]);
 
+  // Refresh conversations when side menu opens
   const { refreshConversations } = useConversation();
   useEffect(() => {
     if (sideMenuVisible) {
@@ -1290,6 +1704,8 @@ export default function HomeScreen() {
         setIsAppActive(true);
         if (autoLockTimerRef.current) { clearTimeout(autoLockTimerRef.current); autoLockTimerRef.current = null; }
         Animated.timing(fadeAnim, { toValue: 0, duration: 300, useNativeDriver: true }).start(() => setShowBlurOverlay(false));
+        // Reload messages when returning from background, but NEVER while AI is streaming
+        // (prevents messages from disappearing during AI generation)
         if (currentConversation?.id && !currentConversation.id.startsWith('guest-') && !currentConversation.id.startsWith('local-') && !streamingMessageId) {
           selectConversation(currentConversation.id);
         }
@@ -1334,14 +1750,19 @@ export default function HomeScreen() {
     }
   }, [searchQuery, messages]);
 
+  // Load shake setting from storage — only when logged in
   useEffect(() => {
-    if (!user) { setShakeEnabled(false); return; }
+    if (!user) {
+      setShakeEnabled(false);
+      return;
+    }
     AsyncStorage.getItem('shake_bug_enabled').then(v => {
       if (v !== null) setShakeEnabled(v === 'true');
-      else setShakeEnabled(true);
+      else setShakeEnabled(true); // default on for logged-in users
     }).catch(() => {});
   }, [user?.id]);
 
+  // Network connectivity monitor (no extra package)
   useEffect(() => {
     let mounted = true;
     const check = async () => {
@@ -1351,7 +1772,9 @@ export default function HomeScreen() {
           new Promise<Response>((_, rej) => setTimeout(() => rej(new Error('timeout')), 5000)),
         ]) as Response;
         if (mounted) setIsConnected(r.status < 500);
-      } catch { if (mounted) setIsConnected(false); }
+      } catch {
+        if (mounted) setIsConnected(false);
+      }
     };
     check();
     const interval = setInterval(check, 10000);
@@ -1359,6 +1782,7 @@ export default function HomeScreen() {
   }, []);
 
   useEffect(() => {
+    // Shake-to-report only available for logged-in users
     if (!user || (Platform.OS !== 'ios' && Platform.OS !== 'android')) return;
     const subscription = Accelerometer.addListener(({ x, y, z }) => {
       const acceleration = Math.sqrt(x * x + y * y + z * z);
@@ -1445,26 +1869,77 @@ export default function HomeScreen() {
     try {
       await cleanupRecording();
       await new Promise(r => setTimeout(r, 250));
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true, shouldDuckAndroid: true, playThroughEarpieceAndroid: false, staysActiveInBackground: false, interruptionModeIOS: 1, interruptionModeAndroid: 1 });
+
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+        shouldDuckAndroid: true,
+        playThroughEarpieceAndroid: false,
+        staysActiveInBackground: false,
+        interruptionModeIOS: 1,
+        interruptionModeAndroid: 1,
+      });
+
       if (Platform.OS === 'android') await new Promise(r => setTimeout(r, 200));
+
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       setRecordingState('recording');
       isRecordingRef.current = true;
       startRecordingTimer();
+
       const { recording } = await Audio.Recording.createAsync({
-        android: { extension: '.m4a', outputFormat: Audio.AndroidOutputFormat.MPEG_4, audioEncoder: Audio.AndroidAudioEncoder.AAC, sampleRate: 16000, numberOfChannels: 1, bitRate: 128000 },
-        ios: { extension: '.m4a', audioQuality: Audio.IOSAudioQuality.HIGH, sampleRate: 16000, numberOfChannels: 1, bitRate: 128000, linearPCMBitDepth: 16, linearPCMIsBigEndian: false, linearPCMIsFloat: false },
+        android: {
+          extension: '.m4a',
+          outputFormat: Audio.AndroidOutputFormat.MPEG_4,
+          audioEncoder: Audio.AndroidAudioEncoder.AAC,
+          sampleRate: 16000,
+          numberOfChannels: 1,
+          bitRate: 128000,
+        },
+        ios: {
+          extension: '.m4a',
+          audioQuality: Audio.IOSAudioQuality.HIGH,
+          sampleRate: 16000,
+          numberOfChannels: 1,
+          bitRate: 128000,
+          linearPCMBitDepth: 16,
+          linearPCMIsBigEndian: false,
+          linearPCMIsFloat: false,
+        },
         web: { mimeType: 'audio/webm;codecs=opus', bitsPerSecond: 64000 },
       });
+
       recordingRef.current = recording;
-      stopTimeoutRef.current = setTimeout(() => { if (isRecordingRef.current) stopVoiceRecording(); }, MAX_RECORDING_DURATION * 1000);
+      stopTimeoutRef.current = setTimeout(() => {
+        if (isRecordingRef.current) stopVoiceRecording();
+      }, MAX_RECORDING_DURATION * 1000);
+
     } catch (error: any) {
       console.log('[Recording] Failed to start:', error?.message);
       await cleanupRecording();
-      Alert.alert('Recording Failed', Platform.OS === 'android' ? 'Could not start microphone. Please close other apps using the mic and try again.' : 'Could not start recording.', [
-        { text: 'Try Again', onPress: () => setTimeout(startVoiceRecording, 600) },
-        { text: 'OK', style: 'cancel' },
-      ]);
+
+      if (Platform.OS === 'android') {
+        try {
+          await Audio.setAudioModeAsync({
+            allowsRecordingIOS: false,
+            shouldDuckAndroid: false,
+            playThroughEarpieceAndroid: false,
+            staysActiveInBackground: false,
+          });
+          await new Promise(r => setTimeout(r, 500));
+        } catch {}
+      }
+
+      Alert.alert(
+        'Recording Failed',
+        Platform.OS === 'android'
+          ? 'Could not start microphone. Please close other apps using the mic and try again.'
+          : 'Could not start recording. Make sure no other app is using the microphone.',
+        [
+          { text: 'Try Again', onPress: () => setTimeout(startVoiceRecording, 600) },
+          { text: 'OK', style: 'cancel' },
+        ]
+      );
     }
   };
 
@@ -1558,30 +2033,48 @@ export default function HomeScreen() {
     }
   };
 
+  // ── Deep Research multi-step chain ──────────────────────────────────────
   const runDeepResearch = useCallback(async (query: string) => {
     const steps = [
-      { label: 'Searching the web...', done: false },
-      { label: 'Reading top sources...', done: false },
-      { label: 'Synthesizing findings...', done: false },
-      { label: 'Formatting report...', done: false },
+      { label: 'Searching the web…', done: false },
+      { label: 'Reading top sources…', done: false },
+      { label: 'Synthesizing findings…', done: false },
+      { label: 'Formatting report…', done: false },
     ];
     setDeepResearchSteps([...steps]);
     setDeepResearchActive(true);
     setSending(true);
     setGenerating(true);
     setThinkingMode('thinking');
+
     let conversationId = currentConversation?.id;
     if (!conversationId) {
       conversationId = await createConversation();
       if (!conversationId) { setDeepResearchActive(false); setSending(false); setGenerating(false); return; }
     }
+
     const markStep = (i: number) => {
       setDeepResearchSteps(prev => prev.map((s, idx) => idx === i ? { ...s, done: true } : s));
     };
+
     try {
-      await new Promise(r => setTimeout(r, 1200)); markStep(0);
-      await new Promise(r => setTimeout(r, 900)); markStep(1);
-      const deepPrompt = `You are performing deep research on: "${query}"\n\nPlease provide a comprehensive, well-structured research report with:\n1. Executive Summary\n2. Key Findings (with citations)\n3. Detailed Analysis\n4. Sources & References\n\nFormat sources at the end using [SOURCES] block format.\nBe thorough and cite specific facts.`;
+      // Step 1 & 2 — simulate search delay
+      await new Promise(r => setTimeout(r, 1200));
+      markStep(0);
+      await new Promise(r => setTimeout(r, 900));
+      markStep(1);
+
+      const deepPrompt = `You are performing deep research on: "${query}"
+
+Please provide a comprehensive, well-structured research report with:
+1. Executive Summary
+2. Key Findings (with citations)
+3. Detailed Analysis
+4. Sources & References
+
+Format sources at the end using [SOURCES] block format.
+Be thorough and cite specific facts.`;
+
       markStep(2);
       await sendMessage(deepPrompt, undefined, undefined, false, currentAIModel);
       markStep(3);
@@ -1599,9 +2092,13 @@ export default function HomeScreen() {
   }, [currentConversation, createConversation, sendMessage, currentAIModel, showAlert]);
 
   const handleSend = async () => {
+    // Deep research mode intercept
     if (deepResearchMode && inputText.trim()) {
       const query = inputText.trim();
-      setInputText(''); setSelectedMedia([]); clearDraft(); Keyboard.dismiss();
+      setInputText('');
+      setSelectedMedia([]);
+      clearDraft();
+      Keyboard.dismiss();
       await runDeepResearch(query);
       return;
     }
@@ -1612,92 +2109,178 @@ export default function HomeScreen() {
 
     if ((!currentText && currentMedia.length === 0) || sending) return;
 
+    // ── Math expression intercept: show CalculatorCard only, never send to AI ──
     if (!currentEditingId && currentMedia.length === 0 && currentText) {
       const mathData = detectMathExpression(currentText);
       if (mathData) {
+        // Add a fake user message + a fake assistant message with the calc result inline
+        // We do this by simply opening the calc modal with the detected expression
         setInputText('');
         clearDraft();
         setCalcExpression(mathData.expression);
         setCalcResult(mathData.result);
         setCalcVisible(true);
+        // Also send a minimal message to show the calc card in chat
+        let conversationId = currentConversation?.id;
+        if (!conversationId) {
+          try { conversationId = await createConversation(); } catch (_e) {}
+          if (!conversationId) conversationId = `local-${Date.now()}`;
+        }
+        // Insert user + assistant messages locally without calling AI
         setSending(true);
         try {
-          await sendMessage(currentText, undefined, undefined, false, currentAIModel);
+          await sendMessage(
+            currentText,
+            undefined,
+            undefined,
+            false,
+            currentAIModel
+          );
         } catch (_e) {}
         finally { setSending(false); setGenerating(false); }
         return;
       }
     }
 
-    const QUIZ_KEYWORDS = ['quiz', 'quizz', 'make me a quiz', 'give me a quiz', 'create a quiz', 'generate a quiz', 'test my knowledge', 'trivia', 'make quiz', 'create quiz', 'generate quiz', 'fe yon quiz', 'ban mwen yon quiz', 'kreye yon quiz'];
+    const QUIZ_KEYWORDS = [
+      'quiz', 'quizz', 'make me a quiz', 'give me a quiz', 'create a quiz', 'generate a quiz',
+      'test my knowledge', 'trivia', 'make quiz', 'create quiz', 'generate quiz',
+      'fe yon quiz', 'ban mwen yon quiz', 'kreye yon quiz',
+      'fais un quiz', 'créer un quiz', 'générer un quiz',
+      'hazme un quiz', 'crear un quiz', 'genera un quiz',
+    ];
     const lowerTextForQuiz = currentText.toLowerCase();
     const isQuizRequest = QUIZ_KEYWORDS.some(kw => lowerTextForQuiz.includes(kw));
     if (isQuizRequest && !currentEditingId) {
       Keyboard.dismiss();
-      setInputText(''); setSelectedMedia([]); clearDraft();
+      setInputText('');
+      setSelectedMedia([]);
+      clearDraft();
       setQuizGenerating(true);
       let detectedTopic = 'General Knowledge';
       const topicMatch = currentText.match(/(?:quiz|trivia)\s+(?:about|on|sur|sou|sobre)?\s*(.+)/i);
-      if (topicMatch && topicMatch[1]?.trim().length > 2) detectedTopic = topicMatch[1].trim().replace(/[?!.]+$/, '');
+      if (topicMatch && topicMatch[1]?.trim().length > 2) {
+        detectedTopic = topicMatch[1].trim().replace(/[?!.]+$/, '');
+      }
       setSelectedQuizTopic(detectedTopic);
       try {
         const questions = await generateAIQuizQuestions(detectedTopic, selectedDifficulty);
         showInlineQuiz(questions);
       } catch (_e) {
         showInlineQuiz(generateQuizQuestions(detectedTopic));
-      } finally { setQuizGenerating(false); }
+      } finally {
+        setQuizGenerating(false);
+      }
       return;
     }
 
     const imageFiles = currentMedia.filter(m => m.type === 'image');
     const docFiles2 = currentMedia.filter(m => m.type !== 'image');
 
+    // Guest mode: photos only, 3 per session, no documents
     if (isGuest) {
-      if (docFiles2.length > 0) { setGuestLockFeature('file upload'); setGuestLockModal(true); return; }
-      if (imageFiles.length > 0 && guestPhotoCount + imageFiles.length > GUEST_PHOTO_LIMIT) { setGuestLockFeature('photo upload'); setGuestLoginModal(true); return; }
+      if (docFiles2.length > 0) {
+        setGuestLockFeature('file upload');
+        setGuestLockModal(true);
+        return;
+      }
+      if (imageFiles.length > 0 && guestPhotoCount + imageFiles.length > GUEST_PHOTO_LIMIT) {
+        setGuestLockFeature('photo upload');
+        setGuestLoginModal(true);
+        return;
+      }
     }
 
+    // ── Photo upload limits: Pro/Plus = 10/session, Free = 4/hour ──
     if (imageFiles.length > 0 && !isGuest && !isAdmin) {
       if (isPro || isUnlimited) {
-        if (photoUploadCount + imageFiles.length > 10) { showAlert('Session Limit', `Pro/Plus plan allows 10 photo uploads per session.`); return; }
+        if (photoUploadCount + imageFiles.length > 10) {
+          showAlert('Session Limit', `Pro/Plus plan allows 10 photo uploads per session. You have used ${photoUploadCount}. Start a new chat to reset.`, [{ text: 'OK', style: 'cancel' }]);
+          return;
+        }
         setPhotoUploadCount(prev => prev + imageFiles.length);
       } else {
+        // Free: 4 per hour (3600s window)
         const now = Date.now();
         const isNewWindow = photoUploadResetTime === 0 || now - photoUploadResetTime > 60 * 60 * 1000;
         const currentCount = isNewWindow ? 0 : photoUploadCount;
-        if (currentCount + imageFiles.length > 4) { showAlert('Hourly Photo Limit', 'Free plan allows 4 photos per hour. Upgrade to Pro for 10/session.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Get Plus', onPress: () => router.push('/subscription') }]); return; }
+        if (currentCount + imageFiles.length > 4) {
+          const minsLeft = isNewWindow ? 0 : Math.ceil((60 * 60 * 1000 - (now - photoUploadResetTime)) / 60000);
+          showAlert('Hourly Photo Limit', `Free plan allows 4 photos per hour.${minsLeft > 0 ? ` Resets in ${minsLeft} min.` : ''} Upgrade to Pro for 10/session.`, [{ text: 'Cancel', style: 'cancel' }, { text: 'Get Plus', onPress: () => router.push('/subscription') }]);
+          return;
+        }
         if (isNewWindow) setPhotoUploadResetTime(now);
         setPhotoUploadCount(currentCount + imageFiles.length);
       }
     }
 
+    // ── Free user file limits: 1 doc, 5MB max ──
     const docFiles = currentMedia.filter(m => m.type !== 'image');
     if (!isGuest && !isPro && !isUnlimited && !isAdmin && docFiles.length > 0) {
-      if (docFiles.length > 1) { showAlert('File Limit', 'Free plan allows 1 file per message.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Get Plus', onPress: () => router.push('/subscription') }]); return; }
+      if (docFiles.length > 1) {
+        showAlert('File Limit', 'Free plan allows 1 file per message. Upgrade to Plus for unlimited.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Get Plus', onPress: () => router.push('/subscription') }]);
+        return;
+      }
       const file = docFiles[0];
-      if (file.size && file.size > 5 * 1024 * 1024) { showAlert('File Too Large', 'Free plan supports files up to 5MB.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Get Plus', onPress: () => router.push('/subscription') }]); return; }
+      if (file.size && file.size > 5 * 1024 * 1024) {
+        showAlert('File Too Large', 'Free plan supports files up to 5MB. Upgrade to Plus for larger files.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Get Plus', onPress: () => router.push('/subscription') }]);
+        return;
+      }
     }
 
     if (isGuest) {
-      if (guestMessageCount >= GUEST_MESSAGE_LIMIT) { setGuestLoginModal(true); return; }
+      if (guestMessageCount >= GUEST_MESSAGE_LIMIT) {
+        setGuestLoginModal(true);
+        return;
+      }
     } else if (!currentEditingId && !canSendMessage() && sessionBonusMessages <= 0) {
-      if (!user) { showAlert('Sign In Required', 'Sign in to start chatting with AI.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Sign In', onPress: () => router.push('/login') }]); }
-      else { showAlert('Credits Required', 'You need credits to continue.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Buy Credits', onPress: () => router.push('/buy-coins') }]); }
+      if (!user) {
+        showAlert('Sign In Required', 'Sign in to start chatting with AI.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Sign In', onPress: () => router.push('/login') }]);
+      } else {
+        showAlert('Credits Required', 'You need credits to continue.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Buy Credits', onPress: () => router.push('/buy-coins') }]);
+      }
       return;
     }
 
     let conversationId = currentConversation?.id;
     if (!conversationId) {
-      if (isGuest) { conversationId = `guest-session-${Date.now()}`; }
-      else {
-        try { conversationId = await createConversation(); } catch (convErr) { console.log('[Home] createConversation error:', convErr); }
-        if (!conversationId) conversationId = `local-${Date.now()}`;
+      if (isGuest) {
+        // Guests always use a stable local ID (no DB)
+        conversationId = `guest-session-${Date.now()}`;
+      } else {
+        try {
+          conversationId = await createConversation();
+        } catch (convErr) {
+          console.log('[Home] createConversation error:', convErr);
+        }
+        if (!conversationId) {
+          conversationId = `local-${Date.now()}`;
+        }
       }
     }
 
-    setInputText(''); setSelectedMedia([]); setEditingMessageId(null); clearDraft();
+    setInputText('');
+    setSelectedMedia([]);
+    setEditingMessageId(null);
+    clearDraft();
     const lowerText = (currentText || '').toLowerCase();
-    const isImageIntent = ['create a logo', 'create logo', 'generate logo', 'make a logo', 'design a logo', 'generate a logo', 'make me a logo', 'create an image', 'create image', 'generate image', 'make an image', 'generate a photo', 'create a photo', 'make a photo', 'generate a picture', 'make a picture', 'create a picture', 'draw me a', 'draw me an', 'create art', 'generate art', 'make art', 'kreye logo', 'fe logo', 'fe imaj', 'kreye yon imaj', 'kreye imaj', 'fè logo', 'fè yon logo', 'fè imaj', 'fè yon imaj', 'créer un logo', 'générer une image', 'créer une image', 'crear un logo', 'generar una imagen'].some(kw => lowerText.includes(kw));
+    const isImageIntent = [
+      'create a logo', 'create logo', 'generate logo', 'make a logo', 'design a logo',
+      'generate a logo', 'make me a logo', 'design me a logo',
+      'create an image', 'create image', 'generate image', 'make an image', 'generate an image of',
+      'generate a photo', 'create a photo', 'make a photo',
+      'generate a picture', 'make a picture', 'create a picture', 'generate a picture of',
+      'draw me a', 'draw me an', 'paint me a', 'illustrate a', 'sketch me a',
+      'create art', 'generate art', 'make art', 'create artwork', 'generate artwork',
+      'create an icon', 'generate icon', 'make an icon', 'design an icon',
+      'create a banner', 'generate banner', 'make a banner', 'design a banner',
+      'generate thumbnail', 'create an illustration', 'generate an illustration',
+      'kreye logo', 'fe logo', 'fe imaj', 'kreye yon imaj', 'kreye imaj',
+      'fè logo', 'fè yon logo', 'fè imaj', 'fè yon imaj',
+      'kreye foto', 'kreye yon foto', 'fè foto', 'fè yon foto',
+      'créer un logo', 'générer une image', 'créer une image', 'faire un logo',
+      'crear un logo', 'generar una imagen', 'crear una imagen', 'hacer un logo',
+    ].some(kw => lowerText.includes(kw));
     setThinkingMode(isImageIntent ? 'creating_image' : 'thinking');
     setSending(true);
     setGenerating(true);
@@ -1714,14 +2297,19 @@ export default function HomeScreen() {
       for (const media of currentMedia) {
         if (media.type === 'image') {
           if (!base64Image) {
-            if (media.base64) { base64Image = media.base64; }
-            else if (media.uri) { try { base64Image = await FileSystem.readAsStringAsync(media.uri, { encoding: FileSystem.EncodingType.Base64 }); } catch (e) {} }
+            if (media.base64) {
+              base64Image = media.base64;
+            } else if (media.uri) {
+              try { base64Image = await FileSystem.readAsStringAsync(media.uri, { encoding: FileSystem.EncodingType.Base64 }); } catch (e) {}
+            }
           }
         } else if (media.type === 'document') {
+          // Try reading text content of the file so AI can analyze it
           try {
             const rawContent = await FileSystem.readAsStringAsync(media.uri, { encoding: FileSystem.EncodingType.UTF8 });
             const preview = rawContent.slice(0, 12000);
-            filePayloadArr.push({ name: media.name || 'document', type: media.mimeType || 'text/plain', content: preview + (rawContent.length > 12000 ? '\n...(truncated)' : '') });
+            const fileEntry = { name: media.name || 'document', type: media.mimeType || 'text/plain', content: preview + (rawContent.length > 12000 ? '\n...(truncated)' : '') };
+            filePayloadArr.push(fileEntry);
             fileContextStr += `\n\n[File: ${media.name || 'document'}]\n${preview}`;
           } catch (e) {
             fileContextStr += `\n\n[Attached file: ${media.name || 'document'} (${media.mimeType || 'binary'})]`;
@@ -1732,31 +2320,54 @@ export default function HomeScreen() {
       }
 
       let finalText = (currentText || '') + fileContextStr;
-      if (groupChatMode && groupCustomInstructions && groupRespondAuto) finalText = `[System instruction: ${groupCustomInstructions}]\n\n${finalText}`;
+      if (groupChatMode && groupCustomInstructions && groupRespondAuto) {
+        finalText = `[System instruction: ${groupCustomInstructions}]\n\n${finalText}`;
+      }
       if (groupChatMode && !groupRespondAuto) { setSending(false); setGenerating(false); return; }
 
+      const atTagMatch = finalText.match(/@(\w+)/);
+      if (groupChatMode && atTagMatch) {
+        const taggedName = atTagMatch[1].toLowerCase();
+        if (groupMembers.some(m => m.username.toLowerCase() === taggedName)) { setSending(false); setGenerating(false); return; }
+      }
+
+      // Build group system prompt if group mode
+      let systemPrefixForGroup = '';
+      if (groupChatMode) {
+        const groupSystemPrompt = groupCustomInstructions
+          ? `You are Dawinix, an AI assistant in a group chat named "${groupName}". Custom instructions from the group admin: ${groupCustomInstructions}. Always respond in a helpful, friendly and concise manner tailored for group conversations. Never use personal memory from outside this group.`
+          : `You are Dawinix, an AI assistant in a group chat named "${groupName}". Respond helpfully and concisely as if chatting in a group. Never reference personal memory from outside this conversation.`;
+        systemPrefixForGroup = `[SYSTEM: ${groupSystemPrompt}]\n\n`;
+      }
+
+      // Include reply context if replying
       let replyContext = '';
       if (replyingTo) {
         const replyRole = replyingTo.role === 'assistant' ? 'Dawinix' : 'You';
-        replyContext = `[Replying to ${replyRole}: "${(replyingTo.content || '').slice(0, 200)}"]\n`;
+        const replySnippet = (replyingTo.content || '').slice(0, 200);
+        replyContext = `[Replying to ${replyRole}: "${replySnippet}"]\n`;
         setReplyingTo(null);
       }
 
-      let prefixedText = replyContext + finalText;
-      if (groupChatMode) {
-        const gSys = groupCustomInstructions ? `You are Dawinix in group chat "${groupName}". Instructions: ${groupCustomInstructions}. Respond helpfully for group conversations.` : `You are Dawinix in group chat "${groupName}". Respond helpfully and concisely.`;
-        prefixedText = `[SYSTEM: ${gSys}]\n\n${prefixedText}`;
-      }
+      let prefixedText = systemPrefixForGroup + replyContext + finalText;
 
+      // ── Inject behavior presets as system instructions ──
       try {
         const behaviorRules = await loadBehaviorPresets();
         if (behaviorRules.length > 0) {
-          const rulesBlock = `[SYSTEM RULES:\n${behaviorRules.map((r, i) => `${i + 1}. ${r}`).join('\n')}]\n\n`;
+          const rulesBlock = `[SYSTEM RULES — always follow these user-defined rules:\n${behaviorRules.map((r, i) => `${i + 1}. ${r}`).join('\n')}]\n\n`;
           prefixedText = rulesBlock + prefixedText;
         }
       } catch (_e) {}
 
-      await sendMessage(prefixedText, filePayloadArr.length > 0 ? filePayloadArr : undefined, base64Image, false, currentAIModel);
+      // Pass fileContents for document/video so edge function can analyse them
+      await sendMessage(
+        prefixedText,
+        filePayloadArr.length > 0 ? filePayloadArr : undefined,
+        base64Image,
+        false,
+        currentAIModel
+      );
       setShowCompletionStatus(true);
       setTimeout(() => setShowCompletionStatus(false), 2000);
       if (user && !isUnlimited && !isAdmin) {
@@ -1785,7 +2396,6 @@ export default function HomeScreen() {
   };
 
   const handleStopGeneration = useCallback(() => {
-    // Cancel AI generation — keep user message visible, only remove empty AI placeholder
     cancelSendMessage();
     setSending(false);
     setGenerating(false);
@@ -1810,7 +2420,12 @@ export default function HomeScreen() {
   const fetchQuizHistory = useCallback(async () => {
     if (!user?.id) return;
     try {
-      const { data } = await supabase.from('quiz_scores').select('topic, difficulty, score, total, created_at').eq('user_id', user.id).order('created_at', { ascending: false }).limit(10);
+      const { data } = await supabase
+        .from('quiz_scores')
+        .select('topic, difficulty, score, total, created_at')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(10);
       if (data) setQuizHistory(data as QuizHistoryEntry[]);
     } catch (_e) {}
   }, [user?.id, supabase]);
@@ -1822,7 +2437,9 @@ export default function HomeScreen() {
   const generateAIQuizQuestions = async (topic: string, difficulty: string = 'Medium'): Promise<QuizQuestion[]> => {
     const topicLabel = topic || 'General Knowledge';
     try {
-      const { data, error } = await supabase.functions.invoke('generate-quiz', { body: { topic: topicLabel, difficulty } });
+      const { data, error } = await supabase.functions.invoke('generate-quiz', {
+        body: { topic: topicLabel, difficulty },
+      });
       if (error) throw new Error(error.message || 'Quiz generation failed');
       const questions: QuizQuestion[] = data?.questions;
       if (!Array.isArray(questions) || questions.length === 0) throw new Error('No questions returned');
@@ -1832,6 +2449,20 @@ export default function HomeScreen() {
       return generateQuizQuestions(topicLabel);
     }
   };
+
+  const preGenerateNextQuiz = useCallback(async (topic: string, difficulty: string) => {
+    if (preGenRunning.current) return;
+    preGenRunning.current = true;
+    setPreGeneratedQuestions(null);
+    try {
+      const questions = await generateAIQuizQuestions(topic, difficulty);
+      setPreGeneratedQuestions(questions);
+    } catch (_e) {
+      setPreGeneratedQuestions(null);
+    } finally {
+      preGenRunning.current = false;
+    }
+  }, [supabase]);
 
   const handleLaunchQuiz = async (topic: string) => {
     setQuizTopicVisible(false);
@@ -1843,7 +2474,9 @@ export default function HomeScreen() {
       showInlineQuiz(questions);
     } catch (e) {
       showInlineQuiz(generateQuizQuestions(topic));
-    } finally { setQuizGenerating(false); }
+    } finally {
+      setQuizGenerating(false);
+    }
   };
 
   const showInlineQuiz = useCallback((questions: QuizQuestion[]) => {
@@ -1853,24 +2486,36 @@ export default function HomeScreen() {
   }, []);
 
   const handleQuizViewResults = async (answers: any[], questions: QuizQuestion[]) => {
+    setQuizModalVisible(false);
     setInlineQuizVisible(false);
     const correct = answers.filter(a => a.correct).length;
     const topic = customTopicInput.trim() || selectedQuizTopic || 'General Knowledge';
+
     if (user?.id) {
       try {
-        await supabase.from('quiz_scores').insert({ user_id: user.id, topic, difficulty: selectedDifficulty, score: correct, total: questions.length });
+        await supabase.from('quiz_scores').insert({
+          user_id: user.id,
+          topic,
+          difficulty: selectedDifficulty,
+          score: correct,
+          total: questions.length,
+        });
         fetchQuizHistory();
       } catch (_e) {}
     }
+
     const resultLines = questions.map((q, i) => {
       const ans = answers.find((a: any) => a.questionIndex === i);
       const chosen = ans ? q.options[ans.chosenIndex] : 'Skipped';
       const isCorrect = ans?.correct;
       return `${i + 1}. **${q.question}**\n${isCorrect ? '\u2705' : '\u274c'} ${chosen}${!isCorrect ? ` (Correct: ${q.options[q.answer]})` : ''}`;
     }).join('\n');
+
     const pct = Math.round((correct / questions.length) * 100);
-    const summaryPrompt = `The user scored ${correct}/${questions.length} (${pct}%) on a quiz about ${topic}. Present results clearly and encouragingly. Here are the answers:\n\n${resultLines}\n\nAsk if they want to try a harder quiz or different topic.`;
+    const summaryPrompt = `The user just completed a quiz on ${topic} (${selectedDifficulty} difficulty) and scored ${correct}/${questions.length} (${pct}%). Please present their quiz results clearly and encouragingly. Here are the answers:\n\n${resultLines}\n\nEnd your message by asking if they want to try a harder quiz or a different topic.`;
     try {
+      let convId = currentConversation?.id;
+      if (!convId) { convId = await createConversation() || undefined; }
       setSending(true); setGenerating(true);
       await sendMessage(summaryPrompt, undefined, undefined, false, currentAIModel);
     } catch (_e) {}
@@ -1878,7 +2523,9 @@ export default function HomeScreen() {
   };
 
   const handleHarderQuiz = () => {
+    setQuizModalVisible(false);
     setInlineQuizVisible(false);
+    setQuizTopicVisible(false);
     setInputText('Make me a harder quiz');
     setTimeout(() => inputRef.current?.focus(), 100);
   };
@@ -1897,7 +2544,9 @@ export default function HomeScreen() {
       setInlineQuizQuestions([...questions]);
     } catch (_e) {
       setInlineQuizQuestions([...generateQuizQuestions(topic)]);
-    } finally { setQuizGenerating(false); }
+    } finally {
+      setQuizGenerating(false);
+    }
   }, [customTopicInput, selectedQuizTopic, selectedDifficulty]);
 
   const handleEditMessage = useCallback((messageId: string, content: string) => { setEditingMessageId(messageId); setInputText(content); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }, []);
@@ -1915,6 +2564,7 @@ export default function HomeScreen() {
     if ((messages || []).length > 0) await createConversation();
     setInputText(''); setSelectedMedia([]); setEditingMessageId(null);
     setGroupChatMode(false); setTemporaryChatMode(false);
+    // Reset photo upload count for new session (Pro plan: 10/session)
     if (isPro || isUnlimited) setPhotoUploadCount(0);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   }, [createConversation, messages, isPro, isUnlimited]);
@@ -1959,7 +2609,9 @@ export default function HomeScreen() {
         await supabase.from('message_likes').delete().eq('message_id', messageId).eq('user_id', user.id);
         await supabase.from('message_likes').insert({ message_id: messageId, user_id: user.id, like_type: 'like' });
       }
-    } catch (_e) { setMessageLikes(prev => ({ ...prev, [messageId]: current })); }
+    } catch (_e) {
+      setMessageLikes(prev => ({ ...prev, [messageId]: current }));
+    }
   }, [messageLikes, user?.id, supabase]);
 
   const handleUnlikeMessage = useCallback(async (messageId: string) => {
@@ -1975,10 +2627,15 @@ export default function HomeScreen() {
         await supabase.from('message_likes').delete().eq('message_id', messageId).eq('user_id', user.id);
         await supabase.from('message_likes').insert({ message_id: messageId, user_id: user.id, like_type: 'dislike' });
         setTimeout(() => {
-          router.push({ pathname: '/feedback', params: { messageId, conversationId: currentConversation?.id || '' } } as any);
+          router.push({
+            pathname: '/feedback',
+            params: { messageId, conversationId: currentConversation?.id || '' },
+          } as any);
         }, 150);
       }
-    } catch (_e) { setMessageLikes(prev => ({ ...prev, [messageId]: current })); }
+    } catch (_e) {
+      setMessageLikes(prev => ({ ...prev, [messageId]: current }));
+    }
   }, [messageLikes, user?.id, supabase, router, currentConversation?.id]);
 
   const handleCopyMessage = useCallback(async (content: string) => { await Clipboard.setStringAsync(content); showAlert('Copied', 'Message copied to clipboard'); }, [showAlert]);
@@ -1997,11 +2654,20 @@ export default function HomeScreen() {
     setTemporaryChatMode(false);
     const newGroupName = 'New group chat';
     setGroupName(newGroupName);
+    // Always create a new conversation so it persists in side menu
     try {
       const convId = await createConversation();
-      if (convId) { await updateConversationTitle(convId, newGroupName); selectConversation(convId); }
-    } catch (e) { console.log('[GroupChat] Failed to create conversation:', e); }
-    setInputText(''); setSelectedMedia([]); setEditingMessageId(null);
+      if (convId) {
+        await updateConversationTitle(convId, newGroupName);
+        // Force select so it becomes current
+        selectConversation(convId);
+      }
+    } catch (e) {
+      console.log('[GroupChat] Failed to create conversation:', e);
+    }
+    setInputText('');
+    setSelectedMedia([]);
+    setEditingMessageId(null);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   }, [createConversation, updateConversationTitle, selectConversation]);
 
@@ -2009,10 +2675,18 @@ export default function HomeScreen() {
     if (!newName.trim()) { setRenameGroupVisible(false); return; }
     setGroupName(newName.trim());
     setRenameGroupVisible(false);
-    if (currentConversation?.id) await updateConversationTitle(currentConversation.id, newName.trim());
+    // Also persist the new name in the conversation
+    if (currentConversation?.id) {
+      await updateConversationTitle(currentConversation.id, newName.trim());
+    }
   }, [currentConversation, updateConversationTitle]);
 
   const handleDeleteGroup = useCallback(() => { setDeleteGroupConfirm(true); }, []);
+
+  const handleReplyToMessage = useCallback((msg: any) => {
+    setReplyingTo(msg);
+    setTimeout(() => inputRef.current?.focus(), 100);
+  }, []);
 
   const handleUserMsgPress = useCallback((item: any, pageY: number) => {
     if (groupChatMode) return;
@@ -2022,6 +2696,7 @@ export default function HomeScreen() {
     setMsgMenuVisible(true);
   }, [groupChatMode]);
 
+  // ── Parse IMAGE_SEARCH_RESULTS tag from AI message content ────────────────
   const parseImageSearchResults = useCallback((content: string): { cleanContent: string; searchImages: Array<{ url: string; title?: string; source?: string }> | null } => {
     const match = content.match(/\[IMAGE_SEARCH_RESULTS:([\s\S]*?)\]/);
     if (!match) return { cleanContent: content, searchImages: null };
@@ -2037,20 +2712,21 @@ export default function HomeScreen() {
   const renderMessage = useCallback(({ item }: { item: any }) => {
     const isStreaming = streamingMessageId === item.id;
     const mathData = item.role === 'assistant' ? detectMathExpression(item.content) : null;
+
+    // Parse image search results from content
     const { cleanContent: msgCleanContent, searchImages: msgSearchImages } = item.role === 'assistant'
       ? parseImageSearchResults(item.content || '')
       : { cleanContent: item.content, searchImages: null };
+
     const imageUrlMatch = item.role === 'assistant'
       ? (msgCleanContent || '').match(/https?:\/\/[^\s"')]+\.(?:jpg|jpeg|png|webp|gif)/i)
       : null;
-    const detectedImageUrl: string | null = imageUrlMatch ? imageUrlMatch[0] : (item.imageUrl || item.image_url || null);
+    const detectedImageUrl: string | null = imageUrlMatch ? imageUrlMatch[0] : (item.imageUrl || null);
     const alreadySaved = detectedImageUrl ? savedImageUrls.has(detectedImageUrl) : false;
     const isSavingThis = savingImageId === item.id;
     const isUserMsg = item.role === 'user';
-    // Messages with image/file/video attachments cannot be edited
-    const hasMediaAttachment = !!(item.imageUrl || item.image_url || item.file_url ||
-      (item.content && (item.content.includes('[Attached file:') || item.content.includes('[Video attached:'))));
 
+    // Create a modified item with clean content for MessageItem
     const displayItem = msgSearchImages ? { ...item, content: msgCleanContent } : item;
 
     return (
@@ -2060,47 +2736,87 @@ export default function HomeScreen() {
           onLongPress={!isUserMsg ? () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); Clipboard.setStringAsync(item.content || ''); showAlert('Copied', 'Message copied'); } : undefined}
           delayLongPress={450}
         >
-          <MessageItem
-            message={displayItem}
-            onCancel={handleCancelGeneration}
-            onEdit={hasMediaAttachment ? undefined : handleEditMessage}
-            onCopy={() => handleCopyMessage(item.content)}
-            isGenerating={isStreaming || (generating && item.id === (messages || [])[(messages || []).length-1]?.id)}
-            streaming={isStreaming}
-            streamingSpeed={isStreaming ? 18 : 0}
-            isOffline={isOffline}
-            isImageTask={thinkingMode === 'creating_image' && (generating || isStreaming)}
-            isAdmin={isAdmin}
-            onReply={groupChatMode ? (msg) => setReplyingTo(msg) : undefined}
-            onDelete={(msgId) => {}}
-            onChunkRendered={() => { if (isAtBottom) flatListRef.current?.scrollToEnd({ animated: false }); }}
-            isLiked={messageLikes[item.id] === 'like'}
-            isUnliked={messageLikes[item.id] === 'dislike'}
-            onLike={handleLikeMessage}
-            onUnlike={handleUnlikeMessage}
-            onOpenActions={handleOpenMessageActions}
-          />
+        <MessageItem
+          message={displayItem}
+          onCancel={handleCancelGeneration}
+          onEdit={handleEditMessage}
+          onCopy={() => handleCopyMessage(item.content)}
+          isGenerating={isStreaming || (generating && item.id === (messages || [])[(messages || []).length-1]?.id)}
+          streaming={isStreaming}
+          streamingSpeed={isStreaming ? 18 : 0}
+          isOffline={isOffline}
+          isImageTask={thinkingMode === 'creating_image' && (generating || isStreaming)}
+          isAdmin={isAdmin}
+          onReply={groupChatMode ? (msg) => setReplyingTo(msg) : undefined}
+          onDelete={(msgId) => {}}
+          onChunkRendered={() => { if (isAtBottom) flatListRef.current?.scrollToEnd({ animated: false }); }}
+          isLiked={messageLikes[item.id] === 'like'}
+          isUnliked={messageLikes[item.id] === 'dislike'}
+          onLike={handleLikeMessage}
+          onUnlike={handleUnlikeMessage}
+          onOpenActions={handleOpenMessageActions}
+        />
         </Pressable>
+        {/* Image search results grid — horizontal scroll */}
         {msgSearchImages && msgSearchImages.length > 0 ? (
           <View style={{ marginTop: 4, marginBottom: 8 }}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 10, paddingBottom: 4 }}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ paddingHorizontal: 16, gap: 10, paddingBottom: 4 }}
+            >
               {msgSearchImages.slice(0, 10).map((img, imgIdx) => (
-                <View key={`search-img-${imgIdx}`} style={{ width: 160, borderRadius: 16, overflow: 'hidden', backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 6, elevation: 3 }}>
-                  <TouchableOpacity activeOpacity={0.88} onPress={() => { Clipboard.setStringAsync(img.url).catch(() => {}); }}>
-                    <ExpoImage source={{ uri: img.url }} style={{ width: 160, height: 120 }} contentFit="cover" transition={200} />
+                <View key={`search-img-${imgIdx}`} style={{
+                  width: 160, borderRadius: 16, overflow: 'hidden',
+                  backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA',
+                  shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.15, shadowRadius: 6, elevation: 3,
+                }}>
+                  <TouchableOpacity
+                    activeOpacity={0.88}
+                    onPress={() => {
+                      // Open fullscreen viewer
+                      const allUrls = msgSearchImages.map((i: any) => i.url);
+                      // Use the MessageItem image viewer via state — just set media
+                      const mediaFile: MediaFile = { type: 'image', uri: img.url, name: img.title || 'photo' };
+                      // Simple approach: copy URL and show it directly
+                      Clipboard.setStringAsync(img.url).catch(() => {});
+                      showAlert('Image URL Copied', 'Tap \'Send\' button to use this image in chat.');
+                    }}
+                  >
+                    <ExpoImage
+                      source={{ uri: img.url }}
+                      style={{ width: 160, height: 120 }}
+                      contentFit="cover"
+                      transition={200}
+                    />
                   </TouchableOpacity>
                   <View style={{ padding: 8 }}>
-                    {img.title ? <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 11, fontWeight: '600', lineHeight: 15 }} numberOfLines={2}>{img.title}</Text> : null}
+                    {img.title ? (
+                      <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 11, fontWeight: '600', lineHeight: 15 }} numberOfLines={2}>
+                        {img.title}
+                      </Text>
+                    ) : null}
                     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 6 }}>
-                      {img.source ? <Text style={{ color: colors.textSecondary, fontSize: 10 }} numberOfLines={1}>{img.source}</Text> : <View />}
+                      {img.source ? (
+                        <Text style={{ color: colors.textSecondary, fontSize: 10 }} numberOfLines={1}>{img.source}</Text>
+                      ) : <View />}
+                      {/* Send to input button */}
                       <TouchableOpacity
                         onPress={async () => {
-                          const media: MediaFile = { type: 'image', uri: img.url, name: img.title || 'photo.jpg', mimeType: 'image/jpeg' };
-                          setSelectedMedia(prev => [...prev, media]);
-                          inputRef.current?.focus();
-                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          try {
+                            const media: MediaFile = { type: 'image', uri: img.url, name: img.title || 'photo.jpg', mimeType: 'image/jpeg' };
+                            setSelectedMedia(prev => [...prev, media]);
+                            inputRef.current?.focus();
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          } catch (_e) {}
                         }}
-                        style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: accentColor + '22', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: accentColor + '44' }}
+                        style={{
+                          width: 28, height: 28, borderRadius: 14,
+                          backgroundColor: accentColor + '22',
+                          alignItems: 'center', justifyContent: 'center',
+                          borderWidth: 1, borderColor: accentColor + '44',
+                        }}
                         hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                       >
                         <Ionicons name="send" size={12} color={accentColor} />
@@ -2124,21 +2840,77 @@ export default function HomeScreen() {
         ) : null}
         {item.role === 'assistant' && detectedImageUrl && user?.id ? (
           <View style={{ paddingHorizontal: 16, paddingBottom: 8, flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+            {/* Save to gallery */}
             <TouchableOpacity
-              style={{ flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', backgroundColor: alreadySaved ? 'rgba(48,209,88,0.12)' : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'), borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1, borderColor: alreadySaved ? 'rgba(48,209,88,0.35)' : (isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)') }}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 6,
+                alignSelf: 'flex-start',
+                backgroundColor: alreadySaved ? 'rgba(48,209,88,0.12)' : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'),
+                borderRadius: 20,
+                paddingHorizontal: 14,
+                paddingVertical: 8,
+                borderWidth: 1,
+                borderColor: alreadySaved ? 'rgba(48,209,88,0.35)' : (isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)'),
+              }}
               onPress={() => !alreadySaved && handleSaveToMyImages(detectedImageUrl, item.id)}
               disabled={alreadySaved || isSavingThis}
               activeOpacity={0.75}
             >
-              {isSavingThis ? <ActivityIndicator size="small" color="#30D158" /> : <Ionicons name={alreadySaved ? 'checkmark-circle' : 'image-outline'} size={15} color={alreadySaved ? '#30D158' : colors.textSecondary} />}
-              <Text style={{ fontSize: 13, fontWeight: '600', color: alreadySaved ? '#30D158' : colors.textSecondary }}>{alreadySaved ? 'Saved' : 'Save'}</Text>
+              {isSavingThis ? (
+                <ActivityIndicator size="small" color="#30D158" />
+              ) : (
+                <Ionicons name={alreadySaved ? 'checkmark-circle' : 'image-outline'} size={15} color={alreadySaved ? '#30D158' : colors.textSecondary} />
+              )}
+              <Text style={{ fontSize: 13, fontWeight: '600', color: alreadySaved ? '#30D158' : colors.textSecondary }}>
+                {alreadySaved ? 'Saved' : 'Save'}
+              </Text>
             </TouchableOpacity>
+            {/* Send image to new message */}
             <TouchableOpacity
-              style={{ flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)' }}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 6,
+                alignSelf: 'flex-start',
+                backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+                borderRadius: 20,
+                paddingHorizontal: 14,
+                paddingVertical: 8,
+                borderWidth: 1,
+                borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)',
+              }}
               onPress={async () => {
-                const media: MediaFile = { type: 'image', uri: detectedImageUrl, name: 'ai-image.jpg', mimeType: 'image/jpeg' };
-                setSelectedMedia(prev => [...prev, media]);
-                inputRef.current?.focus();
+                // Download the AI image as base64 and attach it to the input
+                try {
+                  const resp = await fetch(detectedImageUrl);
+                  const blob = await resp.blob();
+                  const reader = new FileReader();
+                  reader.onloadend = () => {
+                    const base64 = (reader.result as string).split(',')[1];
+                    const media: MediaFile = {
+                      type: 'image',
+                      uri: detectedImageUrl,
+                      base64,
+                      name: 'ai-image.jpg',
+                      mimeType: 'image/jpeg',
+                    };
+                    setSelectedMedia(prev => [...prev, media]);
+                    inputRef.current?.focus();
+                  };
+                  reader.readAsDataURL(blob);
+                } catch (_e) {
+                  // Fallback: attach URL directly
+                  const media: MediaFile = {
+                    type: 'image',
+                    uri: detectedImageUrl,
+                    name: 'ai-image.jpg',
+                    mimeType: 'image/jpeg',
+                  };
+                  setSelectedMedia(prev => [...prev, media]);
+                  inputRef.current?.focus();
+                }
               }}
               activeOpacity={0.75}
             >
@@ -2151,9 +2923,13 @@ export default function HomeScreen() {
     );
   }, [streamingMessageId, handleCancelGeneration, handleEditMessage, handleCopyMessage, isOffline, isAtBottom, savedImageUrls, savingImageId, handleSaveToMyImages, user?.id, isDark, colors, groupChatMode, handleUserMsgPress, generating, messages, thinkingMode, isAdmin, showAlert]);
 
+  // ── Inline media previews inside input wrapper (large cards with divider) ──
+  // ── Inline media previews: large ChatGPT-style thumbnails ──
+  const IMG_THUMB = 116;
   const renderInlineMediaPreviews = useCallback(() => {
     if (selectedMedia.length === 0) return null;
 
+    // Single image: ChatGPT-style compact square thumbnail at top of input
     if (selectedMedia.length === 1 && selectedMedia[0].type === 'image') {
       const media = selectedMedia[0];
       return (
@@ -2162,7 +2938,11 @@ export default function HomeScreen() {
             <View style={{ width: 72, height: 72, borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.1)' }}>
               <ExpoImage source={{ uri: media.uri }} style={{ width: 72, height: 72 }} contentFit="cover" />
             </View>
-            <TouchableOpacity style={{ position: 'absolute', top: -7, right: -7, width: 22, height: 22, borderRadius: 11, backgroundColor: isDark ? '#555' : '#888', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: isDark ? '#1C1C1E' : '#F0F0F5', zIndex: 10 }} onPress={() => removeMedia(0)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+            <TouchableOpacity
+              style={{ position: 'absolute', top: -7, right: -7, width: 22, height: 22, borderRadius: 11, backgroundColor: isDark ? '#555' : '#888', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: isDark ? '#1C1C1E' : '#F0F0F5', zIndex: 10 }}
+              onPress={() => removeMedia(0)}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            >
               <Ionicons name="close" size={11} color="#FFF" />
             </TouchableOpacity>
           </View>
@@ -2170,6 +2950,7 @@ export default function HomeScreen() {
       );
     }
 
+    // Single document
     if (selectedMedia.length === 1 && selectedMedia[0].type === 'document') {
       const media = selectedMedia[0];
       return (
@@ -2184,7 +2965,11 @@ export default function HomeScreen() {
                 <Text style={{ fontSize: 10, color: colors.textSecondary, marginTop: 2 }}>{(media.mimeType || '').split('/')[1]?.toUpperCase() || 'FILE'}</Text>
               </View>
             </View>
-            <TouchableOpacity style={{ position: 'absolute', top: -7, right: -7, width: 22, height: 22, borderRadius: 11, backgroundColor: isDark ? '#555' : '#888', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: isDark ? '#1C1C1E' : '#F0F0F5', zIndex: 10 }} onPress={() => removeMedia(0)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+            <TouchableOpacity
+              style={{ position: 'absolute', top: -7, right: -7, width: 22, height: 22, borderRadius: 11, backgroundColor: isDark ? '#555' : '#888', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: isDark ? '#1C1C1E' : '#F0F0F5', zIndex: 10 }}
+              onPress={() => removeMedia(0)}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            >
               <Ionicons name="close" size={11} color="#FFF" />
             </TouchableOpacity>
           </View>
@@ -2192,9 +2977,14 @@ export default function HomeScreen() {
       );
     }
 
+    // Multiple files: compact horizontal strip
     return (
       <View style={{ marginBottom: 8 }}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8, paddingBottom: 2 }}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8, paddingBottom: 2 }}
+        >
           {selectedMedia.map((media, index) => (
             <View key={`${media.uri}-${index}`} style={{ position: 'relative' }}>
               {media.type === 'image' ? (
@@ -2211,7 +3001,11 @@ export default function HomeScreen() {
                   <Text style={{ fontSize: 8, color: colors.textSecondary, marginTop: 2, fontWeight: '700' }} numberOfLines={1}>{(media.name || '').slice(0, 6)}</Text>
                 </View>
               )}
-              <TouchableOpacity style={{ position: 'absolute', top: -7, right: -7, width: 20, height: 20, borderRadius: 10, backgroundColor: isDark ? '#555' : '#888', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: isDark ? '#1C1C1E' : '#F0F0F5', zIndex: 10 }} onPress={() => removeMedia(index)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+              <TouchableOpacity
+                style={{ position: 'absolute', top: -7, right: -7, width: 20, height: 20, borderRadius: 10, backgroundColor: isDark ? '#555' : '#888', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: isDark ? '#1C1C1E' : '#F0F0F5', zIndex: 10 }}
+                onPress={() => removeMedia(index)}
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+              >
                 <Ionicons name="close" size={9} color="#FFF" />
               </TouchableOpacity>
             </View>
@@ -2227,10 +3021,12 @@ export default function HomeScreen() {
     upgradeBtn: { flexDirection: 'row', alignItems: 'center', borderRadius: 16, gap: 4 },
     upgradeBtnText: { fontWeight: '600' },
     headerEmptyRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+    headerIconBtn: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
     headerChat: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10, backgroundColor: colors.background, gap: 10 },
     headerChatLeft: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
     headerChatTitle: { flex: 1, fontSize: 16, fontWeight: '600', color: colors.text },
     headerChatRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    headerChatEditBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? '#1C1C1E' : '#F2F2F7', borderRadius: 18, paddingHorizontal: 10, paddingVertical: 7, gap: 5 },
     blurOverlayContainer: { ...StyleSheet.absoluteFillObject, zIndex: 9999, justifyContent: 'center', alignItems: 'center' },
     blurView: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center' },
     blurContent: { alignItems: 'center', justifyContent: 'center' },
@@ -2246,9 +3042,14 @@ export default function HomeScreen() {
     addBtnCircle: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
     micBtn: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
     sendButton: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
+    stopButton: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#FF3B30', alignItems: 'center', justifyContent: 'center' },
     voiceOrbBtn: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', shadowColor: colors.primary, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.35, shadowRadius: 5, elevation: 4 },
     emptyState: { flex: 1 },
     loadingContainer: { padding: Spacing.md, alignItems: 'center' },
+    documentPreview: { width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', padding: 4 },
+    documentName: { fontSize: 8, color: colors.textSecondary, marginTop: 2 },
+    editingIndicator: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, backgroundColor: `${colors.primary}20`, borderBottomWidth: 1, borderBottomColor: colors.border },
+    editingText: { fontSize: 12, color: colors.primary, flex: 1 },
     offlineBanner: { backgroundColor: '#FF9500', padding: Spacing.xs, alignItems: 'center' },
     offlineText: { color: '#FFFFFF', fontSize: 12, fontWeight: '600' },
     limitBanner: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, borderTopWidth: 1, gap: Spacing.sm },
@@ -2288,7 +3089,7 @@ export default function HomeScreen() {
   }, [hasMessages, smartSuggestions]);
 
   const handleSuggestionTap = useCallback(async (suggestion: { title: string; sub: string }) => {
-    const text = `${suggestion.title} - ${suggestion.sub}`;
+    const text = `${suggestion.title} — ${suggestion.sub}`;
     let conversationId = currentConversation?.id;
     if (!conversationId) { conversationId = await createConversation(); if (!conversationId) return; }
     setSending(true); setGenerating(true); setInputText(''); setThinkingMode('thinking');
@@ -2301,25 +3102,46 @@ export default function HomeScreen() {
   }, [currentConversation, createConversation, sendMessage, currentAIModel, showAlert]);
 
   const userName = user?.email?.split('@')[0] || 'You';
+
+  // Offline screen:
+  // - Free logged-in users: always show when offline
+  // - Guests: show when offline (limited splash)
+  // - Pro/Plus: never show (they can use offline)
   const showOfflineScreen = !isConnected && !isPro && !isUnlimited;
 
   if (showOfflineScreen) {
+    // Splash like photo 1 (light) and photo 2 (dark) — logo centered
     return (
       <View style={{ flex: 1, backgroundColor: isDark ? '#000' : '#FFF', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40 }}>
         <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={isDark ? '#000' : '#FFF'} />
+        {/* Centered logo — same as splash screens in screenshots */}
         <View style={{ alignItems: 'center', justifyContent: 'center', flex: 1 }}>
-          <Ionicons name="logo-apple" size={52} color={isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.15)'} />
+          <Ionicons
+            name="logo-apple"
+            size={52}
+            color={isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.15)'}
+            style={{ marginBottom: 0 }}
+          />
         </View>
+        {/* Bottom section with message */}
         <View style={{ paddingBottom: 60, alignItems: 'center', width: '100%' }}>
           <Text style={{ color: isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.5)', fontSize: 15, textAlign: 'center', lineHeight: 22, marginBottom: 20 }}>
-            {isGuest ? 'An internet connection is required to use Dawinix. Please check your connection.' : 'A connection is required for the free plan. Upgrade to Pro for offline access.'}
+            {isGuest
+              ? 'An internet connection is required to use Dawinix. Please check your connection.'
+              : 'A connection is required for the free plan. Upgrade to Pro for offline access.'}
           </Text>
           {!isGuest ? (
-            <TouchableOpacity style={{ backgroundColor: colors.primary, borderRadius: 30, paddingHorizontal: 32, paddingVertical: 14, marginBottom: 12, width: '100%', alignItems: 'center' }} onPress={() => router.push('/subscription')}>
+            <TouchableOpacity
+              style={{ backgroundColor: colors.primary, borderRadius: 30, paddingHorizontal: 32, paddingVertical: 14, marginBottom: 12, width: '100%', alignItems: 'center' }}
+              onPress={() => router.push('/subscription')}
+            >
               <Text style={{ color: '#FFF', fontSize: 16, fontWeight: '700' }}>Upgrade for Offline Access</Text>
             </TouchableOpacity>
           ) : null}
-          <TouchableOpacity style={{ paddingVertical: 12, width: '100%', alignItems: 'center', backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)', borderRadius: 30 }} onPress={() => setIsConnected(true)}>
+          <TouchableOpacity
+            style={{ paddingVertical: 12, width: '100%', alignItems: 'center', backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)', borderRadius: 30 }}
+            onPress={() => setIsConnected(true)}
+          >
             <Text style={{ color: isDark ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.6)', fontSize: 15, fontWeight: '600' }}>Try Again</Text>
           </TouchableOpacity>
         </View>
@@ -2337,7 +3159,7 @@ export default function HomeScreen() {
 
               {isOffline ? (
                 <View style={styles.offlineBanner}>
-                  <Text style={styles.offlineText}>No connection - some features unavailable</Text>
+                  <Text style={styles.offlineText}>No connection — some features unavailable</Text>
                 </View>
               ) : null}
 
@@ -2369,20 +3191,33 @@ export default function HomeScreen() {
                     </TouchableOpacity>
                     {!isGuest && !isPro ? (
                       Platform.OS === 'ios' ? (
-                        <BlurView intensity={isDark ? 55 : 45} tint={isDark ? 'dark' : 'light'} style={[styles.upgradeBtn, { overflow: 'hidden', borderWidth: 1, borderColor: accentColor + '50' }]}>
-                          <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5 }} onPress={() => router.push('/subscription')}>
+                        <BlurView
+                          intensity={isDark ? 55 : 45}
+                          tint={isDark ? 'dark' : 'light'}
+                          style={[styles.upgradeBtn, { overflow: 'hidden', borderWidth: 1, borderColor: accentColor + '50' }]}
+                        >
+                          <TouchableOpacity
+                            style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5 }}
+                            onPress={() => router.push('/subscription')}
+                          >
                             <Ionicons name="sparkles" size={11} color={accentColor} />
                             <Text style={[styles.upgradeBtnText, { color: accentColor, fontSize: 12 }]}>Upgrade</Text>
                           </TouchableOpacity>
                         </BlurView>
                       ) : (
-                        <TouchableOpacity style={[styles.upgradeBtn, { backgroundColor: isDark ? accentColor + '22' : accentColor + '18', borderWidth: 1, borderColor: accentColor + '50', paddingHorizontal: 10, paddingVertical: 5 }]} onPress={() => router.push('/subscription')}>
+                        <TouchableOpacity
+                          style={[styles.upgradeBtn, { backgroundColor: isDark ? accentColor + '22' : accentColor + '18', borderWidth: 1, borderColor: accentColor + '50', paddingHorizontal: 10, paddingVertical: 5 }]}
+                          onPress={() => router.push('/subscription')}
+                        >
                           <Ionicons name="sparkles" size={11} color={accentColor} />
                           <Text style={[styles.upgradeBtnText, { color: accentColor, fontSize: 12 }]}>Upgrade</Text>
                         </TouchableOpacity>
                       )
                     ) : isGuest ? (
-                      <TouchableOpacity style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : '#F0F0F5', borderRadius: 16, paddingHorizontal: 12, paddingVertical: 5 }} onPress={() => router.push('/login')}>
+                      <TouchableOpacity
+                        style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : '#F0F0F5', borderRadius: 16, paddingHorizontal: 12, paddingVertical: 5 }}
+                        onPress={() => router.push('/login')}
+                      >
                         <Text style={{ color: isDark ? '#FFF' : '#000', fontWeight: '600', fontSize: 13 }}>Sign up</Text>
                       </TouchableOpacity>
                     ) : null}
@@ -2411,7 +3246,9 @@ export default function HomeScreen() {
                         </View>
                       )}
                     </View>
-                  ) : <View />}
+                  ) : (
+                    <View />
+                  )}
                 </View>
               ) : (
                 <View style={styles.headerChat}>
@@ -2446,6 +3283,7 @@ export default function HomeScreen() {
                       </TouchableOpacity>
                     )}
                     {groupChatMode ? (
+                      // Group chat: show profile avatar icon that opens actions dropdown (Photo 4)
                       <TouchableOpacity hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} onPress={() => setGroupChatActionsVisible(true)}>
                         {userProfilePhoto ? (
                           <ExpoImage source={{ uri: userProfilePhoto }} style={{ width: 36, height: 36, borderRadius: 18 }} contentFit="cover" />
@@ -2540,7 +3378,8 @@ export default function HomeScreen() {
                       ListHeaderComponent={groupChatMode && (messages || []).length > 0 ? (
                         <View style={{ paddingHorizontal: 16, paddingBottom: 16, alignItems: 'center', gap: 10 }}>
                           <Text style={{ color: colors.textSecondary, fontSize: 13, textAlign: 'center' }}>
-                            <Text style={{ color: colors.text, fontWeight: '700' }}>{userName}</Text>{' created the group chat.'}
+                            <Text style={{ color: colors.text, fontWeight: '700' }}>{userName}</Text>
+                            {' created the group chat.'}
                           </Text>
                           <View style={{ flexDirection: 'row', gap: 10 }}>
                             <TouchableOpacity style={styles.groupActionBtn} onPress={() => setCustomizeAIVisible(true)}>
@@ -2597,12 +3436,29 @@ export default function HomeScreen() {
                 </ScrollView>
               ) : null}
 
+              {/* Reply preview bar */}
               {replyingTo ? (
-                <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingBottom: 6, gap: 8 }}>
-                  <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)', borderRadius: 14, borderLeftWidth: 3, borderLeftColor: accentColor, paddingHorizontal: 10, paddingVertical: 7, gap: 6 }}>
+                <View style={{
+                  flexDirection: 'row', alignItems: 'center',
+                  paddingHorizontal: 10, paddingBottom: 6, gap: 8,
+                }}>
+                  <View style={{
+                    flex: 1,
+                    flexDirection: 'row', alignItems: 'center',
+                    backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)',
+                    borderRadius: 14,
+                    borderLeftWidth: 3,
+                    borderLeftColor: accentColor,
+                    paddingHorizontal: 10, paddingVertical: 7,
+                    gap: 6,
+                  }}>
                     <Ionicons name="return-down-forward-outline" size={14} color={accentColor} />
-                    <Text style={{ color: accentColor, fontSize: 13, fontWeight: '600' }} numberOfLines={1}>{replyingTo.role === 'assistant' ? 'Dawinix' : 'You'}:</Text>
-                    <Text style={{ color: isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.55)', fontSize: 13, flex: 1 }} numberOfLines={1}>{(replyingTo.content || '').slice(0, 60)}</Text>
+                    <Text style={{ color: accentColor, fontSize: 13, fontWeight: '600' }} numberOfLines={1}>
+                      {replyingTo.role === 'assistant' ? 'Dawinix' : 'You'}:
+                    </Text>
+                    <Text style={{ color: isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.55)', fontSize: 13, flex: 1 }} numberOfLines={1}>
+                      {(replyingTo.content || '').slice(0, 60)}
+                    </Text>
                     <TouchableOpacity onPress={() => setReplyingTo(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                       <Ionicons name="close" size={16} color={isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.35)'} />
                     </TouchableOpacity>
@@ -2611,7 +3467,7 @@ export default function HomeScreen() {
               ) : null}
 
               {editingMessageId ? (
-                <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingBottom: 6 }}>
+                <View style={[{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingBottom: 6 }]}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? '#1A2030' : '#E8F0FE', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 9, gap: 7, alignSelf: 'flex-start', borderWidth: 1, borderColor: isDark ? 'rgba(0,122,255,0.3)' : 'rgba(0,122,255,0.2)' }}>
                     <Ionicons name="pencil" size={15} color="#007AFF" />
                     <Text style={{ color: '#007AFF', fontSize: 14, fontWeight: '700' }}>Edit</Text>
@@ -2622,6 +3478,9 @@ export default function HomeScreen() {
                 </View>
               ) : null}
 
+
+
+              {/* Deep Research Steps */}
               {deepResearchActive && deepResearchSteps.length > 0 ? (
                 <View style={{ marginHorizontal: 12, marginBottom: 8, backgroundColor: isDark ? 'rgba(44,44,46,0.9)' : 'rgba(242,242,247,0.95)', borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }}>
                   <View style={{ paddingHorizontal: 14, paddingTop: 12, paddingBottom: 4, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -2636,19 +3495,43 @@ export default function HomeScreen() {
               ) : null}
 
               {/* Input Area */}
+              {/* ── ChatGPT-style input bar ── */}
               <View style={[styles.inputContainer, Platform.OS === 'ios' && { backgroundColor: 'transparent' }]}>
+                {/* + Add button — outside the input pill */}
                 {!editingMessageId && !isRecording && !isProcessing ? (
-                  <TouchableOpacity style={styles.addBtn} onPress={() => setToolsVisible(true)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-                    <View style={[styles.addBtnCircle, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)', borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)' }]}>
+                  <TouchableOpacity
+                    style={styles.addBtn}
+                    onPress={() => setToolsVisible(true)}
+                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                  >
+                    <View style={[
+                      styles.addBtnCircle,
+                      { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)', borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)' },
+                    ]}>
                       <Ionicons name="add" size={22} color={colors.text} />
                     </View>
                   </TouchableOpacity>
                 ) : null}
 
-                <Pressable style={[styles.inputWrapper, { backgroundColor: isDark ? '#1C1C1E' : '#EFEFEF', borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)' }]} onPress={() => inputRef.current?.focus()}>
-                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: quizMode ? 8 : 0 }}>
+                {/* Input pill: media previews + quiz chip + text input + mic + send */}
+                <Pressable
+                  style={[
+                    styles.inputWrapper,
+                    { backgroundColor: isDark ? '#1C1C1E' : '#EFEFEF', borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)' },
+                  ]}
+                  onPress={() => inputRef.current?.focus()}
+                >
+                  {/* Chips row: quiz mode chip + model chip */}
+                  {(quizMode || editingMessageId) ? null : null}
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: quizMode || currentAIModel !== 'gemini' ? 8 : 0 }}>
+                    {/* Quiz chip */}
                     {quizMode ? (
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: isDark ? 'rgba(90,200,250,0.15)' : 'rgba(90,200,250,0.12)', borderRadius: 16, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: 'rgba(90,200,250,0.3)' }}>
+                      <View style={{
+                        flexDirection: 'row', alignItems: 'center', gap: 6,
+                        backgroundColor: isDark ? 'rgba(90,200,250,0.15)' : 'rgba(90,200,250,0.12)',
+                        borderRadius: 16, paddingHorizontal: 10, paddingVertical: 5,
+                        borderWidth: 1, borderColor: 'rgba(90,200,250,0.3)',
+                      }}>
                         <Ionicons name="albums-outline" size={14} color="#5AC8FA" />
                         <Text style={{ color: '#5AC8FA', fontSize: 13, fontWeight: '700' }}>Quizzes</Text>
                         <TouchableOpacity onPress={() => setQuizMode(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
@@ -2656,16 +3539,22 @@ export default function HomeScreen() {
                         </TouchableOpacity>
                       </View>
                     ) : null}
+                    {/* Model chip moved to ToolsModal */}
                   </View>
 
+                  {/* Media previews at top of pill */}
                   {renderInlineMediaPreviews()}
 
+                  {/* Recording state */}
                   {isRecording || isProcessing ? (
                     <View style={styles.recordingRow}>
                       <WaveformAnimation isRecording={isRecording} />
-                      <Text style={styles.recordingDuration}>{isProcessing ? 'Processing...' : formatDuration(recordingDuration)}</Text>
+                      <Text style={styles.recordingDuration}>
+                        {isProcessing ? 'Processing...' : formatDuration(recordingDuration)}
+                      </Text>
                     </View>
                   ) : (
+                    /* Single-row: text + mic + send */
                     <View style={styles.inputRow}>
                       <TextInput
                         ref={inputRef}
@@ -2680,19 +3569,39 @@ export default function HomeScreen() {
                         scrollEnabled
                         textAlignVertical="center"
                       />
-                      <TouchableOpacity onPress={toggleRecording} hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }} style={{ opacity: isProcessing ? 0.5 : 1, paddingHorizontal: 4 }}>
-                        <Ionicons name={isRecording ? 'stop-circle' : isProcessing ? 'hourglass-outline' : 'mic-outline'} size={21} color={isRecording ? '#FF3B30' : colors.textSecondary} />
+                      {/* Mic button */}
+                      <TouchableOpacity
+                        onPress={toggleRecording}
+                        hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
+                        style={{ opacity: isProcessing ? 0.5 : 1, paddingHorizontal: 4 }}
+                      >
+                        <Ionicons
+                          name={isRecording ? 'stop-circle' : isProcessing ? 'hourglass-outline' : 'mic-outline'}
+                          size={21}
+                          color={isRecording ? '#FF3B30' : colors.textSecondary}
+                        />
                       </TouchableOpacity>
+                      {/* Voice orb / send button */}
                       {sending ? (
-                        <TouchableOpacity style={[styles.sendButton, { backgroundColor: isDark ? '#3A3A3C' : '#DCDCDC' }]} onPress={handleStopGeneration}>
+                        <TouchableOpacity
+                          style={[styles.sendButton, { backgroundColor: isDark ? '#3A3A3C' : '#DCDCDC' }]}
+                          onPress={handleStopGeneration}
+                        >
                           <View style={{ width: 10, height: 10, backgroundColor: colors.text, borderRadius: 2 }} />
                         </TouchableOpacity>
                       ) : showSendButton ? (
-                        <TouchableOpacity style={[styles.sendButton, { backgroundColor: deepResearchMode ? '#5AC8FA' : accentColor }]} onPress={handleSend} disabled={isRecording || isProcessing}>
+                        <TouchableOpacity
+                          style={[styles.sendButton, { backgroundColor: deepResearchMode ? '#5AC8FA' : accentColor }]}
+                          onPress={handleSend}
+                          disabled={isRecording || isProcessing}
+                        >
                           <Ionicons name="arrow-up" size={18} color="#FFFFFF" />
                         </TouchableOpacity>
                       ) : (
-                        <TouchableOpacity style={[styles.voiceOrbBtn, { backgroundColor: accentColor }]} onPress={() => router.push('/voice-control')}>
+                        <TouchableOpacity
+                          style={[styles.voiceOrbBtn, { backgroundColor: accentColor }]}
+                          onPress={() => router.push('/voice-control')}
+                        >
                           <Ionicons name="pulse" size={17} color="#FFFFFF" />
                         </TouchableOpacity>
                       )}
@@ -2724,15 +3633,27 @@ export default function HomeScreen() {
               </TouchableOpacity>
             )}
 
+
+
             <ToolsModal
               visible={toolsVisible}
               onClose={() => setToolsVisible(false)}
               onPickMedia={(media) => {
+                // Guests can pick photos only (no documents), max 3 per session
                 if (isGuest) {
                   const imageFiles = media.filter(m => m.type === 'image');
                   const docFiles = media.filter(m => m.type !== 'image');
-                  if (docFiles.length > 0) { setToolsVisible(false); setGuestLockFeature('file upload'); setGuestLockModal(true); return; }
-                  if (guestPhotoCount + imageFiles.length > GUEST_PHOTO_LIMIT) { setToolsVisible(false); setGuestLoginModal(true); return; }
+                  if (docFiles.length > 0) {
+                    setToolsVisible(false);
+                    setGuestLockFeature('file upload');
+                    setGuestLockModal(true);
+                    return;
+                  }
+                  if (guestPhotoCount + imageFiles.length > GUEST_PHOTO_LIMIT) {
+                    setToolsVisible(false);
+                    setGuestLoginModal(true);
+                    return;
+                  }
                   setToolsVisible(false);
                   handleMediaPicked(media);
                   return;
@@ -2748,7 +3669,16 @@ export default function HomeScreen() {
                 handleAIModelSelect(model as AIModelKey);
               }}
               onOpenCamera={() => {
-                if (isGuest) { if (guestPhotoCount >= GUEST_PHOTO_LIMIT) { setToolsVisible(false); setGuestLoginModal(true); return; } setToolsVisible(false); router.push('/camera'); return; }
+                if (isGuest) {
+                  if (guestPhotoCount >= GUEST_PHOTO_LIMIT) {
+                    setToolsVisible(false);
+                    setGuestLoginModal(true);
+                    return;
+                  }
+                  setToolsVisible(false);
+                  router.push('/camera');
+                  return;
+                }
                 router.push('/camera');
               }}
               currentModel={currentAIModel}
@@ -2776,24 +3706,30 @@ export default function HomeScreen() {
 
             <CalculatorModal visible={calcVisible} onClose={() => setCalcVisible(false)} initialExpression={calcExpression} initialResult={calcResult} />
 
-            {/* Quiz Connect */}
+            {/* Quizzes Connect Prompt */}
             <Modal visible={quizConnectVisible} transparent animationType="fade" onRequestClose={() => setQuizConnectVisible(false)}>
               <View style={{ flex: 1, backgroundColor: '#000' }}>
-                <TouchableOpacity style={{ position: 'absolute', top: 60, right: 20, backgroundColor: 'rgba(52,199,89,0.85)', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8, zIndex: 10 }} onPress={() => { setQuizConnectVisible(false); setQuizConnectDetailVisible(true); }}>
+                <TouchableOpacity style={{ position: 'absolute', top: 60, right: 20, backgroundColor: 'rgba(52,199,89,0.85)', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8, zIndex: 10 }}
+                  onPress={() => { setQuizConnectVisible(false); setQuizConnectDetailVisible(true); }}>
                   <Text style={{ color: '#FFF', fontSize: 14, fontWeight: '600' }}>Create a quiz</Text>
                 </TouchableOpacity>
                 <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 }}>
+                  <Text style={{ color: 'rgba(255,255,255,0.45)', fontSize: 13, marginBottom: 24 }}>Running app request</Text>
                   <View style={{ backgroundColor: 'rgba(28,28,32,0.95)', borderRadius: 20, padding: 28, width: '100%', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' }}>
-                    <View style={{ width: 54, height: 54, borderRadius: 27, backgroundColor: '#1A3050', alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: '#5AC8FA', marginBottom: 16 }}>
-                      <Ionicons name="albums-outline" size={26} color="#5AC8FA" />
+                    <View style={{ marginBottom: 16 }}>
+                      <View style={{ width: 54, height: 54, borderRadius: 27, backgroundColor: '#1A3050', alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: '#5AC8FA' }}>
+                        <Ionicons name="albums-outline" size={26} color="#5AC8FA" />
+                      </View>
                     </View>
                     <Text style={{ color: '#FFF', fontSize: 17, fontWeight: '700', textAlign: 'center', marginBottom: 8 }}>Dawinix wants to connect to Quizzes</Text>
                     <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14, textAlign: 'center', marginBottom: 28 }}>Create quizzes to test your knowledge</Text>
                     <View style={{ flexDirection: 'row', gap: 12, width: '100%' }}>
-                      <TouchableOpacity style={{ flex: 1, borderRadius: 50, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)', paddingVertical: 14, alignItems: 'center' }} onPress={() => { setQuizConnectVisible(false); setQuizMode(false); }}>
+                      <TouchableOpacity style={{ flex: 1, borderRadius: 50, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)', paddingVertical: 14, alignItems: 'center' }}
+                        onPress={() => { setQuizConnectVisible(false); setQuizMode(false); }}>
                         <Text style={{ color: '#FFF', fontSize: 16, fontWeight: '600' }}>Not now</Text>
                       </TouchableOpacity>
-                      <TouchableOpacity style={{ flex: 1, borderRadius: 50, backgroundColor: '#FFF', paddingVertical: 14, alignItems: 'center' }} onPress={() => { setQuizConnectVisible(false); setQuizConnectDetailVisible(true); }}>
+                      <TouchableOpacity style={{ flex: 1, borderRadius: 50, backgroundColor: '#FFF', paddingVertical: 14, alignItems: 'center' }}
+                        onPress={() => { setQuizConnectVisible(false); setQuizConnectDetailVisible(true); }}>
                         <Text style={{ color: '#000', fontSize: 16, fontWeight: '700' }}>Connect</Text>
                       </TouchableOpacity>
                     </View>
@@ -2802,7 +3738,45 @@ export default function HomeScreen() {
               </View>
             </Modal>
 
-            {/* Quiz Topic */}
+            {/* Quizzes Connect Detail */}
+            <Modal visible={quizConnectDetailVisible} transparent animationType="slide" onRequestClose={() => setQuizConnectDetailVisible(false)}>
+              <View style={{ flex: 1, justifyContent: 'flex-end' }}>
+                <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setQuizConnectDetailVisible(false)} />
+                <View style={{ backgroundColor: '#1C1C1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 28, paddingBottom: insets.bottom + 24 }}>
+                  <TouchableOpacity style={{ position: 'absolute', top: 16, right: 16, width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center' }}
+                    onPress={() => setQuizConnectDetailVisible(false)}>
+                    <Ionicons name="close" size={16} color="rgba(255,255,255,0.7)" />
+                  </TouchableOpacity>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, marginBottom: 20 }}>
+                    <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: '#10A37F', alignItems: 'center', justifyContent: 'center' }}><Ionicons name="chatbubble-ellipses" size={22} color="#FFF" /></View>
+                    <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 18 }}>{String.fromCharCode(8226, 8226, 8226)}</Text>
+                    <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: '#1A3050', alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: '#5AC8FA' }}><Ionicons name="albums-outline" size={22} color="#5AC8FA" /></View>
+                  </View>
+                  <Text style={{ color: '#FFF', fontSize: 20, fontWeight: '700', textAlign: 'center', marginBottom: 20 }}>Connect Quizzes</Text>
+                  <View style={{ backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 14, padding: 16, marginBottom: 20 }}>
+                    {[
+                      { bold: 'Built by Dawinix', text: ' This app is developed and maintained by Dawinix.' },
+                      { bold: 'Works automatically', text: ' Dawinix may use this app in chats when it is helpful.' },
+                      { bold: 'Manage anytime', text: ' Review or turn off this app in Settings, under Apps.' },
+                    ].map((item, i) => (
+                      <Text key={i} style={{ color: 'rgba(255,255,255,0.7)', fontSize: 14, lineHeight: 22, marginBottom: 8 }}>
+                        <Text style={{ fontWeight: '700', color: '#FFF' }}>{item.bold}</Text>{item.text}
+                      </Text>
+                    ))}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
+                      <Text style={{ color: '#FFF', fontSize: 14, fontWeight: '600', flex: 1, lineHeight: 20 }}>Reference memories and chats</Text>
+                      <Switch value={true} onValueChange={() => {}} trackColor={{ true: '#34C759', false: '#3A3A3C' }} thumbColor="#FFF" />
+                    </View>
+                  </View>
+                  <TouchableOpacity style={{ backgroundColor: '#FFF', borderRadius: 50, paddingVertical: 16, alignItems: 'center' }}
+                    onPress={() => { setQuizConnectDetailVisible(false); setQuizTopicVisible(true); }}>
+                    <Text style={{ color: '#000', fontSize: 17, fontWeight: '700' }}>Connect Quizzes</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </Modal>
+
+            {/* Quiz Topic Picker Sheet */}
             <Modal visible={quizTopicVisible} transparent animationType="slide" onRequestClose={() => setQuizTopicVisible(false)}>
               <View style={{ flex: 1, justifyContent: 'flex-end' }}>
                 <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setQuizTopicVisible(false)} />
@@ -2811,6 +3785,7 @@ export default function HomeScreen() {
                     <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.25)', alignSelf: 'center', marginBottom: 20 }} />
                     <Text style={{ color: '#FFF', fontSize: 20, fontWeight: '700', textAlign: 'center', marginBottom: 6 }}>Choose a Quiz Topic</Text>
                     <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14, textAlign: 'center', marginBottom: 20 }}>The AI will generate 10 real questions for you</Text>
+
                     {quizGenerating ? (
                       <View style={{ alignItems: 'center', paddingVertical: 32 }}>
                         <ActivityIndicator size="large" color="#5AC8FA" />
@@ -2820,34 +3795,93 @@ export default function HomeScreen() {
                       <>
                         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'center', marginBottom: 16 }}>
                           {[
-                            { label: 'General Knowledge', value: 'General Knowledge' },
-                            { label: 'Science', value: 'Science' },
-                            { label: 'History', value: 'History' },
-                            { label: 'Coding', value: 'Programming and Coding' },
-                            { label: 'Geography', value: 'Geography' },
-                            { label: 'Math', value: 'Mathematics' },
-                            { label: 'Movies & Pop Culture', value: 'Movies and Pop Culture' },
-                            { label: 'Sports', value: 'Sports' },
+                            { label: '\uD83C\uDF0D General Knowledge', value: 'General Knowledge' },
+                            { label: '\uD83D\uDD2C Science', value: 'Science' },
+                            { label: '\uD83D\uDCDC History', value: 'History' },
+                            { label: '\uD83D\uDCBB Coding', value: 'Programming and Coding' },
+                            { label: '\uD83D\uDDFA\uFE0F Geography', value: 'Geography' },
+                            { label: '\u2797 Math', value: 'Mathematics' },
+                            { label: '\uD83C\uDFAC Movies & Pop Culture', value: 'Movies and Pop Culture' },
+                            { label: '\u26BD Sports', value: 'Sports' },
                           ].map((t) => (
-                            <TouchableOpacity key={t.value} style={{ backgroundColor: selectedQuizTopic === t.value && !customTopicInput ? '#5AC8FA22' : 'rgba(255,255,255,0.07)', borderColor: selectedQuizTopic === t.value && !customTopicInput ? '#5AC8FA' : 'rgba(255,255,255,0.12)', borderWidth: 1.5, borderRadius: 50, paddingHorizontal: 16, paddingVertical: 10 }} activeOpacity={0.75} onPress={() => { setSelectedQuizTopic(t.value); setCustomTopicInput(''); }}>
+                            <TouchableOpacity
+                              key={t.value}
+                              style={{
+                                backgroundColor: selectedQuizTopic === t.value && !customTopicInput ? '#5AC8FA22' : 'rgba(255,255,255,0.07)',
+                                borderColor: selectedQuizTopic === t.value && !customTopicInput ? '#5AC8FA' : 'rgba(255,255,255,0.12)',
+                                borderWidth: 1.5,
+                                borderRadius: 50,
+                                paddingHorizontal: 16,
+                                paddingVertical: 10,
+                              }}
+                              activeOpacity={0.75}
+                              onPress={() => { setSelectedQuizTopic(t.value); setCustomTopicInput(''); }}
+                            >
                               <Text style={{ color: selectedQuizTopic === t.value && !customTopicInput ? '#5AC8FA' : 'rgba(255,255,255,0.85)', fontSize: 14, fontWeight: '600' }}>{t.label}</Text>
                             </TouchableOpacity>
                           ))}
                         </View>
+
                         <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, fontWeight: '600', marginBottom: 8 }}>Custom topic...</Text>
-                        <TextInput style={{ backgroundColor: customTopicInput ? 'rgba(90,200,250,0.1)' : 'rgba(255,255,255,0.07)', borderWidth: 1.5, borderColor: customTopicInput ? '#5AC8FA' : 'rgba(255,255,255,0.12)', borderRadius: 14, paddingHorizontal: 16, paddingVertical: 12, color: '#FFF', fontSize: 15, marginBottom: 20 }} placeholder="e.g. JavaScript ES6, World War II battles..." placeholderTextColor="rgba(255,255,255,0.3)" value={customTopicInput} onChangeText={(txt) => { setCustomTopicInput(txt); if (txt) setSelectedQuizTopic(''); }} returnKeyType="done" />
+                        <TextInput
+                          style={{
+                            backgroundColor: customTopicInput ? 'rgba(90,200,250,0.1)' : 'rgba(255,255,255,0.07)',
+                            borderWidth: 1.5,
+                            borderColor: customTopicInput ? '#5AC8FA' : 'rgba(255,255,255,0.12)',
+                            borderRadius: 14,
+                            paddingHorizontal: 16,
+                            paddingVertical: 12,
+                            color: '#FFF',
+                            fontSize: 15,
+                            marginBottom: 20,
+                          }}
+                          placeholder="e.g. JavaScript ES6, World War II battles..."
+                          placeholderTextColor="rgba(255,255,255,0.3)"
+                          value={customTopicInput}
+                          onChangeText={(txt) => { setCustomTopicInput(txt); if (txt) setSelectedQuizTopic(''); }}
+                          returnKeyType="done"
+                        />
+
                         <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, fontWeight: '600', marginBottom: 10 }}>Difficulty</Text>
                         <View style={{ flexDirection: 'row', gap: 8, marginBottom: 20 }}>
-                          {[{ label: 'Easy', color: '#34C759' }, { label: 'Medium', color: '#5AC8FA' }, { label: 'Hard', color: '#FF9F0A' }, { label: 'Expert', color: '#FF453A' }].map((d) => {
+                          {[
+                            { label: 'Easy', color: '#34C759' },
+                            { label: 'Medium', color: '#5AC8FA' },
+                            { label: 'Hard', color: '#FF9F0A' },
+                            { label: 'Expert', color: '#FF453A' },
+                          ].map((d) => {
                             const isSelected = selectedDifficulty === d.label;
                             return (
-                              <TouchableOpacity key={d.label} style={{ flex: 1, alignItems: 'center', paddingVertical: 10, borderRadius: 12, borderWidth: 1.5, borderColor: isSelected ? d.color : 'rgba(255,255,255,0.1)', backgroundColor: isSelected ? d.color + '22' : 'rgba(255,255,255,0.04)' }} activeOpacity={0.75} onPress={() => setSelectedDifficulty(d.label)}>
+                              <TouchableOpacity
+                                key={d.label}
+                                style={{
+                                  flex: 1,
+                                  alignItems: 'center',
+                                  paddingVertical: 10,
+                                  borderRadius: 12,
+                                  borderWidth: 1.5,
+                                  borderColor: isSelected ? d.color : 'rgba(255,255,255,0.1)',
+                                  backgroundColor: isSelected ? d.color + '22' : 'rgba(255,255,255,0.04)',
+                                }}
+                                activeOpacity={0.75}
+                                onPress={() => setSelectedDifficulty(d.label)}
+                              >
                                 <Text style={{ color: isSelected ? d.color : 'rgba(255,255,255,0.6)', fontSize: 13, fontWeight: '700' }}>{d.label}</Text>
                               </TouchableOpacity>
                             );
                           })}
                         </View>
-                        <TouchableOpacity style={{ backgroundColor: (selectedQuizTopic || customTopicInput.trim()) ? '#5AC8FA' : 'rgba(255,255,255,0.1)', borderRadius: 50, paddingVertical: 16, alignItems: 'center' }} disabled={!selectedQuizTopic && !customTopicInput.trim()} onPress={() => handleLaunchQuiz(customTopicInput.trim() || selectedQuizTopic)}>
+
+                        <TouchableOpacity
+                          style={{
+                            backgroundColor: (selectedQuizTopic || customTopicInput.trim()) ? '#5AC8FA' : 'rgba(255,255,255,0.1)',
+                            borderRadius: 50,
+                            paddingVertical: 16,
+                            alignItems: 'center',
+                          }}
+                          disabled={!selectedQuizTopic && !customTopicInput.trim()}
+                          onPress={() => handleLaunchQuiz(customTopicInput.trim() || selectedQuizTopic)}
+                        >
                           <Text style={{ color: (selectedQuizTopic || customTopicInput.trim()) ? '#000' : 'rgba(255,255,255,0.4)', fontSize: 17, fontWeight: '700' }}>Start Quiz</Text>
                         </TouchableOpacity>
                       </>
@@ -2857,16 +3891,47 @@ export default function HomeScreen() {
               </View>
             </Modal>
 
-            <PresetsModal visible={presetsModalVisible} onClose={() => setPresetsModalVisible(false)} onSelectPreset={(phrase) => setInputText(phrase)} />
+            <PresetsModal
+              visible={presetsModalVisible}
+              onClose={() => setPresetsModalVisible(false)}
+              onSelectPreset={(phrase) => setInputText(phrase)}
+            />
+
+            <Modal visible={expandInputVisible} animationType="slide" onRequestClose={() => setExpandInputVisible(false)}>
+              <View style={{ flex: 1, backgroundColor: colors.background }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: insets.top + 12, paddingHorizontal: 16, paddingBottom: 12 }}>
+                  <TouchableOpacity onPress={() => { setInputText(expandedText); setExpandInputVisible(false); }}>
+                    <Ionicons name="chevron-down" size={24} color={colors.text} />
+                  </TouchableOpacity>
+                  <Text style={{ fontSize: 16, fontWeight: '600', color: colors.text }}>Message</Text>
+                  <TouchableOpacity onPress={() => { const txt = expandedText; setInputText(txt); setExpandInputVisible(false); setTimeout(() => handleSend(), 100); }}>
+                    <View style={{ backgroundColor: settings.accentColor || colors.primary, width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' }}>
+                      <Ionicons name="arrow-up" size={20} color="#FFF" />
+                    </View>
+                  </TouchableOpacity>
+                </View>
+                <TextInput style={{ flex: 1, fontSize: 16, color: colors.text, paddingHorizontal: 20, paddingTop: 8, textAlignVertical: 'top' }} value={expandedText} onChangeText={setExpandedText} multiline autoFocus placeholder="Type your message..." placeholderTextColor={colors.textSecondary} />
+                <View style={{ paddingHorizontal: 20, paddingBottom: insets.bottom + 16 }}>
+                  <TouchableOpacity style={{ backgroundColor: settings.accentColor || colors.primary, borderRadius: 50, paddingVertical: 15, alignItems: 'center' }} onPress={() => { setInputText(expandedText); setExpandInputVisible(false); }}>
+                    <Text style={{ color: '#FFF', fontSize: 17, fontWeight: '700' }}>Done</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </Modal>
 
             <RenameModal visible={renameModalVisible} currentTitle={currentConversation?.title || ''} onConfirm={async (title) => { setRenameModalVisible(false); await handleRenameConversation(title); }} onCancel={() => setRenameModalVisible(false)} />
             <ArchiveConfirmModal visible={archiveConfirmVisible} onConfirm={() => { setArchiveConfirmVisible(false); handleArchiveConversation(); }} onCancel={() => setArchiveConfirmVisible(false)} />
             <GroupStartModal visible={groupStartModalVisible} user={user} profilePhotoUrl={userProfilePhoto} onClose={() => setGroupStartModalVisible(false)} onStartGroup={handleStartGroupChat} isDark={isDark} onSetupProfile={() => { setGroupStartModalVisible(false); setTimeout(() => setProfileEditModalVisible(true), 200); }} />
+
             <ProfileEditModal visible={profileEditModalVisible} user={user} profilePhotoUrl={userProfilePhoto} onClose={() => setProfileEditModalVisible(false)} isDark={isDark} onSave={(name, username, photo) => { if (photo) setUserProfilePhoto(photo); }} />
+
             <GroupChatActionsMenu visible={groupChatActionsVisible} onClose={() => setGroupChatActionsVisible(false)} onPeople={() => setPeopleModalVisible(true)} onAddPeople={handleAddPeople} onManageLink={() => setInviteLinkVisible(true)} onRenameGroup={() => setRenameGroupVisible(true)} onCustomize={() => setCustomizeAIVisible(true)} onMute={() => showAlert('Muted', 'Notifications muted for this group')} onReport={() => setReportGroupVisible(true)} onDeleteGroup={handleDeleteGroup} isDark={isDark} />
+
             <PeopleModal visible={peopleModalVisible} onClose={() => setPeopleModalVisible(false)} groupName={groupName} userName={userName} profilePhotoUrl={userProfilePhoto} isDark={isDark} isAdmin={isAdmin} />
+
             <ReportGroupModal visible={reportGroupVisible} onClose={() => setReportGroupVisible(false)} isDark={isDark} />
 
+            {/* Rename group blur modal (Photo 5) */}
             <Modal visible={renameGroupVisible} transparent animationType="fade" onRequestClose={() => setRenameGroupVisible(false)}>
               <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.45)' }}>
                 {Platform.OS === 'ios' ? <BlurView intensity={60} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} /> : null}
@@ -2874,22 +3939,37 @@ export default function HomeScreen() {
               </View>
             </Modal>
 
+            {/* Delete group confirm blur modal */}
             <Modal visible={deleteGroupConfirm} transparent animationType="fade" onRequestClose={() => setDeleteGroupConfirm(false)}>
               <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
                 {Platform.OS === 'ios' ? <BlurView intensity={65} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} /> : <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.5)' }]} />}
-                <View style={{ width: '80%', borderRadius: 22, overflow: 'hidden', backgroundColor: isDark ? '#2C2C2E' : '#FFF', padding: 26, alignItems: 'center' }}>
-                  <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 19, fontWeight: '700', marginBottom: 10 }}>Delete group chat?</Text>
-                  <Text style={{ color: isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.5)', fontSize: 14, textAlign: 'center', lineHeight: 21, marginBottom: 24 }}>This will permanently delete the group chat and all messages.</Text>
-                  <TouchableOpacity style={{ width: '100%', backgroundColor: '#FF453A', borderRadius: 14, paddingVertical: 13, alignItems: 'center', marginBottom: 10 }} onPress={() => { setDeleteGroupConfirm(false); setGroupChatMode(false); handleNewChat(); }}>
-                    <Text style={{ color: '#FFF', fontSize: 16, fontWeight: '700' }}>Delete group</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={{ paddingVertical: 10 }} onPress={() => setDeleteGroupConfirm(false)}>
-                    <Text style={{ color: isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.5)', fontSize: 15 }}>Cancel</Text>
-                  </TouchableOpacity>
+                <View style={{ width: '80%', borderRadius: 22, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.4, shadowRadius: 22, elevation: 22 }}>
+                  {Platform.OS === 'ios' ? (
+                    <BlurView intensity={92} tint={isDark ? 'dark' : 'extraLight'} style={{ padding: 26, alignItems: 'center' }}>
+                      <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 19, fontWeight: '700', marginBottom: 10 }}>Delete group chat?</Text>
+                      <Text style={{ color: isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.5)', fontSize: 14, textAlign: 'center', lineHeight: 21, marginBottom: 24 }}>This will permanently delete the group chat and all messages.</Text>
+                      <TouchableOpacity style={{ width: '100%', backgroundColor: '#FF453A', borderRadius: 14, paddingVertical: 13, alignItems: 'center', marginBottom: 10 }} onPress={() => { setDeleteGroupConfirm(false); setGroupChatMode(false); handleNewChat(); }}>
+                        <Text style={{ color: '#FFF', fontSize: 16, fontWeight: '700' }}>Delete group</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={{ paddingVertical: 10 }} onPress={() => setDeleteGroupConfirm(false)}>
+                        <Text style={{ color: isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.5)', fontSize: 15 }}>Cancel</Text>
+                      </TouchableOpacity>
+                    </BlurView>
+                  ) : (
+                    <View style={{ backgroundColor: isDark ? '#2C2C2E' : '#FFF', padding: 26, alignItems: 'center', borderRadius: 22 }}>
+                      <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 19, fontWeight: '700', marginBottom: 10 }}>Delete group chat?</Text>
+                      <Text style={{ color: isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.5)', fontSize: 14, textAlign: 'center', lineHeight: 21, marginBottom: 24 }}>This will permanently delete the group chat and all messages.</Text>
+                      <TouchableOpacity style={{ width: '100%', backgroundColor: '#FF453A', borderRadius: 14, paddingVertical: 13, alignItems: 'center', marginBottom: 10 }} onPress={() => { setDeleteGroupConfirm(false); setGroupChatMode(false); handleNewChat(); }}>
+                        <Text style={{ color: '#FFF', fontSize: 16, fontWeight: '700' }}>Delete group</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={{ paddingVertical: 10 }} onPress={() => setDeleteGroupConfirm(false)}>
+                        <Text style={{ color: isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.5)', fontSize: 15 }}>Cancel</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
                 </View>
               </View>
             </Modal>
-
             <CustomizeAIModal visible={customizeAIVisible} onClose={() => setCustomizeAIVisible(false)} onSave={(instructions, respondAuto) => { setGroupCustomInstructions(instructions); setGroupRespondAuto(respondAuto); }} initialInstructions={groupCustomInstructions} initialRespondAuto={groupRespondAuto} />
             <InviteLinkModal visible={inviteLinkVisible} onClose={() => setInviteLinkVisible(false)} isPlus={isUnlimited} isDark={isDark} />
             <NotificationPermissionModal visible={notifPermModalVisible} onAllow={handleAllowNotifications} onSkip={() => setNotifPermModalVisible(false)} />
@@ -2897,37 +3977,83 @@ export default function HomeScreen() {
             {/* Shake to report bug modal */}
             <Modal visible={shakeBugModalVisible} transparent animationType="none" onRequestClose={() => setShakeBugModalVisible(false)}>
               <View style={{ flex: 1, justifyContent: 'flex-end' }}>
-                {Platform.OS === 'ios' ? <BlurView intensity={isDark ? 70 : 55} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} /> : <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.55)' }]} />}
+                {Platform.OS === 'ios' ? (
+                  <BlurView intensity={isDark ? 70 : 55} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
+                ) : (
+                  <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.55)' }]} />
+                )}
                 <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setShakeBugModalVisible(false)} />
-                <View style={{ borderTopLeftRadius: 28, borderTopRightRadius: 28, overflow: 'hidden' }}>
-                  <View style={{ backgroundColor: isDark ? '#1C1C1E' : '#FFF', padding: 28, paddingBottom: insets.bottom + 28, borderTopLeftRadius: 28, borderTopRightRadius: 28 }}>
-                    <View style={{ width: 38, height: 4, borderRadius: 2, backgroundColor: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.18)', alignSelf: 'center', marginBottom: 24 }} />
-                    <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 22, fontWeight: '800', marginBottom: 10 }}>Report a bug?</Text>
-                    <Text style={{ color: isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.5)', fontSize: 15, lineHeight: 22, marginBottom: 28 }}>If something is not working correctly, you can report it to help improve Dawinix for everyone.</Text>
-                    <TouchableOpacity style={{ backgroundColor: isDark ? '#FFF' : '#000', borderRadius: 50, paddingVertical: 17, alignItems: 'center', marginBottom: 16 }} onPress={() => { setShakeBugModalVisible(false); setTimeout(() => router.push('/bugreport'), 200); }}>
-                      <Text style={{ color: isDark ? '#000' : '#FFF', fontSize: 17, fontWeight: '700' }}>Report bug</Text>
-                    </TouchableOpacity>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 6 }}>
-                      <View>
-                        <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 15, fontWeight: '600' }}>{Platform.OS === 'ios' ? 'Shake iPhone to report a bug' : 'Shake Android to report a bug'}</Text>
-                        <Text style={{ color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)', fontSize: 13, marginTop: 3 }}>Toggle off to disable</Text>
+                <View style={{
+                  borderTopLeftRadius: 28, borderTopRightRadius: 28, overflow: 'hidden',
+                  shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.3, shadowRadius: 20, elevation: 20,
+                }}>
+                  {Platform.OS === 'ios' ? (
+                    <BlurView intensity={isDark ? 92 : 78} tint={isDark ? 'dark' : 'extraLight'} style={{ padding: 28, paddingBottom: insets.bottom + 28 }}>
+                      <View style={{ width: 38, height: 4, borderRadius: 2, backgroundColor: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.18)', alignSelf: 'center', marginBottom: 24 }} />
+                      <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 22, fontWeight: '800', marginBottom: 10 }}>Report a bug?</Text>
+                      <Text style={{ color: isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.5)', fontSize: 15, lineHeight: 22, marginBottom: 28 }}>
+                        {'If something is not working correctly, you can report it to help improve Dawinix for everyone.'}
+                      </Text>
+                      <TouchableOpacity
+                        style={{ backgroundColor: isDark ? '#FFF' : '#000', borderRadius: 50, paddingVertical: 17, alignItems: 'center', marginBottom: 16 }}
+                        onPress={() => { setShakeBugModalVisible(false); setTimeout(() => router.push('/bugreport'), 200); }}
+                      >
+                        <Text style={{ color: isDark ? '#000' : '#FFF', fontSize: 17, fontWeight: '700' }}>Report bug</Text>
+                      </TouchableOpacity>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 6 }}>
+                        <View>
+                          <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 15, fontWeight: '600' }}>
+                            {Platform.OS === 'ios' ? 'Shake iPhone to report a bug' : 'Shake Android to report a bug'}
+                          </Text>
+                          <Text style={{ color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)', fontSize: 13, marginTop: 3 }}>Toggle off to disable</Text>
+                        </View>
+                        <Switch
+                          value={shakeEnabled}
+                          onValueChange={async (v) => {
+                            setShakeEnabled(v);
+                            await AsyncStorage.setItem('shake_bug_enabled', v ? 'true' : 'false');
+                          }}
+                          trackColor={{ true: '#34C759', false: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)' }}
+                          thumbColor="#FFF"
+                        />
                       </View>
-                      <Switch
-                        value={shakeEnabled}
-                        onValueChange={async (v) => {
-                          setShakeEnabled(v);
-                          await AsyncStorage.setItem('shake_bug_enabled', v ? 'true' : 'false');
-                        }}
-                        trackColor={{ true: '#34C759', false: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)' }}
-                        thumbColor="#FFF"
-                      />
+                    </BlurView>
+                  ) : (
+                    <View style={{ backgroundColor: isDark ? '#1C1C1E' : '#FFF', padding: 28, paddingBottom: insets.bottom + 28, borderTopLeftRadius: 28, borderTopRightRadius: 28 }}>
+                      <View style={{ width: 38, height: 4, borderRadius: 2, backgroundColor: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.18)', alignSelf: 'center', marginBottom: 24 }} />
+                      <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 22, fontWeight: '800', marginBottom: 10 }}>Report a bug?</Text>
+                      <Text style={{ color: isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.5)', fontSize: 15, lineHeight: 22, marginBottom: 28 }}>
+                        {'If something is not working correctly, you can report it to help improve Dawinix for everyone.'}
+                      </Text>
+                      <TouchableOpacity
+                        style={{ backgroundColor: isDark ? '#FFF' : '#000', borderRadius: 50, paddingVertical: 17, alignItems: 'center', marginBottom: 16 }}
+                        onPress={() => { setShakeBugModalVisible(false); setTimeout(() => router.push('/bugreport'), 200); }}
+                      >
+                        <Text style={{ color: isDark ? '#000' : '#FFF', fontSize: 17, fontWeight: '700' }}>Report bug</Text>
+                      </TouchableOpacity>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 6 }}>
+                        <View>
+                          <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 15, fontWeight: '600' }}>
+                            {Platform.OS === 'ios' ? 'Shake iPhone to report a bug' : 'Shake Android to report a bug'}
+                          </Text>
+                          <Text style={{ color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)', fontSize: 13, marginTop: 3 }}>Toggle off to disable</Text>
+                        </View>
+                        <Switch
+                          value={shakeEnabled}
+                          onValueChange={async (v) => {
+                            setShakeEnabled(v);
+                            await AsyncStorage.setItem('shake_bug_enabled', v ? 'true' : 'false');
+                          }}
+                          trackColor={{ true: '#34C759', false: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)' }}
+                          thumbColor="#FFF"
+                        />
+                      </View>
                     </View>
-                  </View>
+                  )}
                 </View>
               </View>
             </Modal>
 
-            {/* User message long-press menu — Copy only for media messages, Copy+Edit for text */}
             {msgMenuVisible && msgMenuMsg ? (() => {
               const menuBg = isDark ? 'rgba(36,36,40,0.98)' : 'rgba(255,255,255,0.97)';
               const menuTextC = isDark ? '#FFFFFF' : '#000000';
@@ -2937,10 +4063,7 @@ export default function HomeScreen() {
               const ts = createdAt ? new Date(createdAt) : new Date();
               const dateLabel = 'Today, ' + ts.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
               const { height: SCREEN_H } = Dimensions.get('window');
-              const menuTop = Math.max(80, Math.min(msgMenuPageY - 10, SCREEN_H - 200));
-              // Check if this message has media (image, file, video) — these cannot be edited
-              const msgHasMedia = !!(msgMenuMsg.imageUrl || msgMenuMsg.image_url || msgMenuMsg.file_url ||
-                (msgMenuMsg.content && (msgMenuMsg.content.includes('[Attached file:') || msgMenuMsg.content.includes('[Video attached:'))));
+              const menuTop = Math.max(80, Math.min(msgMenuPageY - 10, SCREEN_H - 160));
               return (
                 <Modal visible={msgMenuVisible} transparent animationType="none" onRequestClose={() => setMsgMenuVisible(false)}>
                   <Pressable style={{ flex: 1 }} onPress={() => setMsgMenuVisible(false)}>
@@ -2956,52 +4079,28 @@ export default function HomeScreen() {
                         <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: divC }}>
                           <Text style={{ color: menuSubC, fontSize: 12, fontWeight: '500' }}>{dateLabel}</Text>
                         </View>
-                        {/* Copy — always available */}
-                        <TouchableOpacity
-                          style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, gap: 12, borderBottomWidth: msgHasMedia ? 0 : StyleSheet.hairlineWidth, borderBottomColor: divC }}
-                          onPress={async () => { setMsgMenuVisible(false); await Clipboard.setStringAsync(msgMenuMsg.content || ''); showAlert('Copied', 'Message copied to clipboard'); }}
-                          activeOpacity={0.65}
-                        >
+                        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, gap: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: divC }} onPress={async () => { setMsgMenuVisible(false); await Clipboard.setStringAsync(msgMenuMsg.content || ''); showAlert('Copied', 'Message copied to clipboard'); }} activeOpacity={0.65}>
                           <Ionicons name="copy-outline" size={20} color={menuTextC} />
                           <Text style={{ fontSize: 17, color: menuTextC }}>Copy</Text>
                         </TouchableOpacity>
-                        {/* Edit — only for plain text messages */}
-                        {!msgHasMedia ? (
-                          <TouchableOpacity
-                            style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, gap: 12 }}
-                            onPress={() => { setMsgMenuVisible(false); setTimeout(() => { handleEditMessage(msgMenuMsg.id, msgMenuMsg.content || ''); setTimeout(() => inputRef.current?.focus(), 100); }, 60); }}
-                            activeOpacity={0.65}
-                          >
-                            <Ionicons name="pencil-outline" size={20} color={menuTextC} />
-                            <Text style={{ fontSize: 17, color: menuTextC }}>Edit</Text>
-                          </TouchableOpacity>
-                        ) : null}
+                        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, gap: 12 }} onPress={() => { setMsgMenuVisible(false); setTimeout(() => { handleEditMessage(msgMenuMsg.id, msgMenuMsg.content || ''); setTimeout(() => inputRef.current?.focus(), 100); }, 60); }} activeOpacity={0.65}>
+                          <Ionicons name="pencil-outline" size={20} color={menuTextC} />
+                          <Text style={{ fontSize: 17, color: menuTextC }}>Edit</Text>
+                        </TouchableOpacity>
                       </BlurView>
                     ) : (
                       <View style={{ backgroundColor: menuBg, borderRadius: 18 }}>
                         <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: divC }}>
                           <Text style={{ color: menuSubC, fontSize: 12, fontWeight: '500' }}>{dateLabel}</Text>
                         </View>
-                        {/* Copy — always available */}
-                        <TouchableOpacity
-                          style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, gap: 12, borderBottomWidth: msgHasMedia ? 0 : StyleSheet.hairlineWidth, borderBottomColor: divC }}
-                          onPress={async () => { setMsgMenuVisible(false); await Clipboard.setStringAsync(msgMenuMsg.content || ''); showAlert('Copied', 'Message copied to clipboard'); }}
-                          activeOpacity={0.65}
-                        >
+                        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, gap: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: divC }} onPress={async () => { setMsgMenuVisible(false); await Clipboard.setStringAsync(msgMenuMsg.content || ''); showAlert('Copied', 'Message copied to clipboard'); }} activeOpacity={0.65}>
                           <Ionicons name="copy-outline" size={20} color={menuTextC} />
                           <Text style={{ fontSize: 17, color: menuTextC }}>Copy</Text>
                         </TouchableOpacity>
-                        {/* Edit — only for plain text messages */}
-                        {!msgHasMedia ? (
-                          <TouchableOpacity
-                            style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, gap: 12 }}
-                            onPress={() => { setMsgMenuVisible(false); setTimeout(() => { handleEditMessage(msgMenuMsg.id, msgMenuMsg.content || ''); setTimeout(() => inputRef.current?.focus(), 100); }, 60); }}
-                            activeOpacity={0.65}
-                          >
-                            <Ionicons name="pencil-outline" size={20} color={menuTextC} />
-                            <Text style={{ fontSize: 17, color: menuTextC }}>Edit</Text>
-                          </TouchableOpacity>
-                        ) : null}
+                        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, gap: 12 }} onPress={() => { setMsgMenuVisible(false); setTimeout(() => { handleEditMessage(msgMenuMsg.id, msgMenuMsg.content || ''); setTimeout(() => inputRef.current?.focus(), 100); }, 60); }} activeOpacity={0.65}>
+                          <Ionicons name="pencil-outline" size={20} color={menuTextC} />
+                          <Text style={{ fontSize: 17, color: menuTextC }}>Edit</Text>
+                        </TouchableOpacity>
                       </View>
                     )}
                   </View>
@@ -3011,11 +4110,17 @@ export default function HomeScreen() {
 
             <MessageLimitModal
               visible={messageLimitModalVisible}
-              onClose={() => { messageLimitDismissedAtRef.current = (messages || []).length; setMessageLimitModalVisible(false); }}
-              onNewChat={() => { setMessageLimitModalVisible(false); handleNewChat(); }}
+              onClose={() => {
+                messageLimitDismissedAtRef.current = (messages || []).length;
+                setMessageLimitModalVisible(false);
+              }}
+              onNewChat={() => {
+                setMessageLimitModalVisible(false);
+                handleNewChat();
+              }}
             />
 
-            {/* Guest mode modals */}
+            {/* Guest mode: 35-message limit modal */}
             <Modal visible={guestLoginModal} transparent animationType="fade" onRequestClose={() => setGuestLoginModal(false)}>
               <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}>
                 <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
@@ -3025,7 +4130,7 @@ export default function HomeScreen() {
                     <Ionicons name="close" size={16} color="rgba(255,255,255,0.7)" />
                   </TouchableOpacity>
                   <Text style={{ color: '#FFF', fontSize: 20, fontWeight: '700', textAlign: 'center', marginBottom: 10, marginTop: 8 }}>Log in to keep chatting</Text>
-                  <Text style={{ color: 'rgba(255,255,255,0.55)', fontSize: 14, textAlign: 'center', lineHeight: 21, marginBottom: 24 }}>You have reached your 35-message guest limit. Log in to continue chatting.</Text>
+                  <Text style={{ color: 'rgba(255,255,255,0.55)', fontSize: 14, textAlign: 'center', lineHeight: 21, marginBottom: 24 }}>{'You have reached your 35-message guest limit. Log in to continue chatting or wait 24 hours.'}</Text>
                   <View style={{ gap: 12 }}>
                     {Platform.OS === 'ios' ? (
                       <TouchableOpacity style={{ backgroundColor: '#FFFFFF', borderRadius: 50, paddingVertical: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }} onPress={() => { setGuestLoginModal(false); router.push('/login'); }}>
@@ -3038,6 +4143,9 @@ export default function HomeScreen() {
                       <Text style={{ color: '#FFF', fontSize: 16, fontWeight: '600' }}>Continue with Google</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={{ backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 50, paddingVertical: 15, alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' }} onPress={() => { setGuestLoginModal(false); router.push('/login'); }}>
+                      <Text style={{ color: '#FFF', fontSize: 16, fontWeight: '600' }}>Sign up</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={{ backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 50, paddingVertical: 15, alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' }} onPress={() => { setGuestLoginModal(false); router.push('/login'); }}>
                       <Text style={{ color: '#FFF', fontSize: 16, fontWeight: '600' }}>Log in</Text>
                     </TouchableOpacity>
                   </View>
@@ -3045,6 +4153,7 @@ export default function HomeScreen() {
               </View>
             </Modal>
 
+            {/* Guest mode: feature lock modal */}
             <Modal visible={guestLockModal} transparent animationType="fade" onRequestClose={() => setGuestLockModal(false)}>
               <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}>
                 <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
@@ -3054,7 +4163,7 @@ export default function HomeScreen() {
                     <Ionicons name="close" size={16} color="rgba(255,255,255,0.7)" />
                   </TouchableOpacity>
                   <Text style={{ color: '#FFF', fontSize: 20, fontWeight: '700', textAlign: 'center', marginBottom: 10, marginTop: 8 }}>Log in to try advanced features</Text>
-                  <Text style={{ color: 'rgba(255,255,255,0.55)', fontSize: 14, textAlign: 'center', lineHeight: 21, marginBottom: 24 }}>Get smarter responses, upload files, analyze images, and more by logging in.</Text>
+                  <Text style={{ color: 'rgba(255,255,255,0.55)', fontSize: 14, textAlign: 'center', lineHeight: 21, marginBottom: 24 }}>{'Get smarter responses, upload files, analyze images, and more by logging in.'}</Text>
                   <View style={{ gap: 12 }}>
                     {Platform.OS === 'ios' ? (
                       <TouchableOpacity style={{ backgroundColor: '#FFFFFF', borderRadius: 50, paddingVertical: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }} onPress={() => { setGuestLockModal(false); router.push('/login'); }}>
@@ -3066,6 +4175,9 @@ export default function HomeScreen() {
                       <Ionicons name="logo-google" size={20} color="#FFF" />
                       <Text style={{ color: '#FFF', fontSize: 16, fontWeight: '600' }}>Continue with Google</Text>
                     </TouchableOpacity>
+                    <TouchableOpacity style={{ backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 50, paddingVertical: 15, alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' }} onPress={() => { setGuestLockModal(false); router.push('/login'); }}>
+                      <Text style={{ color: '#FFF', fontSize: 16, fontWeight: '600' }}>Sign up</Text>
+                    </TouchableOpacity>
                     <TouchableOpacity style={{ backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 50, paddingVertical: 15, alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' }} onPress={() => { setGuestLockModal(false); router.push('/login'); }}>
                       <Text style={{ color: '#FFF', fontSize: 16, fontWeight: '600' }}>Log in</Text>
                     </TouchableOpacity>
@@ -3074,6 +4186,9 @@ export default function HomeScreen() {
               </View>
             </Modal>
 
+            {/* Image creation is shown inline in chat via InlineImageCreatingPlaceholder in MessageItem */}
+
+            {/* Image analyzing overlay */}
             <MessageActionsModal
               visible={msgActionsVisible}
               onClose={() => setMsgActionsVisible(false)}
@@ -3084,7 +4199,10 @@ export default function HomeScreen() {
               isUnliked={msgActionsMsg ? messageLikes[msgActionsMsg.id] === 'dislike' : false}
             />
 
-            {thinkingMode === 'creating_image' && (generating || sending) ? <ImageCreatingOverlay /> : null}
+            {/* Image creating overlay — during AI image generation */}
+            {thinkingMode === 'creating_image' && (generating || sending) ? (
+              <ImageCreatingOverlay />
+            ) : null}
 
             {imageAnalyzingOverlay ? (
               <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.78)', zIndex: 9998, alignItems: 'center', justifyContent: 'center' }}>
