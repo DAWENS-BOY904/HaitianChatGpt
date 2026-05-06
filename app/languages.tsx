@@ -112,3 +112,4 @@ export default function LanguagesScreen() {
     </View>
   );
 }
+make this real when someone click languages in settings its send the user to phone system app-aallow access and In the generate-tts edge function, read the user's mainLanguage setting and pass the matching ElevenLabs language code so the AI voice output automatically matches the selected speech language. .
