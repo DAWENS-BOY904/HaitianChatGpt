@@ -338,7 +338,7 @@ export function ToolsModal({
     setSelectedFilesPreview((prev) => prev.filter((_, i) => i !== index));
   };
 
-  // ── Tools grid ──────────────────────────────────────────────────────────
+  // ── Tools grids ──────────────────────────────────────────────────────────
   const tools = [
     { id: 'camera',  label: 'Camera',  icon: 'camera-outline',          action: handleCamera },
     { id: 'photos',  label: 'Photos',  icon: 'image-outline',           action: handlePhotos },
