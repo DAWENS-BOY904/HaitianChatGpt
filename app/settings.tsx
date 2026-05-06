@@ -26,7 +26,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getSupabaseClient } from '@/template';
 import * as ImagePicker from 'expo-image-picker';
 import Constants from 'expo-constants';
-import * as Linking from 'expo-linking';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useProfile } from '../contexts/ProfileContext';
 import { Image as ExpoImageBadge } from 'expo-image';
@@ -942,7 +941,7 @@ export default function SettingsScreen() {
             ═══════════════════════════════════════════════════════════════ */}
         <SectionLabel text="App" />
         <Card>
-          <Row icon="globe-outline" label="App language" value={settings.appLanguage || 'English'} onPress={() => { if (Platform.OS === 'ios') { Linking.openURL('app-settings:'); } else { Linking.openSettings(); } }} />
+          <Row icon="globe-outline" label="App language" value={settings.appLanguage || 'English'} onPress={() => router.push('/languages')} />
           {/* Appearance — inline dropdown, no navigation */}
           <AppearanceRow />
           <AccentColorRow />

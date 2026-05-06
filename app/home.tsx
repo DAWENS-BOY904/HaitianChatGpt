@@ -1412,25 +1412,15 @@ export default function HomeScreen() {
     if (params.fromImages === '1' && params.imageBase64) {
       setImageAnalyzingOverlay(true);
       const base64 = params.imageBase64;
-      // If no explicit prompt, auto-detect + analyze
-      const promptText = (params.imagePrompt || '').trim() ||
-        'Please analyze this image in full detail. Describe everything you see including subjects, colors, text, mood, and any important details.';
+      const promptText = params.imagePrompt || 'Analyze and describe this image in detail. Tell me everything you see.';
       (async () => {
         try {
           let convId = currentConversation?.id;
           if (!convId) { convId = await createConversation(); }
           if (!convId) return;
-          setSending(true);
-          setGenerating(true);
-          setThinkingMode('analyzing');
           await sendMessage(promptText, undefined, base64, false, currentAIModel);
-        } catch (e: any) {
-          showAlert('Error', e?.message || 'Failed to analyze image');
-        } finally {
-          setImageAnalyzingOverlay(false);
-          setSending(false);
-          setGenerating(false);
-        }
+        } catch (e) {}
+        finally { setImageAnalyzingOverlay(false); }
       })();
     }
   }, [params.fromImages]);

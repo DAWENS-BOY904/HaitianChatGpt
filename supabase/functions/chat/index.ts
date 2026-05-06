@@ -1129,7 +1129,7 @@ serve(async (req) => {
 
         const analysisPrompt = textContent.length > 0
           ? textContent
-          : 'Please analyze this image in full detail. Describe everything you see: the subjects, objects, colors, mood, composition, text (if any), setting, and any notable details. Be thorough and descriptive. If you detect any errors or issues with the image, describe them clearly.';
+          : 'Please analyze this image in full detail. Describe everything you see: the subjects, objects, colors, mood, composition, text (if any), setting, and any notable details. Be thorough and descriptive.';
 
         aiMessages.push({
           role: 'user',
@@ -1356,22 +1356,6 @@ In the meantime, you might want to:
       .from('conversations')
       .update({ updated_at: new Date().toISOString() })
       .eq('id', conversationId);
-
-    // ── Auto-save AI-generated image URLs to media_files ──
-    if (imageUrl && user?.id) {
-      try {
-        await supabaseAdmin.from('media_files').insert({
-          user_id: user.id,
-          file_type: 'image',
-          file_url: imageUrl,
-          file_name: `ai-image-${Date.now()}.jpg`,
-          file_size: 0,
-        });
-        console.log('[chat] AI image auto-saved to media_files');
-      } catch (saveErr: any) {
-        console.log('[chat] Could not auto-save AI image:', saveErr.message);
-      }
-    }
 
     // ── Push notification for long requests (>5s) ──
     const requestDurationMs = Date.now() - requestStartTime;
