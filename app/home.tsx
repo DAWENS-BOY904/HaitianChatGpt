@@ -2038,8 +2038,6 @@ export default function HomeScreen() {
     }
   }, []);
 
-  const displayMessages = isSearchMode && searchQuery ? filteredMessages : (messages || []);
-
   // Compute last user message that has a math expression (for inline calculator)
   const lastMathMessage = useMemo(() => {
     const msgs = displayMessages || [];
@@ -2280,6 +2278,7 @@ export default function HomeScreen() {
     searchInput: { flex: 1, fontSize: 16, color: colors.text, marginLeft: Spacing.sm },
   }), [colors, insets, isDark]);
 
+  const displayMessages = isSearchMode && searchQuery ? filteredMessages : (messages || []);
   const showSendButton = inputText.trim().length > 0 || selectedMedia.length > 0;
   const isRecording = recordingState === 'recording';
   const isProcessing = recordingState === 'processing';
