@@ -2109,39 +2109,6 @@ Be thorough and cite specific facts.`;
 
     if ((!currentText && currentMedia.length === 0) || sending) return;
 
-    // ── Math expression intercept: show CalculatorCard only, never send to AI ──
-    if (!currentEditingId && currentMedia.length === 0 && currentText) {
-      const mathData = detectMathExpression(currentText);
-      if (mathData) {
-        // Add a fake user message + a fake assistant message with the calc result inline
-        // We do this by simply opening the calc modal with the detected expression
-        setInputText('');
-        clearDraft();
-        setCalcExpression(mathData.expression);
-        setCalcResult(mathData.result);
-        setCalcVisible(true);
-        // Also send a minimal message to show the calc card in chat
-        let conversationId = currentConversation?.id;
-        if (!conversationId) {
-          try { conversationId = await createConversation(); } catch (_e) {}
-          if (!conversationId) conversationId = `local-${Date.now()}`;
-        }
-        // Insert user + assistant messages locally without calling AI
-        setSending(true);
-        try {
-          await sendMessage(
-            currentText,
-            undefined,
-            undefined,
-            false,
-            currentAIModel
-          );
-        } catch (_e) {}
-        finally { setSending(false); setGenerating(false); }
-        return;
-      }
-    }
-
     const QUIZ_KEYWORDS = [
       'quiz', 'quizz', 'make me a quiz', 'give me a quiz', 'create a quiz', 'generate a quiz',
       'test my knowledge', 'trivia', 'make quiz', 'create quiz', 'generate quiz',

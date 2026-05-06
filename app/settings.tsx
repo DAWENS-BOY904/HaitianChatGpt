@@ -411,8 +411,6 @@ export default function SettingsScreen() {
   const [profilePhoto, setProfilePhoto] = useState('');
   const [username, setUsername] = useState('');
   const [fullName, setFullName] = useState('');
-  // Cached data so UI shows even offline
-  const PROFILE_CACHE_KEY = `settings_profile_${user?.id || 'unknown'}`;
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editName, setEditName] = useState('');
   const [editUsername, setEditUsername] = useState('');
@@ -440,24 +438,6 @@ export default function SettingsScreen() {
 
   useEffect(() => {
     checkAdminAccess();
-    // Load cached profile first for instant display
-    AsyncStorage.getItem(PROFILE_CACHE_KEY).then(cached => {
-      if (cached) {
-        try {
-          const data = JSON.parse(cached);
-          if (data.username) setUsername(data.username);
-          if (data.full_name) setFullName(data.full_name);
-          if (data.profile_photo_url) {
-            setProfilePhoto(data.profile_photo_url);
-            setGlobalPhoto(data.profile_photo_url);
-          }
-          if (data.full_name || data.username) {
-            setGlobalName(data.full_name || data.username || '');
-            setGlobalUsername(data.username || '');
-          }
-        } catch (_e) {}
-      }
-    }).catch(() => {});
     loadProfile();
   }, [user]);
 
@@ -507,25 +487,19 @@ export default function SettingsScreen() {
 
   const loadProfile = async () => {
     if (!user) return;
-    try {
-      const { data } = await supabase
-        .from('user_profiles')
-        .select('username, profile_photo_url, full_name, username_last_changed')
-        .eq('id', user.id)
-        .single();
-      if (data) {
-        setUsername(data.username || '');
-        setFullName(data.full_name || '');
-        setProfilePhoto(data.profile_photo_url || '');
-        setUsernameLastChanged(data.username_last_changed || null);
-        setGlobalPhoto(data.profile_photo_url || '');
-        setGlobalName(data.full_name || data.username || '');
-        setGlobalUsername(data.username || '');
-        // Persist to cache for offline use
-        AsyncStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(data)).catch(() => {});
-      }
-    } catch (_e) {
-      // Network error — silently use cached data already loaded
+    const { data } = await supabase
+      .from('user_profiles')
+      .select('username, profile_photo_url, full_name, username_last_changed')
+      .eq('id', user.id)
+      .single();
+    if (data) {
+      setUsername(data.username || '');
+      setFullName(data.full_name || '');
+      setProfilePhoto(data.profile_photo_url || '');
+      setUsernameLastChanged(data.username_last_changed || null);
+      setGlobalPhoto(data.profile_photo_url || '');
+      setGlobalName(data.full_name || data.username || '');
+      setGlobalUsername(data.username || '');
     }
   };
 
