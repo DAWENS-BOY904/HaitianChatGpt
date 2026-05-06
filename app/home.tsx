@@ -61,7 +61,6 @@ import { ChatHistoryModal } from '../components/ChatHistoryModal';
 import { ImageSearchResults } from '../components/ImageSearchResults';
 import { AIMode } from '../components/AIModeSelectorModal';
 import { CalculatorModal, CalculatorCard, detectMathExpression } from '../components/CalculatorModal';
-import { SpotifyMusicCard, SpotifyTrack } from '../components/SpotifyMusicCard';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
@@ -1034,12 +1033,6 @@ export default function HomeScreen() {
   const [msgActionsVisible, setMsgActionsVisible] = useState(false);
   const [msgActionsMsg, setMsgActionsMsg] = useState<any>(null);
 
-  // ── Spotify state ──────────────────────────────────────────────────────
-  const [spotifyConnected, setSpotifyConnected] = useState(false);
-  const [spotifyHasAccount, setSpotifyHasAccount] = useState(false);
-  const [spotifyActive, setSpotifyActive] = useState(false);
-  const [spotifyTrackMap, setSpotifyTrackMap] = useState<Record<string, SpotifyTrack[]>>({});
-
   const handleOpenMessageActions = useCallback((msg: any) => {
     setMsgActionsMsg(msg);
     setMsgActionsVisible(true);
@@ -1106,46 +1099,6 @@ export default function HomeScreen() {
       setSavingImageId(null);
     }
   }, [user?.id, supabase, showAlert, savingImageId]);
-
-  useEffect(() => {
-    AsyncStorage.multiGet(['spotify_connected', 'spotify_has_account']).then(results => {
-      if (results[0][1] === 'true') setSpotifyConnected(true);
-      if (results[1][1] === 'true') setSpotifyHasAccount(true);
-    });
-  }, []);
-
-  const MUSIC_KEYWORDS = ['play ', 'music', 'song ', 'songs', 'playlist', 'listen', 'recommend music', 'mizik', 'chanson', 'chante', 'spotify', 'track by', 'artist'];
-
-  const detectMusicIntent = useCallback((text: string): string | null => {
-    const lower = text.toLowerCase();
-    if (MUSIC_KEYWORDS.some(kw => lower.includes(kw))) {
-      return text.replace(/^(play|find me|give me|show me|recommend|search for|i want)\s*/i, '').trim();
-    }
-    return null;
-  }, []);
-
-  const handleSpotifyMusicSearch = useCallback(async (query: string, messageId: string) => {
-    try {
-      const { data, error } = await supabase.functions.invoke('spotify-connect', {
-        body: { action: 'search', query, limit: 6 },
-      });
-      if (!error && data?.tracks?.length > 0) {
-        setSpotifyTrackMap(prev => ({ ...prev, [messageId]: data.tracks }));
-      }
-    } catch (_e) {}
-  }, [supabase]);
-
-  const handleAddToSpotifyLibrary = useCallback(async (track: SpotifyTrack) => {
-    try {
-      const userToken = await AsyncStorage.getItem('spotify_access_token');
-      if (!userToken) throw new Error('No Spotify token');
-      await supabase.functions.invoke('spotify-connect', {
-        body: { action: 'add_to_library', trackId: track.id, userToken },
-      });
-    } catch (e: any) {
-      showAlert('Error', e?.message || 'Could not add to library');
-    }
-  }, [supabase, showAlert]);
 
   useEffect(() => {
     loadDraft().then(draft => { if (draft) setInputText(draft); });
