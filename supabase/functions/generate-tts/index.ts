@@ -171,6 +171,51 @@ async function uploadAudio(audioBytes: Uint8Array, supabaseAdmin: any): Promise<
   }
 }
 
+// ── Language name → ElevenLabs language code map ───────────────────────────
+const LANGUAGE_NAME_TO_CODE: Record<string, string> = {
+  'english': 'en', 'french': 'fr', 'spanish': 'es', 'haitian creole': 'ht',
+  'portuguese': 'pt', 'german': 'de', 'italian': 'it', 'arabic': 'ar',
+  'chinese': 'zh', 'japanese': 'ja', 'korean': 'ko', 'russian': 'ru',
+  'hindi': 'hi', 'dutch': 'nl', 'polish': 'pl', 'swedish': 'sv',
+  'danish': 'da', 'norwegian': 'no', 'finnish': 'fi', 'greek': 'el',
+  'hungarian': 'hu', 'czech': 'cs', 'slovak': 'sk', 'romanian': 'ro',
+  'bulgarian': 'bg', 'ukrainian': 'uk', 'croatian': 'hr', 'turkish': 'tr',
+  'indonesian': 'id', 'malay': 'ms', 'vietnamese': 'vi', 'thai': 'th',
+  'hebrew': 'he', 'persian': 'fa', 'catalan': 'ca', 'afrikaans': 'af',
+  'bengali': 'bn', 'gujarati': 'gu', 'malayalam': 'ml', 'marathi': 'mr',
+  'telugu': 'te', 'punjabi': 'pa', 'urdu': 'ur', 'swahili': 'sw',
+  'tamil': 'ta', 'nepali': 'ne', 'sinhala': 'si', 'khmer': 'km',
+  'lao': 'lo', 'burmese': 'my', 'amharic': 'am', 'somali': 'so',
+  'yoruba': 'yo', 'hausa': 'ha', 'zulu': 'zu', 'xhosa': 'xh',
+  'albanian': 'sq', 'serbian': 'sr', 'macedonian': 'mk', 'icelandic': 'is',
+  'irish': 'ga', 'welsh': 'cy', 'basque': 'eu', 'galician': 'gl',
+  'azerbaijani': 'az', 'kazakh': 'kk', 'uzbek': 'uz', 'georgian': 'ka',
+  'armenian': 'hy', 'mongolian': 'mn', 'pashto': 'ps', 'kurdish': 'ku',
+  'luxembourgish': 'lb', 'maltese': 'mt', 'bosnian': 'bs',
+};
+
+function resolveLanguageCode(mainLanguage?: string, detectedLanguage?: string): string | undefined {
+  if (detectedLanguage) return detectedLanguage;
+  if (!mainLanguage) return undefined;
+  const key = mainLanguage.toLowerCase().trim();
+  return LANGUAGE_NAME_TO_CODE[key] || undefined;
+}
+
+// ── Fetch user mainLanguage from user_settings ────────────────────────────
+async function getUserMainLanguage(userId: string | undefined, supabaseAdmin: any): Promise<string | undefined> {
+  if (!userId) return undefined;
+  try {
+    const { data } = await supabaseAdmin
+      .from('user_settings')
+      .select('main_language')
+      .eq('user_id', userId)
+      .single();
+    return data?.main_language || undefined;
+  } catch (_e) {
+    return undefined;
+  }
+}
+
 // ── Main handler ─────────────────────────────────────────────────────────────
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -202,7 +247,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    const { text, voice, detectedLanguage } = body;
+    const { text, voice, detectedLanguage, userId } = body;
 
     if (!text || typeof text !== 'string' || text.trim().length === 0) {
       return new Response(
@@ -216,22 +261,26 @@ Deno.serve(async (req) => {
       ? resolveElevenLabsVoiceId(voice.trim())
       : CONFIG.DEFAULT_VOICE;
 
-    console.log(`[TTS] Request: voice=${finalVoice} (${KNOWN_ELEVENLABS_VOICES[finalVoice] || 'custom'}), len=${finalText.length}`);
+    // ── Resolve language: detectedLanguage > user mainLanguage setting > auto ──
+    const supabaseAdmin = createClient(CONFIG.SUPABASE_URL!, CONFIG.SUPABASE_SERVICE_ROLE_KEY!);
+    const userMainLang = await getUserMainLanguage(userId, supabaseAdmin);
+    const resolvedLang = resolveLanguageCode(userMainLang, detectedLanguage);
+
+    console.log(`[TTS] Request: voice=${finalVoice} (${KNOWN_ELEVENLABS_VOICES[finalVoice] || 'custom'}), lang=${resolvedLang || 'auto'} (detected=${detectedLanguage}, mainLang=${userMainLang}), len=${finalText.length}`);
 
     // ElevenLabs is the sole provider
-    const audioBuffer = await tryElevenLabsTTS(finalText, finalVoice, detectedLanguage);
+    const audioBuffer = await tryElevenLabsTTS(finalText, finalVoice, resolvedLang);
 
     if (!audioBuffer) {
-      return buildFallbackResponse(finalText, finalVoice, detectedLanguage);
+      return buildFallbackResponse(finalText, finalVoice, resolvedLang);
     }
 
-    const supabaseAdmin = createClient(CONFIG.SUPABASE_URL!, CONFIG.SUPABASE_SERVICE_ROLE_KEY!);
     const audioUint8 = new Uint8Array(audioBuffer);
     const audioUrl = await uploadAudio(audioUint8, supabaseAdmin);
 
     if (!audioUrl) {
       console.error('[TTS] Upload failed — fallback to device TTS');
-      return buildFallbackResponse(finalText, finalVoice, detectedLanguage);
+      return buildFallbackResponse(finalText, finalVoice, resolvedLang);
     }
 
     console.log(`[TTS] Done via ElevenLabs: ${audioUrl}`);
@@ -248,7 +297,8 @@ Deno.serve(async (req) => {
           textLength: finalText.length,
           audioSizeKB: parseFloat((audioUint8.length / 1024).toFixed(1)),
           provider: 'elevenlabs',
-          detectedLanguage: detectedLanguage || null,
+          detectedLanguage: resolvedLang || null,
+          mainLanguage: userMainLang || null,
         },
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
