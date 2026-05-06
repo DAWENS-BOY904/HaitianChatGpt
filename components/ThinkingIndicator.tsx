@@ -50,7 +50,7 @@ function detectIntent(message?: string, mode?: string): IntentType {
   return 'message';
 }
 
-// ── Shimmer glow border around container ──────────────────────────────────
+// ── Shimmer glow border around containers ──────────────────────────────────
 const ShimmerGlowBorder = memo(function ShimmerGlowBorder({
   color,
   visible,
