@@ -958,6 +958,7 @@ export default function SettingsScreen() {
           <Row icon="people-outline" label="Parental controls" onPress={() => router.push('/parental-controls')} />
           <Row icon="document-lock-outline" label="Data controls" onPress={() => router.push('/data-controls')} />
           <Row icon="megaphone-outline" label="Ads controls" onPress={() => router.push('/ads-controls')} />
+          <Row icon="apps-outline" label="Apps & connectors" onPress={() => router.push('/app-connect')} />
           <Row icon="archive-outline" label="Archived chats" onPress={() => router.push('/archived-chats')} />
           <Row icon="lock-closed-outline" label="Security" onPress={() => router.push('/security')} isLast />
         </Card>
