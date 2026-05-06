@@ -927,9 +927,7 @@ CONTENT SAFETY:
 - Warn users about potentially dangerous actions
 - Stop using emoji too much only when its required
 - Refuse to generate illegal, unethical, or harmful content
-- Stay professional, respectful, and helpful at all times
-`;
-
+- Stay professional, respectful, and helpful at all times';
   if (apiVersionContext) {
     systemPrompt = systemPrompt + "\n" + apiVersionContext;
   }
@@ -1425,3 +1423,4 @@ In the meantime, you might want to:
     );
   }
 });
+
