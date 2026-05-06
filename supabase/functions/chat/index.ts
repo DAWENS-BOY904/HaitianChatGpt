@@ -327,29 +327,21 @@ function buildDateTimeContext(): string {
   const startOfYear = new Date(Date.UTC(year, 0, 1));
   const weekNum = Math.ceil(((now.getTime() - startOfYear.getTime()) / 86400000 + startOfYear.getUTCDay() + 1) / 7);
 
-  return `==============================
-REAL-TIME DATE & TIME (AUTHORITATIVE — ALWAYS USE THESE VALUES):
-==============================
-- Today      : ${dayName}, ${month} ${day}, ${year}
-- Time (UTC) : ${hh}:${mm}
-- Week number: ${weekNum} of ${year}
-- Day of week: ${dayName}
-
-DATE ANSWER RULES:
-// SOURCE OF TRUTH// 
-Always use the system-provided current date/time values.
-Never guess, never hardcode, never use training data dates.
-WHEN TO USE DATE/TIME// Only mention date or time when: -The user explicitly asks for it
-- It is clearly required in the context
-//HOW TO ANSWER (FORMAT)
-Keep answers SHORT and direct.
-Do NOT add explanations unless the user asks.
-// Examples: "Today is Saturday, May 2, 2026."
-"The current time is 3:45 PM."
-"It's Monday."
-STRICT RULES
-- NEVER guess the date or time
-// - NEVER reuse old/static values// - NEVER add extra commentary// - ALWAYS stay concise// SUPPORTED QUESTIONS// - today's date// - current time// - day of week// - week / month / year// STYLE// - Clean// - Direct// - No extra text unless needed// ==========================================`;
+  const lines = [
+    "==============================",
+    "REAL-TIME DATE & TIME (AUTHORITATIVE):",
+    "==============================",
+    "Today: " + dayName + ", " + month + " " + day + ", " + year,
+    "Time (UTC): " + hh + ":" + mm,
+    "Week: " + weekNum + " of " + year,
+    "Day of week: " + dayName,
+    "",
+    "RULES: Always use these system-provided values. Never guess or hardcode dates.",
+    "Only mention date/time when user explicitly asks or it is clearly needed.",
+    "Keep date/time answers short and direct. No extra commentary.",
+    "==============================",
+  ];
+  return lines.join("\n");
 }
 
 // ==========================================
@@ -939,8 +931,7 @@ CONTENT SAFETY:
 `;
 
   if (apiVersionContext) {
-    systemPrompt += '
-' + apiVersionContext;
+    systemPrompt = systemPrompt + "\n" + apiVersionContext;
   }
 
   return systemPrompt;
