@@ -456,7 +456,7 @@ export default function SpotifyConnectScreen() {
     const apps = raw ? JSON.parse(raw) : [];
     if (!apps.includes('spotify')) apps.push('spotify');
     await AsyncStorage.setItem('connected_apps', JSON.stringify(apps));
-    // Navigate to home so they can see the chip
+    // Navigate to home so they can see the chips
     setTimeout(() => router.back(), 300);
   };
 
