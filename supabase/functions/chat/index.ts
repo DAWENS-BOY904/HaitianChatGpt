@@ -763,13 +763,14 @@ serve(async function(req: Request) {
     }
 
     // Update conversation timestamp (non-fatal)
-    supabaseAdmin
-      .from('conversations')
-      .update({ updated_at: new Date().toISOString() })
-      .eq('id', conversationId)
-      .catch(function(e: any) {
-        console.log('[chat] Conversation update error (non-fatal):', e?.message);
-      });
+    Promise.resolve(
+      supabaseAdmin
+        .from('conversations')
+        .update({ updated_at: new Date().toISOString() })
+        .eq('id', conversationId)
+    ).then(function() {}).catch(function(e: any) {
+      console.log('[chat] Conversation update error (non-fatal):', e?.message);
+    });
 
     // Auto-save AI-generated image URLs to media_files
     if (imageUrl && user.id) {
