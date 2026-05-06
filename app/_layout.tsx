@@ -107,6 +107,7 @@ export default function RootLayout() {
                     <Stack.Screen name="buy-coins" />
                     <Stack.Screen name="coding" />
                     <Stack.Screen name="voice-settings" />
+                    <Stack.Screen name="Speech-Language" options={{ presentation: 'modal', headerShown: false, animation: 'slide_from_bottom' }} />
                     <Stack.Screen name="voice-select" />
                     <Stack.Screen name="check-subscription" />
                     <Stack.Screen name="revenuecat-setup" />

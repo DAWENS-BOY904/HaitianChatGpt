@@ -954,7 +954,7 @@ export default function SettingsScreen() {
             ═══════════════════════════════════════════════════════════════ */}
         <SectionLabel text="Speech" />
         <Card>
-          <Row icon="globe-outline" label="Main language" value={settings.mainLanguage || 'English'} onPress={() => router.push('/languages')} isLast />
+          <Row icon="globe-outline" label="Main language" value={settings.mainLanguage || 'English'} onPress={() => router.push('/Speech-Language')} isLast />
         </Card>
         <Text style={{
           fontSize: 13,
