@@ -853,15 +853,19 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
     } catch (error: any) {
       if (hardTimeoutId) { clearTimeout(hardTimeoutId); hardTimeoutId = null; }
       abortControllerRef.current = null;
-
-      // Remove temp messages on abort or error
-      setMessages(prev => prev.filter(m => m.id !== userMessageId && m.id !== aiMessageId));
       setStreamingMessageId(null);
 
       if (error?.name === 'AbortError') {
-        // User cancelled — silently ignore
+        // User cancelled — keep the user message visible, just remove the empty AI placeholder
+        setMessages(prev => {
+          // Remove streaming placeholder but KEEP the user message
+          return prev.filter(m => m.id !== aiMessageId);
+        });
         return;
       }
+
+      // On real errors, remove both temp messages so user can retry
+      setMessages(prev => prev.filter(m => m.id !== userMessageId && m.id !== aiMessageId));
       throw error;
     }
   };
