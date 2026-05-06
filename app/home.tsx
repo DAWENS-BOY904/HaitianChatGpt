@@ -1789,7 +1789,7 @@ export default function HomeScreen() {
   };
 
   const handleStopGeneration = useCallback(() => {
-    // Cancel AI generation — keep user message visible, only remove empty AI placeholder
+    // Cancel AI generation — keep users message visible, only remove empty AI placeholder
     cancelSendMessage();
     setSending(false);
     setGenerating(false);
