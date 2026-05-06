@@ -247,7 +247,7 @@ const rnStyles = StyleSheet.create({
 const BASE_QUICK_ACTIONS = [
   { id: 'projects', icon: 'folder-outline', label: 'Projects', color: '#8B5CF6', route: '/project-get' },
   { id: 'images', icon: 'images-outline', label: 'Images', color: '#EC4899', route: '/images' },
-  { id: 'apps', icon: 'grid-outline', label: 'Apps', color: '#6366F1', route: '/gpts' },
+  { id: 'apps', icon: 'grid-outline', label: 'Apps', color: '#6366F1', route: '/app-connect' },
   { id: 'upgrade', icon: 'sparkles', label: 'Upgrade', color: '#7C3AED', isUpgrade: true },
 ];
 
