@@ -681,6 +681,9 @@ export const MessageItem = memo(function MessageItem({
       return <SafetyResponse />;
     }
 
+    // Determine if message has media — media messages cannot be edited
+    const hasMedia = !!(message.imageUrl);
+
     return (
       <>
         <View style={userStyles.container}>
