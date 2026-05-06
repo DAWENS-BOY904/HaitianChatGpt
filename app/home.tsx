@@ -917,7 +917,7 @@ export default function HomeScreen() {
     sendMessage, updateMessageAndRegenerate, createConversation, deleteConversation,
     loading, streamingMessageId, updateConversationTitle, archiveConversation,
     selectConversation, temporaryMode: ctxTempMode, setTemporaryMode: ctxSetTempMode,
-    cancelSendMessage,
+    cancelSendMessage, isOfflineMode,
   } = useConversation();
   const { showAlert } = useAlert();
   const router = useRouter();
@@ -1615,14 +1615,18 @@ export default function HomeScreen() {
     if (!currentEditingId && currentMedia.length === 0 && currentText) {
       const mathData = detectMathExpression(currentText);
       if (mathData) {
+        // Math detected — send to AI and show inline calculator card (no modal)
         setInputText('');
         clearDraft();
         setCalcExpression(mathData.expression);
         setCalcResult(mathData.result);
-        setCalcVisible(true);
         setSending(true);
+        setGenerating(true);
+        setThinkingMode('thinking');
         try {
           await sendMessage(currentText, undefined, undefined, false, currentAIModel);
+          setShowCompletionStatus(true);
+          setTimeout(() => setShowCompletionStatus(false), 2000);
         } catch (_e) {}
         finally { setSending(false); setGenerating(false); }
         return;
@@ -2034,9 +2038,22 @@ export default function HomeScreen() {
     }
   }, []);
 
+  // Compute last user message that has a math expression (for inline calculator)
+  const lastMathMessage = useMemo(() => {
+    const msgs = displayMessages || [];
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      const m = msgs[i];
+      if (m.role === 'user' && detectMathExpression(m.content)) return m;
+    }
+    return null;
+  }, [displayMessages]);
+
   const renderMessage = useCallback(({ item }: { item: any }) => {
     const isStreaming = streamingMessageId === item.id;
-    const mathData = item.role === 'assistant' ? detectMathExpression(item.content) : null;
+    // Show calculator only for the latest math expression (inline, no modal)
+    const mathData = item.role === 'user' && item.id === lastMathMessage?.id
+      ? detectMathExpression(item.content)
+      : null;
     const { cleanContent: msgCleanContent, searchImages: msgSearchImages } = item.role === 'assistant'
       ? parseImageSearchResults(item.content || '')
       : { cleanContent: item.content, searchImages: null };
@@ -2119,7 +2136,6 @@ export default function HomeScreen() {
           <CalculatorCard
             expression={mathData.expression}
             result={mathData.result}
-            onOpen={() => { setCalcExpression(mathData.expression); setCalcResult(mathData.result); setCalcVisible(true); }}
           />
         ) : null}
         {item.role === 'assistant' && detectedImageUrl && user?.id ? (
@@ -2335,6 +2351,15 @@ export default function HomeScreen() {
             <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={0}>
               <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
 
+              {isOfflineMode ? (
+                <View style={{ backgroundColor: '#FF9500', paddingVertical: 4, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Ionicons name="cloud-offline-outline" size={14} color="#FFF" />
+                  <Text style={{ color: '#FFF', fontSize: 12, fontWeight: '600', flex: 1 }}>Offline — showing cached chats</Text>
+                  <TouchableOpacity onPress={() => refreshConversations()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <Text style={{ color: '#FFF', fontSize: 11, fontWeight: '700' }}>Retry</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : null}
               {isOffline ? (
                 <View style={styles.offlineBanner}>
                   <Text style={styles.offlineText}>No connection - some features unavailable</Text>
@@ -2774,7 +2799,7 @@ export default function HomeScreen() {
 
             <ChatHistoryModal visible={chatHistoryVisible} onClose={() => setChatHistoryVisible(false)} onSelectChat={() => { setChatHistoryVisible(false); }} onNewChat={() => { handleNewChat(); setChatHistoryVisible(false); }} currentChatId={currentConversation?.id} />
 
-            <CalculatorModal visible={calcVisible} onClose={() => setCalcVisible(false)} initialExpression={calcExpression} initialResult={calcResult} />
+            {/* CalculatorModal removed — calculator is now inline in chat */}
 
             {/* Quiz Connect */}
             <Modal visible={quizConnectVisible} transparent animationType="fade" onRequestClose={() => setQuizConnectVisible(false)}>

@@ -681,20 +681,22 @@ export const MessageItem = memo(function MessageItem({
       return <SafetyResponse />;
     }
 
+    // Support both camelCase (imageUrl) and snake_case (image_url) field names
+    const displayImage = message.imageUrl || (message as any).image_url || null;
     // Determine if message has media — media messages cannot be edited
-    const hasMedia = !!(message.imageUrl);
+    const hasMedia = !!displayImage || !!(message as any).file_url;
 
     return (
       <>
         <View style={userStyles.container}>
-          {message.imageUrl ? (
+          {displayImage ? (
             <TouchableOpacity
-              onPress={() => handleImagePress(message.imageUrl!, [message.imageUrl!], 0)}
+              onPress={() => handleImagePress(displayImage, [displayImage], 0)}
               activeOpacity={0.88}
-              style={{ alignSelf: 'flex-end', marginHorizontal: 16, marginBottom: 6 }}
+              style={{ alignSelf: 'flex-end', marginHorizontal: 16, marginBottom: content ? 6 : 0 }}
             >
               <Image
-                source={{ uri: message.imageUrl }}
+                source={{ uri: displayImage }}
                 style={{ width: 220, height: 220, borderRadius: 18 }}
                 contentFit="cover"
                 transition={200}
@@ -711,7 +713,7 @@ export const MessageItem = memo(function MessageItem({
           ) : null}
         </View>
 
-        {message.imageUrl ? (
+        {displayImage ? (
           <Modal visible={imageViewerVisible} transparent animationType="fade" onRequestClose={() => setImageViewerVisible(false)} statusBarTranslucent>
             <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.93)', justifyContent: 'center', alignItems: 'center' }}>
               <TouchableOpacity style={{ position: 'absolute', top: Platform.OS === 'ios' ? 56 : 24, right: 20, zIndex: 10, width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' }} onPress={() => setImageViewerVisible(false)}>
