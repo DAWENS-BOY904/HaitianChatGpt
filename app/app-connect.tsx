@@ -10,7 +10,7 @@ import { BlurView } from 'expo-blur';
 import { useTheme } from '../hooks/useTheme';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// ── Types ──────────────────────────────────────────────────────────────────
+// ── Types ─────────────────────────────────────────────────────────────────
 
 interface AppItem {
   id: string;
