@@ -12,6 +12,26 @@ const CONFIG = {
   FOLDER_PATH: 'voice-previews',
 };
 
+// Language name → ElevenLabs language code map
+const LANG_NAME_TO_CODE: Record<string, string> = {
+  'English': 'en', 'Chinese': 'zh', 'Spanish': 'es', 'Hindi': 'hi',
+  'French': 'fr', 'German': 'de', 'Japanese': 'ja', 'Portuguese': 'pt',
+  'Arabic': 'ar', 'Korean': 'ko', 'Italian': 'it', 'Dutch': 'nl',
+  'Polish': 'pl', 'Russian': 'ru', 'Swedish': 'sv', 'Turkish': 'tr',
+  'Indonesian': 'id', 'Filipino': 'fil', 'Malay': 'ms', 'Romanian': 'ro',
+  'Ukrainian': 'uk', 'Greek': 'el', 'Czech': 'cs', 'Danish': 'da',
+  'Finnish': 'fi', 'Norwegian': 'no', 'Hungarian': 'hu', 'Slovak': 'sk',
+  'Bulgarian': 'bg', 'Croatian': 'hr', 'Tamil': 'ta', 'Vietnamese': 'vi',
+  'Thai': 'th', 'Hebrew': 'he', 'Catalan': 'ca', 'Afrikaans': 'af',
+  'Bengali': 'bn', 'Gujarati': 'gu', 'Malayalam': 'ml', 'Marathi': 'mr',
+  'Telugu': 'te', 'Punjabi': 'pa', 'Urdu': 'ur', 'Swahili': 'sw',
+  'Haitian Creole': 'ht', 'Lithuanian': 'lt', 'Latvian': 'lv',
+  'Estonian': 'et', 'Slovenian': 'sl', 'Albanian': 'sq', 'Serbian': 'sr',
+  'Macedonian': 'mk', 'Icelandic': 'is', 'Irish': 'ga', 'Welsh': 'cy',
+  'Azerbaijani': 'az', 'Georgian': 'ka', 'Armenian': 'hy',
+  'Persian': 'fa', 'Mongolian': 'mn', 'Nepali': 'ne',
+};
+
 // ── All valid ElevenLabs voice IDs used in the app ──────────────────────────
 const KNOWN_ELEVENLABS_VOICES: Record<string, string> = {
   'pNInz6obpgDQGcFmaJgB': 'Adam',
@@ -26,22 +46,18 @@ const KNOWN_ELEVENLABS_VOICES: Record<string, string> = {
 };
 
 function resolveElevenLabsVoiceId(voice: string): string {
-  // Direct match — known voice ID
   if (KNOWN_ELEVENLABS_VOICES[voice]) return voice;
-  // Looks like a custom ElevenLabs ID (alphanumeric, 10+ chars)
   if (voice && voice.length >= 10 && /^[a-zA-Z0-9]+$/.test(voice)) return voice;
-  // Fallback to Adam
   return CONFIG.DEFAULT_VOICE;
 }
 
-function getElevenLabsModel(detectedLang?: string): string {
-  if (!detectedLang) return 'eleven_turbo_v2_5';
-  const lang = detectedLang.toLowerCase().split('-')[0];
-  // Use multilingual model for non-English languages
+function getElevenLabsModel(langCode?: string): string {
+  if (!langCode) return 'eleven_turbo_v2_5';
+  const lang = langCode.toLowerCase().split('-')[0];
   const multilingualSupported = [
     'de', 'pl', 'es', 'it', 'fr', 'pt', 'hi', 'ar', 'cs', 'sk', 'ro',
     'bg', 'uk', 'hr', 'fa', 'nl', 'ht', 'zh', 'ja', 'ko', 'tr', 'id',
-    'sv', 'da', 'no', 'fi', 'el', 'hu', 'vi', 'ms',
+    'sv', 'da', 'no', 'fi', 'el', 'hu', 'vi', 'ms', 'ta', 'fil',
   ];
   if (multilingualSupported.includes(lang)) return 'eleven_multilingual_v2';
   return 'eleven_turbo_v2_5';
@@ -53,11 +69,11 @@ function generateFileName(): string {
   return `voice_${timestamp}_${random}.mp3`;
 }
 
-// ── ElevenLabs TTS (sole provider) ──────────────────────────────────────────
+// ── ElevenLabs TTS ────────────────────────────────────────────────────────────
 async function tryElevenLabsTTS(
   text: string,
   voiceId: string,
-  detectedLang?: string,
+  langCode?: string,
   stability = 0.5,
   similarityBoost = 0.78,
 ): Promise<ArrayBuffer | null> {
@@ -67,10 +83,28 @@ async function tryElevenLabsTTS(
     return null;
   }
 
-  const modelId = getElevenLabsModel(detectedLang);
+  const modelId = getElevenLabsModel(langCode);
+
+  // Build request body — only include language_code for multilingual model
+  const requestBody: Record<string, unknown> = {
+    text: text.slice(0, 5000),
+    model_id: modelId,
+    voice_settings: {
+      stability,
+      similarity_boost: similarityBoost,
+      style: 0.0,
+      use_speaker_boost: true,
+    },
+    output_format: 'mp3_44100_128',
+  };
+
+  // language_code only supported by multilingual model
+  if (modelId === 'eleven_multilingual_v2' && langCode && langCode !== 'en') {
+    requestBody.language_code = langCode;
+  }
 
   try {
-    console.log(`[TTS] ElevenLabs: voice=${voiceId}, model=${modelId}, lang=${detectedLang || 'auto'}`);
+    console.log(`[TTS] ElevenLabs: voice=${voiceId}, model=${modelId}, lang=${langCode || 'auto'}`);
     const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
       method: 'POST',
       headers: {
@@ -78,17 +112,7 @@ async function tryElevenLabsTTS(
         'Content-Type': 'application/json',
         'Accept': 'audio/mpeg',
       },
-      body: JSON.stringify({
-        text: text.slice(0, 5000),
-        model_id: modelId,
-        voice_settings: {
-          stability,
-          similarity_boost: similarityBoost,
-          style: 0.0,
-          use_speaker_boost: true,
-        },
-        output_format: 'mp3_44100_128',
-      }),
+      body: JSON.stringify(requestBody),
       signal: AbortSignal.timeout(45000),
     });
 
@@ -114,8 +138,8 @@ async function tryElevenLabsTTS(
 }
 
 // ── Device TTS fallback ────────────────────────────────────────────────────
-function buildFallbackResponse(text: string, voice: string, detectedLang?: string): Response {
-  const lang = detectedLang || 'en-US';
+function buildFallbackResponse(text: string, voice: string, langCode?: string): Response {
+  const lang = langCode || 'en-US';
   console.log('[TTS] ElevenLabs unavailable — returning device TTS fallback');
   return new Response(
     JSON.stringify({
@@ -150,7 +174,6 @@ async function uploadAudio(audioBytes: Uint8Array, supabaseAdmin: any): Promise<
 
     if (error) {
       console.error('[TTS] Storage upload error:', error.message);
-      // Retry with alt path
       const altPath = `tts/${fileName}`;
       const { error: altErr } = await supabaseAdmin.storage
         .from(CONFIG.BUCKET_NAME)
@@ -202,7 +225,30 @@ Deno.serve(async (req) => {
       );
     }
 
-    const { text, voice, detectedLanguage } = body;
+    const { text, voice, detectedLanguage, userId } = body;
+
+    // ── Resolve language: detectedLanguage → user mainLanguage setting ────────
+    let resolvedLangCode: string | undefined = detectedLanguage;
+
+    if (!resolvedLangCode && userId) {
+      try {
+        const supabaseAdmin = createClient(CONFIG.SUPABASE_URL!, CONFIG.SUPABASE_SERVICE_ROLE_KEY!);
+        const { data: settingsData } = await supabaseAdmin
+          .from('user_settings')
+          .select('main_language')
+          .eq('user_id', userId)
+          .single();
+        if (settingsData?.main_language) {
+          const mapped = LANG_NAME_TO_CODE[settingsData.main_language];
+          if (mapped) {
+            resolvedLangCode = mapped;
+            console.log(`[TTS] mainLanguage from settings: "${settingsData.main_language}" → "${mapped}"`);
+          }
+        }
+      } catch (e: any) {
+        console.log('[TTS] Could not fetch user mainLanguage:', e.message);
+      }
+    }
 
     if (!text || typeof text !== 'string' || text.trim().length === 0) {
       return new Response(
@@ -216,13 +262,12 @@ Deno.serve(async (req) => {
       ? resolveElevenLabsVoiceId(voice.trim())
       : CONFIG.DEFAULT_VOICE;
 
-    console.log(`[TTS] Request: voice=${finalVoice} (${KNOWN_ELEVENLABS_VOICES[finalVoice] || 'custom'}), len=${finalText.length}`);
+    console.log(`[TTS] Request: voice=${finalVoice} (${KNOWN_ELEVENLABS_VOICES[finalVoice] || 'custom'}), len=${finalText.length}, lang=${resolvedLangCode || 'auto'}`);
 
-    // ElevenLabs is the sole provider
-    const audioBuffer = await tryElevenLabsTTS(finalText, finalVoice, detectedLanguage);
+    const audioBuffer = await tryElevenLabsTTS(finalText, finalVoice, resolvedLangCode);
 
     if (!audioBuffer) {
-      return buildFallbackResponse(finalText, finalVoice, detectedLanguage);
+      return buildFallbackResponse(finalText, finalVoice, resolvedLangCode);
     }
 
     const supabaseAdmin = createClient(CONFIG.SUPABASE_URL!, CONFIG.SUPABASE_SERVICE_ROLE_KEY!);
@@ -231,7 +276,7 @@ Deno.serve(async (req) => {
 
     if (!audioUrl) {
       console.error('[TTS] Upload failed — fallback to device TTS');
-      return buildFallbackResponse(finalText, finalVoice, detectedLanguage);
+      return buildFallbackResponse(finalText, finalVoice, resolvedLangCode);
     }
 
     console.log(`[TTS] Done via ElevenLabs: ${audioUrl}`);
@@ -248,7 +293,7 @@ Deno.serve(async (req) => {
           textLength: finalText.length,
           audioSizeKB: parseFloat((audioUint8.length / 1024).toFixed(1)),
           provider: 'elevenlabs',
-          detectedLanguage: detectedLanguage || null,
+          detectedLanguage: resolvedLangCode || null,
         },
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

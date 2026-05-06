@@ -155,18 +155,70 @@ export default function ImagesScreen() {
   const [viewerUrl, setViewerUrl] = useState<string | null>(null);
   const pollRef = useRef<any>(null);
 
-  // ── Load my images ──
+  // ── Load my images (from media_files + AI-generated images in messages) ──
   const loadMyImages = useCallback(async () => {
     if (!user?.id) return;
     try {
-      const { data } = await supabase
+      // 1. Explicitly saved images (media_files table)
+      const { data: savedImages } = await supabase
         .from('media_files')
-        .select('*')
+        .select('id, file_url, created_at')
         .eq('user_id', user.id)
         .eq('file_type', 'image')
         .order('created_at', { ascending: false })
         .limit(50);
-      if (data) setMyImages(data);
+
+      // 2. AI-generated image URLs extracted from assistant messages
+      const { data: convData } = await supabase
+        .from('conversations')
+        .select('id')
+        .eq('user_id', user.id)
+        .order('updated_at', { ascending: false })
+        .limit(20);
+
+      let aiImages: Array<{ id: string; file_url: string; created_at: string }> = [];
+      if (convData && convData.length > 0) {
+        const convIds = convData.map((c: any) => c.id);
+        const { data: msgData } = await supabase
+          .from('messages')
+          .select('id, content, image_url, created_at')
+          .in('conversation_id', convIds)
+          .eq('role', 'assistant')
+          .order('created_at', { ascending: false })
+          .limit(100);
+
+        if (msgData) {
+          const urlRegex = /https?:\/\/[^\s"')]+\.(?:jpg|jpeg|png|webp|gif)/gi;
+          for (const msg of msgData) {
+            // Check image_url field
+            if (msg.image_url && msg.image_url.startsWith('http')) {
+              aiImages.push({ id: `ai-msg-${msg.id}`, file_url: msg.image_url, created_at: msg.created_at });
+            }
+            // Extract image URLs from content
+            const matches = (msg.content || '').match(urlRegex);
+            if (matches) {
+              for (const url of matches) {
+                if (!aiImages.find(i => i.file_url === url)) {
+                  aiImages.push({ id: `ai-url-${msg.id}-${url.slice(-8)}`, file_url: url, created_at: msg.created_at });
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // Merge: saved images first, then AI images, deduplicate by URL
+      const seenUrls = new Set<string>();
+      const merged: Array<{ id: string; file_url: string; created_at: string }> = [];
+      for (const img of [...(savedImages || []), ...aiImages]) {
+        if (!seenUrls.has(img.file_url)) {
+          seenUrls.add(img.file_url);
+          merged.push(img);
+        }
+      }
+      // Sort by created_at desc
+      merged.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      setMyImages(merged.slice(0, 60));
     } catch (_e) {}
   }, [user?.id, supabase]);
 
@@ -452,7 +504,7 @@ export default function ImagesScreen() {
         <View style={[s.sectionHeader, { marginTop: 28 }]}>
           <Text style={[s.sectionTitle, { color: isDark ? '#FFF' : '#000' }]}>My Images</Text>
           <Text style={[s.sectionSub, { color: textSec }]}>
-            {myImages.length > 0 ? `${myImages.length} photo${myImages.length !== 1 ? 's' : ''}` : 'Appears after AI generates one'}
+            {myImages.length > 0 ? `${myImages.length} image${myImages.length !== 1 ? 's' : ''} (uploads + AI generated)` : 'Your uploads and AI-generated images appear here'}
           </Text>
         </View>
 
