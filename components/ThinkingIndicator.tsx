@@ -421,10 +421,10 @@ export function ThinkingIndicator({
   // ── Completed state ──
   if (completed) {
     const doneMap: Record<IntentType, string> = {
-      image: '✨ Image created',
-      file: '📄 File ready',
-      web_search: '🔍 Search complete',
-      message: '✓ Done',
+      image: 'Image created',
+      file: 'File ready',
+      web_search: 'Search complete',
+      message: 'Done',
     };
     return (
       <AnimatedEntry>
