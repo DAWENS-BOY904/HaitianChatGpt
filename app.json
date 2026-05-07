@@ -21,7 +21,7 @@
         "foregroundImage": "./assets/images/logo.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.onspace.dawinixht",
+      "package": "com.onspace.dawinix-ht",
       "versionCode": 1,
       "edgeToEdgeEnabled": true
     },

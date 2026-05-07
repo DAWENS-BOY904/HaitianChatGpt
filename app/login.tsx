@@ -29,7 +29,7 @@ import { createClient } from '@supabase/supabase-js';
 // ── AI Logo ──
 const AI_LOGO_URL = 'https://uzxmmddivzqjhcnnrkns.supabase.co/storage/v1/object/public/logo/logo.png';
 
-// ── NOUVO SUPABASE POU APPLE LOGIN AK PHONE LOGIN ──
+// ── NOUVO SUPABASE POU APPLE LOGIN SELMAN ──
 const MY_SUPABASE_URL = 'https://uzxmmddivzqjhcnnrkns.supabase.co';
 const MY_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV6eG1tZGRpdnpxamhjbm5ya25zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY0MTY5MjEsImV4cCI6MjA5MTk5MjkyMX0.6PYtbRps9YJjvX5ibxGy346uA82RadEEpFrhSHa1UIE';
 
@@ -41,7 +41,7 @@ const appleSupabase = createClient(MY_SUPABASE_URL, MY_SUPABASE_ANON_KEY, {
   },
 });
 
-// ── COUNTRY LIST (10 peyi) ──
+// ── COUNTRY LIST (10 pou kounye a, men fonksyon pou ajoute plis) ──
 interface Country {
   name: string;
   code: string;
@@ -141,13 +141,10 @@ export default function LoginScreen() {
   const [appleLoading, setAppleLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [guestModalVisible, setGuestModalVisible] = useState(false);
-  
-  // ── PHONE STATE ──
   const [isPhoneMode, setIsPhoneMode] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState('');
   const [selectedCountry, setSelectedCountry] = useState<Country>(COUNTRIES[0]);
   const [showCountryList, setShowCountryList] = useState(false);
-  const [phoneLoading, setPhoneLoading] = useState(false);
 
   useEffect(() => {
     checkForPasskeyLogin();
@@ -267,46 +264,13 @@ export default function LoginScreen() {
     }
   };
 
-  // ═══════════════════════════════════════════════════════════════
-  // ── PHONE LOGIN AK MEME SUPABASE KI APPLE (DIRÈKT) ──
-  // ═══════════════════════════════════════════════════════════════
   const handlePhoneContinue = async () => {
     if (!phoneNumber.trim()) {
       showAlert('Error', 'Please enter your phone number');
       return;
     }
-    
-    const digits = phoneNumber.replace(/\D/g, '');
-    if (digits.length < 6) {
-      showAlert('Error', 'Please enter a valid phone number');
-      return;
-    }
-
-    setPhoneLoading(true);
-    try {
-      // SENBOL: Itilize appleSupabase (menm kliyan ak Apple Sign In)
-      const fullPhone = `${selectedCountry.dialCode}${digits}`;
-      
-      const { error: otpError } = await appleSupabase.auth.signInWithOtp({ 
-        phone: fullPhone 
-      });
-
-      if (otpError) throw otpError;
-
-      // Si OTP voye kòrèkteman, navige nan verify-code
-      router.push({
-        pathname: '/verify-code',
-        params: {
-          phone: fullPhone,
-          formattedPhone: `${selectedCountry.flag} ${selectedCountry.dialCode} ${formatPhoneDisplay(digits)}`,
-          mode: 'phone_login',
-        },
-      });
-    } catch (err: any) {
-      showAlert('Error', err?.message || 'Failed to send verification code.');
-    } finally {
-      setPhoneLoading(false);
-    }
+    const fullNumber = `${selectedCountry.dialCode} ${phoneNumber}`;
+    router.push({ pathname: '/verify-phone', params: { phone: fullNumber } });
   };
 
   const handleGoogleSignIn = async () => {
@@ -343,19 +307,6 @@ export default function LoginScreen() {
   const selectCountry = (country: Country) => {
     setSelectedCountry(country);
     setShowCountryList(false);
-  };
-
-  const handlePhoneChange = (text: string) => {
-    const digits = text.replace(/\D/g, '');
-    setPhoneNumber(digits);
-  };
-
-  const formatPhoneDisplay = (raw: string): string => {
-    const digits = raw.replace(/\D/g, '');
-    if (digits.length <= 3) return digits;
-    if (digits.length <= 6) return `${digits.slice(0, 3)} ${digits.slice(3)}`;
-    if (digits.length <= 10) return `${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6)}`;
-    return `${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6, 10)} ${digits.slice(10)}`;
   };
 
   const handleAppleSignIn = async () => {
@@ -416,104 +367,279 @@ export default function LoginScreen() {
   };
 
   const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: colors.background },
+    container: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
     closeButton: {
       position: 'absolute',
       top: Platform.select({ ios: insets.top + 16, android: insets.top + 16, default: 16 }),
-      right: 20, width: 40, height: 40, borderRadius: 20,
-      backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center',
-      zIndex: 10, borderWidth: 1, borderColor: colors.border,
+      right: 20,
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      backgroundColor: colors.surface,
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 10,
+      borderWidth: 1,
+      borderColor: colors.border,
     },
     content: {
-      flex: 1, paddingHorizontal: Spacing.xl,
-      paddingTop: Platform.select({ ios: insets.top + 80, android: insets.top + 80, default: 80 }),
+      flex: 1,
+      paddingHorizontal: Spacing.xl,
+      paddingTop: Platform.select({
+        ios: insets.top + 80,
+        android: insets.top + 80,
+        default: 80,
+      }),
     },
-    title: { fontSize: 34, fontWeight: '700', color: colors.text, marginBottom: Spacing.xl, textAlign: 'center' },
+    title: {
+      fontSize: 34,
+      fontWeight: '700',
+      color: colors.text,
+      marginBottom: Spacing.xl,
+      textAlign: 'center',
+    },
     description: {
-      ...Typography.body, color: colors.textSecondary,
-      textAlign: 'center', marginBottom: Spacing.xxl, lineHeight: 22,
+      ...Typography.body,
+      color: colors.textSecondary,
+      textAlign: 'center',
+      marginBottom: Spacing.xxl,
+      lineHeight: 22,
     },
     inputContainer: {
-      backgroundColor: colors.surface, borderRadius: BorderRadius.lg,
-      paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm,
-      marginBottom: Spacing.md, borderWidth: 1, borderColor: colors.border,
+      backgroundColor: colors.surface,
+      borderRadius: BorderRadius.lg,
+      paddingHorizontal: Spacing.md,
+      paddingVertical: Spacing.sm,
+      marginBottom: Spacing.md,
+      borderWidth: 1,
+      borderColor: colors.border,
     },
-    inputLabel: { ...Typography.caption, color: colors.textSecondary, fontSize: 12, marginBottom: 4 },
-    input: { ...Typography.body, color: colors.text, fontSize: 16, padding: 0 },
-    // PHONE STYLES
+    inputLabel: {
+      ...Typography.caption,
+      color: colors.textSecondary,
+      fontSize: 12,
+      marginBottom: 4,
+    },
+    input: {
+      ...Typography.body,
+      color: colors.text,
+      fontSize: 16,
+      padding: 0,
+    },
+    // PHONE INPUT STYLES
     countrySelector: {
-      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-      backgroundColor: colors.surface, borderRadius: BorderRadius.lg,
-      paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm,
-      marginBottom: Spacing.sm, borderWidth: 1, borderColor: colors.border,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      backgroundColor: colors.surface,
+      borderRadius: BorderRadius.lg,
+      paddingHorizontal: Spacing.md,
+      paddingVertical: Spacing.sm,
+      marginBottom: Spacing.sm,
+      borderWidth: 1,
+      borderColor: colors.border,
     },
-    countrySelectorLeft: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
-    countryFlag: { fontSize: 20 },
-    countryName: { ...Typography.body, color: colors.text, fontSize: 16 },
-    countryDialCode: { ...Typography.body, color: colors.textSecondary, fontSize: 14 },
+    countrySelectorLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: Spacing.sm,
+    },
+    countryFlag: {
+      fontSize: 20,
+    },
+    countryName: {
+      ...Typography.body,
+      color: colors.text,
+      fontSize: 16,
+    },
+    countryDialCode: {
+      ...Typography.body,
+      color: colors.textSecondary,
+      fontSize: 14,
+    },
     phoneInputContainer: {
-      backgroundColor: colors.surface, borderRadius: BorderRadius.lg,
-      paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm,
-      marginBottom: Spacing.md, borderWidth: 1, borderColor: colors.border,
+      backgroundColor: colors.surface,
+      borderRadius: BorderRadius.lg,
+      paddingHorizontal: Spacing.md,
+      paddingVertical: Spacing.sm,
+      marginBottom: Spacing.md,
+      borderWidth: 1,
+      borderColor: colors.border,
     },
-    phoneInputLabel: { ...Typography.caption, color: colors.textSecondary, fontSize: 12, marginBottom: 4 },
-    phoneInput: { ...Typography.body, color: colors.text, fontSize: 16, padding: 0 },
+    phoneInputLabel: {
+      ...Typography.caption,
+      color: colors.textSecondary,
+      fontSize: 12,
+      marginBottom: 4,
+    },
+    phoneInput: {
+      ...Typography.body,
+      color: colors.text,
+      fontSize: 16,
+      padding: 0,
+    },
+    // COUNTRY LIST STYLES
     countryListContainer: {
-      backgroundColor: colors.surface, borderRadius: BorderRadius.lg,
-      marginTop: 6, marginBottom: Spacing.md,
-      borderWidth: 1, borderColor: colors.border, maxHeight: 250,
+      backgroundColor: colors.surface,
+      borderRadius: BorderRadius.lg,
+      marginTop: 6,
+      marginBottom: Spacing.md,
+      borderWidth: 1,
+      borderColor: colors.border,
+      maxHeight: 250,
     },
     countryItem: {
-      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-      padding: 12, borderBottomWidth: 1, borderColor: colors.border,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      padding: 12,
+      borderBottomWidth: 1,
+      borderColor: colors.border,
     },
-    countryItemLeft: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
-    countryItemText: { ...Typography.body, color: colors.text, fontSize: 15 },
-    countryItemDial: { ...Typography.body, color: colors.textSecondary, fontSize: 14 },
+    countryItemLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: Spacing.sm,
+    },
+    countryItemText: {
+      ...Typography.body,
+      color: colors.text,
+      fontSize: 15,
+    },
+    countryItemDial: {
+      ...Typography.body,
+      color: colors.textSecondary,
+      fontSize: 14,
+    },
     continueButton: {
-      backgroundColor: colors.text, borderRadius: BorderRadius.full,
-      padding: Spacing.md, alignItems: 'center', marginBottom: Spacing.md,
+      backgroundColor: colors.text,
+      borderRadius: BorderRadius.full,
+      padding: Spacing.md,
+      alignItems: 'center',
+      marginBottom: Spacing.md,
     },
     continueButtonDisabled: { opacity: 0.3 },
-    continueButtonText: { ...Typography.body, color: colors.background, fontWeight: '600', fontSize: 16 },
-    divider: { flexDirection: 'row', alignItems: 'center', marginBottom: Spacing.xl },
+    continueButtonText: {
+      ...Typography.body,
+      color: colors.background,
+      fontWeight: '600',
+      fontSize: 16,
+    },
+    divider: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: Spacing.xl,
+    },
     dividerLine: { flex: 1, height: 1, backgroundColor: colors.border },
-    dividerText: { ...Typography.body, color: colors.textSecondary, paddingHorizontal: Spacing.md },
+    dividerText: {
+      ...Typography.body,
+      color: colors.textSecondary,
+      paddingHorizontal: Spacing.md,
+    },
     appleButton: {
-      flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-      backgroundColor: '#000000', borderRadius: BorderRadius.full,
-      padding: Spacing.md, marginBottom: Spacing.md,
-      borderWidth: 1, borderColor: '#000000', gap: Spacing.sm,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: '#000000',
+      borderRadius: BorderRadius.full,
+      padding: Spacing.md,
+      marginBottom: Spacing.md,
+      borderWidth: 1,
+      borderColor: '#000000',
+      gap: Spacing.sm,
       opacity: appleLoading ? 0.7 : 1,
     },
-    appleButtonText: { ...Typography.body, color: '#FFFFFF', fontSize: 16, fontWeight: '500' },
+    appleButtonText: {
+      ...Typography.body,
+      color: '#FFFFFF',
+      fontSize: 16,
+      fontWeight: '500',
+    },
     oauthButton: {
-      flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-      backgroundColor: colors.surface, borderRadius: BorderRadius.full,
-      padding: Spacing.md, marginBottom: Spacing.md,
-      borderWidth: 1.5, borderColor: colors.border, gap: Spacing.sm,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.surface,
+      borderRadius: BorderRadius.full,
+      padding: Spacing.md,
+      marginBottom: Spacing.md,
+      borderWidth: 1.5,
+      borderColor: colors.border,
+      gap: Spacing.sm,
       opacity: operationLoading ? 0.7 : 1,
     },
-    oauthButtonText: { ...Typography.body, color: colors.text, fontSize: 16, fontWeight: '500' },
+    oauthButtonText: {
+      ...Typography.body,
+      color: colors.text,
+      fontSize: 16,
+      fontWeight: '500',
+    },
   });
 
   const pkStyles = StyleSheet.create({
     overlay: {
-      ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.92)',
-      justifyContent: 'center', alignItems: 'center', zIndex: 999, paddingHorizontal: 32,
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: 'rgba(0,0,0,0.92)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      zIndex: 999,
+      paddingHorizontal: 32,
     },
-    card: { width: '100%', alignItems: 'center', paddingVertical: 48 },
+    card: {
+      width: '100%',
+      alignItems: 'center',
+      paddingVertical: 48,
+    },
     iconWrap: {
-      width: 100, height: 100, borderRadius: 50, backgroundColor: 'rgba(255,255,255,0.1)',
-      alignItems: 'center', justifyContent: 'center', marginBottom: 28,
-      borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)',
+      width: 100,
+      height: 100,
+      borderRadius: 50,
+      backgroundColor: 'rgba(255,255,255,0.1)',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 28,
+      borderWidth: 1,
+      borderColor: 'rgba(255,255,255,0.15)',
     },
-    title: { fontSize: 26, fontWeight: '700', color: '#FFFFFF', marginBottom: 10, textAlign: 'center' },
-    subtitle: { fontSize: 15, color: 'rgba(255,255,255,0.55)', textAlign: 'center', lineHeight: 22, marginBottom: 48 },
-    primaryBtn: { width: '100%', backgroundColor: '#FFFFFF', borderRadius: 50, paddingVertical: 16, alignItems: 'center', marginBottom: 14 },
-    primaryBtnText: { fontSize: 17, fontWeight: '700', color: '#000000' },
-    secondaryBtn: { paddingVertical: 12, paddingHorizontal: 24 },
-    secondaryBtnText: { fontSize: 16, color: 'rgba(255,255,255,0.5)', fontWeight: '500' },
+    title: {
+      fontSize: 26,
+      fontWeight: '700',
+      color: '#FFFFFF',
+      marginBottom: 10,
+      textAlign: 'center',
+    },
+    subtitle: {
+      fontSize: 15,
+      color: 'rgba(255,255,255,0.55)',
+      textAlign: 'center',
+      lineHeight: 22,
+      marginBottom: 48,
+    },
+    primaryBtn: {
+      width: '100%',
+      backgroundColor: '#FFFFFF',
+      borderRadius: 50,
+      paddingVertical: 16,
+      alignItems: 'center',
+      marginBottom: 14,
+    },
+    primaryBtnText: {
+      fontSize: 17,
+      fontWeight: '700',
+      color: '#000000',
+    },
+    secondaryBtn: {
+      paddingVertical: 12,
+      paddingHorizontal: 24,
+    },
+    secondaryBtnText: {
+      fontSize: 16,
+      color: 'rgba(255,255,255,0.5)',
+      fontWeight: '500',
+    },
   });
 
   return (
@@ -524,14 +650,31 @@ export default function LoginScreen() {
         <View style={pkStyles.overlay}>
           <View style={pkStyles.card}>
             <View style={pkStyles.iconWrap}>
-              <Ionicons name={passkeyBiometricLabel === 'Face ID' ? 'scan-outline' : 'finger-print-outline'} size={52} color="#FFFFFF" />
+              <Ionicons
+                name={passkeyBiometricLabel === 'Face ID' ? 'scan-outline' : 'finger-print-outline'}
+                size={52}
+                color="#FFFFFF"
+              />
             </View>
             <Text style={pkStyles.title}>Sign in faster</Text>
-            <Text style={pkStyles.subtitle}>Use {passkeyBiometricLabel} to sign in to your account</Text>
-            <TouchableOpacity style={pkStyles.primaryBtn} onPress={handlePasskeyAuthenticate} disabled={passkeyLoading}>
-              {passkeyLoading ? <ActivityIndicator color="#000" /> : <Text style={pkStyles.primaryBtnText}>Sign in with {passkeyBiometricLabel}</Text>}
+            <Text style={pkStyles.subtitle}>
+              Use {passkeyBiometricLabel} to sign in to your account
+            </Text>
+            <TouchableOpacity
+              style={pkStyles.primaryBtn}
+              onPress={handlePasskeyAuthenticate}
+              disabled={passkeyLoading}
+            >
+              {passkeyLoading ? (
+                <ActivityIndicator color="#000" />
+              ) : (
+                <Text style={pkStyles.primaryBtnText}>Sign in with {passkeyBiometricLabel}</Text>
+              )}
             </TouchableOpacity>
-            <TouchableOpacity style={pkStyles.secondaryBtn} onPress={() => setShowPasskeyPrompt(false)}>
+            <TouchableOpacity
+              style={pkStyles.secondaryBtn}
+              onPress={() => setShowPasskeyPrompt(false)}
+            >
               <Text style={pkStyles.secondaryBtnText}>Use password instead</Text>
             </TouchableOpacity>
           </View>
@@ -547,29 +690,42 @@ export default function LoginScreen() {
           <AILogo size={72} />
         </View>
         <Text style={styles.title}>Log in or sign up</Text>
-        <Text style={styles.description}>You will get smarter responses and can upload files, images and more.</Text>
+        <Text style={styles.description}>
+          You will get smarter responses and can upload files, images and more.
+        </Text>
 
-        {/* PHONE INPUT OR EMAIL INPUT */}
+        {/* PHONE INPUT */}
         {isPhoneMode ? (
           <>
-            {/* Country Selector */}
-            <TouchableOpacity style={styles.countrySelector} onPress={() => setShowCountryList(!showCountryList)} activeOpacity={0.7}>
+            {/* Country Selector - ANLE */}
+            <TouchableOpacity
+              style={styles.countrySelector}
+              onPress={() => setShowCountryList(!showCountryList)}
+              activeOpacity={0.7}
+            >
               <View style={styles.countrySelectorLeft}>
                 <Text style={styles.countryFlag}>{selectedCountry.flag}</Text>
                 <Text style={styles.countryName}>{selectedCountry.name}</Text>
                 <Text style={styles.countryDialCode}>({selectedCountry.dialCode})</Text>
               </View>
-              <Ionicons name={showCountryList ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textSecondary} />
+              <Ionicons
+                name={showCountryList ? 'chevron-up' : 'chevron-down'}
+                size={18}
+                color={colors.textSecondary}
+              />
             </TouchableOpacity>
 
-            {/* Country List */}
+            {/* Country List Dropdown */}
             {showCountryList && (
               <View style={styles.countryListContainer}>
                 <ScrollView showsVerticalScrollIndicator={false}>
                   {COUNTRIES.map((country, index) => (
                     <TouchableOpacity
                       key={country.code}
-                      style={[styles.countryItem, index === COUNTRIES.length - 1 && { borderBottomWidth: 0 }]}
+                      style={[
+                        styles.countryItem,
+                        index === COUNTRIES.length - 1 && { borderBottomWidth: 0 }
+                      ]}
                       onPress={() => selectCountry(country)}
                       activeOpacity={0.7}
                     >
@@ -584,41 +740,56 @@ export default function LoginScreen() {
               </View>
             )}
 
-            {/* Phone Input */}
+            {/* Phone Number Input - ANBA */}
             <View style={styles.phoneInputContainer}>
               <Text style={styles.phoneInputLabel}>Phone number</Text>
               <TextInput
                 style={styles.phoneInput}
                 placeholder={`${selectedCountry.dialCode} (305) 896-2443`}
                 placeholderTextColor={colors.textSecondary}
-                value={formatPhoneDisplay(phoneNumber)}
-                onChangeText={handlePhoneChange}
+                value={phoneNumber}
+                onChangeText={setPhoneNumber}
                 keyboardType="phone-pad"
-                editable={!operationLoading && !phoneLoading}
+                editable={!operationLoading}
                 accessibilityLabel="Phone number"
               />
             </View>
           </>
         ) : (
+          /* EMAIL INPUT */
           <View style={styles.inputContainer}>
             <Text style={styles.inputLabel}>Email</Text>
             <TextInput
               style={styles.input}
-              placeholder="" placeholderTextColor={colors.textSecondary}
-              value={email} onChangeText={handleEmailChange}
-              autoCapitalize="none" keyboardType="email-address"
-              editable={!operationLoading} accessibilityLabel="Email address"
+              placeholder=""
+              placeholderTextColor={colors.textSecondary}
+              value={email}
+              onChangeText={handleEmailChange}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              editable={!operationLoading}
+              accessibilityLabel="Email address"
             />
           </View>
         )}
 
         {/* EMAIL SUGGESTIONS */}
         {!isPhoneMode && showSuggestions && (
-          <View style={{ backgroundColor: colors.surface, borderRadius: 10, marginTop: 6, borderWidth: 1, borderColor: colors.border }}>
+          <View style={{
+            backgroundColor: colors.surface,
+            borderRadius: 10,
+            marginTop: 6,
+            borderWidth: 1,
+            borderColor: colors.border,
+          }}>
             {suggestions.map((item, index) => (
               <TouchableOpacity
                 key={index}
-                style={{ padding: 12, borderBottomWidth: index !== suggestions.length - 1 ? 1 : 0, borderColor: colors.border }}
+                style={{
+                  padding: 12,
+                  borderBottomWidth: index !== suggestions.length - 1 ? 1 : 0,
+                  borderColor: colors.border,
+                }}
                 onPress={() => { setEmail(item); setShowSuggestions(false); }}
               >
                 <Text style={{ color: colors.text }}>{item}</Text>
@@ -629,14 +800,21 @@ export default function LoginScreen() {
 
         {/* CONTINUE BUTTON */}
         <TouchableOpacity
-          style={[styles.continueButton, (isPhoneMode ? !phoneNumber.trim() : !email.trim()) && styles.continueButtonDisabled]}
+          style={[
+            styles.continueButton,
+            (isPhoneMode ? !phoneNumber.trim() : !email.trim()) && styles.continueButtonDisabled
+          ]}
           onPress={isPhoneMode ? handlePhoneContinue : handleEmailContinue}
-          disabled={(isPhoneMode ? !phoneNumber.trim() : !email.trim()) || operationLoading || adminCodeSending || phoneLoading}
+          disabled={(isPhoneMode ? !phoneNumber.trim() : !email.trim()) || operationLoading || adminCodeSending}
+          accessibilityLabel={isPhoneMode ? "Continue with phone" : "Continue with email"}
+          accessibilityRole="button"
         >
-          {adminCodeSending || phoneLoading ? (
+          {adminCodeSending ? (
             <ActivityIndicator size="small" color={colors.background} />
           ) : (
-            <Text style={styles.continueButtonText}>{operationLoading ? 'Processing...' : 'Continue'}</Text>
+            <Text style={styles.continueButtonText}>
+              {operationLoading ? 'Processing...' : 'Continue'}
+            </Text>
           )}
         </TouchableOpacity>
 
@@ -646,30 +824,69 @@ export default function LoginScreen() {
           <View style={styles.dividerLine} />
         </View>
 
-        {/* Google */}
-        <TouchableOpacity style={[styles.oauthButton, { opacity: googleLoading ? 0.7 : 1 }]} onPress={handleGoogleSignIn} disabled={googleLoading || operationLoading}>
-          {googleLoading ? <ActivityIndicator size="small" color={colors.text} /> : (
-            <><Ionicons name="logo-google" size={20} color={colors.text} /><Text style={styles.oauthButtonText}>Continue with Google</Text></>
+        {/* Google Button */}
+        <TouchableOpacity
+          style={[styles.oauthButton, { opacity: googleLoading ? 0.7 : 1 }]}
+          onPress={handleGoogleSignIn}
+          disabled={googleLoading || operationLoading}
+          accessibilityLabel="Continue with Google"
+          accessibilityRole="button"
+        >
+          {googleLoading ? (
+            <ActivityIndicator size="small" color={colors.text} />
+          ) : (
+            <>
+              <Ionicons name="logo-google" size={20} color={colors.text} />
+              <Text style={styles.oauthButtonText}>Continue with Google</Text>
+            </>
           )}
         </TouchableOpacity>
 
-        {/* Apple */}
+        {/* Apple Sign In */}
         {Platform.OS === 'ios' && (
-          <TouchableOpacity style={styles.appleButton} onPress={handleAppleSignIn} disabled={appleLoading}>
-            {appleLoading ? <ActivityIndicator size="small" color="#FFFFFF" /> : (
-              <><Ionicons name="logo-apple" size={20} color="#FFFFFF" /><Text style={styles.appleButtonText}>Sign in with Apple</Text></>
+          <TouchableOpacity
+            style={styles.appleButton}
+            onPress={handleAppleSignIn}
+            disabled={appleLoading}
+            accessibilityLabel="Sign in with Apple"
+            accessibilityRole="button"
+          >
+            {appleLoading ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <>
+                <Ionicons name="logo-apple" size={20} color="#FFFFFF" />
+                <Text style={styles.appleButtonText}>Sign in with Apple</Text>
+              </>
             )}
           </TouchableOpacity>
         )}
 
-        {/* Toggle Phone/Email */}
-        <TouchableOpacity style={styles.oauthButton} onPress={togglePhoneMode} disabled={operationLoading || phoneLoading}>
-          <Ionicons name={isPhoneMode ? "mail-outline" : "call"} size={20} color={colors.text} />
-          <Text style={styles.oauthButtonText}>{isPhoneMode ? 'Continue with email' : 'Continue with phone'}</Text>
+        {/* TOGGLE BUTTON: Continue with Phone OR Continue with Email */}
+        <TouchableOpacity
+          style={styles.oauthButton}
+          onPress={togglePhoneMode}
+          disabled={operationLoading}
+          accessibilityLabel={isPhoneMode ? "Continue with email" : "Continue with phone"}
+          accessibilityRole="button"
+        >
+          <Ionicons 
+            name={isPhoneMode ? "mail-outline" : "call"} 
+            size={20} 
+            color={colors.text} 
+          />
+          <Text style={styles.oauthButtonText}>
+            {isPhoneMode ? 'Continue with email' : 'Continue with phone'}
+          </Text>
         </TouchableOpacity>
 
-        {/* Guest */}
-        <TouchableOpacity style={[styles.oauthButton, { marginTop: 4 }]} onPress={() => setGuestModalVisible(true)}>
+        {/* Continue as Guest Button */}
+        <TouchableOpacity
+          style={[styles.oauthButton, { marginTop: 4 }]}
+          onPress={() => setGuestModalVisible(true)}
+          accessibilityLabel="Continue as guest"
+          accessibilityRole="button"
+        >
           <Ionicons name="person-outline" size={20} color={colors.text} />
           <Text style={styles.oauthButtonText}>Continue as guest</Text>
         </TouchableOpacity>
@@ -681,16 +898,32 @@ export default function LoginScreen() {
           <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setGuestModalVisible(false)} />
           <View style={guestStyles.sheet}>
             <View style={guestStyles.handle} />
-            <View style={guestStyles.iconWrap}><Ionicons name="person-outline" size={32} color="#FFF" /></View>
+            <View style={guestStyles.iconWrap}>
+              <Ionicons name="person-outline" size={32} color="#FFF" />
+            </View>
             <Text style={guestStyles.title}>Continue as Guest</Text>
-            <Text style={guestStyles.body}>{'You can chat with AI without creating an account. Guest sessions are limited to 35 messages and do not save history.'}</Text>
+            <Text style={guestStyles.body}>
+              {'You can chat with AI without creating an account. Guest sessions are limited to 35 messages and do not save history.'}
+            </Text>
             <View style={guestStyles.featureList}>
-              {[{ icon: 'checkmark-circle', text: '35 free messages', ok: true }, { icon: 'close-circle', text: 'No chat history saved', ok: false }, { icon: 'close-circle', text: 'No file uploads', ok: false }, { icon: 'checkmark-circle', text: 'Basic AI responses', ok: true }].map((f, i) => (
-                <View key={i} style={guestStyles.featureRow}><Ionicons name={f.icon as any} size={18} color={f.ok ? '#34C759' : '#FF453A'} /><Text style={guestStyles.featureText}>{f.text}</Text></View>
+              {[
+                { icon: 'checkmark-circle', text: '35 free messages', ok: true },
+                { icon: 'close-circle', text: 'No chat history saved', ok: false },
+                { icon: 'close-circle', text: 'No file uploads', ok: false },
+                { icon: 'checkmark-circle', text: 'Basic AI responses', ok: true },
+              ].map((f, i) => (
+                <View key={i} style={guestStyles.featureRow}>
+                  <Ionicons name={f.icon as any} size={18} color={f.ok ? '#34C759' : '#FF453A'} />
+                  <Text style={guestStyles.featureText}>{f.text}</Text>
+                </View>
               ))}
             </View>
-            <TouchableOpacity style={guestStyles.primaryBtn} onPress={() => { setGuestModalVisible(false); handleGuestMode(); }}><Text style={guestStyles.primaryBtnText}>Start as Guest</Text></TouchableOpacity>
-            <TouchableOpacity style={guestStyles.secondaryBtn} onPress={() => setGuestModalVisible(false)}><Text style={guestStyles.secondaryBtnText}>Create Account Instead</Text></TouchableOpacity>
+            <TouchableOpacity style={guestStyles.primaryBtn} onPress={() => { setGuestModalVisible(false); handleGuestMode(); }}>
+              <Text style={guestStyles.primaryBtnText}>Start as Guest</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={guestStyles.secondaryBtn} onPress={() => setGuestModalVisible(false)}>
+              <Text style={guestStyles.secondaryBtnText}>Create Account Instead</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
