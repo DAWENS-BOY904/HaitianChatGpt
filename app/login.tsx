@@ -29,8 +29,8 @@ import { createClient } from '@supabase/supabase-js';
 const AI_LOGO_URL = 'https://uzxmmddivzqjhcnnrkns.supabase.co/storage/v1/object/public/logo/logo.png';
 
 // ── NOUVO SUPABASE POU APPLE LOGIN SELMAN ──
-const MY_SUPABASE_URL = 'https://uzxmmddivzqjhcnnrkns.supabase.co'; // METE URL OU A ISIT LA
-const MY_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV6eG1tZGRpdnpxamhjbm5ya25zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY0MTY5MjEsImV4cCI6MjA5MTk5MjkyMX0.6PYtbRps9YJjvX5ibxGy346uA82RadEEpFrhSHa1UIE'; // METE KEY OU A ISIT LA
+const MY_SUPABASE_URL = 'https://uzxmmddivzqjhcnnrkns.supabase.co';
+const MY_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV6eG1tZGRpdnpxamhjbm5ya25zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY0MTY5MjEsImV4cCI6MjA5MTk5MjkyMX0.6PYtbRps9YJjvX5ibxGy346uA82RadEEpFrhSHa1UIE';
 
 // Kreye yon new kliyan Supabase pou Apple login selman
 const appleSupabase = createClient(MY_SUPABASE_URL, MY_SUPABASE_ANON_KEY, {
@@ -68,7 +68,7 @@ function AILogo({ size = 64 }: { size?: number }) {
 // ── Helper: send login confirmation email (SOU ANSYEN SUPABASE) ──
 async function sendLoginConfirmationEmail(userId: string, email: string) {
   try {
-    const supabase = getSupabaseClient(); // ANSYEN SUPABASE
+    const supabase = getSupabaseClient();
     await supabase.functions.invoke('send-login-email', {
       body: {
         userId,
@@ -96,16 +96,13 @@ async function generateNonce(length: number = 32): Promise<string> {
 // ── Helper: SHA256 hash pou Apple nonce ──
 async function sha256Hash(str: string): Promise<string> {
   try {
-    // Eseye metod Expo Crypto la avan
     const digest = await Crypto.digestStringAsync(
       Crypto.CryptoDigestAlgorithm.SHA256,
       str
     );
     return digest;
   } catch (e) {
-    // Fallback: itilize js-sha256 si disponib oswa yon lòt metod
     console.warn('SHA256 with expo-crypto failed, trying fallback:', e);
-    // Ou ka ajoute js-sha256 kòm yon dependency si ou vle
     throw new Error('SHA256 hashing failed. Please ensure expo-crypto is properly configured.');
   }
 }
@@ -130,6 +127,9 @@ export default function LoginScreen() {
   const [appleLoading, setAppleLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [guestModalVisible, setGuestModalVisible] = useState(false);
+  const [isPhoneMode, setIsPhoneMode] = useState(false);
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [countryCode, setCountryCode] = useState('+1');
 
   // On mount: check for existing passkeys (SOU ANSYEN SUPABASE)
   useEffect(() => {
@@ -147,7 +147,7 @@ export default function LoginScreen() {
   const checkForPasskeyLogin = async () => {
     if (Platform.OS === 'web') return;
     try {
-      const supabase = getSupabaseClient(); // ANSYEN SUPABASE
+      const supabase = getSupabaseClient();
 
       const cleared = await AsyncStorage.getItem('passkey_session_active');
       if (cleared === 'false') return;
@@ -236,7 +236,7 @@ export default function LoginScreen() {
     if (adminEmails.includes(email.toLowerCase())) {
       setAdminCodeSending(true);
       try {
-        const supabase = getSupabaseClient(); // ANSYEN SUPABASE
+        const supabase = getSupabaseClient();
         const { error: otpError } = await supabase.auth.signInWithOtp({
           email: email.toLowerCase(),
           options: { shouldCreateUser: false },
@@ -255,6 +255,16 @@ export default function LoginScreen() {
     }
   };
 
+  // ── PHONE LOGIN ──
+  const handlePhoneContinue = async () => {
+    if (!phoneNumber.trim()) {
+      showAlert('Error', 'Please enter your phone number');
+      return;
+    }
+    const fullNumber = `${countryCode} ${phoneNumber}`;
+    router.push({ pathname: '/verify-phone', params: { phone: fullNumber } });
+  };
+
   // ── GOOGLE LOGIN — Real OnSpace Cloud OAuth ──
   const handleGoogleSignIn = async () => {
     if (googleLoading) return;
@@ -262,14 +272,12 @@ export default function LoginScreen() {
     try {
       const { error } = await signInWithGoogle();
       if (error) {
-        // Silently ignore cancellation — user just closed the browser
         const lower = (error || '').toLowerCase();
         const isCancellation = lower.includes('cancel') || lower.includes('dismiss') || lower.includes('closed') || lower.includes('user closed') || lower.includes('user cancelled');
         if (!isCancellation) {
           showAlert('Error', error);
         }
       }
-      // Navigation handled by useEffect watching `user`
     } catch (err: any) {
       const msg = (err?.message || '').toLowerCase();
       const isCancellation = msg.includes('cancel') || msg.includes('dismiss') || msg.includes('closed') || msg.includes('user closed') || msg.includes('user cancelled');
@@ -282,12 +290,16 @@ export default function LoginScreen() {
     }
   };
 
-  const handlePhoneLogin = () => {
-    router.push('/phone-entry');
-  };
-
   const handleGuestMode = () => {
     router.replace('/home');
+  };
+
+  // ── TOGGLE PHONE MODE ──
+  const togglePhoneMode = () => {
+    setIsPhoneMode(!isPhoneMode);
+    setEmail('');
+    setPhoneNumber('');
+    setShowSuggestions(false);
   };
 
   // ═══════════════════════════════════════════════════════
@@ -302,7 +314,6 @@ export default function LoginScreen() {
     setAppleLoading(true);
     
     try {
-      // Verify Apple Sign In available
       const available = await AppleAuthentication.isAvailableAsync();
       if (!available) {
         showAlert('Not Available', 'Apple Sign In is not available on this device.');
@@ -310,19 +321,15 @@ export default function LoginScreen() {
         return;
       }
 
-      // 1. Generate raw nonce
       const rawNonce = await generateNonce(32);
-      
-      // 2. Hash nonce with SHA256 pou Apple
       const hashedNonce = await sha256Hash(rawNonce);
 
-      // 3. Request Apple credentials
       const credential = await AppleAuthentication.signInAsync({
         requestedScopes: [
           AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
           AppleAuthentication.AppleAuthenticationScope.EMAIL,
         ],
-        nonce: hashedNonce, // Apple resevwa hashed nonce
+        nonce: hashedNonce,
       });
 
       if (!credential.identityToken) {
@@ -331,11 +338,10 @@ export default function LoginScreen() {
         return;
       }
 
-      // 4. Sign in to NOUVO Supabase with Apple ID token
       const { data, error } = await appleSupabase.auth.signInWithIdToken({
         provider: 'apple',
         token: credential.identityToken,
-        nonce: rawNonce, // Supabase resevwa RAW nonce (li pral hash li pou verifye)
+        nonce: rawNonce,
       });
 
       if (error) {
@@ -346,7 +352,6 @@ export default function LoginScreen() {
       }
 
       if (data?.user) {
-        // Update profile with Apple name if provided (first sign-in only)
         if (credential.fullName?.givenName || credential.fullName?.familyName) {
           const fullName = [
             credential.fullName.givenName,
@@ -363,14 +368,8 @@ export default function LoginScreen() {
           }
         }
 
-        // Voye login email sou ANSYEN supabase (si ou vle kenbe tracking la)
         const appleEmail = data.user.email || credential.email || `${credential.user}@privaterelay.appleid.com`;
         await sendLoginConfirmationEmail(data.user.id, appleEmail);
-        
-        // IMPORTANT: Si ou vle itilize ansyen Supabase pou lòt bagay, 
-        // ou ka kopye session la oswa kreye yon koneksyon ant de kont yo
-        // Men pou kounye a, navigation ap fet pa useEffect ki gade 'user' state
-        // Ou ka bezwen ajoute yon mekanis pou update 'user' state la si li pa auto
       }
     } catch (e: any) {
       if (e?.code === 'ERR_REQUEST_CANCELED') {
@@ -449,6 +448,34 @@ export default function LoginScreen() {
       fontSize: 16,
       padding: 0,
     },
+    phoneInputRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: Spacing.sm,
+    },
+    countryCodeBtn: {
+      backgroundColor: colors.surface,
+      borderRadius: BorderRadius.lg,
+      paddingHorizontal: Spacing.md,
+      paddingVertical: Spacing.sm,
+      borderWidth: 1,
+      borderColor: colors.border,
+      minWidth: 80,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    countryCodeText: {
+      ...Typography.body,
+      color: colors.text,
+      fontSize: 16,
+    },
+    phoneInput: {
+      flex: 1,
+      ...Typography.body,
+      color: colors.text,
+      fontSize: 16,
+      padding: 0,
+    },
     continueButton: {
       backgroundColor: colors.text,
       borderRadius: BorderRadius.full,
@@ -511,6 +538,13 @@ export default function LoginScreen() {
       color: colors.text,
       fontSize: 16,
       fontWeight: '500',
+    },
+    toggleModeText: {
+      ...Typography.body,
+      color: colors.textSecondary,
+      fontSize: 14,
+      textAlign: 'center',
+      marginBottom: Spacing.md,
     },
   });
 
@@ -629,22 +663,45 @@ export default function LoginScreen() {
           You will get smarter responses and can upload files, images and more.
         </Text>
 
-        <View style={styles.inputContainer}>
-          <Text style={styles.inputLabel}>Email</Text>
-          <TextInput
-            style={styles.input}
-            placeholder=""
-            placeholderTextColor={colors.textSecondary}
-            value={email}
-            onChangeText={handleEmailChange}
-            autoCapitalize="none"
-            keyboardType="email-address"
-            editable={!operationLoading}
-            accessibilityLabel="Email address"
-          />
-        </View>
+        {/* PHONE INPUT OR EMAIL INPUT */}
+        {isPhoneMode ? (
+          <View style={styles.inputContainer}>
+            <Text style={styles.inputLabel}>Phone number</Text>
+            <View style={styles.phoneInputRow}>
+              <TouchableOpacity style={styles.countryCodeBtn}>
+                <Text style={styles.countryCodeText}>{countryCode}</Text>
+              </TouchableOpacity>
+              <TextInput
+                style={styles.phoneInput}
+                placeholder="(305) 896-2443"
+                placeholderTextColor={colors.textSecondary}
+                value={phoneNumber}
+                onChangeText={setPhoneNumber}
+                keyboardType="phone-pad"
+                editable={!operationLoading}
+                accessibilityLabel="Phone number"
+              />
+            </View>
+          </View>
+        ) : (
+          <View style={styles.inputContainer}>
+            <Text style={styles.inputLabel}>Email</Text>
+            <TextInput
+              style={styles.input}
+              placeholder=""
+              placeholderTextColor={colors.textSecondary}
+              value={email}
+              onChangeText={handleEmailChange}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              editable={!operationLoading}
+              accessibilityLabel="Email address"
+            />
+          </View>
+        )}
 
-        {showSuggestions && (
+        {/* SUGGESTIONS POU EMAIL */}
+        {!isPhoneMode && showSuggestions && (
           <View style={{
             backgroundColor: colors.surface,
             borderRadius: 10,
@@ -668,11 +725,15 @@ export default function LoginScreen() {
           </View>
         )}
 
+        {/* CONTINUE BUTTON */}
         <TouchableOpacity
-          style={[styles.continueButton, !email.trim() && styles.continueButtonDisabled]}
-          onPress={handleEmailContinue}
-          disabled={!email.trim() || operationLoading || adminCodeSending}
-          accessibilityLabel="Continue with email"
+          style={[
+            styles.continueButton,
+            (isPhoneMode ? !phoneNumber.trim() : !email.trim()) && styles.continueButtonDisabled
+          ]}
+          onPress={isPhoneMode ? handlePhoneContinue : handleEmailContinue}
+          disabled={(isPhoneMode ? !phoneNumber.trim() : !email.trim()) || operationLoading || adminCodeSending}
+          accessibilityLabel={isPhoneMode ? "Continue with phone" : "Continue with email"}
           accessibilityRole="button"
         >
           {adminCodeSending ? (
@@ -684,13 +745,20 @@ export default function LoginScreen() {
           )}
         </TouchableOpacity>
 
+        {/* TOGGLE MODE LINK */}
+        <TouchableOpacity onPress={togglePhoneMode}>
+          <Text style={styles.toggleModeText}>
+            {isPhoneMode ? 'Use email instead' : 'Use phone number instead'}
+          </Text>
+        </TouchableOpacity>
+
         <View style={styles.divider}>
           <View style={styles.dividerLine} />
           <Text style={styles.dividerText}>OR</Text>
           <View style={styles.dividerLine} />
         </View>
 
-        {/* Google Button - Real OnSpace Cloud OAuth */}
+        {/* Google Button */}
         <TouchableOpacity
           style={[styles.oauthButton, { opacity: googleLoading ? 0.7 : 1 }]}
           onPress={handleGoogleSignIn}
@@ -708,7 +776,7 @@ export default function LoginScreen() {
           )}
         </TouchableOpacity>
 
-        {/* Apple Sign In - SOU NOUVO SUPABASE */}
+        {/* Apple Sign In */}
         {Platform.OS === 'ios' && (
           <TouchableOpacity
             style={styles.appleButton}
@@ -728,9 +796,13 @@ export default function LoginScreen() {
           </TouchableOpacity>
         )}
 
+        {/* Continue with Phone Button */}
         <TouchableOpacity
           style={styles.oauthButton}
-          onPress={handlePhoneLogin}
+          onPress={() => {
+            setIsPhoneMode(true);
+            // Optionally scroll to input or focus
+          }}
           disabled={operationLoading}
           accessibilityLabel="Continue with phone"
           accessibilityRole="button"
@@ -739,6 +811,7 @@ export default function LoginScreen() {
           <Text style={styles.oauthButtonText}>Continue with phone</Text>
         </TouchableOpacity>
 
+        {/* Continue as Guest Button */}
         <TouchableOpacity
           style={[styles.oauthButton, { marginTop: 4 }]}
           onPress={() => setGuestModalVisible(true)}
@@ -785,8 +858,6 @@ export default function LoginScreen() {
           </View>
         </View>
       </Modal>
-
-
     </View>
   );
 }
@@ -804,4 +875,4 @@ const guestStyles = StyleSheet.create({
   primaryBtnText: { color: '#000000', fontSize: 17, fontWeight: '700' },
   secondaryBtn: { alignItems: 'center', paddingVertical: 10 },
   secondaryBtnText: { color: 'rgba(255,255,255,0.45)', fontSize: 15 },
-}); 
+});
