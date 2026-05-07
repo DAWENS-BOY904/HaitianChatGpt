@@ -40,7 +40,7 @@ serve(async (req: Request) => {
       return d.access_token;
     };
 
-    // ── EXCHANGE CODE ──────────────────────────────────────────────────────
+    // ── EXCHANGE CODES ──────────────────────────────────────────────────────
     if (action === 'exchange_code') {
       if (!code || !redirectUri) return respond({ error: 'Missing code or redirectUri' }, 400);
       const res = await fetch('https://accounts.spotify.com/api/token', {
