@@ -1835,8 +1835,33 @@ export default function HomeScreen() {
   const searchSpotify = useCallback(async (query: string) => {
     setSpotifySearching(true);
     try {
+      // Try to get a valid (possibly refreshed) access token
+      const storedToken = await (async () => {
+        try {
+          const tokenRaw = await AsyncStorage.getItem('spotify_access_token');
+          const expiryRaw = await AsyncStorage.getItem('spotify_token_expiry');
+          if (!tokenRaw) return null;
+          const expiry = expiryRaw ? parseInt(expiryRaw, 10) : 0;
+          if (Date.now() < expiry - 120_000) return tokenRaw;
+          // Refresh
+          const refreshRaw = await AsyncStorage.getItem('spotify_refresh_token');
+          if (!refreshRaw) return null;
+          const { data: rd, error: re } = await supabase.functions.invoke('spotify-connect', {
+            body: { action: 'refresh_token', refreshToken: refreshRaw },
+          });
+          if (re || !rd?.access_token) return null;
+          const newExpiry = Date.now() + (rd.expires_in || 3600) * 1000;
+          await AsyncStorage.multiSet([
+            ['spotify_access_token', rd.access_token],
+            ['spotify_token_expiry', String(newExpiry)],
+            ...(rd.refresh_token ? [['spotify_refresh_token', rd.refresh_token] as [string, string]] : []),
+          ]);
+          return rd.access_token as string;
+        } catch { return null; }
+      })();
+
       const { data, error } = await supabase.functions.invoke('spotify-connect', {
-        body: { action: 'search', query },
+        body: { action: 'search', query, ...(storedToken ? { accessToken: storedToken } : {}) },
       });
       if (!error && data?.results && Array.isArray(data.results)) {
         setSpotifyResults(data.results);
@@ -1877,15 +1902,26 @@ export default function HomeScreen() {
   }, [quizMode, user?.id]);
 
   const generateAIQuizQuestions = async (topic: string, difficulty: string = 'Medium'): Promise<QuizQuestion[]> => {
-    const topicLabel = topic || 'General Knowledge';
+    const topicLabel = (topic || 'General Knowledge').trim();
+    // Always call the real edge function — it already has internal fallback
     try {
-      const { data, error } = await supabase.functions.invoke('generate-quiz', { body: { topic: topicLabel, difficulty } });
-      if (error) throw new Error(error.message || 'Quiz generation failed');
+      const { data, error } = await supabase.functions.invoke('generate-quiz', {
+        body: { topic: topicLabel, difficulty, count: 10 },
+      });
+      if (error) {
+        console.warn('[Quiz] Edge function error:', error);
+        return generateQuizQuestions(topicLabel);
+      }
       const questions: QuizQuestion[] = data?.questions;
-      if (!Array.isArray(questions) || questions.length === 0) throw new Error('No questions returned');
-      return questions;
+      if (!Array.isArray(questions) || questions.length === 0) {
+        console.warn('[Quiz] No questions returned, using fallback');
+        return generateQuizQuestions(topicLabel);
+      }
+      // Always return a fresh set — shuffle lightly so repeated calls give variety
+      const shuffled = [...questions].sort(() => Math.random() - 0.5);
+      return shuffled;
     } catch (err) {
-      console.log('[Quiz] Edge function failed, using fallback:', err);
+      console.warn('[Quiz] Unexpected error, using fallback:', err);
       return generateQuizQuestions(topicLabel);
     }
   };
@@ -1950,8 +1986,11 @@ export default function HomeScreen() {
     const topic = customTopicInput.trim() || selectedQuizTopic || 'General Knowledge';
     setQuizGenerating(true);
     try {
+      // Call real edge function for a fresh new quiz
       const questions = await generateAIQuizQuestions(topic, selectedDifficulty);
-      setInlineQuizQuestions([...questions]);
+      // Force re-render with new questions array reference
+      setInlineQuizQuestions([]);
+      setTimeout(() => setInlineQuizQuestions([...questions]), 50);
     } catch (_e) {
       setInlineQuizQuestions([...generateQuizQuestions(topic)]);
     } finally { setQuizGenerating(false); }

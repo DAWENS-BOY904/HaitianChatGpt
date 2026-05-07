@@ -7,11 +7,10 @@ import {
   Platform,
   ActivityIndicator,
   Share,
-  Clipboard,
   Alert,
 } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { Ionicons } from '@expo/vector-icons';
-import { BlurView } from 'expo-blur';
 import { useTheme } from '../hooks/useTheme';
 import { useAuth, useAlert } from '@/template';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -40,35 +39,79 @@ export default function GroupLinkScreen() {
   const insets = useSafeAreaInsets();
   const supabase = getSupabaseClient();
 
-  const params = useLocalSearchParams<{ groupId?: string; conversationId?: string }>();
+  const params = useLocalSearchParams<{
+    groupId?: string;
+    conversationId?: string;
+    // When opened via an invite link, these come in
+    inviteCode?: string;
+    token?: string;
+  }>();
   const groupId = params.groupId || '';
   const conversationId = params.conversationId || '';
+  const incomingInviteCode = params.inviteCode || '';
+  const incomingToken = params.token || '';
 
   const [groupName, setGroupName] = useState('Group Chat');
   const [inviteToken, setInviteToken] = useState('');
-  const [inviteCode, setInviteCode] = useState('');
+  const [inviteId, setInviteId] = useState('');
   const [loading, setLoading] = useState(true);
+  const [joining, setJoining] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [copied, setCopied] = useState(false);
   const [username, setUsername] = useState('');
+  // Whether this screen is used to JOIN (via invite link) vs MANAGE
+  const isJoinMode = !!(incomingInviteCode && incomingToken);
 
   const baseUrl = 'https://dawinix.com/gg/v';
-
-  const inviteLink = inviteCode && inviteToken
-    ? `${baseUrl}/${inviteCode}?token=${inviteToken}`
-    : inviteToken
-    ? `${baseUrl}/${generateGroupId()}?token=${inviteToken}`
+  const inviteLink = inviteId && inviteToken
+    ? `${baseUrl}/${inviteId}?token=${inviteToken}`
     : '';
 
   useEffect(() => {
-    loadGroupData();
-  }, [groupId]);
+    if (isJoinMode) {
+      loadInviteInfo();
+    } else {
+      loadGroupData();
+    }
+  }, [groupId, incomingInviteCode]);
 
+  // ── Load invite info when joining via a link ───────────────────────────
+  const loadInviteInfo = async () => {
+    setLoading(true);
+    try {
+      const { data: invite } = await supabase
+        .from('group_invites')
+        .select('group_id, invite_code, id, expires_at')
+        .eq('invite_code', incomingToken)
+        .single();
+
+      if (!invite) {
+        setGroupName('Invalid or expired link');
+        setLoading(false);
+        return;
+      }
+
+      const { data: group } = await supabase
+        .from('chat_groups')
+        .select('name')
+        .eq('id', invite.group_id)
+        .single();
+
+      if (group) setGroupName(group.name || 'Group Chat');
+      setInviteId(invite.id || incomingInviteCode);
+      setInviteToken(invite.invite_code);
+    } catch (_e) {
+      setGroupName('Group Chat');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ── Load group data for MANAGE mode ───────────────────────────────────
   const loadGroupData = async () => {
     setLoading(true);
     try {
-      // Load user profile for username
       if (user?.id) {
         const { data: profileData } = await supabase
           .from('user_profiles')
@@ -81,26 +124,20 @@ export default function GroupLinkScreen() {
       }
 
       if (!groupId) {
-        // Generate a new token for display
-        const newToken = generateToken();
-        const newCode = generateGroupId();
-        setInviteToken(newToken);
-        setInviteCode(newCode);
+        setInviteToken(generateToken());
+        setInviteId(generateGroupId());
         setLoading(false);
         return;
       }
 
       const { data: groupData } = await supabase
         .from('chat_groups')
-        .select('name, invite_code')
+        .select('name')
         .eq('id', groupId)
         .single();
 
-      if (groupData) {
-        setGroupName(groupData.name || 'Group Chat');
-      }
+      if (groupData) setGroupName(groupData.name || 'Group Chat');
 
-      // Load invite from group_invites
       const { data: inviteData } = await supabase
         .from('group_invites')
         .select('invite_code, id')
@@ -110,7 +147,7 @@ export default function GroupLinkScreen() {
         .single();
 
       if (inviteData) {
-        setInviteCode(inviteData.id || inviteData.invite_code);
+        setInviteId(inviteData.id || generateGroupId());
         setInviteToken(inviteData.invite_code);
       } else {
         // Create a new invite
@@ -122,21 +159,82 @@ export default function GroupLinkScreen() {
           .single();
         if (newInvite) {
           setInviteToken(newToken);
-          setInviteCode(newInvite.id || generateGroupId());
+          setInviteId(newInvite.id || generateGroupId());
         }
       }
-    } catch (e) {
-      // Fallback token
+    } catch (_e) {
       setInviteToken(generateToken());
-      setInviteCode(generateGroupId());
+      setInviteId(generateGroupId());
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCopy = useCallback(() => {
+  // ── JOIN via invite link ──────────────────────────────────────────────
+  const handleJoinGroup = useCallback(async () => {
+    if (!user?.id) {
+      router.push('/login');
+      return;
+    }
+    setJoining(true);
+    try {
+      // Find the invite
+      const { data: invite } = await supabase
+        .from('group_invites')
+        .select('group_id, expires_at')
+        .eq('invite_code', incomingToken)
+        .single();
+
+      if (!invite) {
+        showAlert('Invalid Link', 'This invite link is invalid or has expired.');
+        setJoining(false);
+        return;
+      }
+
+      if (invite.expires_at && new Date(invite.expires_at) < new Date()) {
+        showAlert('Expired Link', 'This invite link has expired.');
+        setJoining(false);
+        return;
+      }
+
+      // Add user to group_members (ignore duplicate errors)
+      await supabase
+        .from('group_members')
+        .upsert({ group_id: invite.group_id, user_id: user.id }, { onConflict: 'group_id,user_id' });
+
+      // Create or find a conversation for this group
+      let convId: string | null = null;
+      const { data: existingConv } = await supabase
+        .from('conversations')
+        .select('id')
+        .eq('user_id', user.id)
+        .ilike('title', `%${groupName}%`)
+        .limit(1)
+        .single();
+
+      if (existingConv?.id) {
+        convId = existingConv.id;
+      } else {
+        const { data: newConv } = await supabase
+          .from('conversations')
+          .insert({ user_id: user.id, title: groupName })
+          .select('id')
+          .single();
+        convId = newConv?.id || null;
+      }
+
+      // Navigate to home with the group conversation active
+      router.replace('/home');
+    } catch (e: any) {
+      showAlert('Error', e?.message || 'Failed to join group');
+    } finally {
+      setJoining(false);
+    }
+  }, [user?.id, incomingToken, groupName, supabase, router, showAlert]);
+
+  const handleCopy = useCallback(async () => {
     if (!inviteLink) return;
-    Clipboard.setString(inviteLink);
+    await Clipboard.setStringAsync(inviteLink);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }, [inviteLink]);
@@ -145,16 +243,16 @@ export default function GroupLinkScreen() {
     if (!inviteLink) return;
     try {
       await Share.share({
-        message: `Join my Haitian AI group chat: ${inviteLink}`,
+        message: `Join my Dawinix group chat: ${inviteLink}`,
         url: inviteLink,
       });
-    } catch (e) {}
+    } catch (_e) {}
   }, [inviteLink]);
 
   const handleReset = useCallback(async () => {
-    showAlert(
+    Alert.alert(
       'Reset Link',
-      'This will invalidate the current link and generate a new one. Anyone with the old link will no longer be able to join.',
+      'This will invalidate the current link and generate a new one.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -164,33 +262,23 @@ export default function GroupLinkScreen() {
             setResetting(true);
             try {
               const newToken = generateToken();
-              const newCode = generateGroupId();
-
               if (groupId) {
-                // Delete old invites and create new one
-                await supabase
+                await supabase.from('group_invites').delete().eq('group_id', groupId);
+                const { data: newInvite } = await supabase
                   .from('group_invites')
-                  .delete()
-                  .eq('group_id', groupId);
-
-                await supabase
-                  .from('group_invites')
-                  .insert({ group_id: groupId, invite_code: newToken, created_by: user?.id });
-
-                // Insert system message in conversation
-                if (conversationId) {
-                  await supabase.from('messages').insert({
-                    conversation_id: conversationId,
-                    role: 'assistant',
-                    content: `${username} reset the group link.`,
-                  });
+                  .insert({ group_id: groupId, invite_code: newToken, created_by: user?.id })
+                  .select()
+                  .single();
+                if (newInvite) {
+                  setInviteToken(newToken);
+                  setInviteId(newInvite.id || generateGroupId());
                 }
+              } else {
+                setInviteToken(newToken);
+                setInviteId(generateGroupId());
               }
-
-              setInviteToken(newToken);
-              setInviteCode(newCode);
               showAlert('Link Reset', 'A new group link has been generated.');
-            } catch (e) {
+            } catch (_e) {
               showAlert('Error', 'Failed to reset group link.');
             } finally {
               setResetting(false);
@@ -199,12 +287,12 @@ export default function GroupLinkScreen() {
         },
       ]
     );
-  }, [groupId, conversationId, username, showAlert, user?.id]);
+  }, [groupId, user?.id, supabase, showAlert]);
 
-  const handleDelete = useCallback(() => {
-    showAlert(
+  const handleDelete = useCallback(async () => {
+    Alert.alert(
       'Delete Link',
-      'This will permanently delete the group invite link. No one will be able to join with this link.',
+      'This will permanently delete the group invite link.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -214,16 +302,13 @@ export default function GroupLinkScreen() {
             setDeleting(true);
             try {
               if (groupId) {
-                await supabase
-                  .from('group_invites')
-                  .delete()
-                  .eq('group_id', groupId);
+                await supabase.from('group_invites').delete().eq('group_id', groupId);
               }
               setInviteToken('');
-              setInviteCode('');
+              setInviteId('');
               showAlert('Link Deleted', 'The group invite link has been deleted.');
               setTimeout(() => router.back(), 800);
-            } catch (e) {
+            } catch (_e) {
               showAlert('Error', 'Failed to delete group link.');
             } finally {
               setDeleting(false);
@@ -232,31 +317,33 @@ export default function GroupLinkScreen() {
         },
       ]
     );
-  }, [groupId, showAlert, router]);
+  }, [groupId, supabase, showAlert, router]);
 
-  const bgColor = '#0A0A0A';
-  const cardBg = 'rgba(44,44,46,0.9)';
-  const borderCol = 'rgba(255,255,255,0.1)';
+  const bgColor = isDark ? '#0A0A0A' : '#F2F2F7';
+  const cardBg = isDark ? 'rgba(44,44,46,0.9)' : '#FFF';
+  const borderCol = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
+  const textC = isDark ? '#FFF' : '#000';
+  const subC = isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.45)';
 
   const actions = [
     {
       icon: copied ? 'checkmark-outline' : 'copy-outline',
       label: copied ? 'Copied!' : 'Copy',
-      color: copied ? '#34C759' : '#FFFFFF',
+      color: copied ? '#34C759' : textC,
       onPress: handleCopy,
       loading: false,
     },
     {
       icon: 'share-outline',
       label: 'Share',
-      color: '#FFFFFF',
+      color: textC,
       onPress: handleShare,
       loading: false,
     },
     {
       icon: 'refresh-outline',
       label: 'Reset',
-      color: '#FFFFFF',
+      color: textC,
       onPress: handleReset,
       loading: resetting,
     },
@@ -270,17 +357,19 @@ export default function GroupLinkScreen() {
   ];
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top, backgroundColor: bgColor }]}>
+    <View style={[styles.container, { backgroundColor: bgColor, paddingTop: insets.top }]}>
       {/* Header */}
       <View style={[styles.header, { borderBottomColor: borderCol }]}>
         <TouchableOpacity
-          style={styles.backBtn}
+          style={[styles.backBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.07)' }]}
           onPress={() => router.back()}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
-          <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
+          <Ionicons name="chevron-back" size={24} color={textC} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Group link</Text>
+        <Text style={[styles.headerTitle, { color: textC }]}>
+          {isJoinMode ? 'Join Group' : 'Group link'}
+        </Text>
         <View style={{ width: 36 }} />
       </View>
 
@@ -288,29 +377,55 @@ export default function GroupLinkScreen() {
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
           <ActivityIndicator size="large" color="#007AFF" />
         </View>
-      ) : (
-        <View style={styles.content}>
-          {/* Link Display */}
-          <View style={styles.linkSection}>
-            {inviteLink ? (
-              <Text style={styles.linkText} numberOfLines={2}>
-                {inviteLink}
-              </Text>
-            ) : (
-              <Text style={[styles.linkText, { color: 'rgba(255,255,255,0.35)' }]}>
-                No link — tap Reset to generate one
-              </Text>
-            )}
-            <Text style={styles.linkDescription}>
-              Anyone can join your group chat with this link. Anyone who joins this chat will be able to view the entire conversation history.
+      ) : isJoinMode ? (
+        // ── JOIN MODE ────────────────────────────────────────────────────
+        <View style={styles.joinContent}>
+          <View style={[styles.joinCard, { backgroundColor: cardBg, borderColor: borderCol }]}>
+            <View style={styles.groupIconWrap}>
+              <Ionicons name="people" size={36} color="#007AFF" />
+            </View>
+            <Text style={[styles.joinGroupName, { color: textC }]}>{groupName}</Text>
+            <Text style={[styles.joinDesc, { color: subC }]}>
+              You were invited to join this group chat. Everyone in the group can see all messages.
             </Text>
           </View>
 
-          {/* Divider */}
+          <TouchableOpacity
+            style={[styles.joinBtn, joining && { opacity: 0.7 }]}
+            onPress={handleJoinGroup}
+            disabled={joining}
+            activeOpacity={0.82}
+          >
+            {joining ? (
+              <ActivityIndicator size="small" color="#FFF" />
+            ) : (
+              <Text style={styles.joinBtnText}>Join Group Chat</Text>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.cancelBtn} onPress={() => router.replace('/home')}>
+            <Text style={[styles.cancelBtnText, { color: subC }]}>Not now</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        // ── MANAGE MODE ──────────────────────────────────────────────────
+        <View style={styles.content}>
+          <View style={styles.linkSection}>
+            {inviteLink ? (
+              <Text style={styles.linkText} numberOfLines={2}>{inviteLink}</Text>
+            ) : (
+              <Text style={[styles.linkText, { color: subC }]}>
+                No link — tap Reset to generate one
+              </Text>
+            )}
+            <Text style={[styles.linkDescription, { color: subC }]}>
+              Anyone can join your group chat with this link. Anyone who joins will be able to view the entire conversation history.
+            </Text>
+          </View>
+
           <View style={[styles.divider, { backgroundColor: borderCol }]} />
 
-          {/* Actions */}
-          <View style={styles.actionsContainer}>
+          <View style={[styles.actionsContainer, { backgroundColor: cardBg, borderColor: borderCol }]}>
             {actions.map((action, index) => (
               <React.Fragment key={action.label}>
                 {index > 0 && <View style={[styles.actionDivider, { backgroundColor: borderCol }]} />}
@@ -320,10 +435,7 @@ export default function GroupLinkScreen() {
                   activeOpacity={0.6}
                   disabled={action.loading || (!inviteLink && action.label !== 'Reset')}
                 >
-                  <View style={[
-                    styles.actionIconWrap,
-                    { opacity: (!inviteLink && action.label !== 'Reset' && action.label !== 'Delete') ? 0.35 : 1 }
-                  ]}>
+                  <View style={{ width: 28, alignItems: 'center', opacity: (!inviteLink && action.label !== 'Reset' && action.label !== 'Delete') ? 0.35 : 1 }}>
                     {action.loading ? (
                       <ActivityIndicator size="small" color={action.color} />
                     ) : (
@@ -331,8 +443,7 @@ export default function GroupLinkScreen() {
                     )}
                   </View>
                   <Text style={[
-                    styles.actionLabel,
-                    { color: action.color },
+                    styles.actionLabel, { color: action.color },
                     (!inviteLink && action.label !== 'Reset' && action.label !== 'Delete') && { opacity: 0.35 },
                   ]}>
                     {action.label}
@@ -348,79 +459,48 @@ export default function GroupLinkScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0A0A0A',
-  },
+  container: { flex: 1 },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingVertical: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  backBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    alignItems: 'center',
-    justifyContent: 'center',
+  backBtn: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  headerTitle: { fontSize: 17, fontWeight: '700' },
+  content: { flex: 1, paddingTop: 32, paddingHorizontal: 20 },
+  linkSection: { marginBottom: 24 },
+  linkText: { color: '#007AFF', fontSize: 15, lineHeight: 22, marginBottom: 10, fontWeight: '500' },
+  linkDescription: { fontSize: 14, lineHeight: 20 },
+  divider: { height: StyleSheet.hairlineWidth, marginBottom: 8 },
+  actionsContainer: { borderRadius: 16, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth },
+  actionRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 20, gap: 18 },
+  actionLabel: { fontSize: 17, fontWeight: '400' },
+  actionDivider: { height: StyleSheet.hairlineWidth, marginLeft: 66 },
+
+  // Join mode
+  joinContent: { flex: 1, paddingHorizontal: 24, paddingTop: 40, alignItems: 'center' },
+  joinCard: {
+    width: '100%', borderRadius: 20, padding: 28,
+    alignItems: 'center', borderWidth: StyleSheet.hairlineWidth,
+    marginBottom: 28,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12, shadowRadius: 12, elevation: 6,
   },
-  headerTitle: {
-    color: '#FFFFFF',
-    fontSize: 17,
-    fontWeight: '700',
+  groupIconWrap: {
+    width: 72, height: 72, borderRadius: 36,
+    backgroundColor: 'rgba(0,122,255,0.12)',
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: 16,
   },
-  content: {
-    flex: 1,
-    paddingTop: 32,
-    paddingHorizontal: 20,
+  joinGroupName: { fontSize: 22, fontWeight: '700', textAlign: 'center', marginBottom: 10 },
+  joinDesc: { fontSize: 14, lineHeight: 21, textAlign: 'center' },
+  joinBtn: {
+    width: '100%', backgroundColor: '#007AFF', borderRadius: 50,
+    paddingVertical: 17, alignItems: 'center', marginBottom: 14,
+    shadowColor: '#007AFF', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3, shadowRadius: 10, elevation: 6,
   },
-  linkSection: {
-    marginBottom: 24,
-  },
-  linkText: {
-    color: '#007AFF',
-    fontSize: 15,
-    lineHeight: 22,
-    marginBottom: 10,
-    fontWeight: '500',
-  },
-  linkDescription: {
-    color: 'rgba(255,255,255,0.45)',
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  divider: {
-    height: StyleSheet.hairlineWidth,
-    marginBottom: 8,
-  },
-  actionsContainer: {
-    backgroundColor: 'rgba(44,44,46,0.6)',
-    borderRadius: 16,
-    overflow: 'hidden',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.08)',
-  },
-  actionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    gap: 18,
-  },
-  actionIconWrap: {
-    width: 28,
-    alignItems: 'center',
-  },
-  actionLabel: {
-    fontSize: 17,
-    fontWeight: '400',
-  },
-  actionDivider: {
-    height: StyleSheet.hairlineWidth,
-    marginLeft: 66,
-  },
+  joinBtnText: { color: '#FFF', fontSize: 17, fontWeight: '700' },
+  cancelBtn: { paddingVertical: 12, paddingHorizontal: 24 },
+  cancelBtnText: { fontSize: 15 },
 });
