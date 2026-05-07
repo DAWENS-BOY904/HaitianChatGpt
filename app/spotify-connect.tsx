@@ -38,7 +38,7 @@ function buildSpotifyAuthUrl(): string {
   );
 }
 
-// ── Spotify Logo component ─────────────────────────────────────────────────
+// ── Spotify Logo components ─────────────────────────────────────────────────
 function SpotifyLogo({ size = 80 }: { size?: number }) {
   return (
     <View style={{
