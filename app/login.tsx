@@ -20,11 +20,10 @@ import { Spacing, Typography, BorderRadius } from '../constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as AppleAuthentication from 'expo-apple-authentication';
 import * as LocalAuthentication from 'expo-local-authentication';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Crypto from 'expo-crypto';
 import { createClient } from '@supabase/supabase-js';
+import * as Linking from 'expo-linking';
 
 // ── AI Logo ──
 const AI_LOGO_URL = 'https://uzxmmddivzqjhcnnrkns.supabase.co/storage/v1/object/public/logo/logo.png';
@@ -102,28 +101,7 @@ async function sendLoginConfirmationEmail(userId: string, email: string) {
   }
 }
 
-async function generateNonce(length: number = 32): Promise<string> {
-  const charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  const randomBytes = await Crypto.getRandomBytesAsync(length);
-  let nonce = '';
-  for (let i = 0; i < length; i++) {
-    nonce += charset[randomBytes[i] % charset.length];
-  }
-  return nonce;
-}
 
-async function sha256Hash(str: string): Promise<string> {
-  try {
-    const digest = await Crypto.digestStringAsync(
-      Crypto.CryptoDigestAlgorithm.SHA256,
-      str
-    );
-    return digest;
-  } catch (e) {
-    console.warn('SHA256 with expo-crypto failed:', e);
-    throw new Error('SHA256 hashing failed.');
-  }
-}
 
 export default function LoginScreen() {
   const { colors } = useTheme();
@@ -365,49 +343,26 @@ export default function LoginScreen() {
     }
     setAppleLoading(true);
     try {
-      const available = await AppleAuthentication.isAvailableAsync();
-      if (!available) {
-        showAlert('Not Available', 'Apple Sign In is not available on this device.');
-        return;
-      }
-      const rawNonce = await generateNonce(32);
-      const hashedNonce = await sha256Hash(rawNonce);
-      const credential = await AppleAuthentication.signInAsync({
-        requestedScopes: [
-          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
-          AppleAuthentication.AppleAuthenticationScope.EMAIL,
-        ],
-        nonce: hashedNonce,
-      });
-      if (!credential.identityToken) {
-        showAlert('Sign In Error', 'Apple did not return an identity token.');
-        return;
-      }
-      const { data, error } = await appleSupabase.auth.signInWithIdToken({
+      const redirectUrl = Linking.createURL('/');
+      const { data, error } = await appleSupabase.auth.signInWithOAuth({
         provider: 'apple',
-        token: credential.identityToken,
-        nonce: rawNonce,
+        options: {
+          redirectTo: redirectUrl,
+          skipBrowserRedirect: true,
+        },
       });
       if (error) {
-        showAlert('Sign In Failed', error.message || 'Failed to authenticate with Apple.');
+        showAlert('Sign In Failed', error.message || 'Failed to start Apple Sign In.');
         return;
       }
-      if (data?.user) {
-        if (credential.fullName?.givenName || credential.fullName?.familyName) {
-          const fullName = [credential.fullName.givenName, credential.fullName.familyName].filter(Boolean).join(' ');
-          try {
-            await appleSupabase.from('user_profiles').update({ full_name: fullName }).eq('id', data.user.id);
-          } catch (profileErr) {
-            console.log('Profile update error:', profileErr);
-          }
-        }
-        const appleEmail = data.user.email || credential.email || `${credential.user}@privaterelay.appleid.com`;
-        await sendLoginConfirmationEmail(data.user.id, appleEmail);
+      if (data?.url) {
+        const result = await Linking.openURL(data.url);
+        console.log('Apple OAuth opened:', result);
       }
     } catch (e: any) {
-      if (e?.code === 'ERR_REQUEST_CANCELED') {
-        console.log('Apple Sign In cancelled');
-      } else {
+      const msg = (e?.message || '').toLowerCase();
+      const isCancellation = msg.includes('cancel') || msg.includes('dismiss') || msg.includes('closed');
+      if (!isCancellation) {
         showAlert('Sign In Error', e?.message || 'Apple Sign In failed.');
       }
     } finally {

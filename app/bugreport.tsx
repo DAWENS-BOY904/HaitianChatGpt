@@ -17,13 +17,7 @@ import { Spacing, Typography, BorderRadius } from '../constants/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getSupabaseClient } from '@/template';
 import * as Device from 'expo-device';
-// Inline base64-arraybuffer decode (no external package needed)
-function decode(base64: string): ArrayBuffer {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes.buffer;
-}
+import { decode } from 'base64-arraybuffer';
 import * as ImagePicker from 'expo-image-picker';
 
 type BugType = 'ui-issue' | 'performance' | 'crash' | 'other' | null;
@@ -413,7 +407,6 @@ export default function BugReportScreen() {
             </View>
           )}
 
-          
           <TouchableOpacity style={styles.addButton} onPress={handleAddScreenshot}>
             <Ionicons name="camera" size={20} color={colors.text} />
             <Text style={styles.addButtonText}>Add Screenshot</Text>
