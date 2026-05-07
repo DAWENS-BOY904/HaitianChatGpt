@@ -804,4 +804,4 @@ const guestStyles = StyleSheet.create({
   primaryBtnText: { color: '#000000', fontSize: 17, fontWeight: '700' },
   secondaryBtn: { alignItems: 'center', paddingVertical: 10 },
   secondaryBtnText: { color: 'rgba(255,255,255,0.45)', fontSize: 15 },
-});
+}); 
