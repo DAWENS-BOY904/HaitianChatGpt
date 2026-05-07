@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Alert,
   Modal,
+  ScrollView,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { BlurView } from 'expo-blur';
@@ -32,7 +33,6 @@ const AI_LOGO_URL = 'https://uzxmmddivzqjhcnnrkns.supabase.co/storage/v1/object/
 const MY_SUPABASE_URL = 'https://uzxmmddivzqjhcnnrkns.supabase.co';
 const MY_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV6eG1tZGRpdnpxamhjbm5ya25zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY0MTY5MjEsImV4cCI6MjA5MTk5MjkyMX0.6PYtbRps9YJjvX5ibxGy346uA82RadEEpFrhSHa1UIE';
 
-// Kreye yon new kliyan Supabase pou Apple login selman
 const appleSupabase = createClient(MY_SUPABASE_URL, MY_SUPABASE_ANON_KEY, {
   auth: {
     autoRefreshToken: true,
@@ -40,6 +40,27 @@ const appleSupabase = createClient(MY_SUPABASE_URL, MY_SUPABASE_ANON_KEY, {
     detectSessionInUrl: false,
   },
 });
+
+// ── COUNTRY LIST (10 pou kounye a, men fonksyon pou ajoute plis) ──
+interface Country {
+  name: string;
+  code: string;
+  flag: string;
+  dialCode: string;
+}
+
+const COUNTRIES: Country[] = [
+  { name: 'United States', code: 'US', flag: '🇺🇸', dialCode: '+1' },
+  { name: 'United Kingdom', code: 'GB', flag: '🇬🇧', dialCode: '+44' },
+  { name: 'Canada', code: 'CA', flag: '🇨🇦', dialCode: '+1' },
+  { name: 'France', code: 'FR', flag: '🇫🇷', dialCode: '+33' },
+  { name: 'Germany', code: 'DE', flag: '🇩🇪', dialCode: '+49' },
+  { name: 'Haiti', code: 'HT', flag: '🇭🇹', dialCode: '+509' },
+  { name: 'Jamaica', code: 'JM', flag: '🇯🇲', dialCode: '+1' },
+  { name: 'Mexico', code: 'MX', flag: '🇲🇽', dialCode: '+52' },
+  { name: 'Brazil', code: 'BR', flag: '🇧🇷', dialCode: '+55' },
+  { name: 'India', code: 'IN', flag: '🇮🇳', dialCode: '+91' },
+];
 
 const logoStyles = StyleSheet.create({
   logoWrapper: {
@@ -65,7 +86,6 @@ function AILogo({ size = 64 }: { size?: number }) {
   );
 }
 
-// ── Helper: send login confirmation email (SOU ANSYEN SUPABASE) ──
 async function sendLoginConfirmationEmail(userId: string, email: string) {
   try {
     const supabase = getSupabaseClient();
@@ -82,7 +102,6 @@ async function sendLoginConfirmationEmail(userId: string, email: string) {
   }
 }
 
-// ── Helper: Generate nonce pou Apple Sign In ──
 async function generateNonce(length: number = 32): Promise<string> {
   const charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
   const randomBytes = await Crypto.getRandomBytesAsync(length);
@@ -93,7 +112,6 @@ async function generateNonce(length: number = 32): Promise<string> {
   return nonce;
 }
 
-// ── Helper: SHA256 hash pou Apple nonce ──
 async function sha256Hash(str: string): Promise<string> {
   try {
     const digest = await Crypto.digestStringAsync(
@@ -102,8 +120,8 @@ async function sha256Hash(str: string): Promise<string> {
     );
     return digest;
   } catch (e) {
-    console.warn('SHA256 with expo-crypto failed, trying fallback:', e);
-    throw new Error('SHA256 hashing failed. Please ensure expo-crypto is properly configured.');
+    console.warn('SHA256 with expo-crypto failed:', e);
+    throw new Error('SHA256 hashing failed.');
   }
 }
 
@@ -117,38 +135,31 @@ export default function LoginScreen() {
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [checkingPasskey, setCheckingPasskey] = useState(false);
   const [showPasskeyPrompt, setShowPasskeyPrompt] = useState(false);
   const [passkeyBiometricLabel, setPasskeyBiometricLabel] = useState('Biometrics');
   const [passkeyLoading, setPasskeyLoading] = useState(false);
-  const [passkeyUserId, setPasskeyUserId] = useState<string | null>(null);
   const [appleLoading, setAppleLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [guestModalVisible, setGuestModalVisible] = useState(false);
   const [isPhoneMode, setIsPhoneMode] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState('');
-  const [countryCode, setCountryCode] = useState('+1');
+  const [selectedCountry, setSelectedCountry] = useState<Country>(COUNTRIES[0]);
+  const [showCountryList, setShowCountryList] = useState(false);
 
-  // On mount: check for existing passkeys (SOU ANSYEN SUPABASE)
   useEffect(() => {
     checkForPasskeyLogin();
   }, []);
 
-  // Watch for user changes and navigate when authenticated
   useEffect(() => {
     if (user) {
       router.replace('/home');
     }
   }, [user]);
 
-  // ── PASSKEY LOGIC SOU ANSYEN SUPABASE (PA MANYEN) ──
   const checkForPasskeyLogin = async () => {
     if (Platform.OS === 'web') return;
     try {
       const supabase = getSupabaseClient();
-
       const cleared = await AsyncStorage.getItem('passkey_session_active');
       if (cleared === 'false') return;
 
@@ -176,7 +187,6 @@ export default function LoginScreen() {
       else if (types.includes(LocalAuthentication.AuthenticationType.FINGERPRINT)) label = Platform.OS === 'ios' ? 'Touch ID' : 'Fingerprint';
 
       setPasskeyBiometricLabel(label);
-      setPasskeyUserId(userId);
       setShowPasskeyPrompt(true);
     } catch (err) {
       console.log('Passkey check error:', err);
@@ -226,7 +236,6 @@ export default function LoginScreen() {
 
   const [adminCodeSending, setAdminCodeSending] = useState(false);
 
-  // ── EMAIL LOGIN (SOU ANSYEN SUPABASE) ──
   const handleEmailContinue = async () => {
     if (!email.trim()) {
       showAlert('Error', 'Please enter your email address');
@@ -243,7 +252,7 @@ export default function LoginScreen() {
         });
         if (otpError) throw new Error(otpError.message);
       } catch (e: any) {
-        showAlert('Error', e?.message || 'Failed to send admin code. Please try again.');
+        showAlert('Error', e?.message || 'Failed to send admin code.');
         setAdminCodeSending(false);
         return;
       } finally {
@@ -255,17 +264,15 @@ export default function LoginScreen() {
     }
   };
 
-  // ── PHONE LOGIN ──
   const handlePhoneContinue = async () => {
     if (!phoneNumber.trim()) {
       showAlert('Error', 'Please enter your phone number');
       return;
     }
-    const fullNumber = `${countryCode} ${phoneNumber}`;
+    const fullNumber = `${selectedCountry.dialCode} ${phoneNumber}`;
     router.push({ pathname: '/verify-phone', params: { phone: fullNumber } });
   };
 
-  // ── GOOGLE LOGIN — Real OnSpace Cloud OAuth ──
   const handleGoogleSignIn = async () => {
     if (googleLoading) return;
     setGoogleLoading(true);
@@ -273,18 +280,13 @@ export default function LoginScreen() {
       const { error } = await signInWithGoogle();
       if (error) {
         const lower = (error || '').toLowerCase();
-        const isCancellation = lower.includes('cancel') || lower.includes('dismiss') || lower.includes('closed') || lower.includes('user closed') || lower.includes('user cancelled');
-        if (!isCancellation) {
-          showAlert('Error', error);
-        }
+        const isCancellation = lower.includes('cancel') || lower.includes('dismiss') || lower.includes('closed');
+        if (!isCancellation) showAlert('Error', error);
       }
     } catch (err: any) {
       const msg = (err?.message || '').toLowerCase();
-      const isCancellation = msg.includes('cancel') || msg.includes('dismiss') || msg.includes('closed') || msg.includes('user closed') || msg.includes('user cancelled');
-      if (!isCancellation) {
-        console.error('Google sign-in error:', err);
-        showAlert('Error', err?.message || 'Google sign-in failed. Please try again.');
-      }
+      const isCancellation = msg.includes('cancel') || msg.includes('dismiss') || msg.includes('closed');
+      if (!isCancellation) showAlert('Error', err?.message || 'Google sign-in failed.');
     } finally {
       setGoogleLoading(false);
     }
@@ -294,36 +296,33 @@ export default function LoginScreen() {
     router.replace('/home');
   };
 
-  // ── TOGGLE PHONE MODE ──
   const togglePhoneMode = () => {
     setIsPhoneMode(!isPhoneMode);
     setEmail('');
     setPhoneNumber('');
     setShowSuggestions(false);
+    setShowCountryList(false);
   };
 
-  // ═══════════════════════════════════════════════════════
-  // ── APPLE SIGN IN (SOU NOUVO SUPABASE SELMAN) ──
-  // ═══════════════════════════════════════════════════════
+  const selectCountry = (country: Country) => {
+    setSelectedCountry(country);
+    setShowCountryList(false);
+  };
+
   const handleAppleSignIn = async () => {
     if (Platform.OS !== 'ios') {
       showAlert('Not Available', 'Apple Sign In is only available on iOS devices.');
       return;
     }
-
     setAppleLoading(true);
-    
     try {
       const available = await AppleAuthentication.isAvailableAsync();
       if (!available) {
         showAlert('Not Available', 'Apple Sign In is not available on this device.');
-        setAppleLoading(false);
         return;
       }
-
       const rawNonce = await generateNonce(32);
       const hashedNonce = await sha256Hash(rawNonce);
-
       const credential = await AppleAuthentication.signInAsync({
         requestedScopes: [
           AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
@@ -331,54 +330,36 @@ export default function LoginScreen() {
         ],
         nonce: hashedNonce,
       });
-
       if (!credential.identityToken) {
         showAlert('Sign In Error', 'Apple did not return an identity token.');
-        setAppleLoading(false);
         return;
       }
-
       const { data, error } = await appleSupabase.auth.signInWithIdToken({
         provider: 'apple',
         token: credential.identityToken,
         nonce: rawNonce,
       });
-
       if (error) {
-        console.error('Supabase Apple sign-in error:', error);
         showAlert('Sign In Failed', error.message || 'Failed to authenticate with Apple.');
-        setAppleLoading(false);
         return;
       }
-
       if (data?.user) {
         if (credential.fullName?.givenName || credential.fullName?.familyName) {
-          const fullName = [
-            credential.fullName.givenName,
-            credential.fullName.familyName,
-          ].filter(Boolean).join(' ');
-          
+          const fullName = [credential.fullName.givenName, credential.fullName.familyName].filter(Boolean).join(' ');
           try {
-            await appleSupabase
-              .from('user_profiles')
-              .update({ full_name: fullName })
-              .eq('id', data.user.id);
+            await appleSupabase.from('user_profiles').update({ full_name: fullName }).eq('id', data.user.id);
           } catch (profileErr) {
-            console.log('Profile update error (non-critical):', profileErr);
+            console.log('Profile update error:', profileErr);
           }
         }
-
         const appleEmail = data.user.email || credential.email || `${credential.user}@privaterelay.appleid.com`;
         await sendLoginConfirmationEmail(data.user.id, appleEmail);
       }
     } catch (e: any) {
       if (e?.code === 'ERR_REQUEST_CANCELED') {
-        console.log('Apple Sign In cancelled by user');
-      } else if (e?.code === 'ERR_APPLE_AUTHENTICATION_CREDENTIAL') {
-        showAlert('Sign In Failed', 'Apple credential error. Please try again.');
+        console.log('Apple Sign In cancelled');
       } else {
-        console.error('Apple Sign In error:', e);
-        showAlert('Sign In Error', e?.message || 'Apple Sign In failed. Please try again.');
+        showAlert('Sign In Error', e?.message || 'Apple Sign In failed.');
       }
     } finally {
       setAppleLoading(false);
@@ -448,40 +429,97 @@ export default function LoginScreen() {
       fontSize: 16,
       padding: 0,
     },
-    phoneInputRow: {
+    // PHONE INPUT STYLES
+    countrySelector: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: Spacing.sm,
-    },
-    countryCodeBtn: {
+      justifyContent: 'space-between',
       backgroundColor: colors.surface,
       borderRadius: BorderRadius.lg,
       paddingHorizontal: Spacing.md,
       paddingVertical: Spacing.sm,
+      marginBottom: Spacing.sm,
       borderWidth: 1,
       borderColor: colors.border,
-      minWidth: 80,
-      alignItems: 'center',
-      justifyContent: 'center',
     },
-    countryCodeText: {
+    countrySelectorLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: Spacing.sm,
+    },
+    countryFlag: {
+      fontSize: 20,
+    },
+    countryName: {
       ...Typography.body,
       color: colors.text,
       fontSize: 16,
     },
+    countryDialCode: {
+      ...Typography.body,
+      color: colors.textSecondary,
+      fontSize: 14,
+    },
+    phoneInputContainer: {
+      backgroundColor: colors.surface,
+      borderRadius: BorderRadius.lg,
+      paddingHorizontal: Spacing.md,
+      paddingVertical: Spacing.sm,
+      marginBottom: Spacing.md,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    phoneInputLabel: {
+      ...Typography.caption,
+      color: colors.textSecondary,
+      fontSize: 12,
+      marginBottom: 4,
+    },
     phoneInput: {
-      flex: 1,
       ...Typography.body,
       color: colors.text,
       fontSize: 16,
       padding: 0,
+    },
+    // COUNTRY LIST STYLES
+    countryListContainer: {
+      backgroundColor: colors.surface,
+      borderRadius: BorderRadius.lg,
+      marginTop: 6,
+      marginBottom: Spacing.md,
+      borderWidth: 1,
+      borderColor: colors.border,
+      maxHeight: 250,
+    },
+    countryItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      padding: 12,
+      borderBottomWidth: 1,
+      borderColor: colors.border,
+    },
+    countryItemLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: Spacing.sm,
+    },
+    countryItemText: {
+      ...Typography.body,
+      color: colors.text,
+      fontSize: 15,
+    },
+    countryItemDial: {
+      ...Typography.body,
+      color: colors.textSecondary,
+      fontSize: 14,
     },
     continueButton: {
       backgroundColor: colors.text,
       borderRadius: BorderRadius.full,
       padding: Spacing.md,
       alignItems: 'center',
-      marginBottom: Spacing.xl,
+      marginBottom: Spacing.md,
     },
     continueButtonDisabled: { opacity: 0.3 },
     continueButtonText: {
@@ -538,13 +576,6 @@ export default function LoginScreen() {
       color: colors.text,
       fontSize: 16,
       fontWeight: '500',
-    },
-    toggleModeText: {
-      ...Typography.body,
-      color: colors.textSecondary,
-      fontSize: 14,
-      textAlign: 'center',
-      marginBottom: Spacing.md,
     },
   });
 
@@ -663,17 +694,58 @@ export default function LoginScreen() {
           You will get smarter responses and can upload files, images and more.
         </Text>
 
-        {/* PHONE INPUT OR EMAIL INPUT */}
+        {/* PHONE INPUT */}
         {isPhoneMode ? (
-          <View style={styles.inputContainer}>
-            <Text style={styles.inputLabel}>Phone number</Text>
-            <View style={styles.phoneInputRow}>
-              <TouchableOpacity style={styles.countryCodeBtn}>
-                <Text style={styles.countryCodeText}>{countryCode}</Text>
-              </TouchableOpacity>
+          <>
+            {/* Country Selector - ANLE */}
+            <TouchableOpacity
+              style={styles.countrySelector}
+              onPress={() => setShowCountryList(!showCountryList)}
+              activeOpacity={0.7}
+            >
+              <View style={styles.countrySelectorLeft}>
+                <Text style={styles.countryFlag}>{selectedCountry.flag}</Text>
+                <Text style={styles.countryName}>{selectedCountry.name}</Text>
+                <Text style={styles.countryDialCode}>({selectedCountry.dialCode})</Text>
+              </View>
+              <Ionicons
+                name={showCountryList ? 'chevron-up' : 'chevron-down'}
+                size={18}
+                color={colors.textSecondary}
+              />
+            </TouchableOpacity>
+
+            {/* Country List Dropdown */}
+            {showCountryList && (
+              <View style={styles.countryListContainer}>
+                <ScrollView showsVerticalScrollIndicator={false}>
+                  {COUNTRIES.map((country, index) => (
+                    <TouchableOpacity
+                      key={country.code}
+                      style={[
+                        styles.countryItem,
+                        index === COUNTRIES.length - 1 && { borderBottomWidth: 0 }
+                      ]}
+                      onPress={() => selectCountry(country)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={styles.countryItemLeft}>
+                        <Text style={styles.countryFlag}>{country.flag}</Text>
+                        <Text style={styles.countryItemText}>{country.name}</Text>
+                      </View>
+                      <Text style={styles.countryItemDial}>{country.dialCode}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+
+            {/* Phone Number Input - ANBA */}
+            <View style={styles.phoneInputContainer}>
+              <Text style={styles.phoneInputLabel}>Phone number</Text>
               <TextInput
                 style={styles.phoneInput}
-                placeholder="(305) 896-2443"
+                placeholder={`${selectedCountry.dialCode} (305) 896-2443`}
                 placeholderTextColor={colors.textSecondary}
                 value={phoneNumber}
                 onChangeText={setPhoneNumber}
@@ -682,8 +754,9 @@ export default function LoginScreen() {
                 accessibilityLabel="Phone number"
               />
             </View>
-          </View>
+          </>
         ) : (
+          /* EMAIL INPUT */
           <View style={styles.inputContainer}>
             <Text style={styles.inputLabel}>Email</Text>
             <TextInput
@@ -700,7 +773,7 @@ export default function LoginScreen() {
           </View>
         )}
 
-        {/* SUGGESTIONS POU EMAIL */}
+        {/* EMAIL SUGGESTIONS */}
         {!isPhoneMode && showSuggestions && (
           <View style={{
             backgroundColor: colors.surface,
@@ -743,13 +816,6 @@ export default function LoginScreen() {
               {operationLoading ? 'Processing...' : 'Continue'}
             </Text>
           )}
-        </TouchableOpacity>
-
-        {/* TOGGLE MODE LINK */}
-        <TouchableOpacity onPress={togglePhoneMode}>
-          <Text style={styles.toggleModeText}>
-            {isPhoneMode ? 'Use email instead' : 'Use phone number instead'}
-          </Text>
         </TouchableOpacity>
 
         <View style={styles.divider}>
@@ -796,19 +862,22 @@ export default function LoginScreen() {
           </TouchableOpacity>
         )}
 
-        {/* Continue with Phone Button */}
+        {/* TOGGLE BUTTON: Continue with Phone OR Continue with Email */}
         <TouchableOpacity
           style={styles.oauthButton}
-          onPress={() => {
-            setIsPhoneMode(true);
-            // Optionally scroll to input or focus
-          }}
+          onPress={togglePhoneMode}
           disabled={operationLoading}
-          accessibilityLabel="Continue with phone"
+          accessibilityLabel={isPhoneMode ? "Continue with email" : "Continue with phone"}
           accessibilityRole="button"
         >
-          <Ionicons name="call" size={20} color={colors.text} />
-          <Text style={styles.oauthButtonText}>Continue with phone</Text>
+          <Ionicons 
+            name={isPhoneMode ? "mail-outline" : "call"} 
+            size={20} 
+            color={colors.text} 
+          />
+          <Text style={styles.oauthButtonText}>
+            {isPhoneMode ? 'Continue with email' : 'Continue with phone'}
+          </Text>
         </TouchableOpacity>
 
         {/* Continue as Guest Button */}
