@@ -4,7 +4,7 @@ const path = require('path');
 /** @type {import('expo/metro-config').MetroConfig} */
 const config = getDefaultConfig(__dirname);
 
-// Ensure PNG assets are handled
+// Ensure PNG assets are handled 
 if (!config.resolver.assetExts.includes('png')) {
   config.resolver.assetExts.push('png');
 }
