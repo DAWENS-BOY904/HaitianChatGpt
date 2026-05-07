@@ -436,7 +436,124 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
   ) => {
     const imageUrl = typeof fileContents === 'string' ? fileContents : undefined;
     const filePayload = Array.isArray(fileContents) ? fileContents : undefined;
-    if (!user) return;
+
+    // ── Guest mode: call AI with anon key, keep messages in local state only ──
+    if (!user) {
+      const userMessageId = `guest-user-${Date.now()}`;
+      const aiMessageId = `guest-ai-${Date.now() + 1}`;
+
+      const tempUserMessage: Message = {
+        id: userMessageId, role: 'user', content,
+        image_url: imageUrl, created_at: new Date().toISOString(),
+      };
+      setMessages(prev => [...prev, tempUserMessage]);
+
+      const placeholderAIMessage: Message = {
+        id: aiMessageId, role: 'assistant', content: '', created_at: new Date().toISOString(),
+      };
+      setMessages(prev => [...prev, placeholderAIMessage]);
+      setStreamingMessageId(aiMessageId);
+
+      try {
+        const contextMessages = [...messages, tempUserMessage].map(m => ({
+          role: m.role,
+          content: typeof m.content === 'string' ? m.content : String(m.content || ''),
+        }));
+
+        const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+        const supabaseUrlEnv = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
+        const edgeFunctionUrl = `${supabaseUrlEnv}/functions/v1/chat`;
+
+        const response = await fetch(edgeFunctionUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${anonKey}`,
+            'apikey': anonKey,
+          },
+          body: JSON.stringify({
+            messages: contextMessages,
+            conversationId: `guest-${Date.now()}`,
+            aiModel: aiModel || 'google-gemini',
+          }),
+        });
+
+        let streamedContent = '';
+
+        if (response.ok) {
+          const reader = response.body?.getReader();
+          if (reader) {
+            const decoder = new TextDecoder();
+            let buffer = '';
+            const pendingWords: string[] = [];
+            let typewriterRunning = false;
+            function scheduleTypewriter() {
+              if (typewriterRunning) return;
+              typewriterRunning = true;
+              function tick() {
+                if (pendingWords.length === 0) { typewriterRunning = false; return; }
+                streamedContent += pendingWords.shift()!;
+                setMessages(prev => prev.map(m => m.id === aiMessageId ? { ...m, content: streamedContent } : m));
+                setTimeout(tick, 12);
+              }
+              tick();
+            }
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              buffer += decoder.decode(value, { stream: true });
+              const lines = buffer.split('\n'); buffer = lines.pop() || '';
+              for (const line of lines) {
+                const trimmed = line.trim();
+                if (!trimmed.startsWith('data:')) continue;
+                try {
+                  const parsed = JSON.parse(trimmed.slice(5).trim());
+                  if (parsed.done) continue;
+                  const chunk = parsed.content ?? parsed.token ?? '';
+                  if (chunk) { const words = chunk.match(/(\S+|\s+)/g) || [chunk]; pendingWords.push(...words); scheduleTypewriter(); }
+                } catch (_e) {}
+              }
+            }
+            const startWait = Date.now();
+            while ((pendingWords.length > 0 || typewriterRunning) && Date.now() - startWait < 20000) {
+              await new Promise(r => setTimeout(r, 50));
+            }
+          } else {
+            const text = await response.text();
+            for (const line of text.split('\n')) {
+              if (!line.trim().startsWith('data:')) continue;
+              try {
+                const parsed = JSON.parse(line.trim().slice(5).trim());
+                streamedContent += parsed.content ?? parsed.token ?? '';
+              } catch (_e) {}
+            }
+            if (streamedContent) {
+              setMessages(prev => prev.map(m => m.id === aiMessageId ? { ...m, content: streamedContent } : m));
+            }
+          }
+        } else {
+          streamedContent = 'I am here to help! Please sign in for the full experience.';
+          setMessages(prev => prev.map(m => m.id === aiMessageId ? { ...m, content: streamedContent } : m));
+        }
+
+        const finalContent = streamedContent.trim() || 'I am here to help! What would you like to know?';
+        setMessages(prev => prev.map(m =>
+          m.id === aiMessageId ? { ...m, content: finalContent } : m
+        ));
+      } catch (e: any) {
+        if (e?.name !== 'AbortError') {
+          setMessages(prev => prev.map(m =>
+            m.id === aiMessageId ? { ...m, content: 'Could not reach AI. Please check your connection.' } : m
+          ));
+        } else {
+          setMessages(prev => prev.filter(m => m.id !== aiMessageId));
+        }
+      } finally {
+        setStreamingMessageId(null);
+      }
+      return;
+    }
+
     if (accountStatus.isSuspended) throw new Error(`Account suspended: ${accountStatus.reason || 'Contact support'}`);
 
     let conversationId = currentConversation?.id;
