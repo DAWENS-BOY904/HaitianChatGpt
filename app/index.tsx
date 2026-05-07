@@ -1,21 +1,22 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  View, 
-  Text, 
-  TouchableOpacity, 
-  StyleSheet, 
-  StatusBar, 
-  Platform, 
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  StatusBar,
+  Platform,
   ActivityIndicator,
   Animated,
-  Image 
+  Image,
+  Linking,
 } from 'react-native';
 import { useRouter, Redirect } from 'expo-router';
 import { useAuth, useAlert, getSupabaseClient } from '@/template';
 import { useTheme } from '../hooks/useTheme';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { createClient } from '@supabase/supabase-js';
+import { BlurView } from 'expo-blur';
 
 const WELCOME_PHRASES = [
   "Let's brainstorm",
@@ -25,71 +26,56 @@ const WELCOME_PHRASES = [
   "What's on your mind?",
 ];
 
-// AI Logo URL
-const AI_LOGO_URL = 'https://uzxmmddivzqjhcnnrkns.supabase.co/storage/v1/object/public/logo/WhatsApp%20Image%202026-04-18%20at%202.58.46%20AM.jpeg';
+const AI_LOGO_URL =
+  'https://uzxmmddivzqjhcnnrkns.supabase.co/storage/v1/object/public/logo/WhatsApp%20Image%202026-04-18%20at%202.58.46%20AM.jpeg';
 
-// ── Helper: send login confirmation email (non-blocking) ──
 async function sendLoginConfirmationEmail(userId: string, email: string) {
   try {
     const supabase = getSupabaseClient();
     await supabase.functions.invoke('send-login-email', {
-      body: {
-        userId,
-        email,
-        platform: Platform.OS,
-        loginTime: new Date().toISOString(),
-      },
+      body: { userId, email, platform: Platform.OS, loginTime: new Date().toISOString() },
     });
   } catch (e) {
     console.warn('Login email send failed:', e);
   }
 }
 
-// ── Helper: get Apple-specific Supabase client ──
-function getAppleSupabaseClient() {
-  const supabaseUrl = process.env.MY_SUPABASE_URL || process.env.EXPO_PUBLIC_MY_SUPABASE_URL;
-  const supabaseKey = process.env.MY_SUPABASE_ANON_KEY || process.env.EXPO_PUBLIC_MY_SUPABASE_ANON_KEY;
-  
-  if (!supabaseUrl || !supabaseKey) {
-    return getSupabaseClient();
-  }
-  
-  return createClient(supabaseUrl, supabaseKey, {
-    auth: {
-      autoRefreshToken: true,
-      persistSession: true,
-      detectSessionInUrl: false,
-    },
-  });
+// ── Real Google G SVG icon via colored text segments ──
+function GoogleIcon({ size = 20 }: { size?: number }) {
+  return (
+    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+      <Text style={{ fontSize: size * 0.85, fontWeight: '700', letterSpacing: -1 }}>
+        <Text style={{ color: '#4285F4' }}>G</Text>
+      </Text>
+    </View>
+  );
+}
+
+// ── Proper Google icon using colored circles ──
+function GoogleLogo({ size = 20 }: { size?: number }) {
+  const s = size;
+  return (
+    <View style={{ width: s, height: s, borderRadius: s / 2, overflow: 'hidden', backgroundColor: 'white', alignItems: 'center', justifyContent: 'center' }}>
+      <Text style={{ fontSize: s * 0.7, fontWeight: '900', color: '#4285F4', lineHeight: s * 0.75 }}>G</Text>
+    </View>
+  );
 }
 
 // ── Apple Sign-In ──
-async function performAppleSignIn(
-  showAlert: (title: string, msg?: string) => void
-): Promise<{ user: any; error?: string }> {
-  if (Platform.OS === 'web') {
-    return { user: null, error: 'Apple Sign In is not available on web.' };
-  }
-
+async function performAppleSignIn(showAlert: (title: string, msg?: string) => void): Promise<{ user: any; error?: string }> {
+  if (Platform.OS === 'web') return { user: null, error: 'Apple Sign In not available on web.' };
   try {
     const AppleAuthentication = await import('expo-apple-authentication');
     const available = await AppleAuthentication.isAvailableAsync();
-    if (!available) {
-      return { user: null, error: 'Apple Sign In is not available on this device.' };
-    }
+    if (!available) return { user: null, error: 'Apple Sign In not available on this device.' };
 
-    const generateNonce = (len: number) => {
-      const charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-      let n = '';
-      for (let i = 0; i < len; i++) n += charset[Math.floor(Math.random() * charset.length)];
-      return n;
-    };
+    const charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let rawNonce = '';
+    for (let i = 0; i < 32; i++) rawNonce += charset[Math.floor(Math.random() * charset.length)];
 
-    const rawNonce = generateNonce(32);
     const msgBuffer = new TextEncoder().encode(rawNonce);
     const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    const hashedNonce = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    const hashedNonce = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
 
     const credential = await AppleAuthentication.signInAsync({
       requestedScopes: [
@@ -99,17 +85,14 @@ async function performAppleSignIn(
       nonce: hashedNonce,
     });
 
-    if (!credential.identityToken) {
-      return { user: null, error: 'Apple Sign In failed: no identity token returned.' };
-    }
+    if (!credential.identityToken) return { user: null, error: 'Apple did not return an identity token.' };
 
-    const supabase = getAppleSupabaseClient();
+    const supabase = getSupabaseClient();
     const { data, error } = await supabase.auth.signInWithIdToken({
       provider: 'apple',
       token: credential.identityToken,
       nonce: rawNonce,
     });
-
     if (error) return { user: null, error: error.message };
     return { user: data?.user ?? null };
   } catch (e: any) {
@@ -118,7 +101,28 @@ async function performAppleSignIn(
   }
 }
 
-// ── Branded splash logo ──
+// ── Google OAuth via Supabase URL (no WebBrowser needed) ──
+async function performGoogleSignIn(): Promise<{ error?: string }> {
+  try {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: 'haitian-chatgpt://auth/callback',
+        skipBrowserRedirect: true,
+      },
+    });
+    if (error) return { error: error.message };
+    if (data?.url) {
+      await Linking.openURL(data.url);
+      return {};
+    }
+    return { error: 'Could not get Google sign-in URL' };
+  } catch (e: any) {
+    return { error: e?.message || 'Google sign-in failed' };
+  }
+}
+
 function BrandedLogo({ isDark }: { isDark?: boolean }) {
   const pulseAnim = useRef(new Animated.Value(1)).current;
   useEffect(() => {
@@ -131,39 +135,28 @@ function BrandedLogo({ isDark }: { isDark?: boolean }) {
     loop.start();
     return () => loop.stop();
   }, []);
-
   return (
     <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
       <View style={{
-        width: 80, height: 80, borderRadius: 22,
-        overflow: 'hidden',
+        width: 80, height: 80, borderRadius: 22, overflow: 'hidden',
         backgroundColor: isDark ? '#1C1C1E' : '#F2F2F7',
         borderWidth: 1.5,
         borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)',
-        alignItems: 'center',
-        justifyContent: 'center',
+        alignItems: 'center', justifyContent: 'center',
       }}>
-        <Image
-          source={{ uri: AI_LOGO_URL }}
-          style={{ width: 80, height: 80, borderRadius: 20 }}
-          resizeMode="cover"
-        />
+        <Image source={{ uri: AI_LOGO_URL }} style={{ width: 80, height: 80, borderRadius: 20 }} resizeMode="cover" />
       </View>
     </Animated.View>
   );
 }
 
-// ── Branded loading screen (photos 3 & 4) ──
 function SplashScreen() {
   const { isDark } = useTheme();
   const fadeAnim = useRef(new Animated.Value(0)).current;
-
   useEffect(() => {
     Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
   }, []);
-
   const bg = isDark ? '#000' : '#FFFFFF';
-
   return (
     <View style={{ flex: 1, backgroundColor: bg, alignItems: 'center', justifyContent: 'center' }}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={bg} />
@@ -174,15 +167,10 @@ function SplashScreen() {
   );
 }
 
-// ── Static AI Logo ──
 function AILogo({ size = 100 }: { size?: number }) {
   return (
     <View style={{ width: size, height: size, borderRadius: size * 0.25, overflow: 'hidden', borderWidth: 2, borderColor: 'rgba(0,150,255,0.2)' }}>
-      <Image
-        source={{ uri: AI_LOGO_URL }}
-        style={{ width: size, height: size }}
-        resizeMode="cover"
-      />
+      <Image source={{ uri: AI_LOGO_URL }} style={{ width: size, height: size }} resizeMode="cover" />
     </View>
   );
 }
@@ -221,10 +209,7 @@ function WelcomeScreen() {
     try {
       const { user, error } = await performAppleSignIn(showAlert);
       if (error) { showAlert('Sign In Failed', error); return; }
-      if (user) {
-        const email = user.email || `${user.id}@privaterelay.appleid.com`;
-        sendLoginConfirmationEmail(user.id, email);
-      }
+      if (user) sendLoginConfirmationEmail(user.id, user.email || '');
     } finally {
       setLoading(null);
     }
@@ -233,22 +218,52 @@ function WelcomeScreen() {
   const handleGoogle = async () => {
     setLoading('google');
     try {
-      const result = await signInWithGoogle() as any;
+      // Try template signInWithGoogle first, fallback to direct OAuth URL
+      let result: any;
+      try {
+        result = await signInWithGoogle();
+      } catch (innerErr: any) {
+        // Template method failed (e.g. WebBrowser issue), use direct Linking
+        result = await performGoogleSignIn();
+      }
+
       const error = result?.error;
-      const user = result?.user;
-      if (error) { showAlert('Sign In Failed', error); return; }
-      if (user) {
-        sendLoginConfirmationEmail(user.id, user.email || '');
+      if (error) {
+        const lower = (error || '').toLowerCase();
+        const isCancellation = lower.includes('cancel') || lower.includes('dismiss') || lower.includes('closed');
+        if (!isCancellation) showAlert('Sign In Failed', error);
+      }
+    } catch (err: any) {
+      const msg = (err?.message || '').toLowerCase();
+      const isCancellation = msg.includes('cancel') || msg.includes('dismiss') || msg.includes('closed');
+      if (!isCancellation) {
+        // Final fallback: open OAuth URL directly
+        try {
+          await performGoogleSignIn();
+        } catch (e2) {
+          showAlert('Error', 'Google sign-in failed. Please try again.');
+        }
       }
     } finally {
       setLoading(null);
     }
   };
 
+  const btnBase: any = {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 50,
+    paddingVertical: 15,
+    paddingHorizontal: 20,
+    gap: 10,
+    overflow: 'hidden',
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
-      
+
       <Animated.View style={[styles.topSection, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
         <AILogo size={90} />
         <Text style={[styles.title, { color: colors.text }]}>
@@ -258,12 +273,13 @@ function WelcomeScreen() {
           Your AI Assistant
         </Text>
       </Animated.View>
-      
+
       <Animated.View style={[styles.bottomSection, { paddingBottom: Math.max(insets.bottom, 20) + 20, opacity: fadeAnim }]}>
+
         {/* Apple Sign-In — iOS only */}
         {Platform.OS === 'ios' ? (
           <TouchableOpacity
-            style={[styles.appleButton, { backgroundColor: isDark ? '#FFFFFF' : '#000000' }]}
+            style={[btnBase, { backgroundColor: isDark ? '#FFFFFF' : '#000000' }]}
             onPress={handleApple}
             disabled={loading !== null}
             activeOpacity={0.82}
@@ -273,45 +289,78 @@ function WelcomeScreen() {
             ) : (
               <Ionicons name="logo-apple" size={20} color={isDark ? '#000000' : '#FFFFFF'} />
             )}
-            <Text style={[styles.appleButtonText, { color: isDark ? '#000' : '#FFF' }]}>
+            <Text style={{ fontWeight: '700', fontSize: 16, color: isDark ? '#000' : '#FFF' }}>
               {loading === 'apple' ? 'Signing in...' : 'Continue with Apple'}
             </Text>
           </TouchableOpacity>
         ) : null}
 
-        {/* Google Sign-In */}
+        {/* Google Sign-In — real colored G icon */}
         <TouchableOpacity
-          style={styles.googleButton}
+          style={[btnBase, {
+            backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+            borderWidth: 1,
+            borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)',
+          }]}
           onPress={handleGoogle}
           disabled={loading !== null}
           activeOpacity={0.82}
         >
           {loading === 'google' ? (
-            <ActivityIndicator size="small" color="#FFF" />
+            <ActivityIndicator size="small" color={colors.text} />
           ) : (
-            <Ionicons name="logo-google" size={20} color="#FFFFFF" />
+            <>
+              {/* Colored Google G */}
+              <View style={{ width: 22, height: 22, alignItems: 'center', justifyContent: 'center' }}>
+                <Text style={{ fontSize: 15, fontWeight: '900', color: '#4285F4' }}>G</Text>
+              </View>
+            </>
           )}
-          <Text style={styles.googleButtonText}>
+          <Text style={{ fontWeight: '600', fontSize: 16, color: colors.text }}>
             {loading === 'google' ? 'Signing in...' : 'Continue with Google'}
           </Text>
         </TouchableOpacity>
 
-        {/* Email */}
-        <TouchableOpacity 
-          style={[styles.emailButton, { backgroundColor: colors.primary || '#10A37F' }]} 
+        {/* Continue with Email */}
+        <TouchableOpacity
+          style={[btnBase, {
+            backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+            borderWidth: 1,
+            borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)',
+          }]}
           onPress={() => router.push('/login')}
           activeOpacity={0.82}
         >
-          <Text style={styles.emailButtonText}>Continue with Email</Text>
+          <Ionicons name="mail-outline" size={20} color={colors.text} />
+          <Text style={{ fontWeight: '600', fontSize: 16, color: colors.text }}>Continue with email</Text>
         </TouchableOpacity>
 
-        {/* Log in */}
-        <TouchableOpacity 
-          style={[styles.loginButton, { borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)' }]} 
+        {/* Continue with Phone */}
+        <TouchableOpacity
+          style={[btnBase, {
+            backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+            borderWidth: 1,
+            borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)',
+          }]}
+          onPress={() => router.push('/phone-entry')}
+          activeOpacity={0.82}
+        >
+          <Ionicons name="call-outline" size={20} color={colors.text} />
+          <Text style={{ fontWeight: '600', fontSize: 16, color: colors.text }}>Continue with phone</Text>
+        </TouchableOpacity>
+
+        {/* Continue as Guest */}
+        <TouchableOpacity
+          style={[btnBase, {
+            backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
+            borderWidth: 1,
+            borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)',
+          }]}
           onPress={() => router.push('/login')}
           activeOpacity={0.82}
         >
-          <Text style={[styles.loginButtonText, { color: colors.text }]}>Log in</Text>
+          <Ionicons name="person-outline" size={20} color={colors.textSecondary || '#888'} />
+          <Text style={{ fontWeight: '500', fontSize: 16, color: colors.textSecondary || '#888' }}>Continue as guest</Text>
         </TouchableOpacity>
       </Animated.View>
     </View>
@@ -319,9 +368,7 @@ function WelcomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  container: { flex: 1 },
   topSection: {
     flex: 1,
     justifyContent: 'center',
@@ -330,84 +377,20 @@ const styles = StyleSheet.create({
     paddingTop: 60,
     gap: 16,
   },
-  title: {
-    fontSize: 30,
-    fontWeight: '700',
-    textAlign: 'center',
-    lineHeight: 38,
-  },
-  subtitle: {
-    fontSize: 15,
-    textAlign: 'center',
-  },
+  title: { fontSize: 30, fontWeight: '700', textAlign: 'center', lineHeight: 38 },
+  subtitle: { fontSize: 15, textAlign: 'center' },
   bottomSection: {
     width: '100%',
     paddingHorizontal: 20,
     paddingTop: 20,
     gap: 12,
   },
-  appleButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 50,
-    paddingVertical: 16,
-    gap: 10,
-  },
-  appleButtonText: {
-    fontWeight: '700',
-    fontSize: 16,
-  },
-  googleButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#4A4A4A',
-    borderRadius: 50,
-    paddingVertical: 16,
-    gap: 10,
-  },
-  googleButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 16,
-  },
-  emailButton: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 50,
-    paddingVertical: 16,
-  },
-  emailButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 16,
-  },
-  loginButton: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 50,
-    paddingVertical: 16,
-    borderWidth: 1,
-  },
-  loginButtonText: {
-    fontWeight: '600',
-    fontSize: 16,
-  },
 });
 
 export default function RootScreen() {
   const { user, loading } = useAuth();
   const { isDark } = useTheme();
-
-  // Show branded splash while auth loads — prevents login flash + white/black screens
-  if (loading) {
-    return <SplashScreen />;
-  }
-
-  if (user) {
-    return <Redirect href="/home" />;
-  }
-
+  if (loading) return <SplashScreen />;
+  if (user) return <Redirect href="/home" />;
   return <WelcomeScreen />;
 }

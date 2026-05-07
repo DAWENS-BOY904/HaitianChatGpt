@@ -14,6 +14,9 @@ import {
   Modal,
   ActivityIndicator,
   Platform,
+  Keyboard,
+  KeyboardAvoidingView,
+  TouchableWithoutFeedback,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
@@ -23,8 +26,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getSupabaseClient } from '@/template';
 import * as Localization from 'expo-localization';
 
-// ==================== TYPES ====================
-
 interface Country {
   code: string;
   name: string;
@@ -33,10 +34,7 @@ interface Country {
   region: string;
 }
 
-// ==================== STATIC COUNTRY DATA ====================
-
 const COUNTRIES: Country[] = [
-  // North America
   { code: 'US', name: 'United States', dialCode: '+1', flag: '🇺🇸', region: 'North America' },
   { code: 'CA', name: 'Canada', dialCode: '+1', flag: '🇨🇦', region: 'North America' },
   { code: 'MX', name: 'Mexico', dialCode: '+52', flag: '🇲🇽', region: 'North America' },
@@ -53,7 +51,6 @@ const COUNTRIES: Country[] = [
   { code: 'NI', name: 'Nicaragua', dialCode: '+505', flag: '🇳🇮', region: 'North America' },
   { code: 'PA', name: 'Panama', dialCode: '+507', flag: '🇵🇦', region: 'North America' },
   { code: 'TT', name: 'Trinidad and Tobago', dialCode: '+1', flag: '🇹🇹', region: 'North America' },
-  // South America
   { code: 'BR', name: 'Brazil', dialCode: '+55', flag: '🇧🇷', region: 'South America' },
   { code: 'AR', name: 'Argentina', dialCode: '+54', flag: '🇦🇷', region: 'South America' },
   { code: 'CL', name: 'Chile', dialCode: '+56', flag: '🇨🇱', region: 'South America' },
@@ -65,7 +62,6 @@ const COUNTRIES: Country[] = [
   { code: 'PY', name: 'Paraguay', dialCode: '+595', flag: '🇵🇾', region: 'South America' },
   { code: 'UY', name: 'Uruguay', dialCode: '+598', flag: '🇺🇾', region: 'South America' },
   { code: 'GY', name: 'Guyana', dialCode: '+592', flag: '🇬🇾', region: 'South America' },
-  // Europe
   { code: 'GB', name: 'United Kingdom', dialCode: '+44', flag: '🇬🇧', region: 'Europe' },
   { code: 'FR', name: 'France', dialCode: '+33', flag: '🇫🇷', region: 'Europe' },
   { code: 'DE', name: 'Germany', dialCode: '+49', flag: '🇩🇪', region: 'Europe' },
@@ -91,7 +87,6 @@ const COUNTRIES: Country[] = [
   { code: 'RU', name: 'Russia', dialCode: '+7', flag: '🇷🇺', region: 'Europe' },
   { code: 'UA', name: 'Ukraine', dialCode: '+380', flag: '🇺🇦', region: 'Europe' },
   { code: 'TR', name: 'Turkey', dialCode: '+90', flag: '🇹🇷', region: 'Europe' },
-  // Africa
   { code: 'ZA', name: 'South Africa', dialCode: '+27', flag: '🇿🇦', region: 'Africa' },
   { code: 'NG', name: 'Nigeria', dialCode: '+234', flag: '🇳🇬', region: 'Africa' },
   { code: 'EG', name: 'Egypt', dialCode: '+20', flag: '🇪🇬', region: 'Africa' },
@@ -110,7 +105,6 @@ const COUNTRIES: Country[] = [
   { code: 'MZ', name: 'Mozambique', dialCode: '+258', flag: '🇲🇿', region: 'Africa' },
   { code: 'MG', name: 'Madagascar', dialCode: '+261', flag: '🇲🇬', region: 'Africa' },
   { code: 'MU', name: 'Mauritius', dialCode: '+230', flag: '🇲🇺', region: 'Africa' },
-  // Asia
   { code: 'CN', name: 'China', dialCode: '+86', flag: '🇨🇳', region: 'Asia' },
   { code: 'JP', name: 'Japan', dialCode: '+81', flag: '🇯🇵', region: 'Asia' },
   { code: 'IN', name: 'India', dialCode: '+91', flag: '🇮🇳', region: 'Asia' },
@@ -138,17 +132,13 @@ const COUNTRIES: Country[] = [
   { code: 'AF', name: 'Afghanistan', dialCode: '+93', flag: '🇦🇫', region: 'Asia' },
   { code: 'TW', name: 'Taiwan', dialCode: '+886', flag: '🇹🇼', region: 'Asia' },
   { code: 'HK', name: 'Hong Kong', dialCode: '+852', flag: '🇭🇰', region: 'Asia' },
-  // Oceania
   { code: 'AU', name: 'Australia', dialCode: '+61', flag: '🇦🇺', region: 'Oceania' },
   { code: 'NZ', name: 'New Zealand', dialCode: '+64', flag: '🇳🇿', region: 'Oceania' },
   { code: 'FJ', name: 'Fiji', dialCode: '+679', flag: '🇫🇯', region: 'Oceania' },
   { code: 'PG', name: 'Papua New Guinea', dialCode: '+675', flag: '🇵🇬', region: 'Oceania' },
 ];
 
-// Sort alphabetically within each region
 const SORTED_COUNTRIES = [...COUNTRIES].sort((a, b) => a.name.localeCompare(b.name));
-
-// ==================== UTILITY FUNCTIONS ====================
 
 function basicValidatePhone(number: string): boolean {
   const digits = number.replace(/\D/g, '');
@@ -162,8 +152,6 @@ function formatPhoneDisplay(raw: string): string {
   if (digits.length <= 10) return `${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6)}`;
   return `${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6, 10)} ${digits.slice(10)}`;
 }
-
-// ==================== MAIN COMPONENT ====================
 
 export default function PhoneEntryScreen() {
   const { colors } = useTheme();
@@ -186,9 +174,7 @@ export default function PhoneEntryScreen() {
     if (!searchQuery.trim()) return SORTED_COUNTRIES;
     const q = searchQuery.toLowerCase();
     return SORTED_COUNTRIES.filter(c =>
-      c.name.toLowerCase().includes(q) ||
-      c.dialCode.includes(q) ||
-      c.code.toLowerCase().includes(q)
+      c.name.toLowerCase().includes(q) || c.dialCode.includes(q) || c.code.toLowerCase().includes(q)
     );
   }, [searchQuery]);
 
@@ -205,7 +191,6 @@ export default function PhoneEntryScreen() {
     });
   }, [filteredCountries]);
 
-  // Auto-detect country on mount
   useEffect(() => {
     try {
       const region = (Localization as any).region || '';
@@ -230,27 +215,15 @@ export default function PhoneEntryScreen() {
   };
 
   const handleContinue = async () => {
-    if (!phoneNumber.trim()) {
-      setError('Please enter your phone number');
-      return;
-    }
-    if (!basicValidatePhone(phoneNumber)) {
-      setError('Please enter a valid phone number');
-      return;
-    }
-
+    Keyboard.dismiss();
+    if (!phoneNumber.trim()) { setError('Please enter your phone number'); return; }
+    if (!basicValidatePhone(phoneNumber)) { setError('Please enter a valid phone number'); return; }
     setLoading(true);
     setError('');
-
     try {
       const fullPhone = `${selectedCountry.dialCode}${phoneNumber}`;
-
-      const { error: otpError } = await supabase.auth.signInWithOtp({
-        phone: fullPhone,
-      });
-
+      const { error: otpError } = await supabase.auth.signInWithOtp({ phone: fullPhone });
       if (otpError) throw otpError;
-
       router.push({
         pathname: '/verify-code',
         params: {
@@ -268,15 +241,12 @@ export default function PhoneEntryScreen() {
 
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
-    centered: { justifyContent: 'center', alignItems: 'center' },
     header: {
-      flexDirection: 'row',
-      alignItems: 'center',
+      flexDirection: 'row', alignItems: 'center',
       paddingHorizontal: Spacing.md,
       paddingTop: insets.top + Spacing.sm,
       paddingBottom: Spacing.sm,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border,
+      borderBottomWidth: 1, borderBottomColor: colors.border,
     },
     backButton: { padding: Spacing.sm },
     headerTitle: { ...Typography.heading, fontSize: 20, marginLeft: Spacing.md, flex: 1, color: colors.text },
@@ -286,102 +256,56 @@ export default function PhoneEntryScreen() {
     label: { ...Typography.body, fontWeight: '600', marginBottom: Spacing.sm, color: colors.text },
     inputGroup: { marginBottom: Spacing.xl },
     countrySelector: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: colors.surface,
-      borderRadius: BorderRadius.lg,
-      padding: Spacing.md,
-      marginBottom: Spacing.md,
-      borderWidth: 1,
-      borderColor: colors.border,
+      flexDirection: 'row', alignItems: 'center',
+      backgroundColor: colors.surface, borderRadius: BorderRadius.lg,
+      padding: Spacing.md, marginBottom: Spacing.md,
+      borderWidth: 1, borderColor: colors.border,
     },
     flag: { fontSize: 32, marginRight: Spacing.sm },
     countryInfo: { flex: 1 },
     countryName: { ...Typography.body, fontWeight: '600', color: colors.text },
     dialCode: { ...Typography.caption, color: colors.textSecondary },
     phoneInputContainer: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: colors.surface,
-      borderRadius: BorderRadius.lg,
-      borderWidth: 2,
-      borderColor: colors.border,
-      paddingHorizontal: Spacing.md,
+      flexDirection: 'row', alignItems: 'center',
+      backgroundColor: colors.surface, borderRadius: BorderRadius.lg,
+      borderWidth: 2, borderColor: colors.border, paddingHorizontal: Spacing.md,
     },
-    dialCodePrefix: {
-      ...Typography.body,
-      fontSize: 18,
-      fontWeight: '600',
-      color: colors.textSecondary,
-      marginRight: Spacing.sm,
-    },
-    phoneInput: {
-      flex: 1,
-      ...Typography.body,
-      fontSize: 18,
-      color: colors.text,
-      paddingVertical: Platform.OS === 'ios' ? Spacing.md : Spacing.sm,
-    },
+    dialCodePrefix: { ...Typography.body, fontSize: 18, fontWeight: '600', color: colors.textSecondary, marginRight: Spacing.sm },
+    phoneInput: { flex: 1, ...Typography.body, fontSize: 18, color: colors.text, paddingVertical: Platform.OS === 'ios' ? Spacing.md : Spacing.sm },
     hintText: { ...Typography.caption, color: colors.textSecondary, marginTop: Spacing.sm },
     errorText: { ...Typography.caption, color: '#FF453A', marginTop: Spacing.sm },
     continueButton: {
-      backgroundColor: colors.primary,
-      borderRadius: BorderRadius.lg,
-      padding: Spacing.lg,
-      alignItems: 'center',
-      marginTop: 'auto',
+      backgroundColor: colors.primary, borderRadius: BorderRadius.lg,
+      padding: Spacing.lg, alignItems: 'center', marginTop: 'auto',
     },
     continueButtonDisabled: { opacity: 0.5 },
     continueButtonText: { ...Typography.body, color: '#FFFFFF', fontWeight: '700', fontSize: 18 },
-    // Modal
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
     modalContent: {
       backgroundColor: colors.background,
-      borderTopLeftRadius: BorderRadius.xl,
-      borderTopRightRadius: BorderRadius.xl,
-      maxHeight: '85%',
-      paddingTop: Spacing.md,
+      borderTopLeftRadius: BorderRadius.xl, borderTopRightRadius: BorderRadius.xl,
+      maxHeight: '85%', paddingTop: Spacing.md,
       paddingBottom: Math.max(insets.bottom, Spacing.md),
     },
-    modalHandle: {
-      width: 40, height: 4, borderRadius: 2,
-      backgroundColor: colors.border,
-      alignSelf: 'center', marginBottom: Spacing.md,
-    },
+    modalHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border, alignSelf: 'center', marginBottom: Spacing.md },
     modalHeader: { paddingHorizontal: Spacing.md, marginBottom: Spacing.md },
     modalTitle: { ...Typography.heading, fontSize: 20, marginBottom: Spacing.md, color: colors.text },
     searchContainer: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: colors.surface,
-      borderRadius: BorderRadius.md,
-      paddingHorizontal: Spacing.md,
-      borderWidth: 1,
-      borderColor: colors.border,
+      flexDirection: 'row', alignItems: 'center',
+      backgroundColor: colors.surface, borderRadius: BorderRadius.md,
+      paddingHorizontal: Spacing.md, borderWidth: 1, borderColor: colors.border,
     },
     searchIcon: { marginRight: Spacing.sm },
     searchInput: { flex: 1, ...Typography.body, color: colors.text, paddingVertical: Spacing.md },
     sectionHeader: {
-      backgroundColor: colors.background,
-      paddingHorizontal: Spacing.md,
-      paddingVertical: Spacing.sm,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border,
+      backgroundColor: colors.background, paddingHorizontal: Spacing.md,
+      paddingVertical: Spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border,
     },
-    sectionHeaderText: {
-      ...Typography.caption,
-      fontWeight: '700',
-      color: colors.primary,
-      textTransform: 'uppercase',
-      letterSpacing: 0.5,
-    },
+    sectionHeaderText: { ...Typography.caption, fontWeight: '700', color: colors.primary, textTransform: 'uppercase', letterSpacing: 0.5 },
     countryItem: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      padding: Spacing.md,
-      borderRadius: BorderRadius.md,
-      marginHorizontal: Spacing.md,
-      marginBottom: 2,
+      flexDirection: 'row', alignItems: 'center',
+      padding: Spacing.md, borderRadius: BorderRadius.md,
+      marginHorizontal: Spacing.md, marginBottom: 2,
     },
     countryItemSelected: { backgroundColor: `${colors.primary}18` },
     countryItemFlag: { fontSize: 26, marginRight: Spacing.md, width: 36, textAlign: 'center' },
@@ -393,89 +317,76 @@ export default function PhoneEntryScreen() {
   });
 
   return (
-    <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={24} color={colors.text} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Phone Login</Text>
-      </View>
-
-      <View style={styles.content}>
-        <Text style={styles.title}>Enter your phone</Text>
-        <Text style={styles.subtitle}>
-          {"We'll send you a verification code to confirm your number"}
-        </Text>
-
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Country</Text>
-          <TouchableOpacity style={styles.countrySelector} onPress={() => setShowCountryPicker(true)}>
-            <Text style={styles.flag}>{selectedCountry.flag}</Text>
-            <View style={styles.countryInfo}>
-              <Text style={styles.countryName}>{selectedCountry.name}</Text>
-              <Text style={styles.dialCode}>{selectedCountry.dialCode}</Text>
-            </View>
-            <Ionicons name="chevron-down" size={20} color={colors.textSecondary} />
-          </TouchableOpacity>
-
-          <Text style={styles.label}>Phone Number</Text>
-          <View style={[styles.phoneInputContainer, phoneNumber.length > 0 && { borderColor: colors.primary }]}>
-            <Text style={styles.dialCodePrefix}>{selectedCountry.dialCode}</Text>
-            <TextInput
-              ref={phoneInputRef}
-              style={styles.phoneInput}
-              placeholder="Phone number"
-              placeholderTextColor={colors.textSecondary}
-              keyboardType="phone-pad"
-              value={formatPhoneDisplay(phoneNumber)}
-              onChangeText={handlePhoneChange}
-              autoFocus
-              textContentType="telephoneNumber"
-              autoComplete="tel"
-            />
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <View style={styles.container}>
+          {/* Header */}
+          <View style={styles.header}>
+            <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+              <Ionicons name="arrow-back" size={24} color={colors.text} />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Phone Login</Text>
           </View>
 
-          {error ? (
-            <Text style={styles.errorText}>{error}</Text>
-          ) : (
-            <Text style={styles.hintText}>
-              {'Enter your phone number without the country code'}
+          <View style={styles.content}>
+            <Text style={styles.title}>Enter your phone</Text>
+            <Text style={styles.subtitle}>
+              {"We'll send you a verification code to confirm your number"}
             </Text>
-          )}
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Country</Text>
+              <TouchableOpacity style={styles.countrySelector} onPress={() => setShowCountryPicker(true)}>
+                <Text style={styles.flag}>{selectedCountry.flag}</Text>
+                <View style={styles.countryInfo}>
+                  <Text style={styles.countryName}>{selectedCountry.name}</Text>
+                  <Text style={styles.dialCode}>{selectedCountry.dialCode}</Text>
+                </View>
+                <Ionicons name="chevron-down" size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
+
+              <Text style={styles.label}>Phone Number</Text>
+              <View style={[styles.phoneInputContainer, phoneNumber.length > 0 && { borderColor: colors.primary }]}>
+                <Text style={styles.dialCodePrefix}>{selectedCountry.dialCode}</Text>
+                <TextInput
+                  ref={phoneInputRef}
+                  style={styles.phoneInput}
+                  placeholder="Phone number"
+                  placeholderTextColor={colors.textSecondary}
+                  keyboardType="phone-pad"
+                  value={formatPhoneDisplay(phoneNumber)}
+                  onChangeText={handlePhoneChange}
+                  autoFocus
+                  textContentType="telephoneNumber"
+                  autoComplete="tel"
+                />
+              </View>
+
+              {error ? (
+                <Text style={styles.errorText}>{error}</Text>
+              ) : (
+                <Text style={styles.hintText}>
+                  {'Enter your phone number without the country code'}
+                </Text>
+              )}
+            </View>
+
+            <TouchableOpacity
+              style={[styles.continueButton, (loading || !phoneNumber) && styles.continueButtonDisabled]}
+              onPress={handleContinue}
+              disabled={loading || !phoneNumber}
+            >
+              {loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.continueButtonText}>Continue</Text>}
+            </TouchableOpacity>
+          </View>
         </View>
+      </TouchableWithoutFeedback>
 
-        <TouchableOpacity
-          style={[
-            styles.continueButton,
-            (loading || !phoneNumber) && styles.continueButtonDisabled,
-          ]}
-          onPress={handleContinue}
-          disabled={loading || !phoneNumber}
-        >
-          {loading ? (
-            <ActivityIndicator color="#FFFFFF" />
-          ) : (
-            <Text style={styles.continueButtonText}>Continue</Text>
-          )}
-        </TouchableOpacity>
-      </View>
-
-      {/* Country Picker Modal */}
-      <Modal
-        visible={showCountryPicker}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowCountryPicker(false)}
-      >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setShowCountryPicker(false)}
-        >
+      {/* Country Picker Modal — outside TouchableWithoutFeedback so it works correctly */}
+      <Modal visible={showCountryPicker} transparent animationType="slide" onRequestClose={() => setShowCountryPicker(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowCountryPicker(false)}>
           <View style={styles.modalContent} onStartShouldSetResponder={() => true}>
             <View style={styles.modalHandle} />
-
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Select Country</Text>
               <View style={styles.searchContainer}>
@@ -505,10 +416,7 @@ export default function PhoneEntryScreen() {
                   {regionCountries.map(country => (
                     <TouchableOpacity
                       key={country.code}
-                      style={[
-                        styles.countryItem,
-                        selectedCountry.code === country.code && styles.countryItemSelected,
-                      ]}
+                      style={[styles.countryItem, selectedCountry.code === country.code && styles.countryItemSelected]}
                       onPress={() => handleCountrySelect(country)}
                     >
                       <Text style={styles.countryItemFlag}>{country.flag}</Text>
@@ -523,7 +431,6 @@ export default function PhoneEntryScreen() {
                   ))}
                 </View>
               ))}
-
               {filteredCountries.length === 0 && (
                 <View style={styles.emptyContainer}>
                   <Ionicons name="search-outline" size={48} color={colors.textSecondary} />
@@ -534,7 +441,6 @@ export default function PhoneEntryScreen() {
           </View>
         </TouchableOpacity>
       </Modal>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
-
