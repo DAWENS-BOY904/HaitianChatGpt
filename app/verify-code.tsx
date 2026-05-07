@@ -291,6 +291,7 @@ export default function VerifyCodeScreen() {
         )}
       </View>
 
+      
       <View style={styles.footer}>
         <Text style={styles.footerLink}>Terms of Use</Text>
         <Text style={styles.footerLink}>•</Text>
