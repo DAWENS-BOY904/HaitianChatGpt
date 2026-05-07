@@ -262,12 +262,21 @@ export default function LoginScreen() {
     try {
       const { error } = await signInWithGoogle();
       if (error) {
-        showAlert('Error', error);
+        // Silently ignore cancellation — user just closed the browser
+        const lower = (error || '').toLowerCase();
+        const isCancellation = lower.includes('cancel') || lower.includes('dismiss') || lower.includes('closed') || lower.includes('user closed') || lower.includes('user cancelled');
+        if (!isCancellation) {
+          showAlert('Error', error);
+        }
       }
       // Navigation handled by useEffect watching `user`
     } catch (err: any) {
-      console.error('Google sign-in error:', err);
-      showAlert('Error', err?.message || 'Google sign-in failed. Please try again.');
+      const msg = (err?.message || '').toLowerCase();
+      const isCancellation = msg.includes('cancel') || msg.includes('dismiss') || msg.includes('closed') || msg.includes('user closed') || msg.includes('user cancelled');
+      if (!isCancellation) {
+        console.error('Google sign-in error:', err);
+        showAlert('Error', err?.message || 'Google sign-in failed. Please try again.');
+      }
     } finally {
       setGoogleLoading(false);
     }
