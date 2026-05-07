@@ -359,8 +359,7 @@ function WelcomeScreen() {
           onPress={() => router.push('/login')}
           activeOpacity={0.82}
         >
-          <Ionicons name="person-outline" size={20} color={colors.textSecondary || '#888'} />
-          <Text style={{ fontWeight: '500', fontSize: 16, color: colors.textSecondary || '#888' }}>Continue as guest</Text>
+          <Text style={{ fontWeight: '500', fontSize: 16, color: colors.textSecondary || '#888' }}>Login</Text>
         </TouchableOpacity>
       </Animated.View>
     </View>
