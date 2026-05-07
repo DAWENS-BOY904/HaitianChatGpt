@@ -32,7 +32,7 @@ const AI_LOGO_URL = 'https://uzxmmddivzqjhcnnrkns.supabase.co/storage/v1/object/
 const MY_SUPABASE_URL = 'https://uzxmmddivzqjhcnnrkns.supabase.co'; // METE URL OU A ISIT LA
 const MY_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV6eG1tZGRpdnpxamhjbm5ya25zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY0MTY5MjEsImV4cCI6MjA5MTk5MjkyMX0.6PYtbRps9YJjvX5ibxGy346uA82RadEEpFrhSHa1UIE'; // METE KEY OU A ISIT LA
 
-// Kreye yon nouvo kliyan Supabase pou Apple login selman
+// Kreye yon new kliyan Supabase pou Apple login selman
 const appleSupabase = createClient(MY_SUPABASE_URL, MY_SUPABASE_ANON_KEY, {
   auth: {
     autoRefreshToken: true,
