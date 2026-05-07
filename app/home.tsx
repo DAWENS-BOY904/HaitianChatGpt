@@ -1709,7 +1709,13 @@ export default function HomeScreen() {
 
     let conversationId = currentConversation?.id;
     if (!conversationId) {
-      if (isGuest) { conversationId = `guest-session-${Date.now()}`; }
+      if (isGuest) {
+        conversationId = `guest-session-${Date.now()}`;
+        // Create a local guest conversation so messages persist in this session
+        const guestConv = { id: conversationId, title: 'Guest Chat', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+        // We don't call createConversation for guests (it would create a DB entry)
+        // Instead just set local state via sendMessage which handles guest mode
+      }
       else {
         try { conversationId = await createConversation(); } catch (convErr) { console.log('[Home] createConversation error:', convErr); }
         if (!conversationId) conversationId = `local-${Date.now()}`;

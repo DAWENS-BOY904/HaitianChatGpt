@@ -18,7 +18,7 @@ import { useSubscription } from '../hooks/useSubscription';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAlert, useAuth, getSupabaseClient } from '@/template';
-import * as WebBrowser from 'expo-web-browser';
+// expo-web-browser replaced with Linking for web compatibility
 import { useFocusEffect } from '@react-navigation/native';
 import { FunctionsHttpError } from '@supabase/supabase-js';
 
@@ -282,15 +282,7 @@ export default function SubscriptionScreen() {
 
     if (!data?.url) throw new Error('No checkout URL returned from Stripe');
 
-    try {
-      await WebBrowser.openBrowserAsync(data.url, {
-        presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN,
-        enableBarCollapsing: true,
-      });
-    } catch (_e) {
-      await Linking.openURL(data.url);
-    }
-
+    await Linking.openURL(data.url);
     setTimeout(() => checkSubscriptionStatus(), 2000);
   };
 
@@ -305,13 +297,7 @@ export default function SubscriptionScreen() {
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
       if (error || !data?.url) throw new Error(error?.message || 'Could not open portal');
-      try {
-        await WebBrowser.openBrowserAsync(data.url, {
-          presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN,
-        });
-      } catch (_e) {
-        await Linking.openURL(data.url);
-      }
+      await Linking.openURL(data.url);
       setTimeout(() => checkSubscriptionStatus(), 1500);
     } catch (err: any) {
       showAlert('Error', err?.message || 'Failed to open subscription management');
