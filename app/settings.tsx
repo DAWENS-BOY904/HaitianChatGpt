@@ -1385,4 +1385,4 @@ export default function SettingsScreen() {
     </View>
   );
 }
-age verification mudt be full screen with dark/ligth system.
+
