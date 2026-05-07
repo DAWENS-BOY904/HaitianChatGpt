@@ -36,8 +36,8 @@
   "submit": {
     "production": {
       "ios": {
-        "ascAppId": "PLACEHOLDER",
-        "appleTeamId": "PLACEHOLDER"
+        "ascAppId": "6763410636",
+        "appleTeamId": "3CTX33Z5P3"
       },
       "android": {
         "serviceAccountKeyPath": "./google-service-account.json",
