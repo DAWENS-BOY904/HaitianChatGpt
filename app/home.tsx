@@ -3316,3 +3316,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
+fix spotify apear in input only when i add its never apear if i dont add it or connect.
