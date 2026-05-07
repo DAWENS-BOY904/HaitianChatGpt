@@ -228,7 +228,7 @@ export function SpotifyMusicCard({ tracks, hasAccount, isDark, isGuest }: Props)
           );
         })}
 
-        {/* Sign in footer for guest */}
+        {/* Sign in footerS for guest */}
         {!hasAccount ? (
           <View style={[scStyles.signInRow, { borderTopColor: borderC }]}>
             <View style={{ flex: 1 }}>
