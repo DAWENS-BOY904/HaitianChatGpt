@@ -11,8 +11,10 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.onspace.dawinix-ht",
-      "buildNumber": "1.0.0",
-      "usesAppleSignIn": true
+      "usesAppleSignIn": true,
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
