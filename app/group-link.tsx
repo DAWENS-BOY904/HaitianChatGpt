@@ -8,11 +8,9 @@ import {
   ActivityIndicator,
   Share,
   Alert,
-  ScrollView,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { Ionicons } from '@expo/vector-icons';
-import { Image } from 'expo-image';
 import { useTheme } from '../hooks/useTheme';
 import { useAuth, useAlert } from '@/template';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -44,6 +42,7 @@ export default function GroupLinkScreen() {
   const params = useLocalSearchParams<{
     groupId?: string;
     conversationId?: string;
+    // When opened via an invite link, these come in
     inviteCode?: string;
     token?: string;
   }>();
@@ -52,7 +51,7 @@ export default function GroupLinkScreen() {
   const incomingInviteCode = params.inviteCode || '';
   const incomingToken = params.token || '';
 
-  const [groupName, setGroupName] = useState('New group chat');
+  const [groupName, setGroupName] = useState('Group Chat');
   const [inviteToken, setInviteToken] = useState('');
   const [inviteId, setInviteId] = useState('');
   const [loading, setLoading] = useState(true);
@@ -61,9 +60,6 @@ export default function GroupLinkScreen() {
   const [deleting, setDeleting] = useState(false);
   const [copied, setCopied] = useState(false);
   const [username, setUsername] = useState('');
-  const [creatorPhotoUrl, setCreatorPhotoUrl] = useState<string | null>(null);
-  const [creatorName, setCreatorName] = useState('');
-
   // Whether this screen is used to JOIN (via invite link) vs MANAGE
   const isJoinMode = !!(incomingInviteCode && incomingToken);
 
@@ -86,7 +82,7 @@ export default function GroupLinkScreen() {
     try {
       const { data: invite } = await supabase
         .from('group_invites')
-        .select('group_id, invite_code, id, expires_at, created_by')
+        .select('group_id, invite_code, id, expires_at')
         .eq('invite_code', incomingToken)
         .single();
 
@@ -98,29 +94,15 @@ export default function GroupLinkScreen() {
 
       const { data: group } = await supabase
         .from('chat_groups')
-        .select('name, creator_id')
+        .select('name')
         .eq('id', invite.group_id)
         .single();
 
-      if (group) setGroupName(group.name || 'New group chat');
+      if (group) setGroupName(group.name || 'Group Chat');
       setInviteId(invite.id || incomingInviteCode);
       setInviteToken(invite.invite_code);
-
-      // Load creator profile for the avatar shown in join screen
-      const creatorId = group?.creator_id || invite.created_by;
-      if (creatorId) {
-        const { data: creator } = await supabase
-          .from('user_profiles')
-          .select('username, full_name, profile_photo_url')
-          .eq('id', creatorId)
-          .single();
-        if (creator) {
-          setCreatorPhotoUrl(creator.profile_photo_url || null);
-          setCreatorName(creator.full_name || creator.username || 'User');
-        }
-      }
     } catch (_e) {
-      setGroupName('New group chat');
+      setGroupName('Group Chat');
     } finally {
       setLoading(false);
     }
@@ -154,7 +136,7 @@ export default function GroupLinkScreen() {
         .eq('id', groupId)
         .single();
 
-      if (groupData) setGroupName(groupData.name || 'New group chat');
+      if (groupData) setGroupName(groupData.name || 'Group Chat');
 
       const { data: inviteData } = await supabase
         .from('group_invites')
@@ -168,6 +150,7 @@ export default function GroupLinkScreen() {
         setInviteId(inviteData.id || generateGroupId());
         setInviteToken(inviteData.invite_code);
       } else {
+        // Create a new invite
         const newToken = generateToken();
         const { data: newInvite } = await supabase
           .from('group_invites')
@@ -195,6 +178,7 @@ export default function GroupLinkScreen() {
     }
     setJoining(true);
     try {
+      // Find the invite
       const { data: invite } = await supabase
         .from('group_invites')
         .select('group_id, expires_at')
@@ -213,12 +197,13 @@ export default function GroupLinkScreen() {
         return;
       }
 
-      // Add user to group_members
+      // Add user to group_members (ignore duplicate errors)
       await supabase
         .from('group_members')
         .upsert({ group_id: invite.group_id, user_id: user.id }, { onConflict: 'group_id,user_id' });
 
       // Create or find a conversation for this group
+      let convId: string | null = null;
       const { data: existingConv } = await supabase
         .from('conversations')
         .select('id')
@@ -227,14 +212,19 @@ export default function GroupLinkScreen() {
         .limit(1)
         .single();
 
-      if (!existingConv?.id) {
-        await supabase
+      if (existingConv?.id) {
+        convId = existingConv.id;
+      } else {
+        const { data: newConv } = await supabase
           .from('conversations')
-          .insert({ user_id: user.id, title: groupName });
+          .insert({ user_id: user.id, title: groupName })
+          .select('id')
+          .single();
+        convId = newConv?.id || null;
       }
 
-      // Navigate to home and activate group mode
-      router.replace({ pathname: '/home', params: { joinedGroupName: groupName, joinedGroupId: invite.group_id } } as any);
+      // Navigate to home with the group conversation active
+      router.replace('/home');
     } catch (e: any) {
       showAlert('Error', e?.message || 'Failed to join group');
     } finally {
@@ -366,138 +356,6 @@ export default function GroupLinkScreen() {
     },
   ];
 
-  // ── JOIN MODE — Full screen, ChatGPT-style ─────────────────────────
-  if (loading) {
-    return (
-      <View style={{ flex: 1, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center' }}>
-        <ActivityIndicator size="large" color="#FFF" />
-      </View>
-    );
-  }
-
-  if (isJoinMode) {
-    return (
-      <View style={{ flex: 1, backgroundColor: '#000' }}>
-        {/* Main content - centered */}
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 }}>
-          {/* Creator avatar */}
-          <View style={{ marginBottom: 28 }}>
-            {creatorPhotoUrl ? (
-              <Image
-                source={{ uri: creatorPhotoUrl }}
-                style={{ width: 100, height: 100, borderRadius: 50 }}
-                contentFit="cover"
-              />
-            ) : (
-              <View style={{
-                width: 100, height: 100, borderRadius: 50,
-                backgroundColor: '#3A3A3C',
-                alignItems: 'center', justifyContent: 'center',
-              }}>
-                <Text style={{ color: '#FFF', fontSize: 40, fontWeight: '700' }}>
-                  {(creatorName[0] || groupName[0] || 'G').toUpperCase()}
-                </Text>
-              </View>
-            )}
-          </View>
-
-          {/* Title */}
-          <Text style={{ fontSize: 28, textAlign: 'center', marginBottom: 8, lineHeight: 36 }}>
-            <Text style={{ fontWeight: '700', color: '#FFF' }}>Dawinix</Text>
-            <Text style={{ color: 'rgba(255,255,255,0.55)', fontWeight: '300' }}> with </Text>
-            <Text style={{ fontWeight: '700', color: '#FFF' }}>{creatorName || groupName}</Text>
-          </Text>
-          <Text style={{ fontSize: 17, color: 'rgba(255,255,255,0.5)', textAlign: 'center', marginBottom: 44 }}>
-            {groupName}
-          </Text>
-
-          {/* Join button */}
-          <TouchableOpacity
-            style={[{
-              width: '100%', backgroundColor: '#FFFFFF', borderRadius: 50,
-              paddingVertical: 17, alignItems: 'center', marginBottom: 16,
-            }, joining && { opacity: 0.7 }]}
-            onPress={handleJoinGroup}
-            disabled={joining}
-            activeOpacity={0.85}
-          >
-            {joining ? (
-              <ActivityIndicator size="small" color="#000" />
-            ) : (
-              <Text style={{ color: '#000', fontSize: 17, fontWeight: '700' }}>Join group chat</Text>
-            )}
-          </TouchableOpacity>
-
-          {/* Ignore */}
-          <TouchableOpacity
-            onPress={() => router.replace('/home')}
-            activeOpacity={0.7}
-            style={{ paddingVertical: 12, paddingHorizontal: 24 }}
-          >
-            <Text style={{ color: 'rgba(255,255,255,0.65)', fontSize: 17 }}>Ignore</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Bottom section */}
-        <View style={{
-          paddingHorizontal: 20, paddingTop: 16,
-          paddingBottom: insets.bottom + 20,
-          borderTopWidth: StyleSheet.hairlineWidth,
-          borderTopColor: 'rgba(255,255,255,0.1)',
-        }}>
-          <Text style={{
-            color: 'rgba(255,255,255,0.45)', fontSize: 13,
-            textAlign: 'center', lineHeight: 19, marginBottom: 14,
-          }}>
-            {'Your personal Dawinix memory is never used in group chats.'}
-          </Text>
-
-          <TouchableOpacity
-            style={{
-              flexDirection: 'row', alignItems: 'center', gap: 12,
-              backgroundColor: 'rgba(255,255,255,0.07)',
-              borderRadius: 18, padding: 14, marginBottom: 12,
-              borderWidth: StyleSheet.hairlineWidth,
-              borderColor: 'rgba(255,255,255,0.1)',
-            }}
-            onPress={() => router.push('/settings' as any)}
-            activeOpacity={0.8}
-          >
-            <View style={{
-              width: 46, height: 46, borderRadius: 23,
-              backgroundColor: '#4A4A4E',
-              alignItems: 'center', justifyContent: 'center',
-            }}>
-              <Text style={{ color: '#FFF', fontSize: 18, fontWeight: '700' }}>
-                {(user?.email?.[0] || 'U').toUpperCase()}
-              </Text>
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={{ color: '#FFF', fontSize: 16, fontWeight: '600' }}>Set up your profile</Text>
-              <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, marginTop: 2 }}>
-                Choose a username and photo
-              </Text>
-            </View>
-            <Ionicons name="pencil-outline" size={20} color="rgba(255,255,255,0.45)" />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={{ alignItems: 'center', paddingVertical: 10 }}
-            onPress={() => {}}
-          >
-            <View style={{
-              backgroundColor: 'rgba(255,255,255,0.12)',
-              borderRadius: 50, paddingHorizontal: 20, paddingVertical: 10,
-            }}>
-              <Text style={{ color: '#FFF', fontSize: 15 }}>Learn more</Text>
-            </View>
-          </TouchableOpacity>
-        </View>
-      </View>
-    );
-  }
-
-  // ── MANAGE MODE ────────────────────────────────────────────────────
   return (
     <View style={[styles.container, { backgroundColor: bgColor, paddingTop: insets.top }]}>
       {/* Header */}
@@ -509,54 +367,93 @@ export default function GroupLinkScreen() {
         >
           <Ionicons name="chevron-back" size={24} color={textC} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: textC }]}>Group link</Text>
+        <Text style={[styles.headerTitle, { color: textC }]}>
+          {isJoinMode ? 'Join Group' : 'Group link'}
+        </Text>
         <View style={{ width: 36 }} />
       </View>
 
-      <View style={styles.content}>
-        <View style={styles.linkSection}>
-          {inviteLink ? (
-            <Text style={styles.linkText} numberOfLines={2}>{inviteLink}</Text>
-          ) : (
-            <Text style={[styles.linkText, { color: subC }]}>
-              No link — tap Reset to generate one
+      {loading ? (
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <ActivityIndicator size="large" color="#007AFF" />
+        </View>
+      ) : isJoinMode ? (
+        // ── JOIN MODE ────────────────────────────────────────────────────
+        <View style={styles.joinContent}>
+          <View style={[styles.joinCard, { backgroundColor: cardBg, borderColor: borderCol }]}>
+            <View style={styles.groupIconWrap}>
+              <Ionicons name="people" size={36} color="#007AFF" />
+            </View>
+            <Text style={[styles.joinGroupName, { color: textC }]}>{groupName}</Text>
+            <Text style={[styles.joinDesc, { color: subC }]}>
+              You were invited to join this group chat. Everyone in the group can see all messages.
             </Text>
-          )}
-          <Text style={[styles.linkDescription, { color: subC }]}>
-            Anyone can join your group chat with this link. Anyone who joins will be able to view the entire conversation history.
-          </Text>
-        </View>
+          </View>
 
-        <View style={[styles.divider, { backgroundColor: borderCol }]} />
+          <TouchableOpacity
+            style={[styles.joinBtn, joining && { opacity: 0.7 }]}
+            onPress={handleJoinGroup}
+            disabled={joining}
+            activeOpacity={0.82}
+          >
+            {joining ? (
+              <ActivityIndicator size="small" color="#FFF" />
+            ) : (
+              <Text style={styles.joinBtnText}>Join Group Chat</Text>
+            )}
+          </TouchableOpacity>
 
-        <View style={[styles.actionsContainer, { backgroundColor: cardBg, borderColor: borderCol }]}>
-          {actions.map((action, index) => (
-            <React.Fragment key={action.label}>
-              {index > 0 && <View style={[styles.actionDivider, { backgroundColor: borderCol }]} />}
-              <TouchableOpacity
-                style={styles.actionRow}
-                onPress={action.onPress}
-                activeOpacity={0.6}
-                disabled={action.loading || (!inviteLink && action.label !== 'Reset')}
-              >
-                <View style={{ width: 28, alignItems: 'center', opacity: (!inviteLink && action.label !== 'Reset' && action.label !== 'Delete') ? 0.35 : 1 }}>
-                  {action.loading ? (
-                    <ActivityIndicator size="small" color={action.color} />
-                  ) : (
-                    <Ionicons name={action.icon as any} size={24} color={action.color} />
-                  )}
-                </View>
-                <Text style={[
-                  styles.actionLabel, { color: action.color },
-                  (!inviteLink && action.label !== 'Reset' && action.label !== 'Delete') && { opacity: 0.35 },
-                ]}>
-                  {action.label}
-                </Text>
-              </TouchableOpacity>
-            </React.Fragment>
-          ))}
+          <TouchableOpacity style={styles.cancelBtn} onPress={() => router.replace('/home')}>
+            <Text style={[styles.cancelBtnText, { color: subC }]}>Not now</Text>
+          </TouchableOpacity>
         </View>
-      </View>
+      ) : (
+        // ── MANAGE MODE ──────────────────────────────────────────────────
+        <View style={styles.content}>
+          <View style={styles.linkSection}>
+            {inviteLink ? (
+              <Text style={styles.linkText} numberOfLines={2}>{inviteLink}</Text>
+            ) : (
+              <Text style={[styles.linkText, { color: subC }]}>
+                No link — tap Reset to generate one
+              </Text>
+            )}
+            <Text style={[styles.linkDescription, { color: subC }]}>
+              Anyone can join your group chat with this link. Anyone who joins will be able to view the entire conversation history.
+            </Text>
+          </View>
+
+          <View style={[styles.divider, { backgroundColor: borderCol }]} />
+
+          <View style={[styles.actionsContainer, { backgroundColor: cardBg, borderColor: borderCol }]}>
+            {actions.map((action, index) => (
+              <React.Fragment key={action.label}>
+                {index > 0 && <View style={[styles.actionDivider, { backgroundColor: borderCol }]} />}
+                <TouchableOpacity
+                  style={styles.actionRow}
+                  onPress={action.onPress}
+                  activeOpacity={0.6}
+                  disabled={action.loading || (!inviteLink && action.label !== 'Reset')}
+                >
+                  <View style={{ width: 28, alignItems: 'center', opacity: (!inviteLink && action.label !== 'Reset' && action.label !== 'Delete') ? 0.35 : 1 }}>
+                    {action.loading ? (
+                      <ActivityIndicator size="small" color={action.color} />
+                    ) : (
+                      <Ionicons name={action.icon as any} size={24} color={action.color} />
+                    )}
+                  </View>
+                  <Text style={[
+                    styles.actionLabel, { color: action.color },
+                    (!inviteLink && action.label !== 'Reset' && action.label !== 'Delete') && { opacity: 0.35 },
+                  ]}>
+                    {action.label}
+                  </Text>
+                </TouchableOpacity>
+              </React.Fragment>
+            ))}
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -579,4 +476,31 @@ const styles = StyleSheet.create({
   actionRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 20, gap: 18 },
   actionLabel: { fontSize: 17, fontWeight: '400' },
   actionDivider: { height: StyleSheet.hairlineWidth, marginLeft: 66 },
+
+  // Join mode
+  joinContent: { flex: 1, paddingHorizontal: 24, paddingTop: 40, alignItems: 'center' },
+  joinCard: {
+    width: '100%', borderRadius: 20, padding: 28,
+    alignItems: 'center', borderWidth: StyleSheet.hairlineWidth,
+    marginBottom: 28,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12, shadowRadius: 12, elevation: 6,
+  },
+  groupIconWrap: {
+    width: 72, height: 72, borderRadius: 36,
+    backgroundColor: 'rgba(0,122,255,0.12)',
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: 16,
+  },
+  joinGroupName: { fontSize: 22, fontWeight: '700', textAlign: 'center', marginBottom: 10 },
+  joinDesc: { fontSize: 14, lineHeight: 21, textAlign: 'center' },
+  joinBtn: {
+    width: '100%', backgroundColor: '#007AFF', borderRadius: 50,
+    paddingVertical: 17, alignItems: 'center', marginBottom: 14,
+    shadowColor: '#007AFF', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3, shadowRadius: 10, elevation: 6,
+  },
+  joinBtnText: { color: '#FFF', fontSize: 17, fontWeight: '700' },
+  cancelBtn: { paddingVertical: 12, paddingHorizontal: 24 },
+  cancelBtnText: { fontSize: 15 },
 });

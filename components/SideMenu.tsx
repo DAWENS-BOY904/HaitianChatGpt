@@ -733,15 +733,6 @@ export function SideMenu({
                       {isPinned && <Ionicons name="pin" size={12} color={accentColor} />}
                       {renderConvTitle(conv.title || 'New conversation')}
                     </View>
-                    {((conv.title || '').toLowerCase().includes('group') || (conv as any).is_group) ? (
-                      profilePhotoUrl ? (
-                        <Image source={{ uri: profilePhotoUrl }} style={{ width: 28, height: 28, borderRadius: 14, marginLeft: 8 }} contentFit="cover" />
-                      ) : (
-                        <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: isDark ? '#3A3A3C' : '#E5E5EA', alignItems: 'center', justifyContent: 'center', marginLeft: 8 }}>
-                          <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 11, fontWeight: '700' }}>{getUserInitials()[0]}</Text>
-                        </View>
-                      )
-                    ) : null}
                   </TouchableOpacity>
                 );
               })

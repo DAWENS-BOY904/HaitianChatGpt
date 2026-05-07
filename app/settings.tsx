@@ -29,128 +29,6 @@ import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useProfile } from '../contexts/ProfileContext';
 import { Image as ExpoImageBadge } from 'expo-image';
-import { WebView } from 'react-native-webview';
-
-const PERSONA_LINK = 'https://perso.na/s/rKzyfH-XZ9663D';
-const AGE_VERIFIED_KEY = 'age_verification_completed';
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// AGE VERIFICATION MODAL
-// ═══════════════════════════════════════════════════════════════════════════════
-function AgeVerificationModal({ visible, onClose, onVerified }: {
-  visible: boolean; onClose: () => void; onVerified: () => void;
-}) {
-  const [step, setStep] = useState<'consent' | 'camera' | 'device' | 'webview'>('consent');
-  const [webviewLoading, setWebviewLoading] = useState(true);
-  useEffect(() => { if (visible) setStep('consent'); }, [visible]);
-
-  const handleCopyLink = async () => {
-    try { const Clip = require('expo-clipboard'); await Clip.setStringAsync(PERSONA_LINK); } catch (_e) {}
-  };
-  const handleSendEmail = () => {
-    Linking.openURL(`mailto:?subject=Age Verification&body=Continue your age verification: ${PERSONA_LINK}`);
-  };
-  const handleVerified = async () => {
-    await AsyncStorage.setItem(AGE_VERIFIED_KEY, 'true');
-    onVerified(); onClose();
-  };
-
-  return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' }}>
-        <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onClose} />
-        <View style={{ backgroundColor: '#FFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '92%' }}>
-          <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(0,0,0,0.18)', alignSelf: 'center', marginTop: 10 }} />
-          <TouchableOpacity style={{ position: 'absolute', top: 16, right: 16, zIndex: 10, padding: 8 }} onPress={onClose}>
-            <Ionicons name="close" size={22} color="#000" />
-          </TouchableOpacity>
-          {step === 'consent' && (
-            <ScrollView contentContainerStyle={{ padding: 28, paddingTop: 20, alignItems: 'center' }} showsVerticalScrollIndicator={false}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 24 }}>
-                <View style={{ width: 56, height: 56, borderRadius: 16, backgroundColor: '#6366F1', alignItems: 'center', justifyContent: 'center' }}><Ionicons name="star" size={28} color="#FFF" /></View>
-                <View style={{ flexDirection: 'row', gap: 5 }}>{[0,1,2].map(i => <View key={i} style={{ width: 5, height: 5, borderRadius: 2.5, backgroundColor: '#CBD5E1' }} />)}</View>
-                <View style={{ width: 56, height: 56, borderRadius: 28, borderWidth: 2, borderColor: '#E2E8F0', alignItems: 'center', justifyContent: 'center' }}><Ionicons name="shield-checkmark-outline" size={28} color="#64748B" /></View>
-              </View>
-              <Text style={{ fontSize: 24, fontWeight: '700', color: '#000', textAlign: 'center', marginBottom: 14 }}>We need to verify your age</Text>
-              <Text style={{ fontSize: 15, color: '#475569', textAlign: 'center', lineHeight: 22, marginBottom: 24 }}>This quick check helps confirm your age so we can give you the right Dawinix experience. You will need a smartphone or webcam.</Text>
-              <Text style={{ fontSize: 12, color: '#94A3B8', textAlign: 'center', lineHeight: 18, marginBottom: 28 }}>By clicking continue, you consent to Persona and its service providers collecting your biometric data to verify your age and identity on behalf of Dawinix, per Persona's Privacy Policy.</Text>
-              <TouchableOpacity style={{ width: '100%', backgroundColor: '#000', borderRadius: 50, paddingVertical: 17, alignItems: 'center', marginBottom: 20 }} onPress={() => setStep('camera')}>
-                <Text style={{ color: '#FFF', fontSize: 17, fontWeight: '700' }}>Agree and Continue</Text>
-              </TouchableOpacity>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 16 }}>
-                <Text style={{ color: '#94A3B8', fontSize: 12 }}>SECURED WITH</Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                  <View style={{ width: 14, height: 14, borderRadius: 4, backgroundColor: '#6366F1', alignItems: 'center', justifyContent: 'center' }}><Ionicons name="star" size={8} color="#FFF" /></View>
-                  <Text style={{ color: '#6366F1', fontSize: 13, fontWeight: '700' }}>persona</Text>
-                </View>
-              </View>
-            </ScrollView>
-          )}
-          {step === 'camera' && (
-            <ScrollView contentContainerStyle={{ padding: 28, paddingTop: 16, alignItems: 'center' }} showsVerticalScrollIndicator={false}>
-              <TouchableOpacity style={{ position: 'absolute', top: 0, left: 0, padding: 8, zIndex: 10 }} onPress={() => setStep('consent')}><Ionicons name="chevron-back" size={22} color="#000" /></TouchableOpacity>
-              <Text style={{ fontSize: 26, fontWeight: '700', color: '#000', textAlign: 'left', width: '100%', marginTop: 28, marginBottom: 12 }}>{'Let\'s make sure it\'s you'}</Text>
-              <Text style={{ fontSize: 15, color: '#475569', textAlign: 'left', width: '100%', lineHeight: 22, marginBottom: 36 }}>Position yourself in the center of the camera, making sure its well-lit and clearly visible.</Text>
-              <Ionicons name="person-circle-outline" size={120} color="#CBD5E1" style={{ marginBottom: 40 }} />
-              <TouchableOpacity style={{ width: '100%', backgroundColor: '#000', borderRadius: 50, paddingVertical: 17, alignItems: 'center', marginBottom: 14 }} onPress={() => setStep('webview')}>
-                <Text style={{ color: '#FFF', fontSize: 17, fontWeight: '700' }}>Get started</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={{ width: '100%', borderRadius: 50, paddingVertical: 17, alignItems: 'center', borderWidth: 1.5, borderColor: '#E2E8F0', marginBottom: 16 }} onPress={() => setStep('device')}>
-                <Text style={{ color: '#000', fontSize: 17, fontWeight: '600' }}>Continue on another device</Text>
-              </TouchableOpacity>
-            </ScrollView>
-          )}
-          {step === 'device' && (
-            <ScrollView contentContainerStyle={{ padding: 28, paddingTop: 16 }} showsVerticalScrollIndicator={false}>
-              <TouchableOpacity style={{ position: 'absolute', top: 0, left: 0, padding: 8, zIndex: 10 }} onPress={() => setStep('camera')}><Ionicons name="chevron-back" size={22} color="#000" /></TouchableOpacity>
-              <Text style={{ fontSize: 24, fontWeight: '700', color: '#000', marginTop: 28, marginBottom: 12 }}>Continue on another device</Text>
-              <Text style={{ fontSize: 15, color: '#475569', lineHeight: 22, marginBottom: 28 }}>To verify your identity, we will need access to your camera. You can scan the QR code with your phone camera to continue on your mobile device. No app download is required.</Text>
-              <View style={{ alignItems: 'center', marginBottom: 24 }}>
-                <View style={{ width: 160, height: 160, borderRadius: 12, backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#E2E8F0', alignItems: 'center', justifyContent: 'center' }}>
-                  <Ionicons name="qr-code" size={120} color="#1E293B" />
-                </View>
-                <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12 }} onPress={handleCopyLink} activeOpacity={0.7}>
-                  <Text style={{ color: '#475569', fontSize: 13, textDecorationLine: 'underline' }} numberOfLines={1}>{PERSONA_LINK}</Text>
-                  <Ionicons name="link-outline" size={16} color="#475569" />
-                </TouchableOpacity>
-              </View>
-              <TouchableOpacity style={{ width: '100%', backgroundColor: '#000', borderRadius: 50, paddingVertical: 17, alignItems: 'center', marginBottom: 12 }} onPress={handleSendEmail}>
-                <Text style={{ color: '#FFF', fontSize: 17, fontWeight: '700' }}>Send Email</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={{ alignItems: 'center', paddingVertical: 12 }} onPress={handleVerified}>
-                <Text style={{ color: '#64748B', fontSize: 15 }}>I have completed verification</Text>
-              </TouchableOpacity>
-            </ScrollView>
-          )}
-          {step === 'webview' && (
-            <View style={{ minHeight: 500 }}>
-              {webviewLoading && (
-                <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 500, alignItems: 'center', justifyContent: 'center', zIndex: 10, backgroundColor: '#FFF' }}>
-                  <ActivityIndicator size="large" color="#6366F1" />
-                  <Text style={{ color: '#64748B', fontSize: 14, marginTop: 12 }}>Loading verification...</Text>
-                </View>
-              )}
-              <WebView
-                source={{ uri: PERSONA_LINK }}
-                style={{ height: 500 }}
-                onLoadStart={() => setWebviewLoading(true)}
-                onLoadEnd={() => setWebviewLoading(false)}
-                onNavigationStateChange={(state) => {
-                  if (state.url?.includes('success') || state.url?.includes('complete') || state.url?.includes('verified')) { handleVerified(); }
-                }}
-                javaScriptEnabled
-                domStorageEnabled
-              />
-              <TouchableOpacity style={{ paddingVertical: 14, alignItems: 'center', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#E2E8F0' }} onPress={handleVerified}>
-                <Text style={{ color: '#6366F1', fontSize: 15, fontWeight: '600' }}>Verification complete</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
-      </View>
-    </Modal>
-  );
-}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // VERIFIED BADGE COMPONENT
@@ -546,8 +424,6 @@ export default function SettingsScreen() {
   const [accentPickerVisible, setAccentPickerVisible] = useState(false);
   const [appearancePickerVisible, setAppearancePickerVisible] = useState(false);
   const [verifiedBadgeModalVisible, setVerifiedBadgeModalVisible] = useState(false);
-  const [ageVerifiedModalVisible, setAgeVerifiedModalVisible] = useState(false);
-  const [isAgeVerified, setIsAgeVerified] = useState(false);
 
   const currentVersion = Constants.expoConfig?.version || '1.0.0';
   const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'update' | 'no-update' | 'version'>('idle');
@@ -564,10 +440,6 @@ export default function SettingsScreen() {
 
   useEffect(() => {
     checkAdminAccess();
-    // Check age verification status
-    AsyncStorage.getItem(AGE_VERIFIED_KEY).then(val => {
-      if (val === 'true') setIsAgeVerified(true);
-    }).catch(() => {});
     // Load cached profile first for instant display
     AsyncStorage.getItem(PROFILE_CACHE_KEY).then(cached => {
       if (cached) {
@@ -1088,10 +960,7 @@ export default function SettingsScreen() {
           <Row icon="megaphone-outline" label="Ads controls" onPress={() => router.push('/ads-controls')} />
           <Row icon="apps-outline" label="Apps & connectors" onPress={() => router.push('/app-connect')} />
           <Row icon="archive-outline" label="Archived chats" onPress={() => router.push('/archived-chats')} />
-          <Row icon="lock-closed-outline" label="Security" onPress={() => router.push('/security')} />
-          {!isAgeVerified && (
-            <Row icon="shield-checkmark-outline" label="Age verification" onPress={() => setAgeVerifiedModalVisible(true)} isLast />
-          )}
+          <Row icon="lock-closed-outline" label="Security" onPress={() => router.push('/security')} isLast />
         </Card>
 
         {/* ═══════════════════════════════════════════════════════════════
@@ -1253,13 +1122,6 @@ export default function SettingsScreen() {
         onClose={() => setVerifiedBadgeModalVisible(false)}
         isDark={isDark}
         tier={isAdminUser ? 'plus' : tier === 'plus' ? 'plus' : 'pro'}
-      />
-
-      {/* Age Verification Modal */}
-      <AgeVerificationModal
-        visible={ageVerifiedModalVisible}
-        onClose={() => setAgeVerifiedModalVisible(false)}
-        onVerified={() => setIsAgeVerified(true)}
       />
 
       {/* ═══════════════════════════════════════════════════════════════
