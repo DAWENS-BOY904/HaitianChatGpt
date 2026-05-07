@@ -35,31 +35,14 @@ const PERSONA_LINK = 'https://perso.na/s/rKzyfH-XZ9663D';
 const AGE_VERIFIED_KEY = 'age_verification_completed';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// AGE VERIFICATION MODAL — Full-screen with dark/light mode support
+// AGE VERIFICATION MODAL
 // ═══════════════════════════════════════════════════════════════════════════════
 function AgeVerificationModal({ visible, onClose, onVerified }: {
   visible: boolean; onClose: () => void; onVerified: () => void;
 }) {
-  const { isDark } = useTheme();
-  const insets2 = useSafeAreaInsets();
   const [step, setStep] = useState<'consent' | 'camera' | 'device' | 'webview'>('consent');
   const [webviewLoading, setWebviewLoading] = useState(true);
   useEffect(() => { if (visible) setStep('consent'); }, [visible]);
-
-  // Dark/Light theme tokens
-  const bg = isDark ? '#000000' : '#FFFFFF';
-  const primaryText = isDark ? '#FFFFFF' : '#000000';
-  const secondaryText = isDark ? 'rgba(255,255,255,0.55)' : '#475569';
-  const tertiaryText = isDark ? 'rgba(255,255,255,0.35)' : '#94A3B8';
-  const borderColor = isDark ? 'rgba(255,255,255,0.12)' : '#E2E8F0';
-  const inputBg = isDark ? 'rgba(255,255,255,0.07)' : '#F1F5F9';
-  const btnBg = isDark ? '#FFFFFF' : '#000000';
-  const btnText = isDark ? '#000000' : '#FFFFFF';
-  const outlineBtnBorder = isDark ? 'rgba(255,255,255,0.2)' : '#E2E8F0';
-  const outlineBtnText = isDark ? '#FFFFFF' : '#000000';
-  const iconColor = isDark ? 'rgba(255,255,255,0.2)' : '#CBD5E1';
-  const personaText = '#6366F1';
-  const qrIconColor = isDark ? '#E2E8F0' : '#1E293B';
 
   const handleCopyLink = async () => {
     try { const Clip = require('expo-clipboard'); await Clip.setStringAsync(PERSONA_LINK); } catch (_e) {}
@@ -73,162 +56,105 @@ function AgeVerificationModal({ visible, onClose, onVerified }: {
   };
 
   return (
-    <Modal visible={visible} transparent={false} animationType="slide" onRequestClose={onClose}>
-      <View style={{ flex: 1, backgroundColor: bg }}>
-        {/* Header */}
-        <View style={{
-          flexDirection: 'row', alignItems: 'center',
-          paddingTop: insets2.top + 8, paddingHorizontal: 16, paddingBottom: 12,
-          borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: borderColor,
-        }}>
-          {step !== 'consent' ? (
-            <TouchableOpacity
-              style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)', alignItems: 'center', justifyContent: 'center' }}
-              onPress={() => setStep(step === 'webview' ? 'camera' : step === 'device' ? 'camera' : 'consent')}
-            >
-              <Ionicons name="chevron-back" size={20} color={primaryText} />
-            </TouchableOpacity>
-          ) : <View style={{ width: 36 }} />}
-          <View style={{ flex: 1, alignItems: 'center' }}>
-            <Text style={{ fontSize: 17, fontWeight: '700', color: primaryText }}>Age Verification</Text>
-          </View>
-          <TouchableOpacity
-            style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)', alignItems: 'center', justifyContent: 'center' }}
-            onPress={onClose}
-          >
-            <Ionicons name="close" size={18} color={primaryText} />
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' }}>
+        <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onClose} />
+        <View style={{ backgroundColor: '#FFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '92%' }}>
+          <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(0,0,0,0.18)', alignSelf: 'center', marginTop: 10 }} />
+          <TouchableOpacity style={{ position: 'absolute', top: 16, right: 16, zIndex: 10, padding: 8 }} onPress={onClose}>
+            <Ionicons name="close" size={22} color="#000" />
           </TouchableOpacity>
-        </View>
-
-        {/* CONSENT STEP */}
-        {step === 'consent' && (
-          <ScrollView contentContainerStyle={{ padding: 28, alignItems: 'center', flexGrow: 1 }} showsVerticalScrollIndicator={false}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 32, marginTop: 16 }}>
-              <View style={{ width: 56, height: 56, borderRadius: 16, backgroundColor: '#6366F1', alignItems: 'center', justifyContent: 'center' }}>
-                <Ionicons name="star" size={28} color="#FFF" />
+          {step === 'consent' && (
+            <ScrollView contentContainerStyle={{ padding: 28, paddingTop: 20, alignItems: 'center' }} showsVerticalScrollIndicator={false}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 24 }}>
+                <View style={{ width: 56, height: 56, borderRadius: 16, backgroundColor: '#6366F1', alignItems: 'center', justifyContent: 'center' }}><Ionicons name="star" size={28} color="#FFF" /></View>
+                <View style={{ flexDirection: 'row', gap: 5 }}>{[0,1,2].map(i => <View key={i} style={{ width: 5, height: 5, borderRadius: 2.5, backgroundColor: '#CBD5E1' }} />)}</View>
+                <View style={{ width: 56, height: 56, borderRadius: 28, borderWidth: 2, borderColor: '#E2E8F0', alignItems: 'center', justifyContent: 'center' }}><Ionicons name="shield-checkmark-outline" size={28} color="#64748B" /></View>
               </View>
-              <View style={{ flexDirection: 'row', gap: 5 }}>
-                {[0,1,2].map(i => <View key={i} style={{ width: 5, height: 5, borderRadius: 2.5, backgroundColor: borderColor }} />)}
-              </View>
-              <View style={{ width: 56, height: 56, borderRadius: 28, borderWidth: 2, borderColor, alignItems: 'center', justifyContent: 'center' }}>
-                <Ionicons name="shield-checkmark-outline" size={28} color={secondaryText} />
-              </View>
-            </View>
-            <Text style={{ fontSize: 26, fontWeight: '700', color: primaryText, textAlign: 'center', marginBottom: 14 }}>We need to verify your age</Text>
-            <Text style={{ fontSize: 15, color: secondaryText, textAlign: 'center', lineHeight: 22, marginBottom: 24 }}>
-              This quick check helps confirm your age so we can give you the right Dawinix experience. You will need a smartphone or webcam.
-            </Text>
-            <Text style={{ fontSize: 12, color: tertiaryText, textAlign: 'center', lineHeight: 18, marginBottom: 40 }}>
-              By clicking continue, you consent to Persona and its service providers collecting your biometric data to verify your age and identity on behalf of Dawinix, per Persona's Privacy Policy.
-            </Text>
-            <View style={{ flex: 1 }} />
-            <TouchableOpacity
-              style={{ width: '100%', backgroundColor: btnBg, borderRadius: 50, paddingVertical: 17, alignItems: 'center', marginBottom: 16 }}
-              onPress={() => setStep('camera')}
-            >
-              <Text style={{ color: btnText, fontSize: 17, fontWeight: '700' }}>Agree and Continue</Text>
-            </TouchableOpacity>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingBottom: insets2.bottom + 8 }}>
-              <Text style={{ color: tertiaryText, fontSize: 12 }}>SECURED WITH</Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                <View style={{ width: 14, height: 14, borderRadius: 4, backgroundColor: '#6366F1', alignItems: 'center', justifyContent: 'center' }}>
-                  <Ionicons name="star" size={8} color="#FFF" />
+              <Text style={{ fontSize: 24, fontWeight: '700', color: '#000', textAlign: 'center', marginBottom: 14 }}>We need to verify your age</Text>
+              <Text style={{ fontSize: 15, color: '#475569', textAlign: 'center', lineHeight: 22, marginBottom: 24 }}>This quick check helps confirm your age so we can give you the right Dawinix experience. You will need a smartphone or webcam.</Text>
+              <Text style={{ fontSize: 12, color: '#94A3B8', textAlign: 'center', lineHeight: 18, marginBottom: 28 }}>By clicking continue, you consent to Persona and its service providers collecting your biometric data to verify your age and identity on behalf of Dawinix, per Persona's Privacy Policy.</Text>
+              <TouchableOpacity style={{ width: '100%', backgroundColor: '#000', borderRadius: 50, paddingVertical: 17, alignItems: 'center', marginBottom: 20 }} onPress={() => setStep('camera')}>
+                <Text style={{ color: '#FFF', fontSize: 17, fontWeight: '700' }}>Agree and Continue</Text>
+              </TouchableOpacity>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 16 }}>
+                <Text style={{ color: '#94A3B8', fontSize: 12 }}>SECURED WITH</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  <View style={{ width: 14, height: 14, borderRadius: 4, backgroundColor: '#6366F1', alignItems: 'center', justifyContent: 'center' }}><Ionicons name="star" size={8} color="#FFF" /></View>
+                  <Text style={{ color: '#6366F1', fontSize: 13, fontWeight: '700' }}>persona</Text>
                 </View>
-                <Text style={{ color: personaText, fontSize: 13, fontWeight: '700' }}>persona</Text>
               </View>
-            </View>
-          </ScrollView>
-        )}
-
-        {/* CAMERA STEP */}
-        {step === 'camera' && (
-          <ScrollView contentContainerStyle={{ padding: 28, alignItems: 'center', flexGrow: 1 }} showsVerticalScrollIndicator={false}>
-            <Text style={{ fontSize: 28, fontWeight: '700', color: primaryText, textAlign: 'left', width: '100%', marginBottom: 12 }}>
-              {"Let's make sure it's you"}
-            </Text>
-            <Text style={{ fontSize: 15, color: secondaryText, textAlign: 'left', width: '100%', lineHeight: 22, marginBottom: 48 }}>
-              Position yourself in the center of the camera, making sure its well-lit and clearly visible.
-            </Text>
-            <Ionicons name="person-circle-outline" size={140} color={iconColor} style={{ marginBottom: 56 }} />
-            <View style={{ flex: 1 }} />
-            <TouchableOpacity
-              style={{ width: '100%', backgroundColor: btnBg, borderRadius: 50, paddingVertical: 17, alignItems: 'center', marginBottom: 14 }}
-              onPress={() => setStep('webview')}
-            >
-              <Text style={{ color: btnText, fontSize: 17, fontWeight: '700' }}>Get started</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={{ width: '100%', borderRadius: 50, paddingVertical: 17, alignItems: 'center', borderWidth: 1.5, borderColor: outlineBtnBorder, marginBottom: insets2.bottom + 8 }}
-              onPress={() => setStep('device')}
-            >
-              <Text style={{ color: outlineBtnText, fontSize: 17, fontWeight: '600' }}>Continue on another device</Text>
-            </TouchableOpacity>
-          </ScrollView>
-        )}
-
-        {/* DEVICE STEP */}
-        {step === 'device' && (
-          <ScrollView contentContainerStyle={{ padding: 28 }} showsVerticalScrollIndicator={false}>
-            <Text style={{ fontSize: 26, fontWeight: '700', color: primaryText, marginBottom: 12 }}>Continue on another device</Text>
-            <Text style={{ fontSize: 15, color: secondaryText, lineHeight: 22, marginBottom: 36 }}>
-              To verify your identity, we will need access to your camera. You can scan the QR code with your phone camera to continue on your mobile device. No app download is required.
-            </Text>
-            <View style={{ alignItems: 'center', marginBottom: 36 }}>
-              <View style={{ width: 180, height: 180, borderRadius: 16, backgroundColor: inputBg, borderWidth: 1, borderColor, alignItems: 'center', justifyContent: 'center' }}>
-                <Ionicons name="qr-code" size={140} color={qrIconColor} />
+            </ScrollView>
+          )}
+          {step === 'camera' && (
+            <ScrollView contentContainerStyle={{ padding: 28, paddingTop: 16, alignItems: 'center' }} showsVerticalScrollIndicator={false}>
+              <TouchableOpacity style={{ position: 'absolute', top: 0, left: 0, padding: 8, zIndex: 10 }} onPress={() => setStep('consent')}><Ionicons name="chevron-back" size={22} color="#000" /></TouchableOpacity>
+              <Text style={{ fontSize: 26, fontWeight: '700', color: '#000', textAlign: 'left', width: '100%', marginTop: 28, marginBottom: 12 }}>{'Let\'s make sure it\'s you'}</Text>
+              <Text style={{ fontSize: 15, color: '#475569', textAlign: 'left', width: '100%', lineHeight: 22, marginBottom: 36 }}>Position yourself in the center of the camera, making sure its well-lit and clearly visible.</Text>
+              <Ionicons name="person-circle-outline" size={120} color="#CBD5E1" style={{ marginBottom: 40 }} />
+              <TouchableOpacity style={{ width: '100%', backgroundColor: '#000', borderRadius: 50, paddingVertical: 17, alignItems: 'center', marginBottom: 14 }} onPress={() => setStep('webview')}>
+                <Text style={{ color: '#FFF', fontSize: 17, fontWeight: '700' }}>Get started</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={{ width: '100%', borderRadius: 50, paddingVertical: 17, alignItems: 'center', borderWidth: 1.5, borderColor: '#E2E8F0', marginBottom: 16 }} onPress={() => setStep('device')}>
+                <Text style={{ color: '#000', fontSize: 17, fontWeight: '600' }}>Continue on another device</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          )}
+          {step === 'device' && (
+            <ScrollView contentContainerStyle={{ padding: 28, paddingTop: 16 }} showsVerticalScrollIndicator={false}>
+              <TouchableOpacity style={{ position: 'absolute', top: 0, left: 0, padding: 8, zIndex: 10 }} onPress={() => setStep('camera')}><Ionicons name="chevron-back" size={22} color="#000" /></TouchableOpacity>
+              <Text style={{ fontSize: 24, fontWeight: '700', color: '#000', marginTop: 28, marginBottom: 12 }}>Continue on another device</Text>
+              <Text style={{ fontSize: 15, color: '#475569', lineHeight: 22, marginBottom: 28 }}>To verify your identity, we will need access to your camera. You can scan the QR code with your phone camera to continue on your mobile device. No app download is required.</Text>
+              <View style={{ alignItems: 'center', marginBottom: 24 }}>
+                <View style={{ width: 160, height: 160, borderRadius: 12, backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#E2E8F0', alignItems: 'center', justifyContent: 'center' }}>
+                  <Ionicons name="qr-code" size={120} color="#1E293B" />
+                </View>
+                <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12 }} onPress={handleCopyLink} activeOpacity={0.7}>
+                  <Text style={{ color: '#475569', fontSize: 13, textDecorationLine: 'underline' }} numberOfLines={1}>{PERSONA_LINK}</Text>
+                  <Ionicons name="link-outline" size={16} color="#475569" />
+                </TouchableOpacity>
               </View>
-              <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 14 }} onPress={handleCopyLink} activeOpacity={0.7}>
-                <Text style={{ color: '#475569', fontSize: 13, textDecorationLine: 'underline' }} numberOfLines={1}>{PERSONA_LINK}</Text>
-                <Ionicons name="link-outline" size={16} color={secondaryText} />
+              <TouchableOpacity style={{ width: '100%', backgroundColor: '#000', borderRadius: 50, paddingVertical: 17, alignItems: 'center', marginBottom: 12 }} onPress={handleSendEmail}>
+                <Text style={{ color: '#FFF', fontSize: 17, fontWeight: '700' }}>Send Email</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={{ alignItems: 'center', paddingVertical: 12 }} onPress={handleVerified}>
+                <Text style={{ color: '#64748B', fontSize: 15 }}>I have completed verification</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          )}
+          {step === 'webview' && (
+            <View style={{ minHeight: 500 }}>
+              {webviewLoading && (
+                <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 500, alignItems: 'center', justifyContent: 'center', zIndex: 10, backgroundColor: '#FFF' }}>
+                  <ActivityIndicator size="large" color="#6366F1" />
+                  <Text style={{ color: '#64748B', fontSize: 14, marginTop: 12 }}>Loading verification...</Text>
+                </View>
+              )}
+              <WebView
+                source={{ uri: PERSONA_LINK }}
+                style={{ height: 500 }}
+                onLoadStart={() => setWebviewLoading(true)}
+                onLoadEnd={() => setWebviewLoading(false)}
+                onNavigationStateChange={(state) => {
+                  if (state.url?.includes('success') || state.url?.includes('complete') || state.url?.includes('verified')) { handleVerified(); }
+                }}
+                javaScriptEnabled
+                domStorageEnabled
+              />
+              <TouchableOpacity style={{ paddingVertical: 14, alignItems: 'center', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#E2E8F0' }} onPress={handleVerified}>
+                <Text style={{ color: '#6366F1', fontSize: 15, fontWeight: '600' }}>Verification complete</Text>
               </TouchableOpacity>
             </View>
-            <TouchableOpacity
-              style={{ width: '100%', backgroundColor: btnBg, borderRadius: 50, paddingVertical: 17, alignItems: 'center', marginBottom: 14 }}
-              onPress={handleSendEmail}
-            >
-              <Text style={{ color: btnText, fontSize: 17, fontWeight: '700' }}>Send Email</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={{ alignItems: 'center', paddingVertical: 14 }} onPress={handleVerified}>
-              <Text style={{ color: secondaryText, fontSize: 15 }}>I have completed verification</Text>
-            </TouchableOpacity>
-          </ScrollView>
-        )}
-
-        {/* WEBVIEW STEP */}
-        {step === 'webview' && (
-          <View style={{ flex: 1 }}>
-            {webviewLoading && (
-              <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', zIndex: 10, backgroundColor: bg }}>
-                <ActivityIndicator size="large" color="#6366F1" />
-                <Text style={{ color: secondaryText, fontSize: 14, marginTop: 12 }}>Loading verification...</Text>
-              </View>
-            )}
-            <WebView
-              source={{ uri: PERSONA_LINK }}
-              style={{ flex: 1 }}
-              onLoadStart={() => setWebviewLoading(true)}
-              onLoadEnd={() => setWebviewLoading(false)}
-              onNavigationStateChange={(state) => {
-                if (state.url?.includes('success') || state.url?.includes('complete') || state.url?.includes('verified')) {
-                  handleVerified();
-                }
-              }}
-              javaScriptEnabled
-              domStorageEnabled
-            />
-            <TouchableOpacity
-              style={{ paddingVertical: 16, alignItems: 'center', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: borderColor, backgroundColor: bg, paddingBottom: insets2.bottom + 8 }}
-              onPress={handleVerified}
-            >
-              <Text style={{ color: personaText, fontSize: 15, fontWeight: '600' }}>Verification complete</Text>
-            </TouchableOpacity>
-          </View>
-        )}
+          )}
+        </View>
       </View>
     </Modal>
   );
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// VERIFIED BADGE COMPONENT
+// ═══════════════════════════════════════════════════════════════════════════════
 // ═══════════════════════════════════════════════════════════════════════════════
 // VERIFIED BADGE COMPONENT — Updated for Pro & Plus
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -248,9 +174,10 @@ function VerifiedBadge({ onPress, tier }: { onPress: () => void; tier: 'pro' | '
 
   if (!tier) return null;
 
+  // Chwazi bon image selon tier
   const badgeSource = tier === 'plus'
-    ? require('../assets/images/plus-badge.png')
-    : require('../assets/images/verified-badge.png');
+    ? require('../assets/images/plus-badge.png')      // 🆕 NOUVO badge pou Plus
+    : require('../assets/images/verified-badge.png');  // Ansye badge pou Pro
 
   return (
     <TouchableOpacity onPress={onPress} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.75}>
@@ -315,6 +242,7 @@ function VerifiedBadgeModal({ visible, onClose, isDark, tier }: {
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.55)', paddingHorizontal: 24 }}>
         <TouchableOpacity style={{ ...StyleSheet.absoluteFillObject }} activeOpacity={1} onPress={onClose} />
         <View style={{ width: '100%', maxWidth: 360, borderRadius: 24, overflow: 'hidden', backgroundColor: bg, shadowColor: '#000', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.4, shadowRadius: 24, elevation: 24 }}>
+          {/* Close button */}
           <TouchableOpacity
             style={{ position: 'absolute', top: 14, right: 14, width: 32, height: 32, borderRadius: 16, backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}
             onPress={onClose}
@@ -323,6 +251,7 @@ function VerifiedBadgeModal({ visible, onClose, isDark, tier }: {
           </TouchableOpacity>
 
           <View style={{ padding: 28, alignItems: 'center' }}>
+            {/* Badge icon */}
             <ExpoImageBadge
               source={badgeSource}
               style={{ width: 72, height: 72, marginBottom: 16 }}
@@ -387,11 +316,13 @@ function EditModalContent({
       keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
     >
+      {/* Drag handle */}
       <View style={{ alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)', marginBottom: 20 }} />
 
       <Text style={{ fontSize: 20, fontWeight: '700', color: primaryText, textAlign: 'center', marginBottom: 6 }}>Edit Profile</Text>
       <Text style={{ fontSize: 13, color: secondaryText, textAlign: 'center', marginBottom: 16 }}>Your profile helps people recognize you.</Text>
 
+      {/* Avatar */}
       <TouchableOpacity onPress={onPickPhoto} style={{ alignSelf: 'center', marginBottom: 18 }} activeOpacity={0.8}>
         <View style={{ width: 90, height: 90, borderRadius: 45, overflow: 'hidden', backgroundColor: isDark ? '#3A3A3C' : '#E5E5EA', alignItems: 'center', justifyContent: 'center' }}>
           {uploadingPhoto ? (
@@ -412,6 +343,7 @@ function EditModalContent({
         </View>
       </TouchableOpacity>
 
+      {/* Name */}
       <Text style={{ fontSize: 13, fontWeight: '500', color: secondaryText, marginBottom: 6, marginLeft: 2 }}>Display Name</Text>
       <TextInput
         style={{
@@ -426,6 +358,7 @@ function EditModalContent({
         returnKeyType="next"
       />
 
+      {/* Username */}
       <Text style={{ fontSize: 13, fontWeight: '500', color: secondaryText, marginBottom: 6, marginLeft: 2 }}>Username</Text>
       <TextInput
         style={{
@@ -450,6 +383,7 @@ function EditModalContent({
       )}
       {canChange && <View style={{ marginBottom: 12 }} />}
 
+      {/* Save */}
       <TouchableOpacity
         style={{
           backgroundColor: '#10A37F', borderRadius: 50, paddingVertical: 14,
@@ -467,6 +401,7 @@ function EditModalContent({
         )}
       </TouchableOpacity>
 
+      {/* Cancel */}
       <TouchableOpacity style={{ alignItems: 'center', paddingVertical: 10 }} onPress={onClose}>
         <Text style={{ fontSize: 17, color: secondaryText }}>Cancel</Text>
       </TouchableOpacity>
@@ -490,6 +425,7 @@ function GuestSettings() {
 
   return (
     <View style={{ flex: 1, backgroundColor: bg }}>
+      {/* Header */}
       <View style={{
         flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
         paddingTop: insets.top + 12, paddingBottom: 12, paddingHorizontal: 20,
@@ -504,6 +440,7 @@ function GuestSettings() {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}>
+        {/* Account */}
         <View style={{ marginTop: 8, paddingHorizontal: 16 }}>
           <Text style={{ fontSize: 13, fontWeight: '600', color: secondaryText, marginBottom: 8, marginLeft: 4, textTransform: 'uppercase' }}>Account</Text>
           <View style={{ backgroundColor: cardBg, borderRadius: 16, overflow: 'hidden' }}>
@@ -532,6 +469,7 @@ function GuestSettings() {
           </View>
         </View>
 
+        {/* Sign up CTA */}
         <View style={{ marginHorizontal: 16, marginTop: 24 }}>
           <View style={{ backgroundColor: cardBg, borderRadius: 16, overflow: 'hidden' }}>
             <View style={{ padding: 24, alignItems: 'center' }}>
@@ -560,7 +498,7 @@ function GuestSettings() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// ACCENT COLOR PICKER
+// ACCENT COLOR PICKER — extended palette with names
 // ═══════════════════════════════════════════════════════════════════════════════
 const ACCENT_COLORS: Array<{ hex: string; name: string }> = [
   { hex: '#10A37F', name: 'Green'   },
@@ -578,7 +516,7 @@ const ACCENT_COLORS: Array<{ hex: string; name: string }> = [
 ];
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// MAIN SETTINGS SCREEN
+// MAIN SETTINGS SCREEN — ChatGPT Style (Fixed)
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function SettingsScreen() {
   const { colors, isDark } = useTheme();
@@ -595,6 +533,7 @@ export default function SettingsScreen() {
   const [profilePhoto, setProfilePhoto] = useState('');
   const [username, setUsername] = useState('');
   const [fullName, setFullName] = useState('');
+  // Cached data so UI shows even offline
   const PROFILE_CACHE_KEY = `settings_profile_${user?.id || 'unknown'}`;
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editName, setEditName] = useState('');
@@ -605,6 +544,7 @@ export default function SettingsScreen() {
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [photoPickerVisible, setPhotoPickerVisible] = useState(false);
   const [accentPickerVisible, setAccentPickerVisible] = useState(false);
+  const [appearancePickerVisible, setAppearancePickerVisible] = useState(false);
   const [verifiedBadgeModalVisible, setVerifiedBadgeModalVisible] = useState(false);
   const [ageVerifiedModalVisible, setAgeVerifiedModalVisible] = useState(false);
   const [isAgeVerified, setIsAgeVerified] = useState(false);
@@ -612,6 +552,7 @@ export default function SettingsScreen() {
   const currentVersion = Constants.expoConfig?.version || '1.0.0';
   const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'update' | 'no-update' | 'version'>('idle');
 
+  // ── Design tokens ─────────────────────────────────────────────────────
   const bg = isDark ? '#000000' : '#F2F2F7';
   const cardBg = isDark ? '#1C1C1E' : '#FFFFFF';
   const primaryText = isDark ? '#FFFFFF' : '#000000';
@@ -623,9 +564,11 @@ export default function SettingsScreen() {
 
   useEffect(() => {
     checkAdminAccess();
+    // Check age verification status
     AsyncStorage.getItem(AGE_VERIFIED_KEY).then(val => {
       if (val === 'true') setIsAgeVerified(true);
     }).catch(() => {});
+    // Load cached profile first for instant display
     AsyncStorage.getItem(PROFILE_CACHE_KEY).then(cached => {
       if (cached) {
         try {
@@ -706,9 +649,12 @@ export default function SettingsScreen() {
         setGlobalPhoto(data.profile_photo_url || '');
         setGlobalName(data.full_name || data.username || '');
         setGlobalUsername(data.username || '');
+        // Persist to cache for offline use
         AsyncStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(data)).catch(() => {});
       }
-    } catch (_e) {}
+    } catch (_e) {
+      // Network error — silently use cached data already loaded
+    }
   };
 
   const canChangeUsername = (): boolean => {
@@ -866,25 +812,44 @@ export default function SettingsScreen() {
   const displayUsername = username || '';
   const initials = (displayName[0] || 'U').toUpperCase();
 
+  // ── Reusable Card Component ──────────────────────────────────────────
   const Card = ({ children }: { children: React.ReactNode }) => (
-    <View style={{ backgroundColor: cardBg, borderRadius: 16, overflow: 'hidden', marginHorizontal: 16 }}>
+    <View style={{
+      backgroundColor: cardBg,
+      borderRadius: 16,
+      overflow: 'hidden',
+      marginHorizontal: 16,
+    }}>
       {children}
     </View>
   );
 
+  // ── Section Label ────────────────────────────────────────────────────
   const SectionLabel = ({ text }: { text: string }) => (
-    <Text style={{ fontSize: 13, fontWeight: '600', color: sectionLabel, marginBottom: 8, marginLeft: 20, marginTop: 24, textTransform: 'uppercase' }}>
+    <Text style={{
+      fontSize: 13,
+      fontWeight: '600',
+      color: sectionLabel,
+      marginBottom: 8,
+      marginLeft: 20,
+      marginTop: 24,
+      textTransform: 'uppercase',
+    }}>
       {text}
     </Text>
   );
 
+  // ── Row Component (with optional chevron) ────────────────────────────
   const Row = ({ icon, label, value, onPress, isLast, showChevron = true, rightEl }: {
     icon: string; label: string; value?: string; onPress?: () => void; isLast?: boolean; showChevron?: boolean; rightEl?: React.ReactNode;
   }) => (
     <TouchableOpacity
       style={{
-        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-        paddingVertical: 14, paddingHorizontal: 16,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingVertical: 14,
+        paddingHorizontal: 16,
         borderBottomWidth: isLast ? 0 : StyleSheet.hairlineWidth,
         borderBottomColor: divider,
       }}
@@ -905,12 +870,16 @@ export default function SettingsScreen() {
     </TouchableOpacity>
   );
 
+  // ── Switch Row ───────────────────────────────────────────────────────
   const SwitchRow = ({ icon, label, value, onChange, isLast }: {
     icon: string; label: string; value: boolean; onChange: (v: boolean) => void; isLast?: boolean;
   }) => (
     <View style={{
-      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-      paddingVertical: 14, paddingHorizontal: 16,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: 14,
+      paddingHorizontal: 16,
       borderBottomWidth: isLast ? 0 : StyleSheet.hairlineWidth,
       borderBottomColor: divider,
     }}>
@@ -927,6 +896,7 @@ export default function SettingsScreen() {
     </View>
   );
 
+  // ── Accent Color Row ─────────────────────────────────────────────────
   const AccentColorRow = () => {
     const current = settings.accentColor || '#10A37F';
     const found = ACCENT_COLORS.find(c => c.hex === current);
@@ -934,9 +904,13 @@ export default function SettingsScreen() {
     return (
       <TouchableOpacity
         style={{
-          flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-          paddingVertical: 14, paddingHorizontal: 16,
-          borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: divider,
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          paddingVertical: 14,
+          paddingHorizontal: 16,
+          borderBottomWidth: StyleSheet.hairlineWidth,
+          borderBottomColor: divider,
         }}
         onPress={() => setAccentPickerVisible(true)}
         activeOpacity={0.6}
@@ -954,6 +928,7 @@ export default function SettingsScreen() {
     );
   };
 
+  // ── Appearance Row with inline dropdown ──────────────────────────────
   const AppearanceRow = () => {
     const [showDropdown, setShowDropdown] = useState(false);
     const current = settings.appearance || 'System';
@@ -963,9 +938,13 @@ export default function SettingsScreen() {
       <>
         <TouchableOpacity
           style={{
-            flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-            paddingVertical: 14, paddingHorizontal: 16,
-            borderBottomWidth: showDropdown ? 0 : StyleSheet.hairlineWidth, borderBottomColor: divider,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            paddingVertical: 14,
+            paddingHorizontal: 16,
+            borderBottomWidth: showDropdown ? 0 : StyleSheet.hairlineWidth,
+            borderBottomColor: divider,
           }}
           onPress={() => setShowDropdown(!showDropdown)}
           activeOpacity={0.6}
@@ -988,8 +967,11 @@ export default function SettingsScreen() {
                 <TouchableOpacity
                   key={opt}
                   style={{
-                    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-                    paddingVertical: 12, paddingHorizontal: 16,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    paddingVertical: 12,
+                    paddingHorizontal: 16,
                     borderBottomWidth: i < options.length - 1 ? StyleSheet.hairlineWidth : 0,
                     borderBottomColor: divider,
                   }}
@@ -1009,17 +991,29 @@ export default function SettingsScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: bg }}>
+      {/* ═══════════════════════════════════════════════════════════════
+          HEADER — Centered title + X button top right
+          ═══════════════════════════════════════════════════════════════ */}
       <View style={{
-        flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-        paddingTop: insets.top + 12, paddingBottom: 12, paddingHorizontal: 20,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingTop: insets.top + 12,
+        paddingBottom: 12,
+        paddingHorizontal: 20,
       }}>
         <Text style={{ fontSize: 19, fontWeight: '700', color: primaryText }}>Settings</Text>
         <TouchableOpacity
           style={{
-            position: 'absolute', right: 16, top: insets.top + 8,
-            width: 34, height: 34, borderRadius: 17,
+            position: 'absolute',
+            right: 16,
+            top: insets.top + 8,
+            width: 34,
+            height: 34,
+            borderRadius: 17,
             backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.09)',
-            alignItems: 'center', justifyContent: 'center',
+            alignItems: 'center',
+            justifyContent: 'center',
           }}
           onPress={() => router.back()}
         >
@@ -1028,12 +1022,19 @@ export default function SettingsScreen() {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}>
-        {/* PROFILE */}
+        {/* ═══════════════════════════════════════════════════════════════
+            PROFILE SECTION
+            ═══════════════════════════════════════════════════════════════ */}
         <View style={{ alignItems: 'center', paddingVertical: 20 }}>
           <View style={{
-            width: 84, height: 84, borderRadius: 42, overflow: 'hidden',
+            width: 84,
+            height: 84,
+            borderRadius: 42,
+            overflow: 'hidden',
             backgroundColor: isDark ? '#3A3A3C' : '#E5E5EA',
-            alignItems: 'center', justifyContent: 'center', marginBottom: 12,
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: 12,
           }}>
             {profilePhoto ? (
               <Image source={{ uri: profilePhoto }} style={{ width: 84, height: 84 }} contentFit="cover" />
@@ -1051,7 +1052,10 @@ export default function SettingsScreen() {
           {displayUsername ? <Text style={{ fontSize: 15, color: secondaryText, marginBottom: 14 }}>{displayUsername}</Text> : null}
           <TouchableOpacity
             style={{
-              paddingHorizontal: 22, paddingVertical: 9, borderRadius: 20, borderWidth: 1,
+              paddingHorizontal: 22,
+              paddingVertical: 9,
+              borderRadius: 20,
+              borderWidth: 1,
               borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)',
               backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
             }}
@@ -1061,15 +1065,21 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* ACCOUNT */}
+        {/* ═══════════════════════════════════════════════════════════════
+            ACCOUNT SECTION — NO chevron for Subscription, Restore, Upgrade
+            ═══════════════════════════════════════════════════════════════ */}
         <SectionLabel text="Account" />
         <Card>
           <Row icon="mail-outline" label="Email" value={(user?.email?.length ?? 0) > 22 ? (user?.email?.slice(0, 20) + '...') : (user?.email || '')} />
+          {/* Subscription — NO chevron, just value */}
           <Row icon="star-outline" label="Subscription" value={tierLabel()} showChevron={false} />
           {!isPaidPlan && (
+            /* Upgrade — NO chevron */
             <Row icon="arrow-up-circle-outline" label="Upgrade to Plus" showChevron={false} />
           )}
+          {/* Restore purchases — clickable */}
           <Row icon="refresh-outline" label="Restore purchases" onPress={() => router.push('/subscription')} isLast />
+          {/* These have chevrons because they navigate */}
           <Row icon="receipt-outline" label="Orders" onPress={() => router.push('/orders')} />
           <Row icon="person-circle-outline" label="Personalization" onPress={() => router.push('/personalization')} />
           <Row icon="notifications-outline" label="Notifications" onPress={() => router.push('/notifications')} />
@@ -1084,40 +1094,67 @@ export default function SettingsScreen() {
           )}
         </Card>
 
-        {/* APP */}
+        {/* ═══════════════════════════════════════════════════════════════
+            APP SECTION — Appearance with inline dropdown
+            ═══════════════════════════════════════════════════════════════ */}
         <SectionLabel text="App" />
         <Card>
           <Row icon="globe-outline" label="App language" value={settings.appLanguage || 'English'} onPress={() => { if (Platform.OS === 'ios') { Linking.openURL('app-settings:'); } else { Linking.openSettings(); } }} />
+          {/* Appearance — inline dropdown, no navigation */}
           <AppearanceRow />
           <AccentColorRow />
           <SwitchRow icon="phone-portrait-outline" label="Haptic feedback" value={settings.hapticFeedback} onChange={v => updateSetting('hapticFeedback', v)} />
           <SwitchRow icon="text-outline" label="Correct spelling automatically" value={settings.autoSpelling} onChange={v => updateSetting('autoSpelling', v)} isLast />
         </Card>
 
-        {/* SPEECH */}
+        {/* ═══════════════════════════════════════════════════════════════
+            SPEECH SECTION
+            ═══════════════════════════════════════════════════════════════ */}
         <SectionLabel text="Speech" />
         <Card>
           <Row icon="globe-outline" label="Main language" value={settings.mainLanguage || 'English'} onPress={() => router.push('/Speech-Language')} isLast />
         </Card>
-        <Text style={{ fontSize: 13, color: secondaryText, marginTop: 8, marginHorizontal: 20, lineHeight: 18 }}>
-          {"For best results, select the language you mainly speak."}
+        <Text style={{
+          fontSize: 13,
+          color: secondaryText,
+          marginTop: 8,
+          marginHorizontal: 20,
+          lineHeight: 18,
+        }}>
+          For best results, select the language you mainly speak. If it's not listed, it may still be supported via auto-detection.
         </Text>
 
-        {/* VOICE */}
+        {/* ═══════════════════════════════════════════════════════════════
+            VOICE SECTION
+            ═══════════════════════════════════════════════════════════════ */}
         <SectionLabel text="Voice" />
         <Card>
           <Row icon="mic-outline" label="Voice" value={settings.voiceSelection || 'Juniper'} onPress={() => router.push('/voice-select')} />
           <SwitchRow icon="chatbubbles-outline" label="Background conversations" value={settings.backgroundConversations} onChange={v => updateSetting('backgroundConversations', v)} isLast />
         </Card>
+        <Text style={{
+          fontSize: 13,
+          color: secondaryText,
+          marginTop: 8,
+          marginHorizontal: 20,
+          lineHeight: 18,
+        }}>
+          Background conversations keep the conversation going in other apps or while your screen is off.{' '}
+          <Text style={{ color: '#0A84FF' }} onPress={() => {}}>Learn more</Text>
+        </Text>
 
-        {/* SUGGESTIONS */}
+        {/* ═══════════════════════════════════════════════════════════════
+            SUGGESTIONS SECTION
+            ═══════════════════════════════════════════════════════════════ */}
         <SectionLabel text="Suggestions" />
         <Card>
           <SwitchRow icon="create-outline" label="Autocomplete" value={settings.autocomplete} onChange={v => updateSetting('autocomplete', v)} />
           <SwitchRow icon="trending-up-outline" label="Trending searches" value={settings.trendingSearches} onChange={v => updateSetting('trendingSearches', v)} isLast />
         </Card>
 
-        {/* ADMIN */}
+        {/* ═══════════════════════════════════════════════════════════════
+            ADMIN SECTION
+            ═══════════════════════════════════════════════════════════════ */}
         {isAdmin && (
           <>
             <SectionLabel text="Admin" />
@@ -1129,9 +1166,12 @@ export default function SettingsScreen() {
           </>
         )}
 
-        {/* ABOUT */}
+        {/* ═══════════════════════════════════════════════════════════════
+            ABOUT SECTION — NO chevrons at all
+            ═══════════════════════════════════════════════════════════════ */}
         <SectionLabel text="About" />
         <Card>
+          {/* All About rows — NO chevrons */}
           <Row icon="bug-outline" label="Report bug" showChevron={false} />
           <Row icon="help-circle-outline" label="Help Center" showChevron={false} />
           <Row icon="document-text-outline" label="Terms of Use" showChevron={false} />
@@ -1152,7 +1192,9 @@ export default function SettingsScreen() {
           />
         </Card>
 
-        {/* LOG OUT */}
+        {/* ═══════════════════════════════════════════════════════════════
+            LOG OUT
+            ═══════════════════════════════════════════════════════════════ */}
         <View style={{ marginTop: 32, paddingHorizontal: 16 }}>
           <Card>
             <TouchableOpacity
@@ -1167,14 +1209,19 @@ export default function SettingsScreen() {
         </View>
       </ScrollView>
 
-      {/* EDIT PROFILE MODAL */}
+      {/* ═══════════════════════════════════════════════════════════════
+          EDIT PROFILE MODAL
+          ═══════════════════════════════════════════════════════════════ */}
       <Modal visible={editModalVisible} transparent animationType="slide" onRequestClose={() => setEditModalVisible(false)}>
         <View style={{ flex: 1, backgroundColor: isDark ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.3)' }}>
           <TouchableOpacity style={{ flex: 0.25 }} activeOpacity={1} onPress={() => setEditModalVisible(false)} />
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 0.75, maxHeight: 560 }}>
             <View style={{
-              flex: 1, borderTopLeftRadius: 24, borderTopRightRadius: 24,
-              overflow: 'hidden', backgroundColor: isDark ? '#1C1C1E' : '#F2F2F7',
+              flex: 1,
+              borderTopLeftRadius: 24,
+              borderTopRightRadius: 24,
+              overflow: 'hidden',
+              backgroundColor: isDark ? '#1C1C1E' : '#F2F2F7',
             }}>
               <EditModalContent
                 isDark={isDark}
@@ -1200,7 +1247,7 @@ export default function SettingsScreen() {
         </View>
       </Modal>
 
-      {/* VERIFIED BADGE MODAL */}
+      {/* Verified Badge Modal */}
       <VerifiedBadgeModal
         visible={verifiedBadgeModalVisible}
         onClose={() => setVerifiedBadgeModalVisible(false)}
@@ -1208,14 +1255,16 @@ export default function SettingsScreen() {
         tier={isAdminUser ? 'plus' : tier === 'plus' ? 'plus' : 'pro'}
       />
 
-      {/* AGE VERIFICATION MODAL */}
+      {/* Age Verification Modal */}
       <AgeVerificationModal
         visible={ageVerifiedModalVisible}
         onClose={() => setAgeVerifiedModalVisible(false)}
         onVerified={() => setIsAgeVerified(true)}
       />
 
-      {/* PHOTO PICKER MODAL */}
+      {/* ═══════════════════════════════════════════════════════════════
+          PHOTO PICKER MODAL
+          ═══════════════════════════════════════════════════════════════ */}
       <Modal visible={photoPickerVisible} transparent animationType="fade" onRequestClose={() => setPhotoPickerVisible(false)}>
         <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: isDark ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.3)' }}>
           <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setPhotoPickerVisible(false)} />
@@ -1246,15 +1295,25 @@ export default function SettingsScreen() {
         </View>
       </Modal>
 
-      {/* ACCENT COLOR PICKER MODAL */}
+      {/* ═══════════════════════════════════════════════════════════════
+          ACCENT COLOR PICKER MODAL — redesigned with labels & default
+          ═══════════════════════════════════════════════════════════════ */}
       <Modal visible={accentPickerVisible} transparent animationType="slide" onRequestClose={() => setAccentPickerVisible(false)}>
         <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.45)' }}>
           <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setAccentPickerVisible(false)} />
-          <View style={{ backgroundColor: cardBg, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingBottom: insets.bottom + 16 }}>
+          <View style={{
+            backgroundColor: cardBg,
+            borderTopLeftRadius: 24,
+            borderTopRightRadius: 24,
+            paddingBottom: insets.bottom + 16,
+          }}>
+            {/* Handle */}
             <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)', alignSelf: 'center', marginTop: 12, marginBottom: 16 }} />
+
             <Text style={{ fontSize: 18, fontWeight: '700', color: primaryText, textAlign: 'center', marginBottom: 4 }}>Accent Color</Text>
             <Text style={{ fontSize: 13, color: secondaryText, textAlign: 'center', marginBottom: 20, paddingHorizontal: 24 }}>Choose a color that reflects your style</Text>
 
+            {/* Default badge */}
             {(settings.accentColor || '#10A37F') === '#10A37F' ? (
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 16 }}>
                 <View style={{ backgroundColor: '#10A37F22', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 5, borderWidth: 1, borderColor: '#10A37F55' }}>
@@ -1276,6 +1335,7 @@ export default function SettingsScreen() {
               </View>
             )}
 
+            {/* Color grid */}
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 16, paddingHorizontal: 24 }}>
               {ACCENT_COLORS.map(item => {
                 const isSelected = (settings.accentColor || '#10A37F') === item.hex;
@@ -1309,6 +1369,7 @@ export default function SettingsScreen() {
               })}
             </View>
 
+            {/* Done */}
             <View style={{ paddingHorizontal: 20, paddingTop: 24 }}>
               <TouchableOpacity
                 style={{ backgroundColor: settings.accentColor || '#10A37F', borderRadius: 50, paddingVertical: 15, alignItems: 'center' }}
@@ -1324,3 +1385,4 @@ export default function SettingsScreen() {
     </View>
   );
 }
+
