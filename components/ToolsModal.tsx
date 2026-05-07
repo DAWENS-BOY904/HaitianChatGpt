@@ -302,7 +302,7 @@ export function ToolsModal({
       return { icon: 'code-outline', color: '#007AFF' };
     if (mime.startsWith('text/') || ['txt','md','markdown','log'].includes(e))
       return { icon: 'document-text-outline', color: '#8E8E93' };
-    if (['zip','rar','7z','tar','gz','bz2'].includes(e))
+    if (['rar','7z','tar','gz','bz2'].includes(e))
       return { icon: 'archive-outline', color: '#FF9F0A' };
     return { icon: 'attach-outline', color: '#636366' };
   };
