@@ -61,6 +61,8 @@ import { ChatHistoryModal } from '../components/ChatHistoryModal';
 import { ImageSearchResults } from '../components/ImageSearchResults';
 import { AIMode } from '../components/AIModeSelectorModal';
 import { CalculatorModal, CalculatorCard, detectMathExpression } from '../components/CalculatorModal';
+import { SpotifyMusicCard, SpotifyTrack } from '../components/SpotifyMusicCard';
+import { ConnectedAppsModal, ConnectedApp } from '../components/ConnectedAppsModal';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
@@ -1033,6 +1035,14 @@ export default function HomeScreen() {
   const [msgActionsVisible, setMsgActionsVisible] = useState(false);
   const [msgActionsMsg, setMsgActionsMsg] = useState<any>(null);
 
+  // ── Spotify state ────────────────────────────────────────────────────────
+  const [spotifyConnected, setSpotifyConnected] = useState(false);
+  const [spotifyHasAccount, setSpotifyHasAccount] = useState(false);
+  const [spotifyActive, setSpotifyActive] = useState(false);
+  const [spotifyResults, setSpotifyResults] = useState<SpotifyTrack[]>([]);
+  const [spotifySearching, setSpotifySearching] = useState(false);
+  const [connectedAppsModalVisible, setConnectedAppsModalVisible] = useState(false);
+
   const handleOpenMessageActions = useCallback((msg: any) => {
     setMsgActionsMsg(msg);
     setMsgActionsVisible(true);
@@ -1307,6 +1317,13 @@ export default function HomeScreen() {
         Animated.timing(fadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
         Animated.timing(slideAnim, { toValue: 0, duration: 300, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
       ]).start();
+      // Load Spotify connection state
+      AsyncStorage.multiGet(['spotify_connected', 'spotify_has_account']).then(results => {
+        const isConn = results[0][1] === 'true';
+        setSpotifyConnected(isConn);
+        setSpotifyHasAccount(results[1][1] === 'true');
+        if (isConn) setSpotifyActive(true);
+      }).catch(() => {});
       return () => { slideAnim.setValue(100); };
     }, [])
   );
@@ -1700,6 +1717,8 @@ export default function HomeScreen() {
     }
 
     setInputText(''); setSelectedMedia([]); setEditingMessageId(null); clearDraft();
+    // Clear previous Spotify results on new message
+    setSpotifyResults([]);
     const lowerText = (currentText || '').toLowerCase();
     const isImageIntent = ['create a logo', 'create logo', 'generate logo', 'make a logo', 'design a logo', 'generate a logo', 'make me a logo', 'create an image', 'create image', 'generate image', 'make an image', 'generate a photo', 'create a photo', 'make a photo', 'generate a picture', 'make a picture', 'create a picture', 'draw me a', 'draw me an', 'create art', 'generate art', 'make art', 'kreye logo', 'fe logo', 'fe imaj', 'kreye yon imaj', 'kreye imaj', 'fè logo', 'fè yon logo', 'fè imaj', 'fè yon imaj', 'créer un logo', 'générer une image', 'créer une image', 'crear un logo', 'generar una imagen'].some(kw => lowerText.includes(kw));
     setThinkingMode(isImageIntent ? 'creating_image' : 'thinking');
@@ -1763,6 +1782,10 @@ export default function HomeScreen() {
       await sendMessage(prefixedText, filePayloadArr.length > 0 ? filePayloadArr : undefined, base64Image, false, currentAIModel);
       setShowCompletionStatus(true);
       setTimeout(() => setShowCompletionStatus(false), 2000);
+      // Spotify search if active and music-related
+      if (spotifyActive && isMusicQuery(currentText)) {
+        searchSpotify(currentText);
+      }
       if (user && !isUnlimited && !isAdmin) {
         if (sessionBonusMessages > 0) setSessionBonusMessages(prev => prev - 1);
         else await incrementMessageCount();
@@ -1795,6 +1818,36 @@ export default function HomeScreen() {
     setGenerating(false);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   }, [cancelSendMessage]);
+
+  // ── Spotify music search ─────────────────────────────────────────────────
+  const MUSIC_KEYWORDS_SPOTIFY = [
+    'music', 'song', 'playlist', 'play', 'listen', 'artist', 'album', 'track',
+    'beat', 'jazz', 'rock', 'pop', 'hip hop', 'rap', 'classical', 'acoustic',
+    'spotify', 'tune', 'banger', 'vibe', 'musique', 'chanson', 'mizik', 'chante',
+    'recommend', 'suggest music', 'find music', 'search music',
+  ];
+
+  const isMusicQuery = useCallback((text: string): boolean => {
+    const lower = text.toLowerCase();
+    return MUSIC_KEYWORDS_SPOTIFY.some(k => lower.includes(k));
+  }, []);
+
+  const searchSpotify = useCallback(async (query: string) => {
+    setSpotifySearching(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('spotify-connect', {
+        body: { action: 'search', query },
+      });
+      if (!error && data?.results && Array.isArray(data.results)) {
+        setSpotifyResults(data.results);
+      }
+    } catch (_e) {}
+    finally { setSpotifySearching(false); }
+  }, [supabase]);
+
+  const connectedAppsList: ConnectedApp[] = spotifyConnected
+    ? [{ id: 'spotify', name: 'Spotify', description: 'Music and podcasts for you', color: '#1DB954' }]
+    : [];
 
   const handleCancelGeneration = useCallback(() => { setGenerating(false); }, []);
 
@@ -2592,6 +2645,22 @@ export default function HomeScreen() {
                               preGeneratedQuestions={preGeneratedQuestions}
                             />
                           ) : null}
+                                    {spotifySearching ? (
+                            <View style={{ paddingHorizontal: 16, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                              <View style={{ width: 18, height: 18, borderRadius: 9, backgroundColor: '#1DB954', alignItems: 'center', justifyContent: 'center' }}>
+                                <View style={{ gap: 2 }}>{[1, 0.78, 0.56].map((w, i) => <View key={i} style={{ width: 10 * w, height: 1.5, borderRadius: 1, backgroundColor: '#000' }} />)}</View>
+                              </View>
+                              <Text style={{ color: isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.5)', fontSize: 14 }}>Searching Spotify...</Text>
+                            </View>
+                          ) : null}
+                          {spotifyResults.length > 0 && !spotifySearching ? (
+                            <SpotifyMusicCard
+                              tracks={spotifyResults}
+                              hasAccount={spotifyHasAccount}
+                              isDark={isDark}
+                              isGuest={isGuest}
+                            />
+                          ) : null}
                           {(sending || generating) && !streamingMessageId ? (
                             <ThinkingIndicator
                               userMessage={(messages || []).length > 0 ? (messages || [])[(messages || []).length - 1].content : inputText}
@@ -2672,6 +2741,32 @@ export default function HomeScreen() {
                 ) : null}
 
                 <Pressable style={[styles.inputWrapper, { backgroundColor: isDark ? '#1C1C1E' : '#EFEFEF', borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)' }]} onPress={() => inputRef.current?.focus()}>
+                  {/* Spotify chip — shows when Spotify is connected */}
+                  {spotifyActive ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                      <View style={{
+                        flexDirection: 'row', alignItems: 'center', gap: 7,
+                        backgroundColor: isDark ? '#1A1A1D' : '#111',
+                        borderRadius: 50, paddingHorizontal: 10, paddingVertical: 6,
+                      }}>
+                        {/* Spotify icon */}
+                        <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: '#1DB954', alignItems: 'center', justifyContent: 'center' }}>
+                          <View style={{ gap: 2, alignItems: 'center' }}>
+                            {[1, 0.78, 0.56].map((w, i) => (
+                              <View key={i} style={{ width: 11 * w, height: 1.5, borderRadius: 1, backgroundColor: '#000' }} />
+                            ))}
+                          </View>
+                        </View>
+                        <Text style={{ color: '#1DB954', fontSize: 14, fontWeight: '700' }}>Spotify</Text>
+                        <TouchableOpacity
+                          onPress={() => { setSpotifyActive(false); setSpotifyResults([]); }}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                          <Ionicons name="close" size={14} color="rgba(255,255,255,0.55)" />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ) : null}
                   <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: quizMode ? 8 : 0 }}>
                     {quizMode ? (
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: isDark ? 'rgba(90,200,250,0.15)' : 'rgba(90,200,250,0.12)', borderRadius: 16, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: 'rgba(90,200,250,0.3)' }}>
@@ -2768,6 +2863,9 @@ export default function HomeScreen() {
               onSelectTool={(toolId) => {
                 if (isGuest) { setToolsVisible(false); setGuestLockFeature(toolId); setGuestLockModal(true); return; }
                 setInputText(prev => `${prev}[${toolId}] `);
+              }}
+              onConnectApp={() => {
+                setConnectedAppsModalVisible(true);
               }}
               onSelectAIModel={(model) => {
                 if (isGuest) { setToolsVisible(false); setGuestLockFeature('AI model selection'); setGuestLockModal(true); return; }
@@ -3099,6 +3197,19 @@ export default function HomeScreen() {
                 </View>
               </View>
             </Modal>
+
+            {/* Connected Apps Modal */}
+            <ConnectedAppsModal
+              visible={connectedAppsModalVisible}
+              onClose={() => setConnectedAppsModalVisible(false)}
+              connectedApps={connectedAppsList}
+              onSelectApp={(app) => {
+                if (app.id === 'spotify') {
+                  setSpotifyActive(true);
+                  inputRef.current?.focus();
+                }
+              }}
+            />
 
             <MessageActionsModal
               visible={msgActionsVisible}

@@ -64,13 +64,11 @@ function SpotifyLogo({ size = 80 }: { size?: number }) {
 // ── Dawinix logo for connect modal ────────────────────────────────────────
 function DawinixLogo({ size = 52 }: { size?: number }) {
   return (
-    <View style={{
-      width: size, height: size, borderRadius: size / 2,
-      backgroundColor: '#10A37F',
-      alignItems: 'center', justifyContent: 'center',
-    }}>
-      <Ionicons name="sparkles" size={size * 0.5} color="#FFF" />
-    </View>
+    <ExpoImage
+      source={require('../assets/images/logo.png')}
+      style={{ width: size, height: size, borderRadius: size / 2 }}
+      contentFit="cover"
+    />
   );
 }
 
@@ -451,18 +449,16 @@ export default function SpotifyConnectScreen() {
     await AsyncStorage.setItem('spotify_has_account', 'false');
     setConnected(true);
     setHasAccount(false);
-    // Mark in connected apps
     const raw = await AsyncStorage.getItem('connected_apps');
     const apps = raw ? JSON.parse(raw) : [];
     if (!apps.includes('spotify')) apps.push('spotify');
     await AsyncStorage.setItem('connected_apps', JSON.stringify(apps));
-    // Navigate to home so they can see the chips
-    setTimeout(() => router.back(), 300);
+    // Auto-redirect to home so Spotify chip appears
+    setTimeout(() => router.replace('/home'), 300);
   };
 
   const handleOAuthSuccess = async (code: string) => {
     setWebViewVisible(false);
-    // Exchange code for tokens via edge function
     try {
       const { data, error } = await supabase.functions.invoke('spotify-connect', {
         body: { action: 'exchange_code', code, redirectUri: SPOTIFY_REDIRECT_URI },
@@ -472,7 +468,6 @@ export default function SpotifyConnectScreen() {
         if (data.refresh_token) await AsyncStorage.setItem('spotify_refresh_token', data.refresh_token);
       }
     } catch (_e) {}
-
     await AsyncStorage.setItem('spotify_connected', 'true');
     await AsyncStorage.setItem('spotify_has_account', 'true');
     const raw = await AsyncStorage.getItem('connected_apps');
@@ -481,7 +476,8 @@ export default function SpotifyConnectScreen() {
     await AsyncStorage.setItem('connected_apps', JSON.stringify(apps));
     setConnected(true);
     setHasAccount(true);
-    setTimeout(() => router.back(), 300);
+    // Auto-redirect to home with Spotify chip active
+    setTimeout(() => router.replace('/home'), 300);
   };
 
   const handleDisconnect = async () => {

@@ -48,6 +48,7 @@ interface ToolsModalProps {
   onOpenQuiz?: () => void;
   onOpenPresets?: () => void;
   onDeepResearch?: () => void;
+  onConnectApp?: () => void;
 }
 
 const THEME = {
@@ -70,6 +71,7 @@ export function ToolsModal({
   onOpenQuiz,
   onOpenPresets,
   onDeepResearch,
+  onConnectApp,
 }: ToolsModalProps) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -559,17 +561,17 @@ export function ToolsModal({
 
           <View style={[styles.rowDivider, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : THEME.border }]} />
 
-          {/* Professional Data */}
+          {/* Connect with App */}
           <TouchableOpacity
             style={styles.rowItem}
             activeOpacity={0.7}
-            onPress={() => { router.push('/data-controls' as any); onClose(); }}
+            onPress={() => { onConnectApp?.(); onClose(); }}
           >
             <View style={styles.rowLeft}>
               <View style={[styles.rowIconWrap, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : '#F2F2F7' }]}>
-                <Ionicons name="server-outline" size={20} color={isDark ? '#FFFFFF' : THEME.text} />
+                <Ionicons name="apps-outline" size={20} color={isDark ? '#FFFFFF' : THEME.text} />
               </View>
-              <Text style={[styles.rowItemLabel, { color: isDark ? '#FFFFFF' : THEME.text }]}>Professional Data</Text>
+              <Text style={[styles.rowItemLabel, { color: isDark ? '#FFFFFF' : THEME.text }]}>Connect with App</Text>
             </View>
             <Ionicons name="chevron-forward" size={16} color="#C7C7CC" />
           </TouchableOpacity>
