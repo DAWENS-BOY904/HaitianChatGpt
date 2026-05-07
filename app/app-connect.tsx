@@ -14,7 +14,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const { width: SCREEN_W } = Dimensions.get('window');
 const SPOTIFY_GREEN = '#1DB954';
 
-// ── Spotify SVG-style logo ──────────────────────────────────────────────────
+// ── Spotify SVG-styles logo ──────────────────────────────────────────────────
 function SpotifyLogo({ size = 52 }: { size?: number }) {
   return (
     <View style={{
