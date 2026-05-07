@@ -1,4 +1,3 @@
-// by me
 {
   "cli": {
     "version": ">= 16.0.0",
@@ -16,6 +15,9 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "npm_config_legacy_peer_deps": "true"
       }
     },
     "production": {
@@ -25,6 +27,9 @@
       },
       "ios": {
         "credentialsSource": "remote"
+      },
+      "env": {
+        "npm_config_legacy_peer_deps": "true"
       }
     }
   },
