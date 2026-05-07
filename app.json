@@ -1,29 +1,21 @@
-
 {
   "expo": {
-    "name": "Dawinix HT",
-    "slug": "dawinix-ht-ewor4to3vxrkza2nblnst",
+    "name": "onspace-app",
+    "slug": "onspace-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/logo.png",
-    "scheme": "dawinixht",
+    "scheme": "onspaceapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "com.onspace.dawinix-ht",
-      "usesAppleSignIn": true,
-      "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
-      }
+      "supportsTablet": true
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/logo.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.onspace.dawinix-ht",
-      "versionCode": 1,
       "edgeToEdgeEnabled": true
     },
     "web": {
@@ -33,7 +25,6 @@
     },
     "plugins": [
       "expo-router",
-      "expo-apple-authentication",
       [
         "expo-splash-screen",
         {
@@ -43,15 +34,10 @@
           "backgroundColor": "#ffffff"
         }
       ],
-      "expo-secure-store"
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true
-    },
-    "extra": {
-      "eas": {
-        "projectId": "4e273b4c-f781-4751-85ba-caf9379e8953"
-      }
     }
   }
 }
