@@ -407,6 +407,7 @@ export default function BugReportScreen() {
             </View>
           )}
 
+          
           <TouchableOpacity style={styles.addButton} onPress={handleAddScreenshot}>
             <Ionicons name="camera" size={20} color={colors.text} />
             <Text style={styles.addButtonText}>Add Screenshot</Text>
