@@ -661,3 +661,4 @@ const spStyles = StyleSheet.create({
     marginHorizontal: 16, borderRadius: 18, overflow: 'hidden',
   },
 });
+fix error client_id: Not present.
