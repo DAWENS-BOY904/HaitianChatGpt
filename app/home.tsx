@@ -489,7 +489,7 @@ function GroupChatActionsMenu({ visible, onClose, onPeople, onAddPeople, onManag
     { icon: 'settings-outline', label: 'Customize Dawinix', onPress: () => { onClose(); onCustomize(); } },
     { icon: 'notifications-off-outline', label: 'Mute notifications', onPress: () => { onClose(); onMute(); } },
     { icon: 'flag-outline', label: 'Report', onPress: () => { onClose(); onReport(); }, destructive: true },
-    { icon: 'trash-outline', label: 'Delete group', onPress: () => { onClose(); onDeleteGroup(); }, destructive: true },
+    { icon: 'exit-outline', label: 'Leave group chat', onPress: () => { onClose(); onDeleteGroup(); }, destructive: true },
   ];
   if (!visible) return null;
   const bgCard = isDark ? 'rgba(40,40,44,0.97)' : 'rgba(255,255,255,0.97)';
@@ -1317,12 +1317,12 @@ export default function HomeScreen() {
         Animated.timing(fadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
         Animated.timing(slideAnim, { toValue: 0, duration: 300, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
       ]).start();
-      // Load Spotify connection state
+      // Load Spotify connection state — do NOT auto-activate chip; user must tap it or just connected
       AsyncStorage.multiGet(['spotify_connected', 'spotify_has_account']).then(results => {
         const isConn = results[0][1] === 'true';
         setSpotifyConnected(isConn);
         setSpotifyHasAccount(results[1][1] === 'true');
-        if (isConn) setSpotifyActive(true);
+        // spotifyActive is intentionally NOT set here — chip only shows after explicit user action
       }).catch(() => {});
       return () => { slideAnim.setValue(100); };
     }, [])
