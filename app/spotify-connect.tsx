@@ -18,9 +18,7 @@ const { width: SCREEN_W } = Dimensions.get('window');
 
 // ── Spotify branding ───────────────────────────────────────────────────────
 const SPOTIFY_GREEN = '#1DB954';
-// The client ID is used only to build the OAuth URL on the client side.
-// All secret operations (token exchange, refresh) go through the Edge Function.
-const SPOTIFY_CLIENT_ID = process.env.EXPO_PUBLIC_SPOTIFY_CLIENT_ID ?? '';
+const SPOTIFY_CLIENT_ID = process.env.EXPO_PUBLIC_SPOTIFY_CLIENT_ID || '';
 const SPOTIFY_REDIRECT_URI = 'https://dawinix.app/spotify/callback';
 const SPOTIFY_SCOPES = [
   'user-library-modify',
@@ -30,64 +28,14 @@ const SPOTIFY_SCOPES = [
 ].join('%20');
 
 function buildSpotifyAuthUrl(): string {
-  if (!SPOTIFY_CLIENT_ID) {
-    // Return a URL that will gracefully fail in the WebView so we can catch it
-    console.warn('[Spotify] EXPO_PUBLIC_SPOTIFY_CLIENT_ID is not set');
-    return 'about:blank';
-  }
   return (
     `https://accounts.spotify.com/authorize` +
     `?response_type=code` +
-    `&client_id=${encodeURIComponent(SPOTIFY_CLIENT_ID)}` +
+    `&client_id=${SPOTIFY_CLIENT_ID}` +
     `&scope=${SPOTIFY_SCOPES}` +
     `&redirect_uri=${encodeURIComponent(SPOTIFY_REDIRECT_URI)}` +
     `&show_dialog=true`
   );
-}
-
-// ── Token helpers stored in AsyncStorage ────────────────────────────────────
-const TOKEN_EXPIRY_KEY = 'spotify_token_expiry';
-
-async function getValidAccessToken(supabase: any): Promise<string | null> {
-  try {
-    const [tokenResult, refreshResult, expiryResult] = await AsyncStorage.multiGet([
-      'spotify_access_token',
-      'spotify_refresh_token',
-      TOKEN_EXPIRY_KEY,
-    ]);
-    const token = tokenResult[1];
-    const refresh = refreshResult[1];
-    const expiry = expiryResult[1] ? parseInt(expiryResult[1], 10) : 0;
-
-    if (!token) return null;
-
-    // If token is still valid (with 2-min buffer), return it directly
-    if (Date.now() < expiry - 120_000) return token;
-
-    // Token expired — try to refresh
-    if (!refresh) return null;
-
-    const { data, error } = await supabase.functions.invoke('spotify-connect', {
-      body: { action: 'refresh_token', refreshToken: refresh },
-    });
-
-    if (error || !data?.access_token) {
-      console.warn('[Spotify] Token refresh failed:', error);
-      return null;
-    }
-
-    const newExpiry = Date.now() + (data.expires_in || 3600) * 1000;
-    await AsyncStorage.multiSet([
-      ['spotify_access_token', data.access_token],
-      [TOKEN_EXPIRY_KEY, String(newExpiry)],
-      ...(data.refresh_token ? [['spotify_refresh_token', data.refresh_token] as [string, string]] : []),
-    ]);
-
-    return data.access_token;
-  } catch (e) {
-    console.warn('[Spotify] getValidAccessToken error:', e);
-    return null;
-  }
 }
 
 // ── Spotify Logo components ─────────────────────────────────────────────────
@@ -454,7 +402,6 @@ export default function SpotifyConnectScreen() {
   const [connected, setConnected] = useState(false);
   const [hasAccount, setHasAccount] = useState(false);
   const [showFullDesc, setShowFullDesc] = useState(false);
-  const [clientIdMissing, setClientIdMissing] = useState(!SPOTIFY_CLIENT_ID);
 
   useEffect(() => {
     AsyncStorage.multiGet(['spotify_connected', 'spotify_has_account']).then(results => {
@@ -463,10 +410,6 @@ export default function SpotifyConnectScreen() {
       if (connectedVal === 'true') setConnected(true);
       if (accountVal === 'true') setHasAccount(true);
     });
-    // Warn if client ID missing
-    if (!SPOTIFY_CLIENT_ID) {
-      console.warn('[Spotify] EXPO_PUBLIC_SPOTIFY_CLIENT_ID is not set. OAuth login will not work.');
-    }
   }, []);
 
   const handleShare = useCallback(async () => {
@@ -484,14 +427,7 @@ export default function SpotifyConnectScreen() {
 
   const handleConnectWithAccount = () => {
     setConnectModalVisible(false);
-    if (!SPOTIFY_CLIENT_ID) {
-      Alert.alert(
-        'Configuration Required',
-        'Spotify Client ID is not configured. Please set EXPO_PUBLIC_SPOTIFY_CLIENT_ID in your .env file.',
-        [{ text: 'OK', style: 'cancel' }]
-      );
-      return;
-    }
+    // iOS-style alert
     Alert.alert(
       '"Dawinix" Wants to Use "accounts.spotify.com" to Sign In',
       'This allows the app and website to share information about you.',
@@ -527,19 +463,11 @@ export default function SpotifyConnectScreen() {
       const { data, error } = await supabase.functions.invoke('spotify-connect', {
         body: { action: 'exchange_code', code, redirectUri: SPOTIFY_REDIRECT_URI },
       });
-      if (error) {
-        console.warn('[Spotify] exchange_code error:', error);
-      } else if (data?.access_token) {
-        const expiry = Date.now() + (data.expires_in || 3600) * 1000;
-        await AsyncStorage.multiSet([
-          ['spotify_access_token', data.access_token],
-          [TOKEN_EXPIRY_KEY, String(expiry)],
-          ...(data.refresh_token ? [['spotify_refresh_token', data.refresh_token] as [string, string]] : []),
-        ]);
+      if (!error && data?.access_token) {
+        await AsyncStorage.setItem('spotify_access_token', data.access_token);
+        if (data.refresh_token) await AsyncStorage.setItem('spotify_refresh_token', data.refresh_token);
       }
-    } catch (e) {
-      console.warn('[Spotify] OAuth exchange error:', e);
-    }
+    } catch (_e) {}
     await AsyncStorage.setItem('spotify_connected', 'true');
     await AsyncStorage.setItem('spotify_has_account', 'true');
     const raw = await AsyncStorage.getItem('connected_apps');
