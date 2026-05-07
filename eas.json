@@ -32,8 +32,7 @@
         "credentialsSource": "remote"
       },
       "env": {
-        "npm_config_legacy_peer_deps": "true",
-        "EXPO_NO_CAPABILITY_SYNC": "1"
+        "npm_config_legacy_peer_deps": "true"
       }
     }
   },
