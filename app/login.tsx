@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { WebView } from 'react-native-webview';
 import {
   View,
   Text,
@@ -129,9 +128,8 @@ export default function LoginScreen() {
   const [passkeyLoading, setPasskeyLoading] = useState(false);
   const [passkeyUserId, setPasskeyUserId] = useState<string | null>(null);
   const [appleLoading, setAppleLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [guestModalVisible, setGuestModalVisible] = useState(false);
-  const [googleWebViewVisible, setGoogleWebViewVisible] = useState(false);
-  const [googleAuthUrl, setGoogleAuthUrl] = useState('');
 
   // On mount: check for existing passkeys (SOU ANSYEN SUPABASE)
   useEffect(() => {
@@ -257,60 +255,21 @@ export default function LoginScreen() {
     }
   };
 
-  // ── GOOGLE LOGIN — In-App WebView (never leaves app) ──
+  // ── GOOGLE LOGIN — Real OnSpace Cloud OAuth ──
   const handleGoogleSignIn = async () => {
+    if (googleLoading) return;
+    setGoogleLoading(true);
     try {
-      const supabase = getSupabaseClient();
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: 'io.supabase.haitian-chatgpt://login-callback',
-          skipBrowserRedirect: true,
-        },
-      });
-      if (error || !data?.url) {
-        showAlert('Error', error?.message || 'Could not start Google sign-in');
-        return;
+      const { error } = await signInWithGoogle();
+      if (error) {
+        showAlert('Error', error);
       }
-      setGoogleAuthUrl(data.url);
-      setGoogleWebViewVisible(true);
+      // Navigation handled by useEffect watching `user`
     } catch (err: any) {
       console.error('Google sign-in error:', err);
       showAlert('Error', err?.message || 'Google sign-in failed. Please try again.');
-    }
-  };
-
-  const handleGoogleWebViewNavChange = async (navState: any) => {
-    const { url } = navState;
-    if (!url) return;
-    if (url.includes('login-callback') || url.includes('access_token') || url.includes('code=')) {
-      setGoogleWebViewVisible(false);
-      try {
-        const supabase = getSupabaseClient();
-        if (url.includes('access_token')) {
-          const hashPart = url.split('#')[1] || url.split('?')[1] || '';
-          const params = new URLSearchParams(hashPart);
-          const access_token = params.get('access_token') || '';
-          const refresh_token = params.get('refresh_token') || '';
-          if (access_token) {
-            const { data, error } = await supabase.auth.setSession({ access_token, refresh_token });
-            if (!error && data?.user) {
-              await sendLoginConfirmationEmail(data.user.id, data.user.email || '');
-            }
-          }
-        } else if (url.includes('code=')) {
-          const urlObj = new URL(url);
-          const code = urlObj.searchParams.get('code');
-          if (code) {
-            const { data, error } = await supabase.auth.exchangeCodeForSession(code);
-            if (!error && data?.user) {
-              await sendLoginConfirmationEmail(data.user.id, data.user.email || '');
-            }
-          }
-        }
-      } catch (e: any) {
-        console.warn('Google session exchange error:', e?.message);
-      }
+    } finally {
+      setGoogleLoading(false);
     }
   };
 
@@ -722,15 +681,15 @@ export default function LoginScreen() {
           <View style={styles.dividerLine} />
         </View>
 
-        {/* Google Button - SOU ANSYEN SUPABASE */}
+        {/* Google Button - Real OnSpace Cloud OAuth */}
         <TouchableOpacity
-          style={styles.oauthButton}
+          style={[styles.oauthButton, { opacity: googleLoading ? 0.7 : 1 }]}
           onPress={handleGoogleSignIn}
-          disabled={operationLoading}
+          disabled={googleLoading || operationLoading}
           accessibilityLabel="Continue with Google"
           accessibilityRole="button"
         >
-          {operationLoading ? (
+          {googleLoading ? (
             <ActivityIndicator size="small" color={colors.text} />
           ) : (
             <>
@@ -818,41 +777,7 @@ export default function LoginScreen() {
         </View>
       </Modal>
 
-      {/* Google OAuth In-App WebView */}
-      <Modal visible={googleWebViewVisible} animationType="slide" onRequestClose={() => setGoogleWebViewVisible(false)}>
-        <View style={{ flex: 1, backgroundColor: '#000' }}>
-          <View style={{
-            paddingTop: insets.top + 8,
-            paddingHorizontal: 16,
-            paddingBottom: 12,
-            flexDirection: 'row',
-            alignItems: 'center',
-            backgroundColor: '#1A1A1A',
-            borderBottomWidth: StyleSheet.hairlineWidth,
-            borderBottomColor: 'rgba(255,255,255,0.1)',
-          }}>
-            <TouchableOpacity
-              style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center' }}
-              onPress={() => setGoogleWebViewVisible(false)}
-            >
-              <Ionicons name="close" size={18} color="#FFF" />
-            </TouchableOpacity>
-            <View style={{ flex: 1, alignItems: 'center' }}>
-              <Text style={{ color: '#FFF', fontSize: 15, fontWeight: '600' }}>Sign in with Google</Text>
-            </View>
-            <View style={{ width: 36 }} />
-          </View>
-          <WebView
-            source={{ uri: googleAuthUrl }}
-            style={{ flex: 1 }}
-            onNavigationStateChange={handleGoogleWebViewNavChange}
-            javaScriptEnabled
-            domStorageEnabled
-            sharedCookiesEnabled
-            userAgent="Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
-          />
-        </View>
-      </Modal>
+
     </View>
   );
 }
