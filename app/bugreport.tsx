@@ -17,7 +17,7 @@ import { Spacing, Typography, BorderRadius } from '../constants/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getSupabaseClient } from '@/template';
 import * as Device from 'expo-device';
-import { decode } from 'base64-arraybuffer';
+import * as Crypto from 'expo-crypto';
 import * as ImagePicker from 'expo-image-picker';
 
 type BugType = 'ui-issue' | 'performance' | 'crash' | 'other' | null;
@@ -90,7 +90,13 @@ export default function BugReportScreen() {
           let uploadData: any;
           if (screenshot.startsWith('data:')) {
             const base64Data = screenshot.split(',')[1];
-            uploadData = decode(base64Data);
+            // Convert base64 string to Uint8Array for Supabase upload
+            const binaryString = atob(base64Data);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+              bytes[i] = binaryString.charCodeAt(i);
+            }
+            uploadData = bytes;
           } else {
             const response = await fetch(screenshot);
             const blob = await response.blob();
