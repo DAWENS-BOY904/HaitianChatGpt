@@ -8,26 +8,36 @@ import { SubscriptionProvider } from '../contexts/SubscriptionContext';
 import { GuestLimitsProvider } from '../contexts/GuestLimitsContext';
 import { ProfileProvider } from '../contexts/ProfileContext';
 import { useEffect } from 'react';
-import { Platform } from 'react-native';
+import { Platform, LogBox } from 'react-native';
+
+// Suppress non-critical warnings that could spam logs
+LogBox.ignoreLogs([
+  'ReactImageView',
+  'Non-serializable values were found in the navigation state',
+  'Sending `onAnimatedValueUpdate`',
+  '[Reanimated]',
+  'react-native-worklets',
+]);
 
 // ── Configure RevenueCat once at startup ──
 function RevenueCatInit() {
   useEffect(() => {
     if (Platform.OS === 'web') return;
-    try {
-      // Dynamic require to avoid web/SSR build errors
-      const Purchases = require('react-native-purchases').default;
-      const iosKey = process.env.EXPO_PUBLIC_RC_IOS_KEY;
-      const androidKey = process.env.EXPO_PUBLIC_RC_ANDROID_KEY;
-      const apiKey = Platform.OS === 'ios' ? iosKey : androidKey;
-      if (apiKey) {
-        Purchases.configure({ apiKey });
-        console.log('[RevenueCat] Configured successfully');
+    // Defer to avoid blocking the JS thread at startup
+    const timer = setTimeout(() => {
+      try {
+        const Purchases = require('react-native-purchases').default;
+        const apiKey = Platform.OS === 'ios'
+          ? process.env.EXPO_PUBLIC_RC_IOS_KEY
+          : process.env.EXPO_PUBLIC_RC_ANDROID_KEY;
+        if (apiKey) {
+          Purchases.configure({ apiKey });
+        }
+      } catch (_e) {
+        // react-native-purchases not linked — safe to ignore
       }
-    } catch (e) {
-      // react-native-purchases not linked yet — safe to ignore in dev
-      console.log('[RevenueCat] Module not available:', e);
-    }
+    }, 2000);
+    return () => clearTimeout(timer);
   }, []);
   return null;
 }
