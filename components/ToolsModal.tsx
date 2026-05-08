@@ -786,4 +786,3 @@ const pro = StyleSheet.create({
   listLabel: { flex: 1, fontSize: 16, fontWeight: '500' },
   badge: { fontSize: 14 },
 });
-f button yo more small pou tools lan pa open large
