@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
@@ -55,8 +56,6 @@ interface ToolsModalProps {
   onOpenPresets?: () => void;
   onDeepResearch?: () => void;
   onConnectApp?: () => void;
-  onWebSearch?: () => void;
-  onThinkingMode?: () => void;
 }
 
 interface RecentPhoto {
@@ -76,8 +75,6 @@ export function ToolsModal({
   onOpenPresets,
   onDeepResearch,
   onConnectApp,
-  onWebSearch,
-  onThinkingMode,
 }: ToolsModalProps) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -105,6 +102,7 @@ export function ToolsModal({
       setSelectedPhotos(new Map());
       translateY.value = withSpring(0, { damping: 26, stiffness: 300, mass: 0.8 });
       opacity.value = withTiming(1, { duration: 220 });
+      // Load recent photos for free and guest (they have photo strip UI)
       if (!isPro) loadRecentPhotos();
     } else {
       translateY.value = withSpring(SCREEN_HEIGHT, { damping: 26, stiffness: 300 });
@@ -154,7 +152,11 @@ export function ToolsModal({
     setLoading('photos_send');
     try {
       const ordered = Array.from(selectedPhotos.entries()).sort((a, b) => a[1] - b[1]);
-      const medias = ordered.map(([uri]) => ({ type: 'image' as const, uri, mimeType: 'image/jpeg' }));
+      const medias = ordered.map(([uri]) => ({
+        type: 'image' as const,
+        uri,
+        mimeType: 'image/jpeg',
+      }));
       onPickMedia(medias);
       onClose();
     } catch (_e) {}
@@ -178,10 +180,15 @@ export function ToolsModal({
   }));
 
   const pan = Gesture.Pan()
-    .onUpdate((e) => { if (e.translationY > 0) translateY.value = e.translationY; })
+    .onUpdate((e) => {
+      if (e.translationY > 0) translateY.value = e.translationY;
+    })
     .onEnd((e) => {
-      if (e.translationY > 100 || e.velocityY > 500) { runOnJS(onClose)(); }
-      else { translateY.value = withSpring(0, { damping: 26, stiffness: 300 }); }
+      if (e.translationY > 100 || e.velocityY > 500) {
+        runOnJS(onClose)();
+      } else {
+        translateY.value = withSpring(0, { damping: 26, stiffness: 300 });
+      }
     });
 
   const handleCamera = async () => {
@@ -240,53 +247,93 @@ export function ToolsModal({
 
   if (!visible && !rendered) return null;
 
-  const sharedProps = {
-    visible, onClose, isDark, insets,
-    loading, pan, modalStyle, backdropOpacity,
-    onDeepResearch, onConnectApp, onWebSearch, onThinkingMode, onSelectTool,
-  };
+  // const bottomPad = Math.max(insets.bottom, 16); // This line is not used here but in sub-components
 
+  // ── Route to correct modal variant ────────────────────────────────────────
   if (isPro) {
     return (
       <ProToolsModal
-        {...sharedProps}
+        visible={visible}
+        onClose={onClose}
         onPickMedia={onPickMedia}
         onSelectTool={onSelectTool}
         onOpenCamera={onOpenCamera}
         onOpenQuiz={onOpenQuiz}
         onOpenPresets={onOpenPresets}
+        onDeepResearch={onDeepResearch}
+        onConnectApp={onConnectApp}
+        isDark={isDark}
+        insets={insets}
         handleCamera={handleCamera}
         handleAllPhotos={() => handleAllPhotos(PRO_PHOTO_LIMIT)}
         handleFiles={handleFiles}
+        loading={loading}
+        pan={pan}
+        modalStyle={modalStyle}
+        backdropOpacity={backdropOpacity}
         router={router}
       />
     );
   }
 
-  const photoProps = {
-    recentPhotos,
-    selectedPhotos,
-    togglePhoto: (uri: string) => togglePhoto(uri, FREE_PHOTO_LIMIT),
-    handleAllPhotos: () => handleAllPhotos(FREE_PHOTO_LIMIT),
-    handleCamera,
-    handleAddPhotos: () => handleAddPhotos(FREE_PHOTO_LIMIT),
-    photoLimit: FREE_PHOTO_LIMIT,
-    handleFiles,
-  };
-
   if (isGuest) {
-    return <GuestToolsModal {...sharedProps} {...photoProps} />;
+    return (
+      <GuestToolsModal
+        visible={visible}
+        onClose={onClose}
+        onSelectTool={onSelectTool}
+        onDeepResearch={onDeepResearch}
+        onConnectApp={onConnectApp}
+        isDark={isDark}
+        insets={insets}
+        handleFiles={handleFiles}
+        loading={loading}
+        pan={pan}
+        modalStyle={modalStyle}
+        backdropOpacity={backdropOpacity}
+        recentPhotos={recentPhotos}
+        selectedPhotos={selectedPhotos}
+        togglePhoto={(uri) => togglePhoto(uri, FREE_PHOTO_LIMIT)}
+        handleAllPhotos={() => handleAllPhotos(FREE_PHOTO_LIMIT)}
+        handleCamera={handleCamera}
+        handleAddPhotos={() => handleAddPhotos(FREE_PHOTO_LIMIT)}
+        photoLimit={FREE_PHOTO_LIMIT}
+      />
+    );
   }
 
-  return <FreeToolsModal {...sharedProps} {...photoProps} />;
+  // ── FREE plan modal ────────────────────────────────────────────────────────
+  return (
+    <FreeToolsModal
+      visible={visible}
+      onClose={onClose}
+      onSelectTool={onSelectTool}
+      onDeepResearch={onDeepResearch}
+      onConnectApp={onConnectApp}
+      isDark={isDark}
+      insets={insets}
+      handleFiles={handleFiles}
+      loading={loading}
+      pan={pan}
+      modalStyle={modalStyle}
+      backdropOpacity={backdropOpacity}
+      recentPhotos={recentPhotos}
+      selectedPhotos={selectedPhotos}
+      togglePhoto={(uri) => togglePhoto(uri, FREE_PHOTO_LIMIT)}
+      handleAllPhotos={() => handleAllPhotos(FREE_PHOTO_LIMIT)}
+      handleCamera={handleCamera}
+      handleAddPhotos={() => handleAddPhotos(FREE_PHOTO_LIMIT)}
+      photoLimit={FREE_PHOTO_LIMIT}
+    />
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PRO / PLUS MODAL — 3-column icon grid
+// PRO / PLUS MODAL — 3-column icon grid (Photo 1)
 // ─────────────────────────────────────────────────────────────────────────────
 function ProToolsModal({
   visible, onClose, onPickMedia, onSelectTool, onOpenCamera, onOpenQuiz,
-  onOpenPresets, onDeepResearch, onConnectApp, onWebSearch, onThinkingMode, isDark, insets,
+  onOpenPresets, onDeepResearch, onConnectApp, isDark, insets,
   handleCamera, handleAllPhotos, handleFiles, loading, pan, modalStyle, backdropOpacity, router,
 }: any) {
   const textPrimary = isDark ? '#FFFFFF' : '#000000';
@@ -296,6 +343,7 @@ function ProToolsModal({
   const listCardBg = isDark ? 'rgba(44,44,48,0.92)' : 'rgba(255,255,255,0.96)';
   const bottomPad = Math.max(insets.bottom, 16);
 
+  // 3-column grid items
   const gridTools = [
     { id: 'camera', icon: 'camera-outline', label: 'Camera', onPress: () => { handleCamera(); } },
     { id: 'photos', icon: 'image-outline', label: 'Photos', onPress: () => { handleAllPhotos(); } },
@@ -303,13 +351,18 @@ function ProToolsModal({
     { id: 'quiz', icon: 'albums-outline', label: 'Quizzes', onPress: () => { onOpenQuiz?.(); onClose(); } },
     { id: 'voice', icon: 'call-outline', label: 'Call', onPress: () => { router.push('/voice-control'); onClose(); } },
     { id: 'presets', icon: 'cube-outline', label: 'Presets', onPress: () => { onOpenPresets?.(); onClose(); } },
-    { id: 'research', icon: 'search-outline', label: 'Research', onPress: () => { onDeepResearch?.(); } },
+    { id: 'research', icon: 'search-outline', label: 'Research', onPress: () => { onDeepResearch?.(); onClose(); } },
   ];
 
   const listTools = [
-    { id: 'connect', icon: 'apps-outline', label: 'Connect with App', badge: null, onPress: () => { onConnectApp?.(); onClose(); } },
+    {
+      id: 'connect', icon: 'apps-outline',
+      label: 'Connect with App', badge: null,
+      onPress: () => { onConnectApp?.(); onClose(); },
+    },
   ];
 
+  // Tile: 3 columns with gaps
   const HPADDING = 16;
   const GAP = 8;
   const tileW = (SCREEN_WIDTH - HPADDING * 2 - GAP * 2) / 3;
@@ -317,28 +370,44 @@ function ProToolsModal({
 
   const sheetContent = (
     <View>
+      {/* Handle */}
       <View style={s.handleWrap}>
         <View style={[s.handle, { backgroundColor: isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.18)' }]} />
       </View>
-      <ScrollView showsVerticalScrollIndicator={false} bounces={false}
-        contentContainerStyle={{ paddingHorizontal: HPADDING, paddingBottom: bottomPad, paddingTop: 8 }}>
+
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        bounces={false}
+        contentContainerStyle={{ paddingHorizontal: HPADDING, paddingBottom: bottomPad, paddingTop: 8 }}
+      >
+        {/* 3-column grid */}
         <View style={pro.grid}>
           {gridTools.map((tool) => (
-            <TouchableOpacity key={tool.id}
+            <TouchableOpacity
+              key={tool.id}
               style={[pro.tile, { width: tileW, height: tileH, backgroundColor: tileBg }]}
-              onPress={tool.onPress} activeOpacity={0.72}>
-              {loading === tool.id
-                ? <ActivityIndicator color={textPrimary} />
-                : <Ionicons name={tool.icon as any} size={26} color={textPrimary} />}
+              onPress={tool.onPress}
+              activeOpacity={0.72}
+            >
+              {loading === tool.id ? (
+                <ActivityIndicator color={textPrimary} />
+              ) : (
+                <Ionicons name={tool.icon as any} size={26} color={textPrimary} />
+              )}
               <Text style={[pro.tileLabel, { color: textPrimary }]}>{tool.label}</Text>
             </TouchableOpacity>
           ))}
         </View>
+
+        {/* List rows card */}
         <View style={[pro.listCard, { backgroundColor: listCardBg, marginTop: 12 }]}>
           {listTools.map((tool, i) => (
-            <TouchableOpacity key={tool.id}
+            <TouchableOpacity
+              key={tool.id}
               style={[pro.listRow, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: dividerColor }]}
-              onPress={tool.onPress} activeOpacity={0.7}>
+              onPress={tool.onPress}
+              activeOpacity={0.7}
+            >
               <View style={[pro.listIconWrap, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)' }]}>
                 <Ionicons name={tool.icon as any} size={20} color={textPrimary} />
               </View>
@@ -379,10 +448,10 @@ function ProToolsModal({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// FREE PLAN MODAL — photo strip + tool list
+// FREE PLAN MODAL — photo strip + tool list (Photos 2-3)
 // ─────────────────────────────────────────────────────────────────────────────
 function FreeToolsModal({
-  visible, onClose, onSelectTool, onDeepResearch, onConnectApp, onWebSearch, onThinkingMode, isDark, insets,
+  visible, onClose, onSelectTool, onDeepResearch, onConnectApp, isDark, insets,
   handleFiles, loading, pan, modalStyle, backdropOpacity,
   recentPhotos, selectedPhotos, togglePhoto, handleAllPhotos, handleCamera, handleAddPhotos, photoLimit,
 }: any) {
@@ -395,9 +464,9 @@ function FreeToolsModal({
 
   const toolItems = [
     { id: 'create-image', icon: 'color-palette-outline', iconColor: '#FF6B6B', label: 'Create image', sub: 'Visualize anything', onPress: () => { onSelectTool?.('create-image'); onClose(); } },
-    { id: 'thinking', icon: 'bulb-outline', iconColor: '#FFD60A', label: 'Thinking', sub: 'Think longer for better answers', onPress: () => { onThinkingMode?.(); } },
-    { id: 'deep-research', icon: 'search-outline', iconColor: '#5AC8FA', label: 'Deep research', sub: 'Get a detailed report', onPress: () => { onDeepResearch?.(); } },
-    { id: 'web-search', icon: 'globe-outline', iconColor: '#007AFF', label: 'Web search', sub: 'Find real-time news and info', onPress: () => { onWebSearch?.(); } },
+    { id: 'thinking', icon: 'bulb-outline', iconColor: '#FFD60A', label: 'Thinking', sub: 'Think longer for better answers', onPress: () => { onSelectTool?.('thinking'); onClose(); } },
+    { id: 'deep-research', icon: 'search-outline', iconColor: '#5AC8FA', label: 'Deep research', sub: 'Get a detailed report', onPress: () => { onDeepResearch?.(); onClose(); } },
+    { id: 'web-search', icon: 'globe-outline', iconColor: '#007AFF', label: 'Web search', sub: 'Find real-time news and info', onPress: () => { onSelectTool?.('web-search'); onClose(); } },
     { id: 'add-files', icon: 'attach-outline', iconColor: '#8E8E93', label: 'Add files', sub: 'Analyze or summarize', onPress: () => { handleFiles(); } },
     { id: 'spotify', icon: 'logo-spotify', iconColor: '#1DB954', label: 'Spotify', sub: 'Explore music and podcasts', onPress: () => { onConnectApp?.(); onClose(); } },
     { id: 'apps', icon: 'apps-outline', iconColor: '#007AFF', label: 'Explore apps', sub: 'Chat with apps in Dawinix', onPress: () => { onConnectApp?.(); onClose(); }, chevron: true },
@@ -408,6 +477,8 @@ function FreeToolsModal({
       <View style={s.handleWrap}>
         <View style={[s.handle, { backgroundColor: isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.18)' }]} />
       </View>
+
+      {/* Header */}
       <View style={s.headerRow}>
         <Text style={[s.headerTitle, { color: textPrimary }]}>Dawinix</Text>
         <TouchableOpacity onPress={handleAllPhotos} disabled={loading === 'allphotos'} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
@@ -416,20 +487,32 @@ function FreeToolsModal({
             : <Text style={[s.allPhotosBtn, { color: accentBlue }]}>All Photos</Text>}
         </TouchableOpacity>
       </View>
-      <ScrollView showsVerticalScrollIndicator={false} bounces={false} keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ paddingBottom: selectedCount > 0 ? 68 : 8 }}>
+
+      {/* This ScrollView encapsulates the photo strip and the tool list */}
+      <ScrollView showsVerticalScrollIndicator={false} bounces={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: selectedCount > 0 ? 68 : 8 }}>
+        {/* Photo strip */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.photoStrip}>
-          <TouchableOpacity style={[s.cameraTile, { backgroundColor: isDark ? 'rgba(60,60,67,0.5)' : 'rgba(0,0,0,0.07)' }]}
-            onPress={handleCamera} disabled={!!loading} activeOpacity={0.75}>
-            {loading === 'camera' ? <ActivityIndicator color={isDark ? '#FFF' : '#555'} /> : <Ionicons name="camera" size={26} color={isDark ? 'rgba(255,255,255,0.6)' : '#8E8E93'} />}
+          <TouchableOpacity
+            style={[s.cameraTile, { backgroundColor: isDark ? 'rgba(60,60,67,0.5)' : 'rgba(0,0,0,0.07)' }]}
+            onPress={handleCamera} disabled={!!loading} activeOpacity={0.75}
+          >
+            {loading === 'camera'
+              ? <ActivityIndicator color={isDark ? '#FFF' : '#555'} />
+              : <Ionicons name="camera" size={26} color={isDark ? 'rgba(255,255,255,0.6)' : '#8E8E93'} />}
           </TouchableOpacity>
+
           {recentPhotos.map((photo: RecentPhoto) => {
             const order = selectedPhotos.get(photo.uri);
             const isSelected = order !== undefined;
             const isLimitReached = selectedPhotos.size >= photoLimit && !isSelected;
             return (
-              <TouchableOpacity key={photo.id} style={[s.photoTile, isLimitReached && s.photoTileBlocked]}
-                onPress={() => !isLimitReached && togglePhoto(photo.uri)} activeOpacity={isLimitReached ? 1 : 0.85} disabled={isLimitReached}>
+              <TouchableOpacity
+                key={photo.id}
+                style={[s.photoTile, isLimitReached && s.photoTileBlocked]}
+                onPress={() => !isLimitReached && togglePhoto(photo.uri)}
+                activeOpacity={isLimitReached ? 1 : 0.85}
+                disabled={isLimitReached}
+              >
                 <Image source={{ uri: photo.uri }} style={[StyleSheet.absoluteFill, { borderRadius: 10 }]} contentFit="cover" transition={100} />
                 {isLimitReached && <View style={s.photoBlockOverlay} />}
                 <View style={[s.selCircle, isSelected && s.selCircleActive]}>
@@ -440,12 +523,18 @@ function FreeToolsModal({
             );
           })}
         </ScrollView>
+
         <View style={[s.divider, { backgroundColor: dividerColor }]} />
+
+        {/* Tool list */}
         <View style={[s.toolListCard, { backgroundColor: isDark ? 'rgba(44,44,48,0.7)' : 'rgba(255,255,255,0.85)', marginHorizontal: 12, marginBottom: 8 }]}>
           {toolItems.map((tool, i) => (
-            <TouchableOpacity key={tool.id}
+            <TouchableOpacity
+              key={tool.id}
               style={[s.toolRow, i < toolItems.length - 1 && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: dividerColor }]}
-              onPress={tool.onPress} activeOpacity={0.65}>
+              onPress={tool.onPress}
+              activeOpacity={0.65}
+            >
               <View style={[s.toolIconWrap, { backgroundColor: (tool.iconColor || '#888') + '1A' }]}>
                 <Ionicons name={tool.icon as any} size={20} color={tool.iconColor || textPrimary} />
               </View>
@@ -453,15 +542,21 @@ function FreeToolsModal({
                 <Text style={[s.toolLabel, { color: textPrimary }]}>{tool.label}</Text>
                 <Text style={[s.toolSub, { color: textSecondary }]} numberOfLines={1}>{tool.sub}</Text>
               </View>
-              {(tool as any).chevron ? <Ionicons name="chevron-forward" size={16} color={isDark ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.22)'} /> : null}
+              {(tool as any).chevron
+                ? <Ionicons name="chevron-forward" size={16} color={isDark ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.22)'} />
+                : null}
             </TouchableOpacity>
           ))}
         </View>
       </ScrollView>
+
+      {/* "Add N photos" CTA */}
       {selectedCount > 0 && (
         <View style={[s.addPhotosBtnWrap, { paddingBottom: bottomPad, borderTopColor: dividerColor }]}>
-          <TouchableOpacity style={[s.addPhotosBtn, { backgroundColor: isDark ? '#FFFFFF' : '#000000' }]}
-            onPress={handleAddPhotos} disabled={loading === 'photos_send'} activeOpacity={0.88}>
+          <TouchableOpacity
+            style={[s.addPhotosBtn, { backgroundColor: isDark ? '#FFFFFF' : '#000000' }]}
+            onPress={handleAddPhotos} disabled={loading === 'photos_send'} activeOpacity={0.88}
+          >
             {loading === 'photos_send'
               ? <ActivityIndicator color={isDark ? '#000' : '#FFF'} />
               : <Text style={[s.addPhotosBtnText, { color: isDark ? '#000000' : '#FFFFFF' }]}>
@@ -498,10 +593,10 @@ function FreeToolsModal({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GUEST MODAL — photo strip + limited tools
+// GUEST MODAL — photo strip (no selection) + limited tools (Photos 4-5-6)
 // ─────────────────────────────────────────────────────────────────────────────
 function GuestToolsModal({
-  visible, onClose, onSelectTool, onDeepResearch, onConnectApp, onWebSearch, onThinkingMode, isDark, insets,
+  visible, onClose, onSelectTool, onDeepResearch, onConnectApp, isDark, insets,
   handleFiles, loading, pan, modalStyle, backdropOpacity,
   recentPhotos, selectedPhotos, togglePhoto, handleAllPhotos, handleCamera, handleAddPhotos, photoLimit,
 }: any) {
@@ -514,9 +609,9 @@ function GuestToolsModal({
 
   const toolItems = [
     { id: 'create-image', icon: 'color-palette-outline', iconColor: '#FF6B6B', label: 'Create image', sub: 'Visualize anything', onPress: () => { onSelectTool?.('create-image'); onClose(); } },
-    { id: 'web-search', icon: 'globe-outline', iconColor: '#007AFF', label: 'Web Search', sub: 'Find real-time news and info', onPress: () => { onWebSearch?.(); } },
-    { id: 'deep-research', icon: 'search-outline', iconColor: '#5AC8FA', label: 'Deep research', sub: 'Get a detailed report', onPress: () => { onDeepResearch?.(); } },
-    { id: 'thinking', icon: 'bulb-outline', iconColor: '#FFD60A', label: 'Thinking', sub: 'Think longer for better answers', onPress: () => { onThinkingMode?.(); } },
+    { id: 'web-search', icon: 'globe-outline', iconColor: '#007AFF', label: 'Web Search', sub: 'Find real-time news and info', onPress: () => { onSelectTool?.('web-search'); onClose(); } },
+    { id: 'deep-research', icon: 'search-outline', iconColor: '#5AC8FA', label: 'Deep research', sub: 'Get a detailed report', onPress: () => { onDeepResearch?.(); onClose(); } },
+    { id: 'thinking', icon: 'bulb-outline', iconColor: '#FFD60A', label: 'Thinking', sub: 'Think longer for better answers', onPress: () => { onSelectTool?.('thinking'); onClose(); } },
     { id: 'add-files', icon: 'attach-outline', iconColor: '#8E8E93', label: 'Add files', sub: 'Analyze or summarize', onPress: () => { handleFiles(); } },
   ];
 
@@ -525,6 +620,8 @@ function GuestToolsModal({
       <View style={s.handleWrap}>
         <View style={[s.handle, { backgroundColor: isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.18)' }]} />
       </View>
+
+      {/* Header */}
       <View style={s.headerRow}>
         <Text style={[s.headerTitle, { color: textPrimary }]}>Dawinix</Text>
         <TouchableOpacity onPress={handleAllPhotos} disabled={loading === 'allphotos'} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
@@ -533,20 +630,32 @@ function GuestToolsModal({
             : <Text style={[s.allPhotosBtn, { color: accentBlue }]}>All Photos</Text>}
         </TouchableOpacity>
       </View>
-      <ScrollView showsVerticalScrollIndicator={false} bounces={false} keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ paddingBottom: selectedCount > 0 ? 68 : 8 }}>
+
+      {/* This ScrollView encapsulates the photo strip and the tool list */}
+      <ScrollView showsVerticalScrollIndicator={false} bounces={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: selectedCount > 0 ? 68 : 8 }}>
+        {/* Photo strip — guests can select photos (limited to 3 per 20h) */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.photoStrip}>
-          <TouchableOpacity style={[s.cameraTile, { backgroundColor: isDark ? 'rgba(60,60,67,0.5)' : 'rgba(0,0,0,0.07)' }]}
-            onPress={handleCamera} disabled={!!loading} activeOpacity={0.75}>
-            {loading === 'camera' ? <ActivityIndicator color={isDark ? '#FFF' : '#555'} /> : <Ionicons name="camera" size={26} color={isDark ? 'rgba(255,255,255,0.6)' : '#8E8E93'} />}
+          <TouchableOpacity
+            style={[s.cameraTile, { backgroundColor: isDark ? 'rgba(60,60,67,0.5)' : 'rgba(0,0,0,0.07)' }]}
+            onPress={handleCamera} disabled={!!loading} activeOpacity={0.75}
+          >
+            {loading === 'camera'
+              ? <ActivityIndicator color={isDark ? '#FFF' : '#555'} />
+              : <Ionicons name="camera" size={26} color={isDark ? 'rgba(255,255,255,0.6)' : '#8E8E93'} />}
           </TouchableOpacity>
+
           {recentPhotos.map((photo: RecentPhoto) => {
             const order = selectedPhotos.get(photo.uri);
             const isSelected = order !== undefined;
             const isLimitReached = selectedPhotos.size >= photoLimit && !isSelected;
             return (
-              <TouchableOpacity key={photo.id} style={[s.photoTile, isLimitReached && s.photoTileBlocked]}
-                onPress={() => !isLimitReached && togglePhoto(photo.uri)} activeOpacity={isLimitReached ? 1 : 0.85} disabled={isLimitReached}>
+              <TouchableOpacity
+                key={photo.id}
+                style={[s.photoTile, isLimitReached && s.photoTileBlocked]}
+                onPress={() => !isLimitReached && togglePhoto(photo.uri)}
+                activeOpacity={isLimitReached ? 1 : 0.85}
+                disabled={isLimitReached}
+              >
                 <Image source={{ uri: photo.uri }} style={[StyleSheet.absoluteFill, { borderRadius: 10 }]} contentFit="cover" transition={100} />
                 {isLimitReached && <View style={s.photoBlockOverlay} />}
                 <View style={[s.selCircle, isSelected && s.selCircleActive]}>
@@ -557,12 +666,18 @@ function GuestToolsModal({
             );
           })}
         </ScrollView>
+
         <View style={[s.divider, { backgroundColor: dividerColor }]} />
+
+        {/* Tool list — limited for guests */}
         <View style={[s.toolListCard, { backgroundColor: isDark ? 'rgba(44,44,48,0.7)' : 'rgba(255,255,255,0.85)', marginHorizontal: 12, marginBottom: 8 }]}>
           {toolItems.map((tool, i) => (
-            <TouchableOpacity key={tool.id}
+            <TouchableOpacity
+              key={tool.id}
               style={[s.toolRow, i < toolItems.length - 1 && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: dividerColor }]}
-              onPress={tool.onPress} activeOpacity={0.65}>
+              onPress={tool.onPress}
+              activeOpacity={0.65}
+            >
               <View style={[s.toolIconWrap, { backgroundColor: (tool.iconColor || '#888') + '1A' }]}>
                 <Ionicons name={tool.icon as any} size={20} color={tool.iconColor || textPrimary} />
               </View>
@@ -574,10 +689,14 @@ function GuestToolsModal({
           ))}
         </View>
       </ScrollView>
+
+      {/* "Add N photos" CTA */}
       {selectedCount > 0 && (
         <View style={[s.addPhotosBtnWrap, { paddingBottom: bottomPad, borderTopColor: dividerColor }]}>
-          <TouchableOpacity style={[s.addPhotosBtn, { backgroundColor: isDark ? '#FFFFFF' : '#000000' }]}
-            onPress={handleAddPhotos} disabled={loading === 'photos_send'} activeOpacity={0.88}>
+          <TouchableOpacity
+            style={[s.addPhotosBtn, { backgroundColor: isDark ? '#FFFFFF' : '#000000' }]}
+            onPress={handleAddPhotos} disabled={loading === 'photos_send'} activeOpacity={0.88}
+          >
             {loading === 'photos_send'
               ? <ActivityIndicator color={isDark ? '#000' : '#FFF'} />
               : <Text style={[s.addPhotosBtnText, { color: isDark ? '#000000' : '#FFFFFF' }]}>
