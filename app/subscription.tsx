@@ -868,5 +868,4 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   refreshText: { fontSize: 11 },
-}); 
-fix error cannot read property default of undefined.
+});
