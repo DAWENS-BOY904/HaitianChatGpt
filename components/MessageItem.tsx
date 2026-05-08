@@ -726,6 +726,27 @@ export const MessageItem = memo(function MessageItem({
     <>
       <View style={[assistantStyles.container]}>
         <View style={assistantStyles.inner}>
+          {/* AI Thinking indicator */}
+          {isGenerating && blocks.length === 0 ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8, gap: 8 }}>
+              <View style={{
+                width: 24,
+                height: 24,
+                borderRadius: 12,
+                backgroundColor: isDark ? '#FFFFFF' : '#000000',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}>
+                <View style={{
+                  width: 10,
+                  height: 10,
+                  borderRadius: 5,
+                  backgroundColor: isDark ? '#000000' : '#FFFFFF',
+                }} />
+              </View>
+              <Text style={{ color: colors.textSecondary, fontSize: 14, fontWeight: '500' }}>Thinking...</Text>
+            </View>
+          ) : null}
           {blocks.map((block, bi) => {
             if (block.type === 'code') {
               return (
