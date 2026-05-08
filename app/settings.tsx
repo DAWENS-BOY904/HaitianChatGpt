@@ -1432,4 +1432,3 @@ export default function SettingsScreen() {
     </View>
   );
 }
-fucking fix error.
