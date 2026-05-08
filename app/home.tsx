@@ -3322,4 +3322,3 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-the app shows a white screen after login Investigate the home.tsx entry point and ensure the navigation flow from login → home works correctly, checking that AuthRouter redirects properly and all context providers are initialized before rendering.
