@@ -20,7 +20,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getSupabaseClient } from '@/template';
 import * as MediaLibrary from 'expo-media-library';
 import * as FileSystem from 'expo-file-system';
-import { decode } from 'base64-arraybuffer';
 
 export default function ImageViewerScreen() {
   const { colors } = useTheme();
@@ -106,9 +105,13 @@ export default function ImageViewerScreen() {
         const filePath = `${user?.id}/${fileName}`;
 
         const base64Image = data.image.split(',')[1];
+        // Decode base64 to ArrayBuffer inline (avoids base64-arraybuffer dependency)
+        const binaryStr = atob(base64Image);
+        const bytes = new Uint8Array(binaryStr.length);
+        for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
         const { error: uploadError } = await supabase.storage
           .from('media-files')
-          .upload(filePath, decode(base64Image), {
+          .upload(filePath, bytes.buffer, {
             contentType: 'image/png',
           });
 
