@@ -60,6 +60,29 @@ const COUNTRIES: Country[] = [
   { name: 'Mexico', code: 'MX', flag: '🇲🇽', dialCode: '+52' },
   { name: 'Brazil', code: 'BR', flag: '🇧🇷', dialCode: '+55' },
   { name: 'India', code: 'IN', flag: '🇮🇳', dialCode: '+91' },
+
+  // ➕ 20 more countries
+  { name: 'Italy', code: 'IT', flag: '🇮🇹', dialCode: '+39' },
+  { name: 'Spain', code: 'ES', flag: '🇪🇸', dialCode: '+34' },
+  { name: 'Portugal', code: 'PT', flag: '🇵🇹', dialCode: '+351' },
+  { name: 'Netherlands', code: 'NL', flag: '🇳🇱', dialCode: '+31' },
+  { name: 'Belgium', code: 'BE', flag: '🇧🇪', dialCode: '+32' },
+  { name: 'Switzerland', code: 'CH', flag: '🇨🇭', dialCode: '+41' },
+  { name: 'Sweden', code: 'SE', flag: '🇸🇪', dialCode: '+46' },
+  { name: 'Norway', code: 'NO', flag: '🇳🇴', dialCode: '+47' },
+  { name: 'Denmark', code: 'DK', flag: '🇩🇰', dialCode: '+45' },
+  { name: 'Finland', code: 'FI', flag: '🇫🇮', dialCode: '+358' },
+
+  { name: 'Nigeria', code: 'NG', flag: '🇳🇬', dialCode: '+234' },
+  { name: 'South Africa', code: 'ZA', flag: '🇿🇦', dialCode: '+27' },
+  { name: 'Kenya', code: 'KE', flag: '🇰🇪', dialCode: '+254' },
+  { name: 'Ghana', code: 'GH', flag: '🇬🇭', dialCode: '+233' },
+  { name: 'Egypt', code: 'EG', flag: '🇪🇬', dialCode: '+20' },
+
+  { name: 'China', code: 'CN', flag: '🇨🇳', dialCode: '+86' },
+  { name: 'Japan', code: 'JP', flag: '🇯🇵', dialCode: '+81' },
+  { name: 'South Korea', code: 'KR', flag: '🇰🇷', dialCode: '+82' },
+  { name: 'Philippines', code: 'PH', flag: '🇵🇭', dialCode: '+63' },
 ];
 
 const logoStyles = StyleSheet.create({
