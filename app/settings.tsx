@@ -15,7 +15,6 @@ import {
   Animated,
   Share,
 } from 'react-native';
-// react-native-version-check replaced with expo-compatible implementation
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { useTheme } from '../hooks/useTheme';
@@ -37,7 +36,7 @@ const PERSONA_LINK = 'https://perso.na/s/rKzyfH-XZ9663D';
 const AGE_VERIFIED_KEY = 'age_verification_completed';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// AGE VERIFICATION MODAL — Full-screen with dark/light mode support
+// AGE VERIFICATION MODAL
 // ═══════════════════════════════════════════════════════════════════════════════
 function AgeVerificationModal({ visible, onClose, onVerified }: {
   visible: boolean; onClose: () => void; onVerified: () => void;
@@ -46,11 +45,12 @@ function AgeVerificationModal({ visible, onClose, onVerified }: {
   const insets2 = useSafeAreaInsets();
   const [step, setStep] = useState<'consent' | 'camera' | 'device' | 'webview'>('consent');
   const [webviewLoading, setWebviewLoading] = useState(true);
-  useEffect(() => { if (visible) setStep('consent'); }, [visible]);
+  
+  useEffect(() => { 
+    if (visible) setStep('consent'); 
+  }, [visible]);
 
-  // Dark/Light theme tokens
   const bg = isDark ? '#000000' : '#FFFFFF';
-  const dotColor = isDark ? '#fff' : '#000';
   const primaryText = isDark ? '#FFFFFF' : '#000000';
   const secondaryText = isDark ? 'rgba(255,255,255,0.55)' : '#475569';
   const tertiaryText = isDark ? 'rgba(255,255,255,0.35)' : '#94A3B8';
@@ -64,26 +64,25 @@ function AgeVerificationModal({ visible, onClose, onVerified }: {
   const personaText = '#6366F1';
   const qrIconColor = isDark ? '#E2E8F0' : '#1E293B';
 
-  const openLink = async (url: string) => {
-  await WebBrowser.openBrowserAsync(url);
-};
   const handleCopyLink = async () => {
     try {
       const Clipboard = await import('expo-clipboard');
       await Clipboard.setStringAsync(PERSONA_LINK);
     } catch (_e) {
-      // Fallback: try to use Share API as clipboard fallback
       try {
         await Share.share({ message: PERSONA_LINK });
       } catch (_e2) {}
     }
   };
+  
   const handleSendEmail = () => {
     Linking.openURL(`mailto:?subject=Age Verification&body=Continue your age verification: ${PERSONA_LINK}`);
   };
+  
   const handleVerified = async () => {
     await AsyncStorage.setItem(AGE_VERIFIED_KEY, 'true');
-    onVerified(); onClose();
+    onVerified(); 
+    onClose();
   };
 
   return (
@@ -244,7 +243,7 @@ function AgeVerificationModal({ visible, onClose, onVerified }: {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// VERIFIED BADGE COMPONENT — Updated for Pro & Plus
+// VERIFIED BADGE COMPONENT
 // ═══════════════════════════════════════════════════════════════════════════════
 function VerifiedBadge({ onPress, tier }: { onPress: () => void; tier: 'pro' | 'plus' | 'go' | null }) {
   const glowAnim = useRef(new Animated.Value(0)).current;
@@ -519,7 +518,6 @@ function GuestSettings() {
 
   return (
     <View style={{ flex: 1, backgroundColor: bg }}>
-      {/* GUEST header — same redesign */}
       <View style={{
         flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
         paddingTop: insets.top + 12, paddingBottom: 12, paddingHorizontal: 20,
@@ -652,11 +650,21 @@ export default function SettingsScreen() {
   const switchTrackFalse = isDark ? '#3A3A3C' : '#E5E5EA';
   const switchTrackTrue = '#34C759';
 
-  const openLink = (url: string) => {
+  // FIX: Properly handle links - internal routes vs external URLs
+  const openLink = async (url: string) => {
     if (url.startsWith('/')) {
       router.push(url as any);
     } else {
-      Linking.openURL(url);
+      // FIX: Use WebBrowser for external links (in-app browser)
+      try {
+        await WebBrowser.openBrowserAsync(url, {
+          toolbarColor: isDark ? '#000000' : '#FFFFFF',
+          controlsColor: '#10A37F',
+          showTitle: true,
+        });
+      } catch (_e) {
+        Linking.openURL(url);
+      }
     }
   };
 
@@ -683,6 +691,7 @@ export default function SettingsScreen() {
       }
     }).catch(() => {});
     loadProfile();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   const checkAdminAccess = async () => {
@@ -694,7 +703,6 @@ export default function SettingsScreen() {
   const checkUpdate = async () => {
     setUpdateStatus('checking');
     try {
-      // Use expo-updates for OTA update checks when available
       if (Platform.OS !== 'web') {
         try {
           const Updates = require('expo-updates');
@@ -704,7 +712,7 @@ export default function SettingsScreen() {
             return;
           }
         } catch (_e) {
-          // expo-updates not configured or in dev mode — fall through
+          // expo-updates not configured
         }
       }
       setUpdateStatus('no-update');
@@ -718,7 +726,6 @@ export default function SettingsScreen() {
   };
 
   const openStore = () => {
-    // Open the appropriate store page
     const appId = 'app.onspace.dawinix2027';
     const url = Platform.OS === 'ios'
       ? `https://apps.apple.com/app/id${appId}`
@@ -727,7 +734,11 @@ export default function SettingsScreen() {
   };
 
   const handleUpdatePress = () => {
-    if (updateStatus === 'update') { openStore(); } else { checkUpdate(); }
+    if (updateStatus === 'update') { 
+      openStore(); 
+    } else if (updateStatus === 'idle' || updateStatus === 'no-update' || updateStatus === 'version') {
+      checkUpdate();
+    }
   };
 
   const getUpdateLabel = () => {
@@ -930,7 +941,7 @@ export default function SettingsScreen() {
   );
 
   const Row = ({ icon, label, value, onPress, isLast, showChevron = true, rightEl }: {
-    icon: string; label: string; value?: string; onPress?: () => void; isLast?: boolean; showChevron?: boolean; rightEl?: React.ReactNode;
+    icon?: string; label: string; value?: string; onPress?: () => void; isLast?: boolean; showChevron?: boolean; rightEl?: React.ReactNode;
   }) => (
     <TouchableOpacity
       style={{
@@ -944,7 +955,7 @@ export default function SettingsScreen() {
       activeOpacity={onPress ? 0.6 : 1}
     >
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
-        <Ionicons name={icon as any} size={20} color={secondaryText} />
+        {icon && <Ionicons name={icon as any} size={20} color={secondaryText} />}
         <Text style={{ fontSize: 16, color: primaryText, fontWeight: '400' }}>{label}</Text>
       </View>
       {rightEl ? rightEl : (
@@ -1060,7 +1071,7 @@ export default function SettingsScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: bg }}>
-      {/* HEADER — centered title + circular X button */}
+      {/* HEADER */}
       <View style={{
         flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
         paddingTop: insets.top + 16, paddingBottom: 16, paddingHorizontal: 20,
@@ -1169,26 +1180,12 @@ export default function SettingsScreen() {
           <SwitchRow icon="create-outline" label="Autocomplete" value={settings.autocomplete} onChange={v => updateSetting('autocomplete', v)} />
           <SwitchRow icon="trending-up-outline" label="Trending searches" value={settings.trendingSearches} onChange={v => updateSetting('trendingSearches', v)} isLast />
         </Card>
-        <Text
-  style={{
-    fontSize: 13,
-    color: secondaryText,
-    marginTop: 8,
-    marginHorizontal: 20,
-    lineHeight: 18
-  }}
->
-  Background conversations keep the conversation going in other apps or while your screen is off.{" "}
-  
-  <Text
-    style={{ color: '#007AFF', fontWeight: '500' }}
-    onPress={() =>
-      WebBrowser.openBrowserAsync('https://dawinix.com/voice-suggest/')
-    }
-  >
-    Learn more
-  </Text>
-</Text>
+        <Text style={{ fontSize: 13, color: secondaryText, marginTop: 8, marginHorizontal: 20, lineHeight: 18 }}>
+          Background conversations keep the conversation going in other apps or while your screen is off.{" "}
+          <Text style={{ color: '#007AFF', fontWeight: '500' }} onPress={() => openLink('https://dawinix.com/voice-suggest/')}>
+            Learn more
+          </Text>
+        </Text>
 
         {/* ADMIN */}
         {isAdmin && (
@@ -1203,60 +1200,36 @@ export default function SettingsScreen() {
         )}
 
         {/* ABOUT */}
-<SectionLabel text="About" />
+        <SectionLabel text="About" />
+        <Card>
+          <Row icon="bug-outline" label="Report bug" showChevron={false} onPress={() => openLink('/bugreport')} />
+          <Row icon="help-circle-outline" label="Help Center" showChevron={false} onPress={() => openLink('https://yourapp.com/help')} />
+          <Row icon="document-text-outline" label="Terms of Use" showChevron={false} onPress={() => openLink('https://yourapp.com/terms')} />
+          <Row icon="shield-outline" label="Privacy Policy" showChevron={false} onPress={() => openLink('https://yourapp.com/privacy')} />
+          
+          {/* CHECK UPDATE */}
+          <Row 
+            icon="refresh-circle-outline" 
+            label="Check for updates" 
+            showChevron={false}
+            onPress={handleUpdatePress}
+            rightEl={
+              updateStatus === 'checking' ? (
+                <ActivityIndicator size="small" color={secondaryText} />
+              ) : (
+                <View style={{
+                  width: 14,
+                  height: 14,
+                  borderRadius: 7,
+                  backgroundColor: updateStatus === 'update' ? '#FF453A' : (updateStatus === 'no-update' ? '#34C759' : '#10A37F'),
+                }} />
+              )
+            }
+            isLast
+          />
+        </Card>
 
-<Card>
-  <Row
-    label="Report bug"
-    showChevron={false}
-    onPress={() => openLink('/bugreport')}
-    rightEl={null}
-  />
-
-  <Row
-    label="Help Center"
-    showChevron={false}
-    onPress={() => openLink('https://yourapp.com/help')}
-    rightEl={null}
-  />
-
-  <Row
-    label="Terms of Use"
-    showChevron={false}
-    onPress={() => openLink('https://yourapp.com/terms')}
-    rightEl={null}
-  />
-
-  <Row
-    label="Privacy Policy"
-    showChevron={false}
-    onPress={() => openLink('https://yourapp.com/privacy')}
-    rightEl={null}
-  />
-
-  {/* CHECK UPDATE (ONLY ONE WITH DOT) */}
-  <Row
-    label="Check for updates"
-    showChevron={false}
-    onPress={handleUpdatePress}
-    rightEl={
-      updateStatus === 'checking' ? (
-        <ActivityIndicator size="small" color={secondaryText} />
-      ) : (
-        <View
-          style={{
-            width: 14,
-            height: 14,
-            borderRadius: 7,
-            backgroundColor: dotColor, // 🔳 dynamic dot
-          }}
-        />
-      )
-    }
-  />
-</Card>
-
-        {/* LOG OUT — separate card with arrow icon like ChatGPT */}
+        {/* LOG OUT */}
         <View style={{ marginTop: 24, marginHorizontal: 16, marginBottom: 8 }}>
           <TouchableOpacity
             style={{
