@@ -2,7 +2,7 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet,
   Platform, Share, StatusBar, Modal, Linking, Switch,
-  Alert, Dimensions, Animated, Easing,
+  Alert, Dimensions, Animated, Easing, ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -13,13 +13,13 @@ import { Image as ExpoImage } from 'expo-image';
 import { useTheme } from '../hooks/useTheme';
 import { getSupabaseClient } from '@/template';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+// ── Import expo-web-browser for in-app links ──
+import * as WebBrowser from 'expo-web-browser';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
 // ── Spotify branding ───────────────────────────────────────────────────────
 const SPOTIFY_GREEN = '#1DB954';
-// The client ID is used only to build the OAuth URL on the client side.
-// All secret operations (token exchange, refresh) go through the Edge Function.
 const SPOTIFY_CLIENT_ID = process.env.EXPO_PUBLIC_SPOTIFY_CLIENT_ID ?? '';
 const SPOTIFY_REDIRECT_URI = 'https://dawinix.app/spotify/callback';
 const SPOTIFY_SCOPES = [
@@ -29,9 +29,11 @@ const SPOTIFY_SCOPES = [
   'streaming',
 ].join('%20');
 
+// ── Real Spotify support link ──
+const SPOTIFY_SUPPORT_URL = 'https://support.spotify.com';
+
 function buildSpotifyAuthUrl(): string {
   if (!SPOTIFY_CLIENT_ID) {
-    // Return a URL that will gracefully fail in the WebView so we can catch it
     console.warn('[Spotify] EXPO_PUBLIC_SPOTIFY_CLIENT_ID is not set');
     return 'about:blank';
   }
@@ -43,6 +45,29 @@ function buildSpotifyAuthUrl(): string {
     `&redirect_uri=${encodeURIComponent(SPOTIFY_REDIRECT_URI)}` +
     `&show_dialog=true`
   );
+}
+
+// ── SECURE: Fetch version from Supabase Edge Function (no CLIENT_SECRET in client) ──
+async function fetchSpotifyAppVersion(supabase: any): Promise<string | null> {
+  try {
+    const { data, error } = await supabase.functions.invoke('spotify-version', {
+      body: { action: 'get_version' },
+    });
+    
+    if (error) {
+      console.warn('[Spotify] Version check error:', error);
+      return null;
+    }
+    
+    if (data?.version) {
+      return data.version;
+    }
+    
+    return null;
+  } catch (e) {
+    console.warn('[Spotify] Version fetch error:', e);
+    return null;
+  }
 }
 
 // ── Token helpers stored in AsyncStorage ────────────────────────────────────
@@ -60,11 +85,8 @@ async function getValidAccessToken(supabase: any): Promise<string | null> {
     const expiry = expiryResult[1] ? parseInt(expiryResult[1], 10) : 0;
 
     if (!token) return null;
-
-    // If token is still valid (with 2-min buffer), return it directly
     if (Date.now() < expiry - 120_000) return token;
 
-    // Token expired — try to refresh
     if (!refresh) return null;
 
     const { data, error } = await supabase.functions.invoke('spotify-connect', {
@@ -98,7 +120,6 @@ function SpotifyLogo({ size = 80 }: { size?: number }) {
       backgroundColor: SPOTIFY_GREEN,
       alignItems: 'center', justifyContent: 'center',
     }}>
-      {/* Simplified Spotify bars */}
       <View style={{ alignItems: 'center', gap: 3 }}>
         {[1, 0.8, 0.6].map((w, i) => (
           <View key={i} style={{
@@ -139,7 +160,6 @@ function SpotifyConnectModal({
   isDark: boolean;
 }) {
   const [shareMemories, setShareMemories] = useState(false);
-  const textC = isDark ? '#FFF' : '#FFF';
   const subC = 'rgba(255,255,255,0.65)';
 
   return (
@@ -152,14 +172,12 @@ function SpotifyConnectModal({
         )}
         <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onClose} />
         <View style={cmStyles.sheet}>
-          {/* X close */}
           <TouchableOpacity style={cmStyles.closeBtn} onPress={onClose}>
             <View style={cmStyles.closeBtnInner}>
               <Ionicons name="close" size={15} color="#FFF" />
             </View>
           </TouchableOpacity>
 
-          {/* Logo pair */}
           <View style={cmStyles.logoPair}>
             <DawinixLogo size={54} />
             <View style={cmStyles.logoDots}>
@@ -172,7 +190,6 @@ function SpotifyConnectModal({
 
           <Text style={cmStyles.connectTitle}>Connect Spotify</Text>
 
-          {/* Privacy box */}
           <View style={cmStyles.privacyBox}>
             <Text style={cmStyles.privacyText}>
               <Text style={{ fontWeight: '700', color: '#FFF' }}>{"You're in control "}</Text>
@@ -216,12 +233,10 @@ function SpotifyConnectModal({
             </View>
           </View>
 
-          {/* Continue without account */}
           <TouchableOpacity style={cmStyles.continueWithout} onPress={onContinueWithout}>
             <Text style={cmStyles.continueWithoutText}>Continue without account</Text>
           </TouchableOpacity>
 
-          {/* Connect Spotify */}
           <TouchableOpacity style={cmStyles.connectBtn} onPress={onConnectWithAccount}>
             <Text style={cmStyles.connectBtnText}>Connect Spotify</Text>
           </TouchableOpacity>
@@ -239,26 +254,16 @@ const cmStyles = StyleSheet.create({
     paddingHorizontal: 20, paddingTop: 24, paddingBottom: 40,
     alignItems: 'center',
   },
-  closeBtn: {
-    position: 'absolute', top: 14, right: 16,
-    zIndex: 10,
-  },
+  closeBtn: { position: 'absolute', top: 14, right: 16, zIndex: 10 },
   closeBtnInner: {
     width: 28, height: 28, borderRadius: 14,
     backgroundColor: 'rgba(255,255,255,0.15)',
     alignItems: 'center', justifyContent: 'center',
   },
-  logoPair: {
-    flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 18,
-  },
+  logoPair: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 18 },
   logoDots: { flexDirection: 'row', gap: 5, alignItems: 'center' },
-  logoDot: {
-    width: 5, height: 5, borderRadius: 2.5,
-    backgroundColor: 'rgba(255,255,255,0.4)',
-  },
-  connectTitle: {
-    color: '#FFF', fontSize: 22, fontWeight: '700', marginBottom: 18,
-  },
+  logoDot: { width: 5, height: 5, borderRadius: 2.5, backgroundColor: 'rgba(255,255,255,0.4)' },
+  connectTitle: { color: '#FFF', fontSize: 22, fontWeight: '700', marginBottom: 18 },
   privacyBox: {
     backgroundColor: 'rgba(255,255,255,0.06)',
     borderRadius: 14, padding: 14, width: '100%', marginBottom: 16,
@@ -269,22 +274,16 @@ const cmStyles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.1)',
     marginVertical: 10,
   },
-  toggleRow: {
-    flexDirection: 'row', alignItems: 'center',
-  },
+  toggleRow: { flexDirection: 'row', alignItems: 'center' },
   continueWithout: {
     paddingVertical: 14, width: '100%', alignItems: 'center', marginBottom: 4,
   },
-  continueWithoutText: {
-    color: '#FFF', fontSize: 16, fontWeight: '400',
-  },
+  continueWithoutText: { color: '#FFF', fontSize: 16, fontWeight: '400' },
   connectBtn: {
     backgroundColor: '#FFF', borderRadius: 50,
     paddingVertical: 17, width: '100%', alignItems: 'center',
   },
-  connectBtnText: {
-    color: '#000', fontSize: 17, fontWeight: '700',
-  },
+  connectBtnText: { color: '#000', fontSize: 17, fontWeight: '700' },
 });
 
 // ── Spotify OAuth WebView Modal ─────────────────────────────────────────────
@@ -306,7 +305,6 @@ function SpotifyWebViewModal({
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <View style={{ flex: 1, backgroundColor: '#000', paddingTop: insets.top }}>
-        {/* Header */}
         <View style={wvStyles.header}>
           <TouchableOpacity
             style={[wvStyles.closeBtn, { backgroundColor: 'rgba(255,255,255,0.1)' }]}
@@ -321,26 +319,22 @@ function SpotifyWebViewModal({
           <View style={{ width: 36 }} />
         </View>
 
-        {/* Progress bar */}
         <View style={wvStyles.progressBg}>
           <View style={[wvStyles.progressFill, { backgroundColor: SPOTIFY_GREEN }]} />
         </View>
 
-        {/* WebView */}
         <WebView
           source={{ uri: authUrl }}
           style={{ flex: 1 }}
           onLoadStart={() => setLoading(true)}
           onLoadEnd={() => setLoading(false)}
           onShouldStartLoadWithRequest={(request) => {
-            // Intercept redirect
             if (request.url.startsWith(SPOTIFY_REDIRECT_URI) || request.url.includes('spotify/callback')) {
               const url = request.url;
               const codeMatch = url.match(/code=([^&]+)/);
               if (codeMatch && codeMatch[1]) {
                 onSuccess(codeMatch[1]);
               } else {
-                // User denied or error
                 onClose();
               }
               return false;
@@ -362,10 +356,7 @@ const wvStyles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingVertical: 10,
   },
-  closeBtn: {
-    width: 36, height: 36, borderRadius: 18,
-    alignItems: 'center', justifyContent: 'center',
-  },
+  closeBtn: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   title: { color: '#FFF', fontSize: 15, fontWeight: '600' },
   progressBg: { height: 3, backgroundColor: 'rgba(255,255,255,0.1)' },
@@ -377,13 +368,11 @@ function PreviewCard({ title, subtitle, dark }: { title: string; subtitle: strin
   const bg = dark ? '#111' : '#F5F5F7';
   return (
     <View style={[pvStyles.card, { backgroundColor: bg }]}>
-      {/* Chat bubble */}
       <View style={pvStyles.bubbleWrap}>
         <View style={pvStyles.bubble}>
           <Text style={pvStyles.bubbleText}>{title}</Text>
         </View>
       </View>
-      {/* Mock music cards */}
       {[1, 2].map(i => (
         <View key={i} style={[pvStyles.trackRow, { borderColor: dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }]}>
           <View style={[pvStyles.albumArt, { backgroundColor: dark ? '#2C2C2E' : '#DDD' }]} />
@@ -401,16 +390,9 @@ function PreviewCard({ title, subtitle, dark }: { title: string; subtitle: strin
 }
 
 const pvStyles = StyleSheet.create({
-  card: {
-    width: (SCREEN_W - 48) / 2,
-    borderRadius: 18, padding: 14,
-    minHeight: 200,
-  },
+  card: { width: (SCREEN_W - 48) / 2, borderRadius: 18, padding: 14, minHeight: 200 },
   bubbleWrap: { marginBottom: 12 },
-  bubble: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 14, padding: 10,
-  },
+  bubble: { backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 14, padding: 10 },
   bubbleText: { color: '#FFF', fontSize: 11, lineHeight: 15 },
   trackRow: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
@@ -424,20 +406,54 @@ const pvStyles = StyleSheet.create({
 });
 
 // ── Info table row ─────────────────────────────────────────────────────────
-function InfoRow({ label, value, isDark, last }: { label: string; value: string; isDark: boolean; last?: boolean }) {
+function InfoRow({ 
+  label, 
+  value, 
+  isDark, 
+  last, 
+  isLink, 
+  onPress, 
+  isLoading 
+}: { 
+  label: string; 
+  value: string; 
+  isDark: boolean; 
+  last?: boolean; 
+  isLink?: boolean; 
+  onPress?: () => void;
+  isLoading?: boolean;
+}) {
   return (
-    <View style={[
-      irStyles.row,
-      !last && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)' },
-    ]}>
+    <TouchableOpacity 
+      style={[
+        irStyles.row,
+        !last && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)' },
+      ]}
+      onPress={onPress}
+      disabled={!isLink && !onPress}
+      activeOpacity={isLink || onPress ? 0.6 : 1}
+    >
       <Text style={[irStyles.label, { color: isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.45)' }]}>{label}</Text>
-      <Text style={[irStyles.value, { color: isDark ? '#FFF' : '#000' }]}>{value}</Text>
-    </View>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+        {isLoading ? (
+          <ActivityIndicator size="small" color={isDark ? '#FFF' : '#000'} />
+        ) : (
+          <Text style={[
+            irStyles.value, 
+            { color: isDark ? '#FFF' : '#000' },
+            (isLink || onPress) && { color: SPOTIFY_GREEN, fontWeight: '600' }
+          ]}>
+            {value}
+          </Text>
+        )}
+        {(isLink || onPress) && <Ionicons name="open-outline" size={14} color={SPOTIFY_GREEN} />}
+      </View>
+    </TouchableOpacity>
   );
 }
 
 const irStyles = StyleSheet.create({
-  row: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 14, paddingHorizontal: 16 },
+  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 16 },
   label: { fontSize: 15 },
   value: { fontSize: 15, fontWeight: '500', maxWidth: '55%', textAlign: 'right' },
 });
@@ -456,6 +472,10 @@ export default function SpotifyConnectScreen() {
   const [showFullDesc, setShowFullDesc] = useState(false);
   const [clientIdMissing, setClientIdMissing] = useState(!SPOTIFY_CLIENT_ID);
 
+  // State for real version and loading
+  const [appVersion, setAppVersion] = useState<string>('3.0.0');
+  const [versionLoading, setVersionLoading] = useState(false);
+
   useEffect(() => {
     AsyncStorage.multiGet(['spotify_connected', 'spotify_has_account']).then(results => {
       const connectedVal = results[0][1];
@@ -463,10 +483,36 @@ export default function SpotifyConnectScreen() {
       if (connectedVal === 'true') setConnected(true);
       if (accountVal === 'true') setHasAccount(true);
     });
-    // Warn if client ID missing
     if (!SPOTIFY_CLIENT_ID) {
       console.warn('[Spotify] EXPO_PUBLIC_SPOTIFY_CLIENT_ID is not set. OAuth login will not work.');
     }
+  }, []);
+
+  // SECURE: Fetch version from Edge Function (no secret in client)
+  useEffect(() => {
+    const checkVersion = async () => {
+      setVersionLoading(true);
+      try {
+        // Try Edge Function first
+        const version = await fetchSpotifyAppVersion(supabase);
+        if (version) {
+          setAppVersion(version);
+          await AsyncStorage.setItem('spotify_app_version', version);
+          return;
+        }
+      } catch (e) {
+        console.warn('[Spotify] Edge Function version check failed:', e);
+      } finally {
+        setVersionLoading(false);
+      }
+    };
+
+    checkVersion();
+    
+    // Load cached version immediately
+    AsyncStorage.getItem('spotify_app_version').then(cached => {
+      if (cached) setAppVersion(cached);
+    });
   }, []);
 
   const handleShare = useCallback(async () => {
@@ -478,9 +524,7 @@ export default function SpotifyConnectScreen() {
     } catch (_e) {}
   }, []);
 
-  const handleConnectPress = () => {
-    setConnectModalVisible(true);
-  };
+  const handleConnectPress = () => setConnectModalVisible(true);
 
   const handleConnectWithAccount = () => {
     setConnectModalVisible(false);
@@ -499,9 +543,7 @@ export default function SpotifyConnectScreen() {
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Continue',
-          onPress: () => {
-            setTimeout(() => setWebViewVisible(true), 200);
-          },
+          onPress: () => setTimeout(() => setWebViewVisible(true), 200),
         },
       ]
     );
@@ -517,7 +559,6 @@ export default function SpotifyConnectScreen() {
     const apps = raw ? JSON.parse(raw) : [];
     if (!apps.includes('spotify')) apps.push('spotify');
     await AsyncStorage.setItem('connected_apps', JSON.stringify(apps));
-    // Auto-redirect to home so Spotify chip appears
     setTimeout(() => router.replace('/home'), 300);
   };
 
@@ -548,7 +589,6 @@ export default function SpotifyConnectScreen() {
     await AsyncStorage.setItem('connected_apps', JSON.stringify(apps));
     setConnected(true);
     setHasAccount(true);
-    // Auto-redirect to home with Spotify chip active
     setTimeout(() => router.replace('/home'), 300);
   };
 
@@ -558,16 +598,33 @@ export default function SpotifyConnectScreen() {
       {
         text: 'Disconnect', style: 'destructive',
         onPress: async () => {
-          await AsyncStorage.multiRemove(['spotify_connected', 'spotify_has_account', 'spotify_access_token', 'spotify_refresh_token']);
+          await AsyncStorage.multiRemove([
+            'spotify_connected', 'spotify_has_account', 
+            'spotify_access_token', 'spotify_refresh_token', 'spotify_app_version'
+          ]);
           const raw = await AsyncStorage.getItem('connected_apps');
           if (raw) {
             const apps = JSON.parse(raw).filter((a: string) => a !== 'spotify');
             await AsyncStorage.setItem('connected_apps', JSON.stringify(apps));
           }
           setConnected(false); setHasAccount(false);
+          setAppVersion('3.0.0');
         },
       },
     ]);
+  };
+
+  // Open links in-app using expo-web-browser
+  const handleOpenInAppBrowser = async (url: string) => {
+    try {
+      await WebBrowser.openBrowserAsync(url, {
+        toolbarColor: isDark ? '#000000' : '#FFFFFF',
+        controlsColor: SPOTIFY_GREEN,
+        showTitle: true,
+      });
+    } catch (e) {
+      Linking.openURL(url);
+    }
   };
 
   const bg = isDark ? '#000' : '#F2F2F7';
@@ -577,6 +634,37 @@ export default function SpotifyConnectScreen() {
 
   const description = `Explore a new way to discover music and podcasts, with recommendations picked just for you. Want music to power your next run, study session, or party? Just ask and Spotify will drop the right songs.`;
   const shortDesc = description.slice(0, 120) + '...';
+
+  // Information rows with real links and version
+  const infoRows = [
+    { label: 'Category', value: 'Entertainment', isLink: false },
+    { label: 'Capabilities', value: 'Interactive, Writes', isLink: false },
+    { label: 'Developer', value: 'Spotify', isLink: false },
+    { 
+      label: 'Version', 
+      value: versionLoading ? 'Checking...' : appVersion, 
+      isLink: false,
+      isLoading: versionLoading,
+    },
+    { 
+      label: 'Privacy Policy', 
+      value: '↗', 
+      isLink: true, 
+      onPress: () => handleOpenInAppBrowser('https://www.spotify.com/legal/privacy-policy/') 
+    },
+    { 
+      label: 'Terms of Service', 
+      value: '↗', 
+      isLink: true, 
+      onPress: () => handleOpenInAppBrowser('https://www.spotify.com/legal/end-user-agreement/') 
+    },
+    { 
+      label: 'Customer support', 
+      value: '↗', 
+      isLink: true, 
+      onPress: () => handleOpenInAppBrowser('https://support.spotify.com/us/article/contact-us/') 
+    },
+  ];
 
   return (
     <View style={{ flex: 1, backgroundColor: bg, paddingTop: insets.top }}>
@@ -638,16 +726,8 @@ export default function SpotifyConnectScreen() {
           contentContainerStyle={{ paddingHorizontal: 16, gap: 12, paddingBottom: 4 }}
           style={{ marginBottom: 24 }}
         >
-          <PreviewCard
-            title="Recommend songs for my workout"
-            subtitle="Running playlist"
-            dark={true}
-          />
-          <PreviewCard
-            title="Find me chill music for studying"
-            subtitle="Focus playlist"
-            dark={isDark}
-          />
+          <PreviewCard title="Recommend songs for my workout" subtitle="Running playlist" dark={true} />
+          <PreviewCard title="Find me chill music for studying" subtitle="Focus playlist" dark={isDark} />
         </ScrollView>
 
         {/* Description */}
@@ -665,16 +745,17 @@ export default function SpotifyConnectScreen() {
         {/* Information table */}
         <Text style={[spStyles.sectionTitle, { color: textC }]}>Information</Text>
         <View style={[spStyles.infoCard, { backgroundColor: cardBg }]}>
-          {[
-            { label: 'Category', value: 'Entertainment' },
-            { label: 'Capabilities', value: 'Interactive, Writes' },
-            { label: 'Developer', value: 'Spotify' },
-            { label: 'Version', value: '3.0.0' },
-            { label: 'Privacy Policy', value: '↗' },
-            { label: 'Terms of Service', value: '↗' },
-            { label: 'Customer support', value: '↗' },
-          ].map((row, i, arr) => (
-            <InfoRow key={row.label} label={row.label} value={row.value} isDark={isDark} last={i === arr.length - 1} />
+          {infoRows.map((row, i, arr) => (
+            <InfoRow 
+              key={row.label} 
+              label={row.label} 
+              value={row.value} 
+              isDark={isDark} 
+              last={i === arr.length - 1}
+              isLink={row.isLink}
+              onPress={row.onPress}
+              isLoading={row.isLoading}
+            />
           ))}
         </View>
       </ScrollView>
