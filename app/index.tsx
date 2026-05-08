@@ -59,20 +59,13 @@ async function performAppleSignIn(showAlert: (title: string, msg?: string) => vo
   try {
     AppleAuthentication = require('expo-apple-authentication');
     Crypto = require('expo-crypto');
-    // Validate the module loaded correctly
-    if (!AppleAuthentication || typeof AppleAuthentication.signInAsync !== 'function') {
-      throw new Error('Apple Authentication module not properly loaded');
-    }
   } catch (_e) {
     return { user: null, error: 'Apple Sign In requires a native development build.' };
   }
 
   try {
-    // Check availability safely — some builds don't have isAvailableAsync
-    if (typeof AppleAuthentication.isAvailableAsync === 'function') {
-      const available = await AppleAuthentication.isAvailableAsync();
-      if (!available) return { user: null }; // silently skip — not available
-    }
+    const available = await AppleAuthentication.isAvailableAsync();
+    if (!available) return { user: null, error: 'Apple Sign In is not available on this device.' };
 
     const rawNonce = Array.from({ length: 32 }, () =>
       'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'[

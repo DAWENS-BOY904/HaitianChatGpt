@@ -957,17 +957,12 @@ export default function HomeScreen() {
   const [deepResearchActive, setDeepResearchActive] = useState(false);
   const isGuest = !user;
   const [guestMessageCount, setGuestMessageCount] = useState(0);
-  const GUEST_MESSAGE_LIMIT = 20;
+  const GUEST_MESSAGE_LIMIT = 35;
   const [guestLoginModal, setGuestLoginModal] = useState(false);
   const [guestLockModal, setGuestLockModal] = useState(false);
   const [guestLockFeature, setGuestLockFeature] = useState('');
   const [guestPhotoCount, setGuestPhotoCount] = useState(0);
-  const [guestPhotoResetTime, setGuestPhotoResetTime] = useState<number>(0);
   const GUEST_PHOTO_LIMIT = 3;
-  const GUEST_PHOTO_BLOCK_MS = 20 * 60 * 60 * 1000; // 20 hours
-  const [guestMessageLimitReached, setGuestMessageLimitReached] = useState(false);
-  const [guestMessageLimitTime, setGuestMessageLimitTime] = useState<number>(0);
-  const GUEST_LOCK_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
   const [currentAIMode, setCurrentAIMode] = useState<AIMode>('instant');
   const [photoUploadCount, setPhotoUploadCount] = useState(0);
   const [photoUploadResetTime, setPhotoUploadResetTime] = useState<number>(0);
@@ -1133,31 +1128,6 @@ export default function HomeScreen() {
   }, [user?.id, supabase, showAlert, savingImageId]);
 
   useEffect(() => {
-    // Load guest limits from AsyncStorage
-    if (!user) {
-      (async () => {
-        try {
-          const stored = await AsyncStorage.multiGet(['guest_msg_count','guest_msg_limit_time','guest_photo_count','guest_photo_reset_time']);
-          const msgCount = parseInt(stored[0][1] || '0', 10);
-          const msgLimitTime = parseInt(stored[1][1] || '0', 10);
-          const photoCount = parseInt(stored[2][1] || '0', 10);
-          const photoResetTime = parseInt(stored[3][1] || '0', 10);
-          const now = Date.now();
-          if (msgLimitTime > 0 && now - msgLimitTime > GUEST_LOCK_DURATION_MS) {
-            await AsyncStorage.multiRemove(['guest_msg_count', 'guest_msg_limit_time']);
-          } else {
-            setGuestMessageCount(msgCount);
-            if (msgLimitTime > 0) { setGuestMessageLimitReached(true); setGuestMessageLimitTime(msgLimitTime); }
-          }
-          if (photoResetTime > 0 && now - photoResetTime > GUEST_PHOTO_BLOCK_MS) {
-            await AsyncStorage.multiRemove(['guest_photo_count', 'guest_photo_reset_time']);
-          } else {
-            setGuestPhotoCount(photoCount);
-            setGuestPhotoResetTime(photoResetTime);
-          }
-        } catch (_e) {}
-      })();
-    }
     loadDraft().then(draft => { if (draft) setInputText(draft); });
     AsyncStorage.getItem(CONV_PERSIST_KEY).then(savedId => {
       if (savedId && selectConversation) {
@@ -1728,27 +1698,7 @@ export default function HomeScreen() {
 
     if (isGuest) {
       if (docFiles2.length > 0) { setGuestLockFeature('file upload'); setGuestLockModal(true); return; }
-      // Guest photo upload: 3 per 20 hours
-      if (imageFiles.length > 0) {
-        const now = Date.now();
-        const inBlock = guestPhotoResetTime > 0 && now - guestPhotoResetTime < GUEST_PHOTO_BLOCK_MS;
-        const currentPhotoCount = inBlock ? guestPhotoCount : 0;
-        if (currentPhotoCount + imageFiles.length > GUEST_PHOTO_LIMIT) {
-          const hoursLeft = inBlock ? Math.ceil((GUEST_PHOTO_BLOCK_MS - (now - guestPhotoResetTime)) / (1000 * 60 * 60)) : 0;
-          showAlert('Photo Limit Reached', `Guest mode allows ${GUEST_PHOTO_LIMIT} photos every 20 hours. ${hoursLeft > 0 ? `Try again in ${hoursLeft}h or sign in.` : 'Please sign in to continue.'}`);
-          return;
-        }
-        if (!inBlock) {
-          const resetTime = now;
-          setGuestPhotoResetTime(resetTime);
-          setGuestPhotoCount(imageFiles.length);
-          AsyncStorage.multiSet([['guest_photo_count', String(imageFiles.length)], ['guest_photo_reset_time', String(resetTime)]]).catch(() => {});
-        } else {
-          const newPhotoCount = currentPhotoCount + imageFiles.length;
-          setGuestPhotoCount(newPhotoCount);
-          AsyncStorage.setItem('guest_photo_count', String(newPhotoCount)).catch(() => {});
-        }
-      }
+      if (imageFiles.length > 0 && guestPhotoCount + imageFiles.length > GUEST_PHOTO_LIMIT) { setGuestLockFeature('photo upload'); setGuestLoginModal(true); return; }
     }
 
     if (imageFiles.length > 0 && !isGuest && !isAdmin) {
@@ -1773,22 +1723,7 @@ export default function HomeScreen() {
     }
 
     if (isGuest) {
-      const now24 = Date.now();
-      if (guestMessageLimitReached && now24 - guestMessageLimitTime < GUEST_LOCK_DURATION_MS) {
-        setGuestLoginModal(true);
-        return;
-      }
-      if (guestMessageLimitReached && now24 - guestMessageLimitTime >= GUEST_LOCK_DURATION_MS) {
-        setGuestMessageLimitReached(false); setGuestMessageCount(0); setGuestMessageLimitTime(0);
-        AsyncStorage.multiRemove(['guest_msg_count','guest_msg_limit_time']).catch(()=>{});
-      }
-      if (guestMessageCount >= GUEST_MESSAGE_LIMIT) {
-        const lockTime = Date.now();
-        setGuestMessageLimitReached(true); setGuestMessageLimitTime(lockTime);
-        AsyncStorage.multiSet([['guest_msg_limit_time', String(lockTime)],['guest_msg_count', String(guestMessageCount)]]).catch(()=>{});
-        setMessageLimitModalVisible(true);
-        return;
-      }
+      if (guestMessageCount >= GUEST_MESSAGE_LIMIT) { setGuestLoginModal(true); return; }
     } else if (!currentEditingId && !canSendMessage() && sessionBonusMessages <= 0) {
       if (!user) { showAlert('Sign In Required', 'Sign in to start chatting with AI.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Sign In', onPress: () => router.push('/login') }]); }
       else { showAlert('Credits Required', 'You need credits to continue.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Buy Credits', onPress: () => router.push('/buy-coins') }]); }
@@ -1899,15 +1834,8 @@ export default function HomeScreen() {
       setSending(false);
       setGenerating(false);
       if (isGuest) {
-        const newMsgCount = guestMessageCount + 1;
-        setGuestMessageCount(newMsgCount);
-        AsyncStorage.setItem('guest_msg_count', String(newMsgCount)).catch(()=>{});
-        if (newMsgCount >= GUEST_MESSAGE_LIMIT) {
-          const lockTime = Date.now();
-          setGuestMessageLimitReached(true); setGuestMessageLimitTime(lockTime);
-          AsyncStorage.multiSet([['guest_msg_limit_time',String(lockTime)],['guest_msg_count',String(newMsgCount)]]).catch(()=>{});
-          setTimeout(() => setMessageLimitModalVisible(true), 800);
-        }
+        setGuestMessageCount(prev => prev + 1);
+        if (imageFiles.length > 0) setGuestPhotoCount(prev => prev + imageFiles.length);
       }
     }
   };
@@ -2474,7 +2402,6 @@ export default function HomeScreen() {
   }), [colors, insets, isDark]);
 
   const showSendButton = inputText.trim().length > 0 || selectedMedia.length > 0;
-  const isGuestLocked = isGuest && guestMessageLimitReached && (Date.now() - guestMessageLimitTime < GUEST_LOCK_DURATION_MS);
   const isRecording = recordingState === 'recording';
   const isProcessing = recordingState === 'processing';
   const accentColor = settings.accentColor || colors.primary;
@@ -2934,8 +2861,7 @@ export default function HomeScreen() {
                         style={styles.input}
                         value={inputText}
                         onChangeText={handleInputChange}
-                        placeholder={isGuestLocked ? 'Chat locked for 24h. Sign in to continue.' : (deepResearchMode ? 'Research topic...' : 'Ask anything')}
-                        editable={!isGuestLocked}
+                        placeholder={deepResearchMode ? 'Research topic...' : 'Ask anything'}
                         placeholderTextColor={colors.textSecondary}
                         multiline
                         returnKeyType="default"
@@ -2995,15 +2921,7 @@ export default function HomeScreen() {
                   const imageFiles = media.filter(m => m.type === 'image');
                   const docFiles = media.filter(m => m.type !== 'image');
                   if (docFiles.length > 0) { setToolsVisible(false); setGuestLockFeature('file upload'); setGuestLockModal(true); return; }
-                  const nowTools2 = Date.now();
-                  const inPhotoBlock2 = guestPhotoResetTime > 0 && nowTools2 - guestPhotoResetTime < GUEST_PHOTO_BLOCK_MS;
-                  const curPhotoCount2 = inPhotoBlock2 ? guestPhotoCount : 0;
-                  if (curPhotoCount2 + imageFiles.length > GUEST_PHOTO_LIMIT) {
-                    setToolsVisible(false);
-                    const hoursLeft3 = inPhotoBlock2 ? Math.ceil((GUEST_PHOTO_BLOCK_MS-(nowTools2-guestPhotoResetTime))/(1000*60*60)) : 0;
-                    showAlert('Photo Limit',`Guest: ${GUEST_PHOTO_LIMIT} photos per 20h.${hoursLeft3>0?` Try in ${hoursLeft3}h or sign in.`:' Sign in to continue.'}`);
-                    return;
-                  }
+                  if (guestPhotoCount + imageFiles.length > GUEST_PHOTO_LIMIT) { setToolsVisible(false); setGuestLoginModal(true); return; }
                   setToolsVisible(false);
                   handleMediaPicked(media);
                   return;
