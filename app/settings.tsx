@@ -1206,25 +1206,55 @@ export default function SettingsScreen() {
 <SectionLabel text="About" />
 
 <Card>
-          <Row icon="bug-outline" label="Report bug" showChevron={false} onPress={() => openLink('/bugreport')} />
-          <Row icon="help-circle-outline" label="Help Center" showChevron={false} onPress={() => openLink('https://yourdomain.com/help')} />
-          <Row icon="document-text-outline" label="Terms of Use" showChevron={false} onPress={() => openLink('https://yourdomain.com/terms')} />
-          <Row icon="shield-checkmark-outline" label="Privacy Policy" showChevron={false} onPress={() => openLink('https://yourdomain.com/privacy')} />
-          <Row
-            icon="sync-outline"
-            label="Check for updates"
-            isLast
-            showChevron={false}
-            onPress={handleUpdatePress}
-            rightEl={
-              updateStatus === 'checking' ? (
-                <ActivityIndicator size="small" color={secondaryText} />
-              ) : (
-                <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: isDark ? '#fff' : '#000' }} />
-              )
-            }
-          />
-        </Card>
+  <Row
+    label="Report bug"
+    showChevron={false}
+    onPress={() => openLink('/bugreport')}
+    rightEl={null}
+  />
+
+  <Row
+    label="Help Center"
+    showChevron={false}
+    onPress={() => openLink('https://yourapp.com/help')}
+    rightEl={null}
+  />
+
+  <Row
+    label="Terms of Use"
+    showChevron={false}
+    onPress={() => openLink('https://yourapp.com/terms')}
+    rightEl={null}
+  />
+
+  <Row
+    label="Privacy Policy"
+    showChevron={false}
+    onPress={() => openLink('https://yourapp.com/privacy')}
+    rightEl={null}
+  />
+
+  {/* CHECK UPDATE (ONLY ONE WITH DOT) */}
+  <Row
+    label="Check for updates"
+    showChevron={false}
+    onPress={handleUpdatePress}
+    rightEl={
+      updateStatus === 'checking' ? (
+        <ActivityIndicator size="small" color={secondaryText} />
+      ) : (
+        <View
+          style={{
+            width: 14,
+            height: 14,
+            borderRadius: 7,
+            backgroundColor: dotColor, // 🔳 dynamic dot
+          }}
+        />
+      )
+    }
+  />
+</Card>
 
         {/* LOG OUT — separate card with arrow icon like ChatGPT */}
         <View style={{ marginTop: 24, marginHorizontal: 16, marginBottom: 8 }}>
