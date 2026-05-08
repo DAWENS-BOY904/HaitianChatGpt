@@ -514,26 +514,18 @@ function GuestSettings() {
 
   return (
     <View style={{ flex: 1, backgroundColor: bg }}>
+      {/* GUEST header — same redesign */}
       <View style={{
         flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
         paddingTop: insets.top + 12, paddingBottom: 12, paddingHorizontal: 20,
-        borderBottomLeftRadius: 24,
-        borderBottomRightRadius: 24,
-        backgroundColor: cardBg,
-        marginHorizontal: 12,
-        marginTop: 4,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-        elevation: 4,
       }}>
-        <Text style={{ fontSize: 19, fontWeight: '700', color: primaryText }}>Settings</Text>
+        <Text style={{ fontSize: 17, fontWeight: '700', color: primaryText }}>Settings</Text>
         <TouchableOpacity
-          style={{ position: 'absolute', right: 16, top: insets.top + 8, width: 34, height: 34, borderRadius: 17, backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.09)', alignItems: 'center', justifyContent: 'center' }}
+          style={{ position: 'absolute', right: 16, top: insets.top + 4, width: 36, height: 36, borderRadius: 18, backgroundColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.08)', alignItems: 'center', justifyContent: 'center' }}
           onPress={() => router.back()}
+          activeOpacity={0.7}
         >
-          <Ionicons name="close" size={18} color={primaryText} />
+          <Ionicons name="close" size={17} color={primaryText} />
         </TouchableOpacity>
       </View>
 
@@ -1055,31 +1047,23 @@ export default function SettingsScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: bg }}>
+      {/* HEADER — centered title + circular X button */}
       <View style={{
         flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-        paddingTop: insets.top + 12, paddingBottom: 12, paddingHorizontal: 20,
-        borderBottomLeftRadius: 24,
-        borderBottomRightRadius: 24,
-        backgroundColor: cardBg,
-        marginHorizontal: 12,
-        marginTop: 4,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-        elevation: 4,
+        paddingTop: insets.top + 16, paddingBottom: 16, paddingHorizontal: 20,
       }}>
-        <Text style={{ fontSize: 19, fontWeight: '700', color: primaryText }}>Settings</Text>
+        <Text style={{ fontSize: 17, fontWeight: '700', color: primaryText }}>Settings</Text>
         <TouchableOpacity
           style={{
             position: 'absolute', right: 16, top: insets.top + 8,
-            width: 34, height: 34, borderRadius: 17,
-            backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.09)',
+            width: 36, height: 36, borderRadius: 18,
+            backgroundColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.08)',
             alignItems: 'center', justifyContent: 'center',
           }}
           onPress={() => router.back()}
+          activeOpacity={0.7}
         >
-          <Ionicons name="close" size={18} color={primaryText} />
+          <Ionicons name="close" size={17} color={primaryText} />
         </TouchableOpacity>
       </View>
 
@@ -1208,18 +1192,22 @@ export default function SettingsScreen() {
           />
         </Card>
 
-        {/* LOG OUT */}
-        <View style={{ marginTop: 32, paddingHorizontal: 16 }}>
-          <Card>
-            <TouchableOpacity
-              style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 15, paddingHorizontal: 16 }}
-              onPress={handleLogout}
-              activeOpacity={0.6}
-            >
-              <Ionicons name="log-out-outline" size={20} color="#FF453A" />
-              <Text style={{ fontSize: 16, color: '#FF453A', fontWeight: '600', marginLeft: 12 }}>Log out</Text>
-            </TouchableOpacity>
-          </Card>
+        {/* LOG OUT — separate card with arrow icon like ChatGPT */}
+        <View style={{ marginTop: 24, marginHorizontal: 16, marginBottom: 8 }}>
+          <TouchableOpacity
+            style={{
+              backgroundColor: cardBg, borderRadius: 16,
+              flexDirection: 'row', alignItems: 'center',
+              paddingVertical: 16, paddingHorizontal: 20,
+              shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+              shadowOpacity: 0.04, shadowRadius: 4, elevation: 1,
+            }}
+            onPress={handleLogout}
+            activeOpacity={0.6}
+          >
+            <Ionicons name="arrow-forward-circle-outline" size={22} color={primaryText} />
+            <Text style={{ fontSize: 16, color: primaryText, fontWeight: '500', marginLeft: 14, flex: 1 }}>Log out</Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
 
