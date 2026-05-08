@@ -1207,35 +1207,35 @@ export default function SettingsScreen() {
 
 <Card>
   <Row
+    icon="ellipse"
     label="Report bug"
     showChevron={false}
     onPress={() => openLink('/bugreport')}
-    rightEl={null}
   />
 
   <Row
+    icon="ellipse"
     label="Help Center"
     showChevron={false}
     onPress={() => openLink('https://yourapp.com/help')}
-    rightEl={null}
   />
 
   <Row
+    icon="ellipse"
     label="Terms of Use"
     showChevron={false}
     onPress={() => openLink('https://yourapp.com/terms')}
-    rightEl={null}
   />
 
   <Row
+    icon="ellipse"
     label="Privacy Policy"
     showChevron={false}
     onPress={() => openLink('https://yourapp.com/privacy')}
-    rightEl={null}
   />
 
-  {/* CHECK UPDATE (ONLY ONE WITH DOT) */}
   <Row
+    icon="ellipse"
     label="Check for updates"
     showChevron={false}
     onPress={handleUpdatePress}
@@ -1248,7 +1248,7 @@ export default function SettingsScreen() {
             width: 14,
             height: 14,
             borderRadius: 7,
-            backgroundColor: dotColor, // 🔳 dynamic dot
+            backgroundColor: dotColor,
           }}
         />
       )
@@ -1432,4 +1432,3 @@ export default function SettingsScreen() {
     </View>
   );
 }
-fix all error and in place icon add dot white/black.
