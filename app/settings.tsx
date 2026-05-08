@@ -30,6 +30,7 @@ import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useProfile } from '../contexts/ProfileContext';
 import { Image as ExpoImageBadge } from 'expo-image';
+import * as WebBrowser from 'expo-web-browser';
 import { WebView } from 'react-native-webview';
 
 const PERSONA_LINK = 'https://perso.na/s/rKzyfH-XZ9663D';
@@ -1156,6 +1157,26 @@ export default function SettingsScreen() {
           <SwitchRow icon="create-outline" label="Autocomplete" value={settings.autocomplete} onChange={v => updateSetting('autocomplete', v)} />
           <SwitchRow icon="trending-up-outline" label="Trending searches" value={settings.trendingSearches} onChange={v => updateSetting('trendingSearches', v)} isLast />
         </Card>
+        <Text
+  style={{
+    fontSize: 13,
+    color: secondaryText,
+    marginTop: 8,
+    marginHorizontal: 20,
+    lineHeight: 18
+  }}
+>
+  Background conversations keep the conversation going in other apps or while your screen is off.{" "}
+  
+  <Text
+    style={{ color: '#007AFF', fontWeight: '500' }}
+    onPress={() =>
+      WebBrowser.openBrowserAsync('https://dawinix.com/voice-suggest/')
+    }
+  >
+    Learn more
+  </Text>
+</Text>
 
         {/* ADMIN */}
         {isAdmin && (
