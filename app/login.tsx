@@ -157,7 +157,8 @@ export default function LoginScreen() {
 
   useEffect(() => {
     if (user) {
-      router.replace('/home');
+      // Let index.tsx / RootScreen drive the redirect via auth state
+      router.replace('/');
     }
   }, [user]);
 
