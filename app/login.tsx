@@ -24,7 +24,6 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 import * as Linking from 'expo-linking';
-import * as AppleAuthentication from 'expo-apple-authentication';
 
 // ── AI Logo ──
 const AI_LOGO_URL = 'https://uzxmmddivzqjhcnnrkns.supabase.co/storage/v1/object/public/logo/logo.png';
@@ -344,49 +343,23 @@ export default function LoginScreen() {
     }
     setAppleLoading(true);
     try {
-      // Use native expo-apple-authentication — stays fully in-app, no browser
-      const credential = await AppleAuthentication.signInAsync({
-        requestedScopes: [
-          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
-          AppleAuthentication.AppleAuthenticationScope.EMAIL,
-        ],
-      });
-
-      const { identityToken } = credential;
-      if (!identityToken) {
-        showAlert('Sign In Failed', 'No identity token returned from Apple.');
-        return;
-      }
-
-      // Exchange Apple identity token with Supabase
-      const { data, error } = await appleSupabase.auth.signInWithIdToken({
+      const redirectUrl = Linking.createURL('/');
+      const { data, error } = await appleSupabase.auth.signInWithOAuth({
         provider: 'apple',
-        token: identityToken,
+        options: {
+          redirectTo: redirectUrl,
+          skipBrowserRedirect: true,
+        },
       });
-
       if (error) {
-        showAlert('Sign In Failed', error.message || 'Apple Sign In failed.');
+        showAlert('Sign In Failed', error.message || 'Failed to start Apple Sign In.');
         return;
       }
-
-      if (data?.session) {
-        // Also sign in the main supabase client so AuthProvider picks it up
-        const supabase = getSupabaseClient();
-        await supabase.auth.setSession({
-          access_token: data.session.access_token,
-          refresh_token: data.session.refresh_token,
-        });
-        // Send login confirmation email non-blocking
-        if (data.session.user) {
-          sendLoginConfirmationEmail(data.session.user.id, data.session.user.email || '');
-        }
-        router.replace('/home');
+      if (data?.url) {
+        const result = await Linking.openURL(data.url);
+        console.log('Apple OAuth opened:', result);
       }
     } catch (e: any) {
-      if (e?.code === 'ERR_REQUEST_CANCELED') {
-        // User cancelled — silent
-        return;
-      }
       const msg = (e?.message || '').toLowerCase();
       const isCancellation = msg.includes('cancel') || msg.includes('dismiss') || msg.includes('closed');
       if (!isCancellation) {
