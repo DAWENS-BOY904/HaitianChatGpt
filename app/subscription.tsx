@@ -51,8 +51,8 @@ const STRIPE_PRICES = {
 
 // ── Apple IAP product IDs ──
 const APPLE_PRODUCT_ID = Platform.select({
-  ios: 'app.dawinix.go.month',
-  default: 'app.dawinix.go.month',
+  ios: 'app.dawinix.go.monthly',
+  default: 'app.dawinix.go.monthly',
 });
 
 // ── RevenueCat API key ──
