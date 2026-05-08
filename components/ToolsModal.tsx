@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
@@ -247,7 +246,7 @@ export function ToolsModal({
 
   if (!visible && !rendered) return null;
 
-  // const bottomPad = Math.max(insets.bottom, 16); // This line is not used here but in sub-components
+  const bottomPad = Math.max(insets.bottom, 16);
 
   // ── Route to correct modal variant ────────────────────────────────────────
   if (isPro) {
@@ -488,8 +487,7 @@ function FreeToolsModal({
         </TouchableOpacity>
       </View>
 
-      {/* This ScrollView encapsulates the photo strip and the tool list */}
-      <ScrollView showsVerticalScrollIndicator={false} bounces={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: selectedCount > 0 ? 68 : 8 }}>
+      <ScrollView showsVerticalScrollIndicator={false} bounces={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: bottomPad + (selectedCount > 0 ? 68 : 0) }}>
         {/* Photo strip */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.photoStrip}>
           <TouchableOpacity
@@ -631,8 +629,7 @@ function GuestToolsModal({
         </TouchableOpacity>
       </View>
 
-      {/* This ScrollView encapsulates the photo strip and the tool list */}
-      <ScrollView showsVerticalScrollIndicator={false} bounces={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: selectedCount > 0 ? 68 : 8 }}>
+      <ScrollView showsVerticalScrollIndicator={false} bounces={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: bottomPad + (selectedCount > 0 ? 68 : 0) }}>
         {/* Photo strip — guests can select photos (limited to 3 per 20h) */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.photoStrip}>
           <TouchableOpacity
@@ -735,7 +732,7 @@ function GuestToolsModal({
 // ─────────────────────────────────────────────────────────────────────────────
 // SHARED STYLES
 // ─────────────────────────────────────────────────────────────────────────────
-const TILE_SIZE = 70;
+const TILE_SIZE = 80;
 
 const s = StyleSheet.create({
   sheetOuter: {
@@ -766,7 +763,7 @@ const s = StyleSheet.create({
   selNumber: { color: '#FFFFFF', fontSize: 12, fontWeight: '800', lineHeight: 14 },
   divider: { height: StyleSheet.hairlineWidth, marginBottom: 2, marginHorizontal: 0 },
   toolListCard: { borderRadius: 16, overflow: 'hidden' },
-  toolRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 7, gap: 12 },
+  toolRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10, gap: 12 },
   toolIconWrap: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   toolTextWrap: { flex: 1 },
   toolLabel: { fontSize: 15, fontWeight: '600', marginBottom: 1 },
