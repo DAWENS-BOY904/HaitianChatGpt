@@ -632,4 +632,3 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
 });
-fix cannot read slice.
