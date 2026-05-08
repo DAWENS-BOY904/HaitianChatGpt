@@ -24,7 +24,6 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 import * as Linking from 'expo-linking';
-import * as AppleAuthentication from 'expo-apple-authentication';
 
 // ── AI Logo ──
 const AI_LOGO_URL = 'https://uzxmmddivzqjhcnnrkns.supabase.co/storage/v1/object/public/logo/logo.png';
@@ -369,6 +368,14 @@ export default function LoginScreen() {
     setAppleLoading(true);
     try {
       // Use native expo-apple-authentication — stays fully in-app, no browser
+      let AppleAuthentication: any;
+      try {
+        AppleAuthentication = require('expo-apple-authentication');
+      } catch (_e) {
+        showAlert('Not Available', 'Apple Sign In is not supported on this device.');
+        setAppleLoading(false);
+        return;
+      }
       const credential = await AppleAuthentication.signInAsync({
         requestedScopes: [
           AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
