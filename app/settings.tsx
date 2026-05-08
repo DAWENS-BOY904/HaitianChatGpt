@@ -13,9 +13,8 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Animated,
-  Share,
 } from 'react-native';
-// react-native-version-check replaced with expo-compatible implementation
+import VersionCheck from 'react-native-version-check';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { useTheme } from '../hooks/useTheme';
@@ -63,15 +62,7 @@ function AgeVerificationModal({ visible, onClose, onVerified }: {
   const qrIconColor = isDark ? '#E2E8F0' : '#1E293B';
 
   const handleCopyLink = async () => {
-    try {
-      const Clipboard = await import('expo-clipboard');
-      await Clipboard.setStringAsync(PERSONA_LINK);
-    } catch (_e) {
-      // Fallback: try to use Share API as clipboard fallback
-      try {
-        await Share.share({ message: PERSONA_LINK });
-      } catch (_e2) {}
-    }
+    try { const Clip = require('expo-clipboard'); await Clip.setStringAsync(PERSONA_LINK); } catch (_e) {}
   };
   const handleSendEmail = () => {
     Linking.openURL(`mailto:?subject=Age Verification&body=Continue your age verification: ${PERSONA_LINK}`);
@@ -241,7 +232,7 @@ function AgeVerificationModal({ visible, onClose, onVerified }: {
 // ═══════════════════════════════════════════════════════════════════════════════
 // VERIFIED BADGE COMPONENT — Updated for Pro & Plus
 // ═══════════════════════════════════════════════════════════════════════════════
-function VerifiedBadge({ onPress, tier }: { onPress: () => void; tier: 'pro' | 'plus' | 'go' | null }) {
+function VerifiedBadge({ onPress, tier }: { onPress: () => void; tier: 'pro' | 'plus' | null }) {
   const glowAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -259,8 +250,6 @@ function VerifiedBadge({ onPress, tier }: { onPress: () => void; tier: 'pro' | '
 
   const badgeSource = tier === 'plus'
     ? require('../assets/images/plus-badge.png')
-    : tier === 'go'
-    ? require('../assets/images/plan-go.png')
     : require('../assets/images/verified-badge.png');
 
   return (
@@ -286,14 +275,13 @@ function VerifiedBadgeModal({ visible, onClose, isDark, tier }: {
   visible: boolean; 
   onClose: () => void; 
   isDark: boolean;
-  tier: 'pro' | 'plus' | 'go';
+  tier: 'pro' | 'plus';
 }) {
   const bg = isDark ? '#1C1C1E' : '#FFFFFF';
   const primaryText = isDark ? '#FFFFFF' : '#000000';
   const secondaryText = isDark ? 'rgba(255,255,255,0.65)' : 'rgba(0,0,0,0.6)';
 
   const isPlus = tier === 'plus';
-  const isGo = tier === 'go';
 
   const proBenefits = [
     { icon: '💰', text: '$20 welcome reward (credited after verification approval)' },
@@ -313,25 +301,13 @@ function VerifiedBadgeModal({ visible, onClose, isDark, tier }: {
     { icon: '🎯', text: 'Exclusive Plus features' },
   ];
 
-  const goBenefits = [
-    { icon: '🚀', text: 'Faster response times' },
-    { icon: '📸', text: 'Photo upload access' },
-    { icon: '💬', text: 'Extended message limits' },
-    { icon: '⚡', text: 'Standard priority support' },
-    { icon: '🎯', text: 'Go Plan features' },
-  ];
-
-  const benefits = isPlus ? plusBenefits : isGo ? goBenefits : proBenefits;
+  const benefits = isPlus ? plusBenefits : proBenefits;
   const badgeSource = isPlus 
     ? require('../assets/images/plus-badge.png')
-    : isGo
-    ? require('../assets/images/plan-go.png')
     : require('../assets/images/verified-badge.png');
-  const title = isPlus ? '✔ Verified Plus Member' : isGo ? '✔ Verified Go Member' : '✔ Verified Pro Member';
+  const title = isPlus ? '✔ Verified Plus Member' : '✔ Verified Pro Member';
   const subtitle = isPlus 
     ? 'This badge confirms that the user is a Plus Plan Verified Member.'
-    : isGo
-    ? 'This badge confirms that the user is a Go Plan Verified Member.'
     : 'This badge confirms that the user is a Pro Plan Verified Member.';
 
   return (
@@ -517,16 +493,6 @@ function GuestSettings() {
       <View style={{
         flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
         paddingTop: insets.top + 12, paddingBottom: 12, paddingHorizontal: 20,
-        borderBottomLeftRadius: 24,
-        borderBottomRightRadius: 24,
-        backgroundColor: cardBg,
-        marginHorizontal: 12,
-        marginTop: 4,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-        elevation: 4,
       }}>
         <Text style={{ fontSize: 19, fontWeight: '700', color: primaryText }}>Settings</Text>
         <TouchableOpacity
@@ -689,35 +655,24 @@ export default function SettingsScreen() {
   const checkUpdate = async () => {
     setUpdateStatus('checking');
     try {
-      // Use expo-updates for OTA update checks when available
-      if (Platform.OS !== 'web') {
-        try {
-          const Updates = require('expo-updates');
-          const update = await Updates.checkForUpdateAsync();
-          if (update.isAvailable) {
-            setUpdateStatus('update');
-            return;
-          }
-        } catch (_e) {
-          // expo-updates not configured or in dev mode — fall through
-        }
+      const latest = await VersionCheck.getLatestVersion();
+      const current = VersionCheck.getCurrentVersion();
+      if (latest !== current) {
+        setUpdateStatus('update');
+      } else {
+        setUpdateStatus('no-update');
+        setTimeout(() => {
+          setUpdateStatus('version');
+          setTimeout(() => { setUpdateStatus('no-update'); }, 3000);
+        }, 3000);
       }
-      setUpdateStatus('no-update');
-      setTimeout(() => {
-        setUpdateStatus('version');
-        setTimeout(() => { setUpdateStatus('no-update'); }, 3000);
-      }, 3000);
     } catch (e) {
       setUpdateStatus('idle');
     }
   };
 
   const openStore = () => {
-    // Open the appropriate store page
-    const appId = 'app.onspace.dawinix2027';
-    const url = Platform.OS === 'ios'
-      ? `https://apps.apple.com/app/id${appId}`
-      : `https://play.google.com/store/apps/details?id=${appId}`;
+    const url = VersionCheck.getStoreUrl();
     Linking.openURL(url);
   };
 
@@ -792,8 +747,7 @@ export default function SettingsScreen() {
       const arrayBuffer = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
       const ext = asset.uri.split('.').pop()?.toLowerCase() || 'jpg';
       const mimeType = ext === 'png' ? 'image/png' : 'image/jpeg';
-      if (!user?.id) throw new Error('User not authenticated');
-      const filePath = `${user.id}/avatar_${Date.now()}.${ext}`;
+      const filePath = `${user!.id}/avatar_${Date.now()}.${ext}`;
       const { error: uploadError } = await supabase.storage
         .from('profile-images')
         .upload(filePath, arrayBuffer, { contentType: mimeType, upsert: true });
@@ -1058,16 +1012,6 @@ export default function SettingsScreen() {
       <View style={{
         flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
         paddingTop: insets.top + 12, paddingBottom: 12, paddingHorizontal: 20,
-        borderBottomLeftRadius: 24,
-        borderBottomRightRadius: 24,
-        backgroundColor: cardBg,
-        marginHorizontal: 12,
-        marginTop: 4,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-        elevation: 4,
       }}>
         <Text style={{ fontSize: 19, fontWeight: '700', color: primaryText }}>Settings</Text>
         <TouchableOpacity
@@ -1125,7 +1069,7 @@ export default function SettingsScreen() {
           {!isPaidPlan && (
             <Row icon="arrow-up-circle-outline" label="Upgrade to Plus" showChevron={false} />
           )}
-          <Row icon="refresh-outline" label="Restore purchases" onPress={() => router.push('/subscription')} />
+          <Row icon="refresh-outline" label="Restore purchases" onPress={() => router.push('/subscription')} isLast />
           <Row icon="receipt-outline" label="Orders" onPress={() => router.push('/orders')} />
           <Row icon="person-circle-outline" label="Personalization" onPress={() => router.push('/personalization')} />
           <Row icon="notifications-outline" label="Notifications" onPress={() => router.push('/notifications')} />

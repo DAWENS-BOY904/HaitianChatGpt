@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Dawinix HT",
-    "slug": "dawinix-ht",
+    "slug": "dawinix-ht-ewor4to3vxrkza2nblnst",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/logo.png",
@@ -10,7 +10,7 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "app.onspace.dawinix2026",
+      "bundleIdentifier": "app.onspace.dawinix2027",
       "usesAppleSignIn": true,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
@@ -21,7 +21,7 @@
         "foregroundImage": "./assets/images/logo.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "app.onspace.dawinix2026",
+      "package": "app.onspace.dawinix2027",
       "versionCode": 1,
       "edgeToEdgeEnabled": true
     },
