@@ -1432,4 +1432,3 @@ export default function SettingsScreen() {
     </View>
   );
 }
-fix all error and in place icon add dot white/black only in check update section.
