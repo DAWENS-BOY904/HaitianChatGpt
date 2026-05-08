@@ -442,7 +442,7 @@ function ProToolsModal({
   const gridTools = [
     { id: 'camera', icon: 'camera-outline', label: 'Camera', onPress: () => { handleCamera(); } },
     { id: 'photos', icon: 'images-outline', label: 'Photos', onPress: () => { handleAllPhotos(); } },
-    { id: 'files', icon: 'cloud-upload-outline', label: 'Files', onPress: () => { handleFiles(); } },
+    { id: 'files', icon: 'arrow-up-circle-outline', label: 'Files', onPress: () => { handleFiles(); } },
     { id: 'quiz', icon: 'albums-outline', label: 'Quizzes', onPress: () => { onOpenQuiz?.(); onClose(); } },
     { id: 'voice', icon: 'call-outline', label: 'Call', onPress: () => { router.push('/voice-control'); onClose(); } },
     { id: 'presets', icon: 'cube-outline', label: 'Presets', onPress: () => { onOpenPresets?.(); onClose(); } },
@@ -595,3 +595,4 @@ const pro = StyleSheet.create({
   listLabel: { flex: 1, fontSize: 16, fontWeight: '500' },
   badge: { fontSize: 14 },
 });
+fix tools modal its to much space
