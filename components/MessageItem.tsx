@@ -7,12 +7,8 @@ import {
   Linking,
   Alert,
   Modal,
-  Animated,
-  Pressable,
   Platform,
   ScrollView,
-  Share,
-  ActivityIndicator,
   Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,9 +18,7 @@ import { useSettings } from '../hooks/useSettings';
 import { getSupabaseClient } from '@/template';
 import { Audio } from 'expo-av';
 import * as Speech from 'expo-speech';
-// WebView loaded lazily to avoid undefined crash if module not linked
-let WebView: any = null;
-try { WebView = require('react-native-webview').default; } catch (_e) {}
+import * as WebBrowser from 'expo-web-browser';
 import { BlurView } from 'expo-blur';
 import { CodeBlock } from './CodeBlock';
 import { SourcesListModal as SourcesModal } from './SourcesModal';
@@ -553,8 +547,7 @@ export const MessageItem = memo(function MessageItem({
   const [sourcesData, setSourcesData] = useState<string[]>([]);
   const [linkSafetyVisible, setLinkSafetyVisible] = useState(false);
   const [pendingLink, setPendingLink] = useState('');
-  const [webViewVisible, setWebViewVisible] = useState(false);
-  const [webViewUrl, setWebViewUrl] = useState('');
+
   const [ttsLoading, setTtsLoading] = useState(false);
 
   // ── TTS: read message aloud using user-selected voice ─────────────────────
@@ -660,16 +653,13 @@ export const MessageItem = memo(function MessageItem({
     setImageViewerVisible(true);
   }, []);
 
-  const handleLinkConfirm = useCallback(() => {
+  const handleLinkConfirm = useCallback(async () => {
     setLinkSafetyVisible(false);
     const url = pendingLink;
-    // Check if it should open in-app WebView
-    const inAppDomains = ['988lifeline.org', 'crisis', 'support'];
-    const isInApp = inAppDomains.some(d => url.includes(d));
-    if (isInApp) {
-      setWebViewUrl(url);
-      setWebViewVisible(true);
-    } else {
+    if (!url) return;
+    try {
+      await WebBrowser.openBrowserAsync(url);
+    } catch (_e) {
       Linking.openURL(url).catch(() => {});
     }
   }, [pendingLink]);
@@ -1027,20 +1017,7 @@ export const MessageItem = memo(function MessageItem({
         onConfirm={handleLinkConfirm}
       />
 
-      {/* In-app WebView modal — only render if WebView is available */}
-      {WebView ? (
-        <Modal visible={webViewVisible} animationType="slide" onRequestClose={() => setWebViewVisible(false)}>
-          <View style={{ flex: 1, backgroundColor: '#000' }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', padding: 14, paddingTop: Platform.OS === 'ios' ? 56 : 14, backgroundColor: '#1C1C1E' }}>
-              <TouchableOpacity onPress={() => setWebViewVisible(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Ionicons name="close" size={24} color="#FFF" />
-              </TouchableOpacity>
-              <Text style={{ flex: 1, color: '#FFF', fontSize: 15, fontWeight: '600', marginLeft: 12 }} numberOfLines={1}>{webViewUrl}</Text>
-            </View>
-            <WebView source={{ uri: webViewUrl }} style={{ flex: 1 }} />
-          </View>
-        </Modal>
-      ) : null}
+
     </>
   );
 });
