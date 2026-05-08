@@ -379,14 +379,34 @@ export default function LoginScreen() {
       // Use native expo-apple-authentication — stays fully in-app, no browser
       let AppleAuthentication: any;
       try {
-        const appleModule = await import('expo-apple-authentication');
+        // Try require first (works in development builds with native modules linked)
+        const appleModule = require('expo-apple-authentication');
         AppleAuthentication = appleModule;
-        // Verify the module has the expected methods
+
+        // Verify the module has the expected methods AND native module is available
         if (!AppleAuthentication?.signInAsync || !AppleAuthentication?.AppleAuthenticationScope) {
           throw new Error('Apple Authentication module not properly loaded');
         }
-      } catch (_e: any) {
-        showAlert('Not Available', 'Apple Sign In is not supported on this device. Make sure you are using a development build.');
+
+        // Extra check: verify native module is actually present (not just JS shim)
+        if (AppleAuthentication.isAvailableAsync) {
+          const isAvailable = await AppleAuthentication.isAvailableAsync();
+          if (!isAvailable) {
+            throw new Error('Apple Sign In not available on this device');
+          }
+        }
+      } catch (moduleErr: any) {
+        console.log('[Apple Sign In] Module error:', moduleErr?.message);
+        // Check if it's a native module error (common in Expo Go vs dev builds)
+        const errMsg = moduleErr?.message || '';
+        if (errMsg.includes('Native module') || errMsg.includes('cannot find') || errMsg.includes('undefined')) {
+          showAlert(
+            'Development Build Required',
+            'Apple Sign In requires a native iOS development build. It does not work in Expo Go. Please build with "eas build --profile development" and install the .ipa on your device.'
+          );
+        } else {
+          showAlert('Not Available', 'Apple Sign In is not available. Make sure you are signed into iCloud with Apple ID.');
+        }
         setAppleLoading(false);
         return;
       }
@@ -703,26 +723,34 @@ export default function LoginScreen() {
         </TouchableOpacity>
       </View>
 
-      <Modal visible={guestModalVisible} transparent animationType="fade" onRequestClose={() => setGuestModalVisible(false)}>
+      <Modal visible={guestModalVisible} transparent animationType="slide" onRequestClose={() => setGuestModalVisible(false)}>
         <View style={{ flex: 1, justifyContent: 'flex-end' }}>
-          {Platform.OS === 'ios' ? (
-            <BlurView intensity={60} tint="dark" style={StyleSheet.absoluteFill} experimentalBlurMethod="dimezisBlurView" />
-          ) : (
-            <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.7)' }]} />
-          )}
-          <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setGuestModalVisible(false)} />
-          <View style={guestStyles.sheet}>
-            <View style={guestStyles.handle} />
-            <View style={guestStyles.iconWrap}><Ionicons name="person-outline" size={32} color="#FFF" /></View>
-            <Text style={guestStyles.title}>Continue as Guest</Text>
-            <Text style={guestStyles.body}>{'You can chat with AI without creating an account. Guest sessions are limited to 35 messages and do not save history.'}</Text>
-            <View style={guestStyles.featureList}>
-              {[{ icon: 'checkmark-circle', text: '35 free messages', ok: true }, { icon: 'close-circle', text: 'No chat history saved', ok: false }, { icon: 'close-circle', text: 'No file uploads', ok: false }, { icon: 'checkmark-circle', text: 'Basic AI responses', ok: true }].map((f, i) => (
-                <View key={i} style={guestStyles.featureRow}><Ionicons name={f.icon as any} size={18} color={f.ok ? '#34C759' : '#FF453A'} /><Text style={guestStyles.featureText}>{f.text}</Text></View>
-              ))}
-            </View>
-            <TouchableOpacity style={guestStyles.primaryBtn} onPress={() => { setGuestModalVisible(false); handleGuestMode(); }}><Text style={guestStyles.primaryBtnText}>Start as Guest</Text></TouchableOpacity>
-            <TouchableOpacity style={guestStyles.secondaryBtn} onPress={() => setGuestModalVisible(false)}><Text style={guestStyles.secondaryBtnText}>Create Account Instead</Text></TouchableOpacity>
+          {/* Backdrop - solid color based on theme */}
+          <TouchableOpacity 
+            style={[StyleSheet.absoluteFill, { backgroundColor: colors.text === '#FFFFFF' ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.4)' }]} 
+            activeOpacity={1} 
+            onPress={() => setGuestModalVisible(false)} 
+          />
+
+          {/* Modal Sheet with BlurView wrapping the content */}
+          <View style={{ borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: 'hidden' }}>
+            {Platform.OS === 'ios' ? (
+              <BlurView intensity={80} tint={colors.text === '#FFFFFF' ? 'dark' : 'light'} style={{ width: '100%' }} experimentalBlurMethod="dimezisBlurView">
+                <GuestModalContent 
+                  onStartGuest={() => { setGuestModalVisible(false); handleGuestMode(); }}
+                  onClose={() => setGuestModalVisible(false)}
+                  isDark={colors.text === '#FFFFFF'}
+                />
+              </BlurView>
+            ) : (
+              <View style={{ width: '100%', backgroundColor: colors.text === '#FFFFFF' ? '#1C1C1E' : '#FFFFFF' }}>
+                <GuestModalContent 
+                  onStartGuest={() => { setGuestModalVisible(false); handleGuestMode(); }}
+                  onClose={() => setGuestModalVisible(false)}
+                  isDark={colors.text === '#FFFFFF'}
+                />
+              </View>
+            )}
           </View>
         </View>
       </Modal>
@@ -730,17 +758,43 @@ export default function LoginScreen() {
   );
 }
 
-const guestStyles = StyleSheet.create({
-  sheet: { backgroundColor: '#1C1C1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 28, paddingBottom: 40 },
-  handle: { width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.3)', alignSelf: 'center', marginBottom: 24 },
-  iconWrap: { width: 64, height: 64, borderRadius: 32, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center', alignSelf: 'center', marginBottom: 16 },
-  title: { color: '#FFF', fontSize: 22, fontWeight: '700', textAlign: 'center', marginBottom: 10 },
-  body: { color: 'rgba(255,255,255,0.55)', fontSize: 14, textAlign: 'center', lineHeight: 21, marginBottom: 20 },
-  featureList: { gap: 10, marginBottom: 24 },
-  featureRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  featureText: { color: 'rgba(255,255,255,0.8)', fontSize: 15 },
-  primaryBtn: { backgroundColor: '#FFFFFF', borderRadius: 50, paddingVertical: 16, alignItems: 'center', marginBottom: 12 },
-  primaryBtnText: { color: '#000000', fontSize: 17, fontWeight: '700' },
-  secondaryBtn: { alignItems: 'center', paddingVertical: 10 },
-  secondaryBtnText: { color: 'rgba(255,255,255,0.45)', fontSize: 15 },
-});
+function GuestModalContent({ onStartGuest, onClose, isDark }: { onStartGuest: () => void; onClose: () => void; isDark: boolean }) {
+  const bg = isDark ? '#1C1C1E' : '#FFFFFF';
+  const text = isDark ? '#FFFFFF' : '#000000';
+  const textSecondary = isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.55)';
+  const textTertiary = isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.45)';
+  const iconBg = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)';
+  const handleColor = isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.2)';
+  const btnBg = isDark ? '#FFFFFF' : '#000000';
+  const btnText = isDark ? '#000000' : '#FFFFFF';
+
+  return (
+    <View style={{ padding: 28, paddingBottom: 40 }}>
+      <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: handleColor, alignSelf: 'center', marginBottom: 24 }} />
+      <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: iconBg, alignItems: 'center', justifyContent: 'center', alignSelf: 'center', marginBottom: 16 }}>
+        <Ionicons name="person-outline" size={32} color={text} />
+      </View>
+      <Text style={{ color: text, fontSize: 22, fontWeight: '700', textAlign: 'center', marginBottom: 10 }}>Continue as Guest</Text>
+      <Text style={{ color: textSecondary, fontSize: 14, textAlign: 'center', lineHeight: 21, marginBottom: 20 }}>
+        {'You can chat with AI without creating an account. Guest sessions are limited to 35 messages and do not save history.'}
+      </Text>
+      <View style={{ gap: 10, marginBottom: 24 }}>
+        {[{ icon: 'checkmark-circle', text: '35 free messages', ok: true }, { icon: 'close-circle', text: 'No chat history saved', ok: false }, { icon: 'close-circle', text: 'No file uploads', ok: false }, { icon: 'checkmark-circle', text: 'Basic AI responses', ok: true }].map((f, i) => (
+          <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <Ionicons name={f.icon as any} size={18} color={f.ok ? '#34C759' : '#FF453A'} />
+            <Text style={{ color: isDark ? 'rgba(255,255,255,0.8)' : 'rgba(0,0,0,0.7)', fontSize: 15 }}>{f.text}</Text>
+          </View>
+        ))}
+      </View>
+      <TouchableOpacity 
+        style={{ backgroundColor: btnBg, borderRadius: 50, paddingVertical: 16, alignItems: 'center', marginBottom: 12 }}
+        onPress={onStartGuest}
+      >
+        <Text style={{ color: btnText, fontSize: 17, fontWeight: '700' }}>Start as Guest</Text>
+      </TouchableOpacity>
+      <TouchableOpacity style={{ alignItems: 'center', paddingVertical: 10 }} onPress={onClose}>
+        <Text style={{ color: textTertiary, fontSize: 15 }}>Create Account Instead</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
