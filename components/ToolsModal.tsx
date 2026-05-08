@@ -355,11 +355,6 @@ function ProToolsModal({
 
   const listTools = [
     {
-      id: 'web-search', icon: 'globe-outline',
-      label: 'Web search', badge: 'Auto',
-      onPress: () => { onSelectTool?.('web-search'); onClose(); },
-    },
-    {
       id: 'connect', icon: 'apps-outline',
       label: 'Connect with App', badge: null,
       onPress: () => { onConnectApp?.(); onClose(); },
@@ -791,3 +786,4 @@ const pro = StyleSheet.create({
   listLabel: { flex: 1, fontSize: 16, fontWeight: '500' },
   badge: { fontSize: 14 },
 });
+f button yo more small pou tools lan pa open large
