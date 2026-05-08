@@ -1074,7 +1074,6 @@ export default function HomeScreen() {
   const [spotifyResults, setSpotifyResults] = useState<SpotifyTrack[]>([]);
   const [spotifySearching, setSpotifySearching] = useState(false);
   const [connectedAppsModalVisible, setConnectedAppsModalVisible] = useState(false);
-  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
 
   const handleOpenMessageActions = useCallback((msg: any) => {
     setMsgActionsMsg(msg);
@@ -1318,13 +1317,6 @@ export default function HomeScreen() {
     const interval = setInterval(computeTimeUntilMidnight, 60000);
     return () => clearInterval(interval);
   }, [computeTimeUntilMidnight]);
-
-  // Track keyboard visibility for + button placement
-  useEffect(() => {
-    const showSub = Keyboard.addListener('keyboardDidShow', () => setIsKeyboardVisible(true));
-    const hideSub = Keyboard.addListener('keyboardDidHide', () => setIsKeyboardVisible(false));
-    return () => { showSub.remove(); hideSub.remove(); };
-  }, []);
 
   const { refreshConversations } = useConversation();
   useEffect(() => {
@@ -2563,8 +2555,6 @@ export default function HomeScreen() {
   }), [colors, insets, isDark]);
 
   const showSendButton = inputText.trim().length > 0 || selectedMedia.length > 0;
-  // + button goes OUTSIDE input when keyboard is visible (regardless of text), inside when keyboard hidden
-  const showPlusOutside = isKeyboardVisible && !editingMessageId && !isRecording && !isProcessing;
   const isGuestLocked = isGuest && guestMessageLimitReached && (Date.now() - guestMessageLimitTime < GUEST_LOCK_DURATION_MS);
   const isRecording = recordingState === 'recording';
   const isProcessing = recordingState === 'processing';
@@ -3051,8 +3041,8 @@ export default function HomeScreen() {
 
               {/* Input Area */}
               <View style={[styles.inputContainer, Platform.OS === 'ios' && { backgroundColor: 'transparent' }]}>
-                {/* + button OUTSIDE input when keyboard is visible */}
-                {showPlusOutside ? (
+                {/* + button OUTSIDE input when typing */}
+                {!editingMessageId && !isRecording && !isProcessing && showSendButton ? (
                   <TouchableOpacity style={styles.addBtn} onPress={() => setToolsVisible(true)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
                     {Platform.OS === 'ios' ? (
                       <BlurView intensity={isDark ? 60 : 50} tint={isDark ? 'dark' : 'light'} style={[styles.addBtnCircle, { overflow: 'hidden', borderColor: isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.14)' }]}>
@@ -3130,8 +3120,8 @@ export default function HomeScreen() {
                         </View>
                       ) : (
                         <View style={styles.inputRow}>
-                          {/* + button INSIDE input when keyboard is NOT visible */}
-                          {!isKeyboardVisible && !editingMessageId ? (
+                          {/* + button INSIDE input when not typing */}
+                          {!showSendButton && !editingMessageId ? (
                             <TouchableOpacity onPress={() => setToolsVisible(true)} hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }} style={{ paddingRight: 6 }}>
                               <Ionicons name="add" size={22} color={colors.textSecondary} />
                             </TouchableOpacity>
@@ -3201,8 +3191,8 @@ export default function HomeScreen() {
                       </View>
                     ) : (
                       <View style={styles.inputRow}>
-                        {/* + button INSIDE input when keyboard is NOT visible (Android) */}
-                        {!isKeyboardVisible && !editingMessageId ? (
+                        {/* + button INSIDE input when not typing (Android) */}
+                        {!showSendButton && !editingMessageId ? (
                           <TouchableOpacity onPress={() => setToolsVisible(true)} hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }} style={{ paddingRight: 6 }}>
                             <Ionicons name="add" size={22} color={colors.textSecondary} />
                           </TouchableOpacity>
