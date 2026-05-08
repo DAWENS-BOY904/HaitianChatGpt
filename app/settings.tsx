@@ -50,6 +50,7 @@ function AgeVerificationModal({ visible, onClose, onVerified }: {
 
   // Dark/Light theme tokens
   const bg = isDark ? '#000000' : '#FFFFFF';
+  const dotColor = isDark ? '#fff' : '#000';
   const primaryText = isDark ? '#FFFFFF' : '#000000';
   const secondaryText = isDark ? 'rgba(255,255,255,0.55)' : '#475569';
   const tertiaryText = isDark ? 'rgba(255,255,255,0.35)' : '#94A3B8';
@@ -63,6 +64,9 @@ function AgeVerificationModal({ visible, onClose, onVerified }: {
   const personaText = '#6366F1';
   const qrIconColor = isDark ? '#E2E8F0' : '#1E293B';
 
+  const openLink = async (url: string) => {
+  await WebBrowser.openBrowserAsync(url);
+};
   const handleCopyLink = async () => {
     try {
       const Clipboard = await import('expo-clipboard');
@@ -1191,27 +1195,64 @@ export default function SettingsScreen() {
         )}
 
         {/* ABOUT */}
-        <SectionLabel text="About" />
-        <Card>
-          <Row icon="bug-outline" label="Report bug" showChevron={false} />
-          <Row icon="help-circle-outline" label="Help Center" showChevron={false} />
-          <Row icon="document-text-outline" label="Terms of Use" showChevron={false} />
-          <Row icon="shield-checkmark-outline" label="Privacy Policy" showChevron={false} />
-          <Row
-            icon="cloud-download-outline"
-            label="Check for updates"
-            isLast
-            showChevron={false}
-            onPress={handleUpdatePress}
-            rightEl={
-              updateStatus === 'checking' ? (
-                <ActivityIndicator size="small" color={secondaryText} />
-              ) : (
-                <Text style={{ fontSize: 15, color: secondaryText }}>{getUpdateLabel()}</Text>
-              )
-            }
-          />
-        </Card>
+<SectionLabel text="About" />
+
+<Card>
+  {/* BUG REPORT (PA CHANJE) */}
+  <Row
+    icon="bug-outline"
+    label="Report bug"
+    showChevron={false}
+    onPress={() => router.push('/bugreport')}
+  />
+
+  {/* HELP CENTER */}
+  <Row
+    icon="help-circle-outline"
+    label="Help Center"
+    showChevron={false}
+    onPress={() => openLink('https://your-help-center.com')}
+  />
+
+  {/* TERMS */}
+  <Row
+    icon="document-text-outline"
+    label="Terms of Use"
+    showChevron={false}
+    onPress={() => openLink('https://your-terms.com')}
+  />
+
+  {/* PRIVACY */}
+  <Row
+    icon="shield-checkmark-outline"
+    label="Privacy Policy"
+    showChevron={false}
+    onPress={() => openLink('https://your-privacy.com')}
+  />
+
+  {/* CHECK FOR UPDATES */}
+  <Row
+    icon="cloud-download-outline"
+    label="Check for updates"
+    isLast
+    showChevron={false}
+    onPress={handleUpdatePress}
+    rightEl={
+      updateStatus === 'checking' ? (
+        <ActivityIndicator size="small" color={secondaryText} />
+      ) : (
+        <View
+          style={{
+            width: 10,
+            height: 10,
+            borderRadius: 5,
+            backgroundColor: dotColor
+          }}
+        />
+      )
+    }
+  />
+</Card>
 
         {/* LOG OUT — separate card with arrow icon like ChatGPT */}
         <View style={{ marginTop: 24, marginHorizontal: 16, marginBottom: 8 }}>
