@@ -953,6 +953,15 @@ export default function HomeScreen() {
   const [sideMenuVisible, setSideMenuVisible] = useState(false);
   const [chatHistoryVisible, setChatHistoryVisible] = useState(false);
   const [deepResearchMode, setDeepResearchMode] = useState(false);
+  const [webSearchMode, setWebSearchMode] = useState(false);
+  const [thinkingModeActive, setThinkingModeActive] = useState(false);
+  const [deepResearchPlanVisible, setDeepResearchPlanVisible] = useState(false);
+  const [deepResearchPlanSteps, setDeepResearchPlanSteps] = useState<string[]>([]);
+  const [deepResearchPlanTitle, setDeepResearchPlanTitle] = useState('');
+  const [deepResearchCountdown, setDeepResearchCountdown] = useState(58);
+  const deepResearchCountdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [deepResearchRunning, setDeepResearchRunning] = useState(false);
+  const [webSearchModalVisible, setWebSearchModalVisible] = useState(false);
   const [deepResearchSteps, setDeepResearchSteps] = useState<Array<{label:string;done:boolean}>>([]);
   const [deepResearchActive, setDeepResearchActive] = useState(false);
   const isGuest = !user;
@@ -1628,7 +1637,40 @@ export default function HomeScreen() {
     }
   };
 
-  const runDeepResearch = useCallback(async (query: string) => {
+  const buildDeepResearchPlan = useCallback((query: string): { title: string; steps: string[] } => {
+    const q = query.trim();
+    return {
+      title: q.length > 50 ? q.slice(0, 50) + '...' : q,
+      steps: [
+        `Identify key aspects of "${q.slice(0, 40)}".`,
+        'Survey primary and secondary sources.',
+        'Collect supporting examples and evidence.',
+        'Compare multiple perspectives and findings.',
+        'Summarize findings in a structured report.',
+      ],
+    };
+  }, []);
+
+  const startDeepResearchCountdown = useCallback((query: string) => {
+    if (deepResearchCountdownRef.current) clearInterval(deepResearchCountdownRef.current);
+    setDeepResearchCountdown(58);
+    const plan = buildDeepResearchPlan(query);
+    setDeepResearchPlanTitle(plan.title);
+    setDeepResearchPlanSteps(plan.steps);
+    setDeepResearchPlanVisible(true);
+    let remaining = 58;
+    deepResearchCountdownRef.current = setInterval(() => {
+      remaining -= 1;
+      setDeepResearchCountdown(remaining);
+      if (remaining <= 0) {
+        if (deepResearchCountdownRef.current) clearInterval(deepResearchCountdownRef.current);
+        setDeepResearchPlanVisible(false);
+        runDeepResearchActual(query);
+      }
+    }, 1000);
+  }, [buildDeepResearchPlan]);
+
+  const runDeepResearchActual = useCallback(async (query: string) => {
     const steps = [
       { label: 'Searching the web...', done: false },
       { label: 'Reading top sources...', done: false },
@@ -1637,13 +1679,14 @@ export default function HomeScreen() {
     ];
     setDeepResearchSteps([...steps]);
     setDeepResearchActive(true);
+    setDeepResearchRunning(true);
     setSending(true);
     setGenerating(true);
     setThinkingMode('thinking');
     let conversationId = currentConversation?.id;
     if (!conversationId) {
       conversationId = await createConversation();
-      if (!conversationId) { setDeepResearchActive(false); setSending(false); setGenerating(false); return; }
+      if (!conversationId) { setDeepResearchActive(false); setDeepResearchRunning(false); setSending(false); setGenerating(false); return; }
     }
     const markStep = (i: number) => {
       setDeepResearchSteps(prev => prev.map((s, idx) => idx === i ? { ...s, done: true } : s));
@@ -1661,6 +1704,7 @@ export default function HomeScreen() {
       showAlert('Error', e?.message || 'Deep research failed');
     } finally {
       setDeepResearchActive(false);
+      setDeepResearchRunning(false);
       setSending(false);
       setGenerating(false);
       setDeepResearchMode(false);
@@ -1668,11 +1712,47 @@ export default function HomeScreen() {
     }
   }, [currentConversation, createConversation, sendMessage, currentAIModel, showAlert]);
 
+  const runDeepResearch = useCallback(async (query: string) => {
+    startDeepResearchCountdown(query);
+  }, [startDeepResearchCountdown]);
+
   const handleSend = async () => {
     if (deepResearchMode && inputText.trim()) {
       const query = inputText.trim();
       setInputText(''); setSelectedMedia([]); clearDraft(); Keyboard.dismiss();
-      await runDeepResearch(query);
+      runDeepResearch(query);
+      return;
+    }
+
+    if (webSearchMode && inputText.trim()) {
+      const query = inputText.trim();
+      setInputText(''); setSelectedMedia([]); clearDraft(); Keyboard.dismiss();
+      setWebSearchMode(false);
+      setSending(true); setGenerating(true); setThinkingMode('thinking');
+      let conversationId = currentConversation?.id;
+      if (!conversationId) { conversationId = await createConversation(); if (!conversationId) { setSending(false); setGenerating(false); return; } }
+      try {
+        const webPrompt = `[WEB SEARCH MODE] Search the web and provide current, accurate information about: "${query}"\n\nInclude relevant sources in [SOURCES] block format at the end. Be comprehensive and cite specific URLs.`;
+        await sendMessage(webPrompt, undefined, undefined, false, currentAIModel);
+        setShowCompletionStatus(true); setTimeout(() => setShowCompletionStatus(false), 2000);
+      } catch (e: any) { showAlert('Error', e?.message || 'Web search failed'); }
+      finally { setSending(false); setGenerating(false); }
+      return;
+    }
+
+    if (thinkingModeActive && inputText.trim()) {
+      const query = inputText.trim();
+      setInputText(''); setSelectedMedia([]); clearDraft(); Keyboard.dismiss();
+      setThinkingModeActive(false);
+      setSending(true); setGenerating(true); setThinkingMode('thinking');
+      let conversationId = currentConversation?.id;
+      if (!conversationId) { conversationId = await createConversation(); if (!conversationId) { setSending(false); setGenerating(false); return; } }
+      try {
+        const thinkPrompt = `[THINKING MODE] Think deeply and carefully before responding. Provide an extensive, well-reasoned, thorough response to: "${query}"\n\nTake your time, explore multiple angles, consider edge cases, and provide a comprehensive answer with detailed explanations.`;
+        await sendMessage(thinkPrompt, undefined, undefined, false, currentAIModel);
+        setShowCompletionStatus(true); setTimeout(() => setShowCompletionStatus(false), 2000);
+      } catch (e: any) { showAlert('Error', e?.message || 'Thinking mode failed'); }
+      finally { setSending(false); setGenerating(false); }
       return;
     }
 
@@ -2858,110 +2938,298 @@ export default function HomeScreen() {
                 </View>
               ) : null}
 
-              {deepResearchActive && deepResearchSteps.length > 0 ? (
-                <View style={{ marginHorizontal: 12, marginBottom: 8, backgroundColor: isDark ? 'rgba(44,44,46,0.9)' : 'rgba(242,242,247,0.95)', borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }}>
-                  <View style={{ paddingHorizontal: 14, paddingTop: 12, paddingBottom: 4, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                    <Ionicons name="search" size={16} color="#5AC8FA" />
-                    <Text style={{ color: isDark ? '#FFF' : '#000', fontWeight: '700', fontSize: 14 }}>Deep Research</Text>
+              {/* Deep Research Plan Card (countdown) */}
+              {deepResearchPlanVisible && (
+                <View style={{ marginHorizontal: 12, marginBottom: 8, backgroundColor: isDark ? '#FFFFFF' : '#FFFFFF', borderRadius: 20, overflow: 'hidden', borderWidth: 1, borderColor: isDark ? 'rgba(0,0,0,0.08)' : 'rgba(0,0,0,0.08)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 4 }}>
+                  <View style={{ padding: 16 }}>
+                    <Text style={{ color: '#000', fontSize: 16, fontWeight: '700', marginBottom: 12 }}>{deepResearchPlanTitle}</Text>
+                    {deepResearchPlanSteps.map((step, i) => (
+                      <View key={i} style={{ flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 6, gap: 12 }}>
+                        <View style={{ width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, borderColor: 'rgba(0,0,0,0.2)', alignItems: 'center', justifyContent: 'center', marginTop: 1 }}>
+                          <View style={{ width: 8, height: 8, borderRadius: 4, borderWidth: 1, borderColor: 'rgba(0,0,0,0.3)' }} />
+                        </View>
+                        <Text style={{ color: '#111', fontSize: 14, flex: 1, lineHeight: 20 }}>{step}</Text>
+                      </View>
+                    ))}
+                    <TouchableOpacity
+                      style={{ marginTop: 12, backgroundColor: '#000', borderRadius: 50, paddingVertical: 14, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 10 }}
+                      onPress={() => {
+                        if (deepResearchCountdownRef.current) clearInterval(deepResearchCountdownRef.current);
+                        setDeepResearchPlanVisible(false);
+                        runDeepResearchActual(deepResearchPlanTitle);
+                      }}
+                    >
+                      <Text style={{ color: '#FFF', fontSize: 17, fontWeight: '700' }}>Start</Text>
+                      <View style={{ width: 28, height: 28, borderRadius: 14, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.5)', alignItems: 'center', justifyContent: 'center' }}>
+                        <Text style={{ color: '#FFF', fontSize: 12, fontWeight: '700' }}>{deepResearchCountdown}</Text>
+                      </View>
+                    </TouchableOpacity>
                   </View>
-                  {deepResearchSteps.map((step, i) => (
-                    <DeepResearchCard key={i} step={i} label={step.label} done={step.done} colors={colors} />
-                  ))}
-                  <View style={{ height: 8 }} />
+                </View>
+              )}
+
+              {/* Deep Research In-progress */}
+              {deepResearchActive && deepResearchSteps.length > 0 ? (
+                <View style={{ marginHorizontal: 12, marginBottom: 8, backgroundColor: isDark ? '#FFFFFF' : '#FFFFFF', borderRadius: 20, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(0,0,0,0.08)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 4 }}>
+                  <View style={{ padding: 16 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                      <Ionicons name="search" size={16} color="#111" />
+                      <Text style={{ color: '#000', fontWeight: '700', fontSize: 14 }}>{deepResearchPlanTitle || 'Deep Research'}</Text>
+                    </View>
+                    {deepResearchSteps.map((step, i) => (
+                      <DeepResearchCard key={i} step={i} label={step.label} done={step.done} colors={{ text: '#000', textSecondary: '#555' }} />
+                    ))}
+                    <View style={{ marginTop: 10, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <Text style={{ color: '#555', fontSize: 13, flex: 1 }}>Researching...</Text>
+                      <View style={{ flex: 1, height: 2, backgroundColor: 'rgba(0,0,0,0.08)', borderRadius: 1 }}>
+                        <Animated.View style={{ height: 2, backgroundColor: '#000', borderRadius: 1, width: `${(deepResearchSteps.filter(s => s.done).length / deepResearchSteps.length) * 100}%` }} />
+                      </View>
+                      <TouchableOpacity
+                        style={{ width: 24, height: 24, borderRadius: 12, borderWidth: 1.5, borderColor: '#000', alignItems: 'center', justifyContent: 'center' }}
+                        onPress={() => {
+                          setDeepResearchActive(false);
+                          setDeepResearchRunning(false);
+                          setSending(false);
+                          setGenerating(false);
+                          setDeepResearchSteps([]);
+                          cancelSendMessage();
+                        }}
+                      >
+                        <View style={{ width: 8, height: 8, backgroundColor: '#000', borderRadius: 1 }} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
                 </View>
               ) : null}
 
+              {/* Web Search Modal */}
+              <Modal visible={webSearchModalVisible} transparent animationType="slide" onRequestClose={() => setWebSearchModalVisible(false)}>
+                <View style={{ flex: 1, justifyContent: 'flex-end' }}>
+                  {Platform.OS === 'ios' ? <BlurView intensity={isDark ? 60 : 45} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} /> : <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.5)' }]} />}
+                  <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setWebSearchModalVisible(false)} />
+                  <View style={{ backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: insets.bottom + 24 }}>
+                    <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.15)', alignSelf: 'center', marginBottom: 20 }} />
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                      <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#34C75922', alignItems: 'center', justifyContent: 'center' }}>
+                        <Ionicons name="globe-outline" size={20} color="#34C759" />
+                      </View>
+                      <View>
+                        <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 18, fontWeight: '700' }}>Web Search</Text>
+                        <Text style={{ color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)', fontSize: 13 }}>Search the web with AI</Text>
+                      </View>
+                      <TouchableOpacity style={{ marginLeft: 'auto', width: 32, height: 32, borderRadius: 16, backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)', alignItems: 'center', justifyContent: 'center' }} onPress={() => setWebSearchModalVisible(false)}>
+                        <Ionicons name="close" size={16} color={isDark ? '#FFF' : '#000'} />
+                      </TouchableOpacity>
+                    </View>
+                    <Text style={{ color: isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.55)', fontSize: 14, lineHeight: 20, marginBottom: 20 }}>
+                      Web Search mode lets AI search the internet for current information and provide answers with cited sources.
+                    </Text>
+                    <TouchableOpacity
+                      style={{ backgroundColor: '#34C759', borderRadius: 50, paddingVertical: 15, alignItems: 'center' }}
+                      onPress={() => {
+                        setWebSearchModalVisible(false);
+                        setWebSearchMode(true);
+                        setTimeout(() => inputRef.current?.focus(), 100);
+                      }}
+                    >
+                      <Text style={{ color: '#FFF', fontSize: 16, fontWeight: '700' }}>Start Web Search</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </Modal>
+
               {/* Input Area */}
               <View style={[styles.inputContainer, Platform.OS === 'ios' && { backgroundColor: 'transparent' }]}>
-                {!editingMessageId && !isRecording && !isProcessing ? (
+                {/* + button OUTSIDE input when typing */}
+                {!editingMessageId && !isRecording && !isProcessing && showSendButton ? (
                   <TouchableOpacity style={styles.addBtn} onPress={() => setToolsVisible(true)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-                    <View style={[styles.addBtnCircle, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)', borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)' }]}>
-                      <Ionicons name="add" size={22} color={colors.text} />
-                    </View>
+                    {Platform.OS === 'ios' ? (
+                      <BlurView intensity={isDark ? 60 : 50} tint={isDark ? 'dark' : 'light'} style={[styles.addBtnCircle, { overflow: 'hidden', borderColor: isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.14)' }]}>
+                        <Ionicons name="add" size={22} color={colors.text} />
+                      </BlurView>
+                    ) : (
+                      <View style={[styles.addBtnCircle, { backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.09)', borderColor: isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.14)' }]}>
+                        <Ionicons name="add" size={22} color={colors.text} />
+                      </View>
+                    )}
                   </TouchableOpacity>
                 ) : null}
 
-                <Pressable style={[styles.inputWrapper, { backgroundColor: isDark ? '#1C1C1E' : '#EFEFEF', borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)' }]} onPress={() => inputRef.current?.focus()}>
-                  {/* Spotify chip — shows when Spotify is connected */}
-                  {spotifyActive ? (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
-                      <View style={{
-                        flexDirection: 'row', alignItems: 'center', gap: 7,
-                        backgroundColor: isDark ? '#1A1A1D' : '#111',
-                        borderRadius: 50, paddingHorizontal: 10, paddingVertical: 6,
-                      }}>
-                        {/* Spotify icon */}
-                        <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: '#1DB954', alignItems: 'center', justifyContent: 'center' }}>
-                          <View style={{ gap: 2, alignItems: 'center' }}>
-                            {[1, 0.78, 0.56].map((w, i) => (
-                              <View key={i} style={{ width: 11 * w, height: 1.5, borderRadius: 1, backgroundColor: '#000' }} />
-                            ))}
+                {Platform.OS === 'ios' ? (
+                  <BlurView
+                    intensity={isDark ? 70 : 55}
+                    tint={isDark ? 'dark' : 'light'}
+                    style={[styles.inputWrapper, { borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)', overflow: 'hidden' }]}
+                  >
+                    <Pressable style={{ flex: 1 }} onPress={() => inputRef.current?.focus()}>
+                      {/* Spotify chip */}
+                      {spotifyActive ? (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: isDark ? '#1A1A1D' : '#111', borderRadius: 50, paddingHorizontal: 10, paddingVertical: 6 }}>
+                            <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: '#1DB954', alignItems: 'center', justifyContent: 'center' }}>
+                              <View style={{ gap: 2, alignItems: 'center' }}>
+                                {[1, 0.78, 0.56].map((w, i) => (<View key={i} style={{ width: 11 * w, height: 1.5, borderRadius: 1, backgroundColor: '#000' }} />))}
+                              </View>
+                            </View>
+                            <Text style={{ color: '#1DB954', fontSize: 14, fontWeight: '700' }}>Spotify</Text>
+                            <TouchableOpacity onPress={() => { setSpotifyActive(false); setSpotifyResults([]); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                              <Ionicons name="close" size={14} color="rgba(255,255,255,0.55)" />
+                            </TouchableOpacity>
                           </View>
                         </View>
-                        <Text style={{ color: '#1DB954', fontSize: 14, fontWeight: '700' }}>Spotify</Text>
-                        <TouchableOpacity
-                          onPress={() => { setSpotifyActive(false); setSpotifyResults([]); }}
-                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                        >
-                          <Ionicons name="close" size={14} color="rgba(255,255,255,0.55)" />
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  ) : null}
-                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: quizMode ? 8 : 0 }}>
-                    {quizMode ? (
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: isDark ? 'rgba(90,200,250,0.15)' : 'rgba(90,200,250,0.12)', borderRadius: 16, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: 'rgba(90,200,250,0.3)' }}>
-                        <Ionicons name="albums-outline" size={14} color="#5AC8FA" />
-                        <Text style={{ color: '#5AC8FA', fontSize: 13, fontWeight: '700' }}>Quizzes</Text>
-                        <TouchableOpacity onPress={() => setQuizMode(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                          <Ionicons name="close" size={12} color="#5AC8FA" />
-                        </TouchableOpacity>
+                      ) : null}
+                      {/* Mode chips */}
+                      {(quizMode || deepResearchMode || webSearchMode || thinkingModeActive) ? (
+                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                          {quizMode ? (
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(90,200,250,0.15)', borderRadius: 16, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: 'rgba(90,200,250,0.3)' }}>
+                              <Ionicons name="albums-outline" size={14} color="#5AC8FA" />
+                              <Text style={{ color: '#5AC8FA', fontSize: 13, fontWeight: '700' }}>Quizzes</Text>
+                              <TouchableOpacity onPress={() => setQuizMode(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}><Ionicons name="close" size={12} color="#5AC8FA" /></TouchableOpacity>
+                            </View>
+                          ) : null}
+                          {deepResearchMode ? (
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(90,200,250,0.12)', borderRadius: 16, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: 'rgba(90,200,250,0.3)' }}>
+                              <Ionicons name="search" size={14} color="#5AC8FA" />
+                              <Text style={{ color: '#5AC8FA', fontSize: 13, fontWeight: '700' }}>Research</Text>
+                              <TouchableOpacity onPress={() => setDeepResearchMode(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}><Ionicons name="close" size={12} color="#5AC8FA" /></TouchableOpacity>
+                            </View>
+                          ) : null}
+                          {webSearchMode ? (
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(52,199,89,0.12)', borderRadius: 16, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: 'rgba(52,199,89,0.3)' }}>
+                              <Ionicons name="globe-outline" size={14} color="#34C759" />
+                              <Text style={{ color: '#34C759', fontSize: 13, fontWeight: '700' }}>Web Search</Text>
+                              <TouchableOpacity onPress={() => setWebSearchMode(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}><Ionicons name="close" size={12} color="#34C759" /></TouchableOpacity>
+                            </View>
+                          ) : null}
+                          {thinkingModeActive ? (
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(191,90,242,0.12)', borderRadius: 16, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: 'rgba(191,90,242,0.3)' }}>
+                              <Ionicons name="bulb-outline" size={14} color="#BF5AF2" />
+                              <Text style={{ color: '#BF5AF2', fontSize: 13, fontWeight: '700' }}>Thinking</Text>
+                              <TouchableOpacity onPress={() => setThinkingModeActive(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}><Ionicons name="close" size={12} color="#BF5AF2" /></TouchableOpacity>
+                            </View>
+                          ) : null}
+                        </View>
+                      ) : null}
+                      {renderInlineMediaPreviews()}
+                      {isRecording || isProcessing ? (
+                        <View style={styles.recordingRow}>
+                          <WaveformAnimation isRecording={isRecording} />
+                          <Text style={styles.recordingDuration}>{isProcessing ? 'Processing...' : formatDuration(recordingDuration)}</Text>
+                        </View>
+                      ) : (
+                        <View style={styles.inputRow}>
+                          {/* + button INSIDE input when not typing */}
+                          {!showSendButton && !editingMessageId ? (
+                            <TouchableOpacity onPress={() => setToolsVisible(true)} hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }} style={{ paddingRight: 6 }}>
+                              <Ionicons name="add" size={22} color={colors.textSecondary} />
+                            </TouchableOpacity>
+                          ) : null}
+                          <TextInput
+                            ref={inputRef}
+                            style={styles.input}
+                            value={inputText}
+                            onChangeText={handleInputChange}
+                            placeholder={isGuestLocked ? 'Chat locked for 24h. Sign in to continue.' : thinkingModeActive ? 'Ask AI' : webSearchMode ? 'Search the web...' : deepResearchMode ? 'Get a detailed report' : 'Ask anything'}
+                            editable={!isGuestLocked}
+                            placeholderTextColor={colors.textSecondary}
+                            multiline
+                            returnKeyType="default"
+                            blurOnSubmit={false}
+                            scrollEnabled
+                            textAlignVertical="center"
+                          />
+                          <TouchableOpacity onPress={toggleRecording} hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }} style={{ opacity: isProcessing ? 0.5 : 1, paddingHorizontal: 4 }}>
+                            <Ionicons name={isRecording ? 'stop-circle' : isProcessing ? 'hourglass-outline' : 'mic-outline'} size={21} color={isRecording ? '#FF3B30' : colors.textSecondary} />
+                          </TouchableOpacity>
+                          {sending ? (
+                            <TouchableOpacity style={[styles.sendButton, { backgroundColor: accentColor }]} onPress={handleStopGeneration}>
+                              <View style={{ width: 11, height: 11, backgroundColor: '#FFF', borderRadius: 2 }} />
+                            </TouchableOpacity>
+                          ) : showSendButton ? (
+                            <TouchableOpacity style={[styles.sendButton, { backgroundColor: deepResearchMode ? '#5AC8FA' : webSearchMode ? '#34C759' : thinkingModeActive ? '#BF5AF2' : accentColor }]} onPress={handleSend} disabled={isRecording || isProcessing}>
+                              <Ionicons name="arrow-up" size={18} color="#FFFFFF" />
+                            </TouchableOpacity>
+                          ) : (
+                            <TouchableOpacity style={[styles.voiceOrbBtn, { backgroundColor: accentColor }]} onPress={() => router.push('/voice-control')}>
+                              <Ionicons name="pulse" size={17} color="#FFFFFF" />
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                      )}
+                    </Pressable>
+                  </BlurView>
+                ) : (
+                  <Pressable style={[styles.inputWrapper, { backgroundColor: isDark ? '#1C1C1E' : '#EFEFEF', borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)' }]} onPress={() => inputRef.current?.focus()}>
+                    {/* Spotify chip */}
+                    {spotifyActive ? (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: isDark ? '#1A1A1D' : '#111', borderRadius: 50, paddingHorizontal: 10, paddingVertical: 6 }}>
+                          <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: '#1DB954', alignItems: 'center', justifyContent: 'center' }}>
+                            <View style={{ gap: 2, alignItems: 'center' }}>{[1, 0.78, 0.56].map((w, i) => (<View key={i} style={{ width: 11 * w, height: 1.5, borderRadius: 1, backgroundColor: '#000' }} />))}</View>
+                          </View>
+                          <Text style={{ color: '#1DB954', fontSize: 14, fontWeight: '700' }}>Spotify</Text>
+                          <TouchableOpacity onPress={() => { setSpotifyActive(false); setSpotifyResults([]); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}><Ionicons name="close" size={14} color="rgba(255,255,255,0.55)" /></TouchableOpacity>
+                        </View>
                       </View>
                     ) : null}
-                  </View>
-
-                  {renderInlineMediaPreviews()}
-
-                  {isRecording || isProcessing ? (
-                    <View style={styles.recordingRow}>
-                      <WaveformAnimation isRecording={isRecording} />
-                      <Text style={styles.recordingDuration}>{isProcessing ? 'Processing...' : formatDuration(recordingDuration)}</Text>
-                    </View>
-                  ) : (
-                    <View style={styles.inputRow}>
-                      <TextInput
-                        ref={inputRef}
-                        style={styles.input}
-                        value={inputText}
-                        onChangeText={handleInputChange}
-                        placeholder={isGuestLocked ? 'Chat locked for 24h. Sign in to continue.' : (deepResearchMode ? 'Research topic...' : 'Ask anything')}
-                        editable={!isGuestLocked}
-                        placeholderTextColor={colors.textSecondary}
-                        multiline
-                        returnKeyType="default"
-                        blurOnSubmit={false}
-                        scrollEnabled
-                        textAlignVertical="center"
-                      />
-                      <TouchableOpacity onPress={toggleRecording} hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }} style={{ opacity: isProcessing ? 0.5 : 1, paddingHorizontal: 4 }}>
-                        <Ionicons name={isRecording ? 'stop-circle' : isProcessing ? 'hourglass-outline' : 'mic-outline'} size={21} color={isRecording ? '#FF3B30' : colors.textSecondary} />
-                      </TouchableOpacity>
-                      {sending ? (
-                        <TouchableOpacity style={[styles.sendButton, { backgroundColor: isDark ? '#3A3A3C' : '#DCDCDC' }]} onPress={handleStopGeneration}>
-                          <View style={{ width: 10, height: 10, backgroundColor: colors.text, borderRadius: 2 }} />
+                    {/* Mode chips */}
+                    {(quizMode || deepResearchMode || webSearchMode || thinkingModeActive) ? (
+                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                        {quizMode ? (<View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(90,200,250,0.15)', borderRadius: 16, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: 'rgba(90,200,250,0.3)' }}><Ionicons name="albums-outline" size={14} color="#5AC8FA" /><Text style={{ color: '#5AC8FA', fontSize: 13, fontWeight: '700' }}>Quizzes</Text><TouchableOpacity onPress={() => setQuizMode(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}><Ionicons name="close" size={12} color="#5AC8FA" /></TouchableOpacity></View>) : null}
+                        {deepResearchMode ? (<View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(90,200,250,0.12)', borderRadius: 16, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: 'rgba(90,200,250,0.3)' }}><Ionicons name="search" size={14} color="#5AC8FA" /><Text style={{ color: '#5AC8FA', fontSize: 13, fontWeight: '700' }}>Research</Text><TouchableOpacity onPress={() => setDeepResearchMode(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}><Ionicons name="close" size={12} color="#5AC8FA" /></TouchableOpacity></View>) : null}
+                        {webSearchMode ? (<View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(52,199,89,0.12)', borderRadius: 16, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: 'rgba(52,199,89,0.3)' }}><Ionicons name="globe-outline" size={14} color="#34C759" /><Text style={{ color: '#34C759', fontSize: 13, fontWeight: '700' }}>Web Search</Text><TouchableOpacity onPress={() => setWebSearchMode(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}><Ionicons name="close" size={12} color="#34C759" /></TouchableOpacity></View>) : null}
+                        {thinkingModeActive ? (<View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(191,90,242,0.12)', borderRadius: 16, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: 'rgba(191,90,242,0.3)' }}><Ionicons name="bulb-outline" size={14} color="#BF5AF2" /><Text style={{ color: '#BF5AF2', fontSize: 13, fontWeight: '700' }}>Thinking</Text><TouchableOpacity onPress={() => setThinkingModeActive(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}><Ionicons name="close" size={12} color="#BF5AF2" /></TouchableOpacity></View>) : null}
+                      </View>
+                    ) : null}
+                    {renderInlineMediaPreviews()}
+                    {isRecording || isProcessing ? (
+                      <View style={styles.recordingRow}>
+                        <WaveformAnimation isRecording={isRecording} />
+                        <Text style={styles.recordingDuration}>{isProcessing ? 'Processing...' : formatDuration(recordingDuration)}</Text>
+                      </View>
+                    ) : (
+                      <View style={styles.inputRow}>
+                        {/* + button INSIDE input when not typing (Android) */}
+                        {!showSendButton && !editingMessageId ? (
+                          <TouchableOpacity onPress={() => setToolsVisible(true)} hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }} style={{ paddingRight: 6 }}>
+                            <Ionicons name="add" size={22} color={colors.textSecondary} />
+                          </TouchableOpacity>
+                        ) : null}
+                        <TextInput
+                          ref={inputRef}
+                          style={styles.input}
+                          value={inputText}
+                          onChangeText={handleInputChange}
+                          placeholder={isGuestLocked ? 'Chat locked for 24h. Sign in to continue.' : thinkingModeActive ? 'Ask AI' : webSearchMode ? 'Search the web...' : deepResearchMode ? 'Get a detailed report' : 'Ask anything'}
+                          editable={!isGuestLocked}
+                          placeholderTextColor={colors.textSecondary}
+                          multiline
+                          returnKeyType="default"
+                          blurOnSubmit={false}
+                          scrollEnabled
+                          textAlignVertical="center"
+                        />
+                        <TouchableOpacity onPress={toggleRecording} hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }} style={{ opacity: isProcessing ? 0.5 : 1, paddingHorizontal: 4 }}>
+                          <Ionicons name={isRecording ? 'stop-circle' : isProcessing ? 'hourglass-outline' : 'mic-outline'} size={21} color={isRecording ? '#FF3B30' : colors.textSecondary} />
                         </TouchableOpacity>
-                      ) : showSendButton ? (
-                        <TouchableOpacity style={[styles.sendButton, { backgroundColor: deepResearchMode ? '#5AC8FA' : accentColor }]} onPress={handleSend} disabled={isRecording || isProcessing}>
-                          <Ionicons name="arrow-up" size={18} color="#FFFFFF" />
-                        </TouchableOpacity>
-                      ) : (
-                        <TouchableOpacity style={[styles.voiceOrbBtn, { backgroundColor: accentColor }]} onPress={() => router.push('/voice-control')}>
-                          <Ionicons name="pulse" size={17} color="#FFFFFF" />
-                        </TouchableOpacity>
-                      )}
-                    </View>
-                  )}
-                </Pressable>
+                        {sending ? (
+                          <TouchableOpacity style={[styles.sendButton, { backgroundColor: accentColor }]} onPress={handleStopGeneration}>
+                            <View style={{ width: 11, height: 11, backgroundColor: '#FFF', borderRadius: 2 }} />
+                          </TouchableOpacity>
+                        ) : showSendButton ? (
+                          <TouchableOpacity style={[styles.sendButton, { backgroundColor: deepResearchMode ? '#5AC8FA' : webSearchMode ? '#34C759' : thinkingModeActive ? '#BF5AF2' : accentColor }]} onPress={handleSend} disabled={isRecording || isProcessing}>
+                            <Ionicons name="arrow-up" size={18} color="#FFFFFF" />
+                          </TouchableOpacity>
+                        ) : (
+                          <TouchableOpacity style={[styles.voiceOrbBtn, { backgroundColor: accentColor }]} onPress={() => router.push('/voice-control')}>
+                            <Ionicons name="pulse" size={17} color="#FFFFFF" />
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    )}
+                  </Pressable>
+                )}
               </View>
             </KeyboardAvoidingView>
 
@@ -2980,10 +3248,18 @@ export default function HomeScreen() {
 
             {showScrollToBottom && hasMessages && (
               <TouchableOpacity
-                style={{ position: 'absolute', bottom: 90, right: 16, width: 36, height: 36, borderRadius: 18, backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA', alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 6, elevation: 6, zIndex: 50 }}
+                style={{ position: 'absolute', bottom: 90, alignSelf: 'center', left: '50%', marginLeft: -20, width: 40, height: 40, borderRadius: 20, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 8, zIndex: 50 }}
                 onPress={() => { flatListRef.current?.scrollToEnd({ animated: true }); setIsAtBottom(true); setShowScrollToBottom(false); }}
               >
-                <Ionicons name="chevron-down" size={20} color={colors.text} />
+                {Platform.OS === 'ios' ? (
+                  <BlurView intensity={isDark ? 70 : 55} tint={isDark ? 'dark' : 'light'} style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+                    <Ionicons name="chevron-down" size={20} color={colors.text} />
+                  </BlurView>
+                ) : (
+                  <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: isDark ? 'rgba(44,44,46,0.92)' : 'rgba(240,240,245,0.92)' }}>
+                    <Ionicons name="chevron-down" size={20} color={colors.text} />
+                  </View>
+                )}
               </TouchableOpacity>
             )}
 
@@ -3037,7 +3313,26 @@ export default function HomeScreen() {
               onDeepResearch={() => {
                 if (isGuest) { setGuestLockFeature('deep research'); setGuestLockModal(true); return; }
                 setDeepResearchMode(true);
+                setWebSearchMode(false);
+                setThinkingModeActive(false);
                 setInputText('');
+                setToolsVisible(false);
+                setTimeout(() => inputRef.current?.focus(), 100);
+              }}
+              onWebSearch={() => {
+                if (isGuest) { setGuestLockFeature('web search'); setGuestLockModal(true); return; }
+                setWebSearchMode(true);
+                setDeepResearchMode(false);
+                setThinkingModeActive(false);
+                setToolsVisible(false);
+                setWebSearchModalVisible(true);
+              }}
+              onThinkingMode={() => {
+                if (isGuest) { setGuestLockFeature('thinking mode'); setGuestLockModal(true); return; }
+                setThinkingModeActive(true);
+                setDeepResearchMode(false);
+                setWebSearchMode(false);
+                setToolsVisible(false);
                 setTimeout(() => inputRef.current?.focus(), 100);
               }}
             />
