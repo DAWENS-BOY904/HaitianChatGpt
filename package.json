@@ -39,9 +39,6 @@
     "expo-linear-gradient": "~14.1.4",
     "expo-location": "~18.1.5",
     "expo-linking": "^7.1.5",
-    "expo-router": "~4.0.17",
-    "expo-splash-screen": "~0.30.8",
-=======
     "expo-mail-composer": "^14.1.5",
     "expo-manifests": "~0.16.6",
     "expo-media-library": "^17.1.7",
