@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -149,6 +149,15 @@ export default function LoginScreen() {
   const [selectedCountry, setSelectedCountry] = useState<Country>(COUNTRIES[0]);
   const [showCountryList, setShowCountryList] = useState(false);
   const [phoneLoading, setPhoneLoading] = useState(false);
+  const isMounted = useRef(true);
+
+  useEffect(() => {
+    return () => { isMounted.current = false; };
+  }, []);
+
+  const safeSetState = useCallback(<T,>(setter: React.Dispatch<React.SetStateAction<T>>, value: T) => {
+    if (isMounted.current) setter(value);
+  }, []);
 
   useEffect(() => {
     checkForPasskeyLogin();
@@ -191,15 +200,15 @@ export default function LoginScreen() {
       if (types.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION)) label = 'Face ID';
       else if (types.includes(LocalAuthentication.AuthenticationType.FINGERPRINT)) label = Platform.OS === 'ios' ? 'Touch ID' : 'Fingerprint';
 
-      setPasskeyBiometricLabel(label);
-      setShowPasskeyPrompt(true);
+      safeSetState(setPasskeyBiometricLabel, label);
+      safeSetState(setShowPasskeyPrompt, true);
     } catch (err) {
       console.log('Passkey check error:', err);
     }
   };
 
   const handlePasskeyAuthenticate = async () => {
-    setPasskeyLoading(true);
+    safeSetState(setPasskeyLoading, true);
     try {
       const result = await LocalAuthentication.authenticateAsync({
         promptMessage: `Sign in with ${passkeyBiometricLabel}`,
@@ -211,12 +220,12 @@ export default function LoginScreen() {
         await AsyncStorage.setItem('passkey_session_active', 'true');
         router.replace('/home');
       } else {
-        setShowPasskeyPrompt(false);
+        safeSetState(setShowPasskeyPrompt, false);
       }
     } catch {
-      setShowPasskeyPrompt(false);
+      safeSetState(setShowPasskeyPrompt, false);
     } finally {
-      setPasskeyLoading(false);
+      safeSetState(setPasskeyLoading, false);
     }
   };
 
@@ -248,7 +257,7 @@ export default function LoginScreen() {
     }
     const adminEmails = ['berryxoe@gmail.com', 'newdawens@gmail.com', 'kontgithub@gmail.com'];
     if (adminEmails.includes(email.toLowerCase())) {
-      setAdminCodeSending(true);
+      safeSetState(setAdminCodeSending, true);
       try {
         const supabase = getSupabaseClient();
         const { error: otpError } = await supabase.auth.signInWithOtp({
@@ -258,10 +267,10 @@ export default function LoginScreen() {
         if (otpError) throw new Error(otpError.message);
       } catch (e: any) {
         showAlert('Error', e?.message || 'Failed to send admin code.');
-        setAdminCodeSending(false);
+        safeSetState(setAdminCodeSending, false);
         return;
       } finally {
-        setAdminCodeSending(false);
+        safeSetState(setAdminCodeSending, false);
       }
       router.push({ pathname: '/verify-code', params: { email: email.toLowerCase(), mode: 'admin_login' } });
     } else {
@@ -313,7 +322,7 @@ export default function LoginScreen() {
 
   const handleGoogleSignIn = async () => {
     if (googleLoading) return;
-    setGoogleLoading(true);
+    safeSetState(setGoogleLoading, true);
     try {
       const { error } = await signInWithGoogle();
       if (error) {
@@ -326,7 +335,7 @@ export default function LoginScreen() {
       const isCancellation = msg.includes('cancel') || msg.includes('dismiss') || msg.includes('closed');
       if (!isCancellation) showAlert('Error', err?.message || 'Google sign-in failed.');
     } finally {
-      setGoogleLoading(false);
+      safeSetState(setGoogleLoading, false);
     }
   };
 
@@ -370,12 +379,18 @@ export default function LoginScreen() {
       // Use native expo-apple-authentication — stays fully in-app, no browser
       let AppleAuthentication: any;
       try {
-        AppleAuthentication = require('expo-apple-authentication');
-      } catch (_e) {
-        showAlert('Not Available', 'Apple Sign In is not supported on this device.');
+        const appleModule = await import('expo-apple-authentication');
+        AppleAuthentication = appleModule;
+        // Verify the module has the expected methods
+        if (!AppleAuthentication?.signInAsync || !AppleAuthentication?.AppleAuthenticationScope) {
+          throw new Error('Apple Authentication module not properly loaded');
+        }
+      } catch (_e: any) {
+        showAlert('Not Available', 'Apple Sign In is not supported on this device. Make sure you are using a development build.');
         setAppleLoading(false);
         return;
       }
+
       const credential = await AppleAuthentication.signInAsync({
         requestedScopes: [
           AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
@@ -690,7 +705,11 @@ export default function LoginScreen() {
 
       <Modal visible={guestModalVisible} transparent animationType="fade" onRequestClose={() => setGuestModalVisible(false)}>
         <View style={{ flex: 1, justifyContent: 'flex-end' }}>
-          <BlurView intensity={60} tint="dark" style={StyleSheet.absoluteFill} />
+          {Platform.OS === 'ios' ? (
+            <BlurView intensity={60} tint="dark" style={StyleSheet.absoluteFill} experimentalBlurMethod="dimezisBlurView" />
+          ) : (
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.7)' }]} />
+          )}
           <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setGuestModalVisible(false)} />
           <View style={guestStyles.sheet}>
             <View style={guestStyles.handle} />
