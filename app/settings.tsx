@@ -260,7 +260,7 @@ function VerifiedBadge({ onPress, tier }: { onPress: () => void; tier: 'pro' | '
   const badgeSource = tier === 'plus'
     ? require('../assets/images/plus-badge.png')
     : tier === 'go'
-    ? require('../assets/images/go-badge.png')
+    ? require('../assets/images/plan-go.png')
     : require('../assets/images/verified-badge.png');
 
   return (
@@ -325,7 +325,7 @@ function VerifiedBadgeModal({ visible, onClose, isDark, tier }: {
   const badgeSource = isPlus 
     ? require('../assets/images/plus-badge.png')
     : isGo
-    ? require('../assets/images/go-badge.png')
+    ? require('../assets/images/plan-go.png')
     : require('../assets/images/verified-badge.png');
   const title = isPlus ? '✔ Verified Plus Member' : isGo ? '✔ Verified Go Member' : '✔ Verified Pro Member';
   const subtitle = isPlus 
