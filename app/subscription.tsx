@@ -9,6 +9,7 @@ import {
   Linking,
   ActivityIndicator,
   useColorScheme,
+  StatusBar,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -116,11 +117,20 @@ export default function SubscriptionScreen() {
     plan: string | null;
     subscription_end: string | null;
   } | null>(null);
+  const isMounted = useRef(true);
+
+  useEffect(() => {
+    return () => { isMounted.current = false; };
+  }, []);
+
+  const safeSetState = useCallback(<T,>(setter: React.Dispatch<React.SetStateAction<T>>, value: T) => {
+    if (isMounted.current) setter(value);
+  }, []);
 
   // ── Check subscription status ──
   const checkSubscriptionStatus = useCallback(async () => {
     if (!user) return;
-    setCheckingStatus(true);
+    safeSetState(setCheckingStatus, true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) return;
@@ -128,7 +138,7 @@ export default function SubscriptionScreen() {
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
       if (!error && data) {
-        setSubscriptionInfo({
+        safeSetState(setSubscriptionInfo, {
           subscribed: data.subscribed ?? false,
           plan: data.plan ?? null,
           subscription_end: data.subscription_end ?? null,
@@ -137,9 +147,9 @@ export default function SubscriptionScreen() {
     } catch (e) {
       console.log('[subscription] check failed:', e);
     } finally {
-      setCheckingStatus(false);
+      safeSetState(setCheckingStatus, false);
     }
-  }, [user, supabase]);
+  }, [user, supabase, safeSetState]);
 
   useFocusEffect(
     useCallback(() => {
@@ -163,8 +173,24 @@ export default function SubscriptionScreen() {
       return;
     }
 
+    // Guard: Check if react-native-purchases is available (dev build only)
+    let Purchases: any;
     try {
-      const Purchases = require('react-native-purchases').default;
+      const rcModule = await import('react-native-purchases');
+      Purchases = rcModule.default || rcModule.Purchases || rcModule;
+      if (!Purchases || typeof Purchases.configure !== 'function') {
+        throw new Error('RevenueCat SDK not properly initialized');
+      }
+    } catch (importErr: any) {
+      console.log('[RevenueCat] SDK not available:', importErr?.message);
+      showAlert(
+        'Not Available',
+        'In-App Purchase requires a development build. Use Expo Go for preview only, or build with EAS.'
+      );
+      return;
+    }
+
+    try {
       const apiKey = RC_API_KEY ||
         (Platform.OS === 'ios'
           ? (process.env.EXPO_PUBLIC_RC_IOS_KEY || '')
@@ -175,7 +201,7 @@ export default function SubscriptionScreen() {
         return;
       }
 
-      try { Purchases.configure({ apiKey }); } catch (_e) {}
+      try { await Purchases.configure({ apiKey }); } catch (_e) {}
 
       const offerings = await Purchases.getOfferings();
       const offering = offerings.current;
@@ -186,8 +212,8 @@ export default function SubscriptionScreen() {
 
       const pkg = offering.availablePackages.find(
         (p: any) =>
-          p.product.productIdentifier === APPLE_PRODUCT_ID ||
-          p.product.identifier === APPLE_PRODUCT_ID ||
+          p.product?.productIdentifier === APPLE_PRODUCT_ID ||
+          p.product?.identifier === APPLE_PRODUCT_ID ||
           p.packageType === 'MONTHLY',
       );
 
@@ -197,7 +223,7 @@ export default function SubscriptionScreen() {
 
       const { customerInfo } = await Purchases.purchasePackage(pkg);
       const receiptData = JSON.stringify(customerInfo);
-      const transactionId = (customerInfo as any).originalAppUserId || `rc_${Date.now()}`;
+      const transactionId = customerInfo?.originalAppUserId || `rc_${Date.now()}`;
 
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) throw new Error('Not authenticated');
@@ -248,13 +274,14 @@ export default function SubscriptionScreen() {
       if (
         err?.message?.includes('Cannot find module') ||
         err?.message?.includes('NativeModule') ||
-        err?.message?.includes('not available')
+        err?.message?.includes('not available') ||
+        err?.message?.includes('RevenueCat SDK not properly initialized')
       ) {
-        showAlert('Not Available', 'Apple In-App Purchase is only available on a real iPhone device.');
+        showAlert('Not Available', 'Apple In-App Purchase is only available on a real iPhone device with a development build.');
         return;
       }
 
-      throw err;
+      showAlert('Purchase Failed', err?.message || 'Something went wrong with the purchase.');
     }
   };
 
@@ -289,7 +316,7 @@ export default function SubscriptionScreen() {
   // ── Manage subscription (Stripe portal) ──
   const handleManage = async () => {
     if (!user || managing) return;
-    setManaging(true);
+    safeSetState(setManaging, true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) throw new Error('Not authenticated');
@@ -302,14 +329,14 @@ export default function SubscriptionScreen() {
     } catch (err: any) {
       showAlert('Error', err?.message || 'Failed to open subscription management');
     } finally {
-      setManaging(false);
+      safeSetState(setManaging, false);
     }
   };
 
   // ── Main purchase handler ──
   const handleUpgrade = async () => {
     if (loading) return;
-    setLoading(true);
+    safeSetState(setLoading, true);
     try {
       if (selectedPlan === 'go') {
         await purchaseGoWithAppleIAP();
@@ -320,38 +347,42 @@ export default function SubscriptionScreen() {
     } catch (err: any) {
       showAlert('Purchase Failed', err?.message || 'Something went wrong. Please try again.');
     } finally {
-      setLoading(false);
+      safeSetState(setLoading, false);
     }
   };
 
   // ── "Buy on Web" (Plus only) — Stripe hosted checkout in browser ──
   const handleBuyOnWeb = async () => {
     if (loading) return;
-    setLoading(true);
+    safeSetState(setLoading, true);
     try {
       await purchasePlusWithStripe('plus');
     } catch (err: any) {
       showAlert('Error', err?.message || 'Could not open web checkout');
     } finally {
-      setLoading(false);
+      safeSetState(setLoading, false);
     }
   };
 
   // ── Restore purchases ──
   const handleRestore = async () => {
-    setRestoring(true);
+    safeSetState(setRestoring, true);
     try {
       if (Platform.OS !== 'web') {
         try {
-          const Purchases = require('react-native-purchases').default;
+          const rcModule = await import('react-native-purchases');
+          const Purchases = rcModule.default || rcModule.Purchases || rcModule;
+          if (!Purchases || typeof Purchases.configure !== 'function') {
+            throw new Error('RevenueCat SDK not available');
+          }
           const apiKey = RC_API_KEY ||
             (Platform.OS === 'ios'
               ? (process.env.EXPO_PUBLIC_RC_IOS_KEY || '')
               : (process.env.EXPO_PUBLIC_RC_ANDROID_KEY || ''));
           if (apiKey) {
-            try { Purchases.configure({ apiKey }); } catch (_e) {}
+            try { await Purchases.configure({ apiKey }); } catch (_e) {}
             const customerInfo = await Purchases.restorePurchases();
-            const hasActive = Object.keys(customerInfo.entitlements.active).length > 0;
+            const hasActive = Object.keys(customerInfo.entitlements?.active || {}).length > 0;
             if (hasActive && user?.id) {
               await supabase.from('user_profiles').update({ subscription_tier: 'go' }).eq('id', user.id);
               showAlert('Purchases Restored', 'Your Dawinix Go subscription has been restored.');
@@ -359,7 +390,9 @@ export default function SubscriptionScreen() {
               return;
             }
           }
-        } catch (_e) {}
+        } catch (_e) {
+          // Silently fail - RevenueCat not available in Expo Go
+        }
       }
       await restorePurchases();
       await checkSubscriptionStatus();
@@ -367,7 +400,7 @@ export default function SubscriptionScreen() {
     } catch (_e) {
       showAlert('No Purchases Found', 'No previous purchases were found for this account.');
     } finally {
-      setRestoring(false);
+      safeSetState(setRestoring, false);
     }
   };
 
@@ -400,15 +433,27 @@ export default function SubscriptionScreen() {
 
       {/* Close button */}
       <View style={[styles.closeWrap, { top: insets.top + 12 }]}>
-        <BlurView intensity={40} tint={T.blurTint} style={styles.closeBlur}>
-          <TouchableOpacity
-            style={styles.closeBtn}
-            onPress={() => router.back()}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Ionicons name="close" size={20} color={T.text} />
-          </TouchableOpacity>
-        </BlurView>
+        {Platform.OS === 'ios' ? (
+          <BlurView intensity={40} tint={T.blurTint} style={styles.closeBlur} experimentalBlurMethod="dimezisBlurView">
+            <TouchableOpacity
+              style={styles.closeBtn}
+              onPress={() => router.back()}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons name="close" size={20} color={T.text} />
+            </TouchableOpacity>
+          </BlurView>
+        ) : (
+          <View style={[styles.closeBlur, { backgroundColor: T.dark ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.7)' }]}>
+            <TouchableOpacity
+              style={styles.closeBtn}
+              onPress={() => router.back()}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons name="close" size={20} color={T.text} />
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
 
       <ScrollView
@@ -452,83 +497,159 @@ export default function SubscriptionScreen() {
         </Text>
 
         {/* Plan toggle (glass pill) */}
-        <BlurView intensity={60} tint={T.blurTint} style={[styles.toggle, { borderColor: T.cardBorder }]}>
-          {(['go', 'plus'] as const).map((p) => (
-            <TouchableOpacity
-              key={p}
-              style={[
-                styles.toggleBtn,
-                selectedPlan === p && { backgroundColor: planColor + (T.dark ? 'CC' : 'DD') },
-              ]}
-              onPress={() => setSelectedPlan(p)}
-            >
-              <Text
+        {Platform.OS === 'ios' ? (
+          <BlurView intensity={60} tint={T.blurTint} style={[styles.toggle, { borderColor: T.cardBorder }]} experimentalBlurMethod="dimezisBlurView">
+            {(['go', 'plus'] as const).map((p) => (
+              <TouchableOpacity
+                key={p}
                 style={[
-                  styles.toggleText,
-                  { color: selectedPlan === p ? '#FFF' : T.toggleTextInactive },
-                  selectedPlan === p && { fontWeight: '700' },
+                  styles.toggleBtn,
+                  selectedPlan === p && { backgroundColor: planColor + (T.dark ? 'CC' : 'DD') },
                 ]}
+                onPress={() => setSelectedPlan(p)}
               >
-                {p === 'go' ? '⚡ Go' : '✨ Plus'}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </BlurView>
+                <Text
+                  style={[
+                    styles.toggleText,
+                    { color: selectedPlan === p ? '#FFF' : T.toggleTextInactive },
+                    selectedPlan === p && { fontWeight: '700' },
+                  ]}
+                >
+                  {p === 'go' ? '⚡ Go' : '✨ Plus'}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </BlurView>
+        ) : (
+          <View style={[styles.toggle, { borderColor: T.cardBorder, backgroundColor: T.dark ? 'rgba(28,28,30,0.85)' : 'rgba(255,255,255,0.75)' }]}>
+            {(['go', 'plus'] as const).map((p) => (
+              <TouchableOpacity
+                key={p}
+                style={[
+                  styles.toggleBtn,
+                  selectedPlan === p && { backgroundColor: planColor + (T.dark ? 'CC' : 'DD') },
+                ]}
+                onPress={() => setSelectedPlan(p)}
+              >
+                <Text
+                  style={[
+                    styles.toggleText,
+                    { color: selectedPlan === p ? '#FFF' : T.toggleTextInactive },
+                    selectedPlan === p && { fontWeight: '700' },
+                  ]}
+                >
+                  {p === 'go' ? '⚡ Go' : '✨ Plus'}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
 
         {/* Payment badge (glass) */}
-        <BlurView
-          intensity={50}
-          tint={T.blurTint}
-          style={[styles.paymentBadge, { borderColor: planColor + '55' }]}
-        >
-          <View style={styles.paymentBadgeRow}>
-            <Ionicons
-              name={selectedPlan === 'go' ? 'logo-apple' : 'card-outline'}
-              size={18}
-              color={planColor}
-            />
-            <Text style={[styles.paymentBadgeText, { color: planColor }]}>
-              {'  '}
-              {selectedPlan === 'go'
-                ? 'Apple In-App Purchase · Face ID'
-                : 'Card · Apple Pay · Google Pay via Stripe'}
-            </Text>
+        {Platform.OS === 'ios' ? (
+          <BlurView
+            intensity={50}
+            tint={T.blurTint}
+            style={[styles.paymentBadge, { borderColor: planColor + '55' }]}
+            experimentalBlurMethod="dimezisBlurView"
+          >
+            <View style={styles.paymentBadgeRow}>
+              <Ionicons
+                name={selectedPlan === 'go' ? 'logo-apple' : 'card-outline'}
+                size={18}
+                color={planColor}
+              />
+              <Text style={[styles.paymentBadgeText, { color: planColor }]}>
+                {'  '}
+                {selectedPlan === 'go'
+                  ? 'Apple In-App Purchase · Face ID'
+                  : 'Card · Apple Pay · Google Pay via Stripe'}
+              </Text>
+            </View>
+          </BlurView>
+        ) : (
+          <View style={[styles.paymentBadge, { borderColor: planColor + '55', backgroundColor: T.dark ? 'rgba(28,28,30,0.7)' : 'rgba(255,255,255,0.6)' }]}>
+            <View style={styles.paymentBadgeRow}>
+              <Ionicons
+                name={selectedPlan === 'go' ? 'logo-apple' : 'card-outline'}
+                size={18}
+                color={planColor}
+              />
+              <Text style={[styles.paymentBadgeText, { color: planColor }]}>
+                {'  '}
+                {selectedPlan === 'go'
+                  ? 'Apple In-App Purchase · Face ID'
+                  : 'Card · Apple Pay · Google Pay via Stripe'}
+              </Text>
+            </View>
           </View>
-        </BlurView>
+        )}
 
         {/* Features table (glass card) */}
-        <BlurView
-          intensity={55}
-          tint={T.blurTint}
-          style={[styles.featureCard, { borderColor: T.cardBorder }]}
-        >
-          <View style={[styles.featureRow, { borderBottomColor: T.surfaceBorder, borderBottomWidth: StyleSheet.hairlineWidth }]}>
-            <Text style={[styles.featureHeaderLabel, { color: T.textSec }]}>Features</Text>
-            <Text style={[styles.featureHeaderFree, { color: T.text }]}>Free</Text>
-            <Text style={[styles.featureHeaderPlan, { color: planColor }]}>
-              {selectedPlan === 'go' ? 'Go' : 'Plus'}
-            </Text>
-          </View>
-          {features.map((f, i) => (
-            <View
-              key={f.label}
-              style={[
-                styles.featureRow,
-                i < features.length - 1 && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: T.surfaceBorder },
-              ]}
-            >
-              <Text style={[styles.featureLabel, { color: T.text }]}>{f.label}</Text>
-              <View style={styles.featureCheck}>
-                {f.free
-                  ? <Ionicons name="checkmark" size={18} color={T.featureCheckInactive} />
-                  : <Text style={[styles.featureDash, { color: T.featureDash }]}>—</Text>}
-              </View>
-              <View style={styles.featureCheck}>
-                <Ionicons name="checkmark-circle" size={18} color={planColor} />
-              </View>
+        {Platform.OS === 'ios' ? (
+          <BlurView
+            intensity={55}
+            tint={T.blurTint}
+            style={[styles.featureCard, { borderColor: T.cardBorder }]}
+            experimentalBlurMethod="dimezisBlurView"
+          >
+            <View style={[styles.featureRow, { borderBottomColor: T.surfaceBorder, borderBottomWidth: StyleSheet.hairlineWidth }]}>
+              <Text style={[styles.featureHeaderLabel, { color: T.textSec }]}>Features</Text>
+              <Text style={[styles.featureHeaderFree, { color: T.text }]}>Free</Text>
+              <Text style={[styles.featureHeaderPlan, { color: planColor }]}>
+                {selectedPlan === 'go' ? 'Go' : 'Plus'}
+              </Text>
             </View>
-          ))}
-        </BlurView>
+            {features.map((f, i) => (
+              <View
+                key={f.label}
+                style={[
+                  styles.featureRow,
+                  i < features.length - 1 && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: T.surfaceBorder },
+                ]}
+              >
+                <Text style={[styles.featureLabel, { color: T.text }]}>{f.label}</Text>
+                <View style={styles.featureCheck}>
+                  {f.free
+                    ? <Ionicons name="checkmark" size={18} color={T.featureCheckInactive} />
+                    : <Text style={[styles.featureDash, { color: T.featureDash }]}>—</Text>}
+                </View>
+                <View style={styles.featureCheck}>
+                  <Ionicons name="checkmark-circle" size={18} color={planColor} />
+                </View>
+              </View>
+            ))}
+          </BlurView>
+        ) : (
+          <View style={[styles.featureCard, { borderColor: T.cardBorder, backgroundColor: T.dark ? 'rgba(28,28,30,0.85)' : 'rgba(255,255,255,0.75)' }]}>
+            <View style={[styles.featureRow, { borderBottomColor: T.surfaceBorder, borderBottomWidth: StyleSheet.hairlineWidth }]}>
+              <Text style={[styles.featureHeaderLabel, { color: T.textSec }]}>Features</Text>
+              <Text style={[styles.featureHeaderFree, { color: T.text }]}>Free</Text>
+              <Text style={[styles.featureHeaderPlan, { color: planColor }]}>
+                {selectedPlan === 'go' ? 'Go' : 'Plus'}
+              </Text>
+            </View>
+            {features.map((f, i) => (
+              <View
+                key={f.label}
+                style={[
+                  styles.featureRow,
+                  i < features.length - 1 && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: T.surfaceBorder },
+                ]}
+              >
+                <Text style={[styles.featureLabel, { color: T.text }]}>{f.label}</Text>
+                <View style={styles.featureCheck}>
+                  {f.free
+                    ? <Ionicons name="checkmark" size={18} color={T.featureCheckInactive} />
+                    : <Text style={[styles.featureDash, { color: T.featureDash }]}>—</Text>}
+                </View>
+                <View style={styles.featureCheck}>
+                  <Ionicons name="checkmark-circle" size={18} color={planColor} />
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
 
         {/* Restore */}
         <TouchableOpacity onPress={handleRestore} style={styles.restoreBtn} disabled={restoring}>
@@ -539,11 +660,13 @@ export default function SubscriptionScreen() {
       </ScrollView>
 
       {/* ── Bottom CTA (glass bar) ── */}
-      <BlurView
-        intensity={80}
-        tint={T.blurTint}
-        style={[styles.bottomCTA, { paddingBottom: insets.bottom + 20, borderTopColor: T.cardBorder }]}
-      >
+      {Platform.OS === 'ios' ? (
+        <BlurView
+          intensity={80}
+          tint={T.blurTint}
+          style={[styles.bottomCTA, { paddingBottom: insets.bottom + 20, borderTopColor: T.cardBorder }]}
+          experimentalBlurMethod="dimezisBlurView"
+        >
         {/* Active badge */}
         {user && isAlreadySubscribed && (
           <View style={styles.activeBadge}>
@@ -655,13 +778,129 @@ export default function SubscriptionScreen() {
             <Text style={[styles.refreshText, { color: T.textTertiary }]}>Refresh Status</Text>
           </TouchableOpacity>
         )}
-      </BlurView>
+        </BlurView>
+      ) : (
+        <View
+          style={[styles.bottomCTA, { paddingBottom: insets.bottom + 20, borderTopColor: T.cardBorder, backgroundColor: T.bottomBg }]}
+        >
+          {/* Active badge */}
+          {user && isAlreadySubscribed && (
+            <View style={styles.activeBadge}>
+              <Ionicons name="checkmark-circle" size={15} color="#34C759" />
+              <Text style={styles.activeBadgeText}>
+                {subscriptionInfo?.plan?.toUpperCase()} active
+                {subscriptionInfo?.subscription_end
+                  ? ` · renews ${new Date(subscriptionInfo.subscription_end).toLocaleDateString()}`
+                  : ''}
+              </Text>
+            </View>
+          )}
+
+          {isAlreadySubscribed ? (
+            <TouchableOpacity
+              style={[
+                styles.primaryBtn,
+                { backgroundColor: T.dark ? '#2C2C2E' : '#E5E5EA', borderWidth: 1, borderColor: T.cardBorder },
+              ]}
+              onPress={handleManage}
+              disabled={managing}
+            >
+              {managing
+                ? <ActivityIndicator color={T.text} />
+                : <Text style={[styles.primaryBtnText, { color: T.text }]}>Manage Subscription</Text>}
+            </TouchableOpacity>
+          ) : selectedPlan === 'go' ? (
+            <>
+              <TouchableOpacity
+                style={[
+                  styles.primaryBtn,
+                  { backgroundColor: '#000', borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
+                  loading && styles.btnDisabled,
+                ]}
+                onPress={handleUpgrade}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#FFF" />
+                ) : (
+                  <View style={styles.btnRow}>
+                    <Ionicons name="logo-apple" size={20} color="#FFF" />
+                    <Text style={[styles.primaryBtnText, { color: '#FFF' }]}>
+                      {goButtonLabel} — {planPrice}/mo
+                    </Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+              <Text style={[styles.note, { color: T.noteText }]}>
+                Billed via Apple. Manage in Settings → Subscriptions.
+              </Text>
+            </>
+          ) : (
+            <>
+              <TouchableOpacity
+                style={[
+                  styles.primaryBtn,
+                  { backgroundColor: T.dark ? '#FFF' : '#000' },
+                  loading && styles.btnDisabled,
+                ]}
+                onPress={() => router.push({ pathname: '/checkout', params: { plan: 'plus', priceId: STRIPE_PRICES.plus, price: '19.99', name: 'Dawinix Plus' } })}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator color={T.dark ? '#000' : '#FFF'} />
+                ) : (
+                  <View style={styles.btnRow}>
+                    <Ionicons name="card-outline" size={20} color={T.dark ? '#000' : '#FFF'} />
+                    <Text style={[styles.primaryBtnText, { color: T.dark ? '#000' : '#FFF' }]}>
+                      {plusButtonLabel} — {planPrice}/mo
+                    </Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.webBtn,
+                  { backgroundColor: T.webBtnBg, borderColor: T.webBtnBorder },
+                  loading && styles.btnDisabled,
+                ]}
+                onPress={handleBuyOnWeb}
+                disabled={loading}
+              >
+                <Ionicons name="globe-outline" size={16} color={T.webBtnText} />
+                <Text style={[styles.webBtnText, { color: T.webBtnText }]}>Buy on Web</Text>
+                <Ionicons name="open-outline" size={14} color={T.textTertiary} />
+              </TouchableOpacity>
+
+              <Text style={[styles.note, { color: T.noteText }]}>
+                Apple Pay &amp; Google Pay available at checkout.{'
+'}
+                DAWINIX2026 — 20% off applied automatically.
+              </Text>
+            </>
+          )}
+
+          {/* Refresh */}
+          {user && (
+            <TouchableOpacity
+              onPress={checkSubscriptionStatus}
+              style={styles.refreshBtn}
+              disabled={checkingStatus}
+            >
+              {checkingStatus
+                ? <ActivityIndicator size="small" color={T.textTertiary} />
+                : <Ionicons name="refresh" size={13} color={T.textTertiary} />}
+              <Text style={[styles.refreshText, { color: T.textTertiary }]}>Refresh Status</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, position: 'relative', overflow: 'hidden' },
+  root: { flex: 1, position: 'relative', overflow: 'hidden', paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight || 0 : 0 },
 
   // Decorative blobs
   blob1: {
@@ -868,4 +1107,4 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   refreshText: { fontSize: 11 },
-});
+}); 
