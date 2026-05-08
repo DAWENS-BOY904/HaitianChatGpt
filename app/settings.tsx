@@ -652,6 +652,14 @@ export default function SettingsScreen() {
   const switchTrackFalse = isDark ? '#3A3A3C' : '#E5E5EA';
   const switchTrackTrue = '#34C759';
 
+  const openLink = (url: string) => {
+    if (url.startsWith('/')) {
+      router.push(url as any);
+    } else {
+      Linking.openURL(url);
+    }
+  };
+
   useEffect(() => {
     checkAdminAccess();
     AsyncStorage.getItem(AGE_VERIFIED_KEY).then(val => {
@@ -1198,57 +1206,25 @@ export default function SettingsScreen() {
 <SectionLabel text="About" />
 
 <Card>
-  <Row
-    icon="bug-outline"
-    label="Report bug"
-    showChevron={false}
-    onPress={() => openLink('/bugreport')}
-  />
-
-  <Row
-    icon="help-circle-outline"
-    label="Help Center"
-    showChevron={false}
-    onPress={() => openLink('https://yourdomain.com/help')}
-  />
-
-  <Row
-    icon="document-text-outline"
-    label="Terms of Use"
-    showChevron={false}
-    onPress={() => openLink('https://yourdomain.com/terms')}
-  />
-
-  <Row
-    icon="shield-checkmark-outline"
-    label="Privacy Policy"
-    showChevron={false}
-    onPress={() => openLink('https://yourdomain.com/privacy')}
-  />
-
-  {/* CHECK UPDATE */}
-  <Row
-    icon={null} // ❌ remove old icon
-    label="Check for updates"
-    isLast
-    showChevron={false}
-    onPress={handleUpdatePress}
-    rightEl={
-      updateStatus === 'checking' ? (
-        <ActivityIndicator size="small" color={secondaryText} />
-      ) : (
-        <View
-          style={{
-            width: 10,
-            height: 10,
-            borderRadius: 5,
-            backgroundColor: isDarkMode ? '#fff' : '#000' // ⚫⚪ dot
-          }}
-        />
-      )
-    }
-  />
-</Card>
+          <Row icon="bug-outline" label="Report bug" showChevron={false} onPress={() => openLink('/bugreport')} />
+          <Row icon="help-circle-outline" label="Help Center" showChevron={false} onPress={() => openLink('https://yourdomain.com/help')} />
+          <Row icon="document-text-outline" label="Terms of Use" showChevron={false} onPress={() => openLink('https://yourdomain.com/terms')} />
+          <Row icon="shield-checkmark-outline" label="Privacy Policy" showChevron={false} onPress={() => openLink('https://yourdomain.com/privacy')} />
+          <Row
+            icon="sync-outline"
+            label="Check for updates"
+            isLast
+            showChevron={false}
+            onPress={handleUpdatePress}
+            rightEl={
+              updateStatus === 'checking' ? (
+                <ActivityIndicator size="small" color={secondaryText} />
+              ) : (
+                <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: isDark ? '#fff' : '#000' }} />
+              )
+            }
+          />
+        </Card>
 
         {/* LOG OUT — separate card with arrow icon like ChatGPT */}
         <View style={{ marginTop: 24, marginHorizontal: 16, marginBottom: 8 }}>
@@ -1426,4 +1402,3 @@ export default function SettingsScreen() {
     </View>
   );
 }
-fix all error.
