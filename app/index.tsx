@@ -17,10 +17,6 @@ import { useTheme } from '../hooks/useTheme';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
-// ── FIX: Static namespace import so signInAsync exists ──
-import * as AppleAuthentication from 'expo-apple-authentication';
-// ── FIX: Use expo-crypto for SHA-256 (works in RN, unlike crypto.subtle) ──
-import * as Crypto from 'expo-crypto';
 
 const WELCOME_PHRASES = [
   "Let's brainstorm",
@@ -54,16 +50,23 @@ function GoogleLogo({ size = 20 }: { size?: number }) {
   );
 }
 
-// ── Apple Sign-In ──
+// ── Apple Sign-In (dynamic import to avoid web bundle errors) ──
 async function performAppleSignIn(showAlert: (title: string, msg?: string) => void): Promise<{ user: any; error?: string }> {
   if (Platform.OS !== 'ios') return { user: null, error: 'Apple Sign In is only available on iOS.' };
-  
+
+  let AppleAuthentication: any;
+  let Crypto: any;
   try {
-    // FIX: Use statically imported namespace — signInAsync is a named export on the namespace
+    AppleAuthentication = require('expo-apple-authentication');
+    Crypto = require('expo-crypto');
+  } catch (_e) {
+    return { user: null, error: 'Apple Sign In requires a native development build.' };
+  }
+
+  try {
     const available = await AppleAuthentication.isAvailableAsync();
     if (!available) return { user: null, error: 'Apple Sign In is not available on this device.' };
 
-    // FIX: Generate nonce using expo-crypto instead of crypto.subtle (not available in RN)
     const rawNonce = Array.from({ length: 32 }, () =>
       'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'[
         Math.floor(Math.random() * 62)
@@ -91,10 +94,9 @@ async function performAppleSignIn(showAlert: (title: string, msg?: string) => vo
       token: credential.identityToken,
       nonce: rawNonce,
     });
-    
+
     if (error) return { user: null, error: error.message };
-    
-    // FIX: Save name/email on first sign-in (Apple only sends these once)
+
     if (credential.fullName || credential.email) {
       const updates: any = {};
       if (credential.fullName?.givenName || credential.fullName?.familyName) {
@@ -111,10 +113,9 @@ async function performAppleSignIn(showAlert: (title: string, msg?: string) => vo
         await supabase.auth.updateUser(updates);
       }
     }
-    
+
     return { user: data?.user ?? null };
   } catch (e: any) {
-    // FIX: Correct error code for expo-apple-authentication is ERR_REQUEST_CANCELED
     if (e?.code === 'ERR_REQUEST_CANCELED') return { user: null };
     return { user: null, error: e?.message || 'Apple Sign In failed' };
   }
