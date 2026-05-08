@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,7 +11,6 @@ import {
   ActivityIndicator,
   BackHandler,
   Alert,
-  Pressable,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
@@ -21,6 +20,7 @@ import Animated, {
   useAnimatedStyle,
   withSpring,
   withTiming,
+  FadeInUp,
   runOnJS,
   interpolate,
   Extrapolate,
@@ -37,12 +37,6 @@ import { useAuth } from '@/template';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-const ADMIN_EMAILS = ['berryxoe@gmail.com', 'newdawens@gmail.com', 'kontgithub@gmail.com'];
-
-// Photo selection limits
-const FREE_PHOTO_LIMIT = 3;
-const PRO_PHOTO_LIMIT = 10;
-
 interface ToolsModalProps {
   visible: boolean;
   onClose: () => void;
@@ -57,15 +51,14 @@ interface ToolsModalProps {
   onConnectApp?: () => void;
 }
 
-interface RecentPhoto {
-  uri: string;
-  id: string;
-}
-
-interface SelectedPhoto {
-  uri: string;
-  order: number;
-}
+const THEME = {
+  bg: '#F2F2F7',
+  surface: '#FFFFFF',
+  border: '#E5E5EA',
+  text: '#1C1C1E',
+  sub: '#8E8E93',
+  accent: '#007AFF',
+};
 
 export function ToolsModal({
   visible,
@@ -85,19 +78,25 @@ export function ToolsModal({
   const { isDark } = useTheme();
   const { tier } = useSubscription();
   const { user } = useAuth();
-
-  const isAdmin = user?.email ? ADMIN_EMAILS.includes(user.email.toLowerCase()) : false;
-  const isPro = isAdmin || tier === 'plus' || tier === 'go';
-  const isGuest = !user;
-
-  const photoLimit = isPro ? PRO_PHOTO_LIMIT : FREE_PHOTO_LIMIT;
-
+  const ADMIN_EMAILS = ['berryxoe@gmail.com', 'newdawens@gmail.com', 'kontgithub@gmail.com'];
+  const isAdminUser = user?.email ? ADMIN_EMAILS.includes(user.email.toLowerCase()) : false;
+  // Carousel is only for free plan users — Pro/Plus/Admin see standard picker
+  const showCarousel = !isAdminUser && tier !== 'plus' && tier !== 'go';
+  const [showWebOptions, setShowWebOptions] = useState(false);
+  const [webMode, setWebMode] = useState<'auto' | 'off'>('auto');
   const [loading, setLoading] = useState<string | null>(null);
   const [rendered, setRendered] = useState(false);
-  const [recentPhotos, setRecentPhotos] = useState<RecentPhoto[]>([]);
-  // Map of uri -> selection order (1-based)
-  const [selectedPhotos, setSelectedPhotos] = useState<Map<string, number>>(new Map());
-  const selectionCounter = useRef(0);
+  const [selectedFilesPreview, setSelectedFilesPreview] = useState<{
+    name: string;
+    size: number;
+    mimeType: string;
+    uri: string;
+    isImage: boolean;
+    isVideo?: boolean;
+  }[]>([]);
+  // Recent photos carousel
+  const [recentPhotos, setRecentPhotos] = useState<Array<{ uri: string; id: string }>>([]);
+  const [selectedRecentUris, setSelectedRecentUris] = useState<Set<string>>(new Set());
 
   const translateY = useSharedValue(SCREEN_HEIGHT);
   const opacity = useSharedValue(0);
@@ -105,18 +104,17 @@ export function ToolsModal({
   useEffect(() => {
     if (visible) {
       setRendered(true);
-      selectionCounter.current = 0;
-      setSelectedPhotos(new Map());
       translateY.value = withSpring(0, { damping: 26, stiffness: 300, mass: 0.8 });
-      opacity.value = withTiming(1, { duration: 220 });
+      opacity.value = withTiming(1, { duration: 240 });
       loadRecentPhotos();
     } else {
       translateY.value = withSpring(SCREEN_HEIGHT, { damping: 26, stiffness: 300 });
       opacity.value = withTiming(0, { duration: 180 });
       const t = setTimeout(() => {
         setRendered(false);
-        setSelectedPhotos(new Map());
-        selectionCounter.current = 0;
+        setShowWebOptions(false);
+        setSelectedFilesPreview([]);
+        setSelectedRecentUris(new Set());
       }, 280);
       return () => clearTimeout(t);
     }
@@ -128,44 +126,36 @@ export function ToolsModal({
       if (status !== 'granted') return;
       const { assets } = await MediaLibrary.getAssetsAsync({
         mediaType: MediaLibrary.MediaType.photo,
-        first: 20,
+        first: 10,
         sortBy: MediaLibrary.SortBy.creationTime,
       });
       setRecentPhotos(assets.map(a => ({ uri: a.uri, id: a.id })));
     } catch (_e) {}
   };
 
-  const togglePhoto = useCallback((uri: string) => {
-    setSelectedPhotos(prev => {
-      const next = new Map(prev);
+  const toggleRecentPhoto = (uri: string) => {
+    setSelectedRecentUris(prev => {
+      const next = new Set(prev);
       if (next.has(uri)) {
-        // Deselect — re-number remaining in order
         next.delete(uri);
-        // Rebuild order numbers
-        const entries = Array.from(next.entries()).sort((a, b) => a[1] - b[1]);
-        next.clear();
-        entries.forEach(([u], i) => next.set(u, i + 1));
-        selectionCounter.current = next.size;
-      } else {
-        if (next.size >= photoLimit) return prev; // blocked
-        selectionCounter.current += 1;
-        next.set(uri, selectionCounter.current);
+      } else if (next.size < 5) {
+        next.add(uri);
       }
       return next;
     });
-  }, [photoLimit]);
+  };
 
-  const handleAddPhotos = async () => {
-    if (selectedPhotos.size === 0) return;
-    setLoading('photos_send');
+  const sendRecentPhotos = async () => {
+    if (selectedRecentUris.size === 0) return;
+    setLoading('recent');
     try {
-      const ordered = Array.from(selectedPhotos.entries()).sort((a, b) => a[1] - b[1]);
-      const medias = ordered.map(([uri]) => ({
+      const medias = Array.from(selectedRecentUris).map(uri => ({
         type: 'image' as const,
         uri,
         mimeType: 'image/jpeg',
       }));
       onPickMedia(medias);
+      setSelectedRecentUris(new Set());
       onClose();
     } catch (_e) {}
     finally { setLoading(null); }
@@ -181,9 +171,10 @@ export function ToolsModal({
 
   const modalStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: translateY.value }],
+    opacity: opacity.value,
   }));
 
-  const backdropOpacity = useAnimatedStyle(() => ({
+  const backdropStyle = useAnimatedStyle(() => ({
     opacity: interpolate(opacity.value, [0, 1], [0, 1], Extrapolate.CLAMP),
   }));
 
@@ -191,6 +182,7 @@ export function ToolsModal({
     .onUpdate((e) => {
       if (e.translationY > 0) {
         translateY.value = e.translationY;
+        opacity.value = 1 - e.translationY / (SCREEN_HEIGHT * 0.5);
       }
     })
     .onEnd((e) => {
@@ -198,17 +190,46 @@ export function ToolsModal({
         runOnJS(onClose)();
       } else {
         translateY.value = withSpring(0, { damping: 26, stiffness: 300 });
+        opacity.value = withTiming(1, { duration: 200 });
       }
     });
 
+  // ── CAMERA ──────────────────────────────────────────────────────────────
   const handleCamera = async () => {
     setLoading('camera');
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission required', 'Camera permission is required.');
+      if (status !== 'granted') { Alert.alert('Permission required', 'Camera permission is required.'); return; }
+
+      if (Platform.OS === 'android') {
+        Alert.alert('Select Media Type', 'What would you like to capture?', [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Photo', onPress: async () => {
+            const result = await ImagePicker.launchCameraAsync({
+              mediaTypes: ImagePicker.MediaTypeOptions.Images,
+              quality: 0.85,
+              base64: true,
+            });
+            if (!result.canceled && result.assets[0]) {
+              onPickMedia([{ type: 'image', uri: result.assets[0].uri, base64: result.assets[0].base64, mimeType: 'image/jpeg' }]);
+              onClose();
+            }
+          }},
+          { text: 'Video', onPress: async () => {
+            const result = await ImagePicker.launchCameraAsync({
+              mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+              quality: 0.85,
+            });
+            if (!result.canceled && result.assets[0]) {
+              onPickMedia([{ type: 'video', uri: result.assets[0].uri, mimeType: 'video/mp4' }]);
+              onClose();
+            }
+          }},
+        ]);
+        setLoading(null);
         return;
       }
+
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.All,
         quality: 0.85,
@@ -224,27 +245,25 @@ export function ToolsModal({
         }]);
         onClose();
       }
-    } catch (_e) {}
+    } catch (e) { console.error('Camera error:', e); }
     finally { setLoading(null); }
   };
 
-  const handleAllPhotos = async () => {
-    setLoading('allphotos');
+  // ── PHOTOS & VIDEOS ──────────────────────────────────────────────────────
+  const handlePhotos = async () => {
+    setLoading('photos');
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission required', 'Photo library permission is required.');
-        return;
-      }
+      if (status !== 'granted') { Alert.alert('Permission required', 'Photo library permission is required.'); return; }
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.All,
         allowsMultipleSelection: true,
         quality: 0.85,
         base64: true,
-        selectionLimit: photoLimit,
+        selectionLimit: 5,
       });
       if (!result.canceled && result.assets.length > 0) {
-        onPickMedia(result.assets.map(a => ({
+        onPickMedia(result.assets.map((a) => ({
           type: a.mimeType?.startsWith('video/') ? 'video' : 'image',
           uri: a.uri,
           base64: a.base64,
@@ -253,10 +272,42 @@ export function ToolsModal({
         })));
         onClose();
       }
-    } catch (_e) {}
+    } catch (e) { console.error('Photo picker error:', e); }
     finally { setLoading(null); }
   };
 
+  const formatBytes = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const getMimeIcon = (mime: string, ext: string): { icon: any; color: string } => {
+    const e = ext.toLowerCase();
+    if (mime.startsWith('image/') || ['jpg','jpeg','png','gif','webp','bmp','svg','ico','tiff','heic','heif','avif'].includes(e))
+      return { icon: 'image-outline', color: '#FF2D55' };
+    if (mime.startsWith('video/') || ['mp4','mov','avi','mkv','wmv','flv','webm','m4v','3gp','mpg','mpeg'].includes(e))
+      return { icon: 'videocam-outline', color: '#FF9500' };
+    if (mime.startsWith('audio/') || ['mp3','wav','aac','flac','ogg','m4a','wma','aiff','opus'].includes(e))
+      return { icon: 'musical-notes-outline', color: '#AF52DE' };
+    if (mime.includes('pdf') || e === 'pdf')
+      return { icon: 'document-text-outline', color: '#FF3B30' };
+    if (mime.includes('word') || ['doc','docx','odt','rtf'].includes(e))
+      return { icon: 'document-outline', color: '#2B5CE6' };
+    if (mime.includes('excel') || mime.includes('spreadsheet') || ['xls','xlsx','csv','ods'].includes(e))
+      return { icon: 'grid-outline', color: '#217346' };
+    if (mime.includes('powerpoint') || mime.includes('presentation') || ['ppt','pptx','odp'].includes(e))
+      return { icon: 'easel-outline', color: '#D24726' };
+    if (['js','ts','tsx','jsx','py','rb','go','rs','java','kt','swift','sh','css','html','htm','xml','json','yaml','yml','sql','php','c','cpp'].includes(e))
+      return { icon: 'code-outline', color: '#007AFF' };
+    if (mime.startsWith('text/') || ['txt','md','markdown','log'].includes(e))
+      return { icon: 'document-text-outline', color: '#8E8E93' };
+    if (['rar','7z','tar','gz','bz2'].includes(e))
+      return { icon: 'archive-outline', color: '#FF9F0A' };
+    return { icon: 'attach-outline', color: '#636366' };
+  };
+
+  // ── FILES ────────────────────────────────────────────────────────────────
   const handleFiles = async () => {
     setLoading('files');
     try {
@@ -266,228 +317,293 @@ export function ToolsModal({
         multiple: true,
       });
       if (!result.canceled && result.assets?.length > 0) {
-        const medias = result.assets.map(asset => {
-          const mime = (asset.mimeType || 'application/octet-stream').toLowerCase();
-          const isImg = mime.startsWith('image/');
+        const files = result.assets.map((asset) => {
           const ext = (asset.name || '').split('.').pop()?.toLowerCase() || '';
-          const isVideo = mime.startsWith('video/') || ['mp4','mov','avi','mkv','webm'].includes(ext);
-          return {
-            type: isImg ? 'image' : isVideo ? 'video' : 'document',
-            uri: asset.uri,
-            name: asset.name,
-            mimeType: mime,
-            size: asset.size,
-          };
+          const mime = (asset.mimeType || 'application/octet-stream').toLowerCase();
+          const isImage = mime.startsWith('image/');
+          const isVideo = mime.startsWith('video/') || ['mp4','mov','avi','mkv','wmv','flv','webm','m4v','3gp'].includes(ext);
+          return { name: asset.name || 'file', size: asset.size || 0, mimeType: mime, uri: asset.uri, isImage, isVideo };
         });
-        onPickMedia(medias);
-        onClose();
+        setSelectedFilesPreview(files);
       }
-    } catch (_e) {}
+    } catch (e) { console.error('File picker error:', e); }
     finally { setLoading(null); }
   };
 
-  if (!visible && !rendered) return null;
+  const confirmSendFiles = () => {
+    if (selectedFilesPreview.length === 0) return;
+    const media = selectedFilesPreview.map((f) => ({
+      type: f.isImage ? 'image' : f.isVideo ? 'video' : 'document',
+      uri: f.uri,
+      name: f.name,
+      mimeType: f.mimeType,
+      size: f.size,
+    }));
+    onPickMedia(media);
+    setSelectedFilesPreview([]);
+    onClose();
+  };
 
-  const bottomPad = Math.max(insets.bottom, 16);
-  const selectedCount = selectedPhotos.size;
-  const hasSelectedPhotos = selectedCount > 0;
+  const removeFile = (index: number) => {
+    setSelectedFilesPreview((prev) => prev.filter((_, i) => i !== index));
+  };
 
-  // ── Color tokens ──────────────────────────────────────────────────────────
-  const textPrimary = isDark ? '#FFFFFF' : '#000000';
-  const textSecondary = isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.5)';
-  const dividerColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)';
-  const rowBg = isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)';
-  const accentBlue = '#007AFF';
-
-  // ── TOOLS LIST ────────────────────────────────────────────────────────────
-  // Pro has full list, free/guest has limited
-  const toolItems = isGuest ? [
-    { id: 'create-image', icon: 'color-palette-outline', iconColor: '#FF6B6B', label: 'Create image', sub: 'Visualize anything', onPress: () => { onSelectTool?.('create-image'); onClose(); } },
-    { id: 'web-search',   icon: 'globe-outline',         iconColor: '#007AFF', label: 'Web Search',   sub: 'Find real-time news and info', onPress: () => { onSelectTool?.('web-search'); onClose(); } },
-    { id: 'deep-research',icon: 'search-outline',         iconColor: '#5AC8FA', label: 'Deep research',sub: 'Get a detailed report', onPress: () => { onDeepResearch?.(); onClose(); } },
-    { id: 'thinking',     icon: 'bulb-outline',           iconColor: '#FFD60A', label: 'Thinking',     sub: 'Think longer for better answers', onPress: () => { onSelectTool?.('thinking'); onClose(); } },
-    { id: 'add-files',    icon: 'attach-outline',         iconColor: '#8E8E93', label: 'Add files',    sub: 'Analyze or summarize', onPress: () => { handleFiles(); } },
-  ] : isPro ? [
-    { id: 'create-image', icon: 'color-palette-outline', iconColor: '#FF6B6B', label: 'Create image', sub: 'Visualize anything', onPress: () => { onSelectTool?.('create-image'); onClose(); } },
-    { id: 'thinking',     icon: 'bulb-outline',           iconColor: '#FFD60A', label: 'Thinking',     sub: 'Think longer for better answers', onPress: () => { onSelectTool?.('thinking'); onClose(); } },
-    { id: 'deep-research',icon: 'search-outline',         iconColor: '#5AC8FA', label: 'Deep research',sub: 'Get a detailed report', onPress: () => { onDeepResearch?.(); onClose(); } },
-    { id: 'web-search',   icon: 'globe-outline',         iconColor: '#007AFF', label: 'Web search',   sub: 'Find real-time news and info', onPress: () => { onSelectTool?.('web-search'); onClose(); } },
-    { id: 'add-files',    icon: 'attach-outline',         iconColor: '#8E8E93', label: 'Add files',    sub: 'Analyze or summarize', onPress: () => { handleFiles(); } },
-    { id: 'quiz',         icon: 'albums-outline',         iconColor: '#5AC8FA', label: 'Study & Quiz', sub: 'Test your knowledge', onPress: () => { onOpenQuiz?.(); onClose(); } },
-    { id: 'voice',        icon: 'mic-outline',            iconColor: '#34C759', label: 'Voice mode',   sub: 'Talk to your AI assistant', onPress: () => { router.push('/voice-control'); onClose(); } },
-    { id: 'presets',      icon: 'cube-outline',           iconColor: '#AF52DE', label: 'Presets',      sub: 'Quick behavior templates', onPress: () => { onOpenPresets?.(); onClose(); } },
-    { id: 'apps',         icon: 'apps-outline',           iconColor: '#FF9F0A', label: 'Explore apps', sub: 'Chat with apps in Dawinix', onPress: () => { onConnectApp?.(); onClose(); }, chevron: true },
-  ] : [
-    // Free plan
-    { id: 'create-image', icon: 'color-palette-outline', iconColor: '#FF6B6B', label: 'Create image', sub: 'Visualize anything', onPress: () => { onSelectTool?.('create-image'); onClose(); } },
-    { id: 'thinking',     icon: 'bulb-outline',           iconColor: '#FFD60A', label: 'Thinking',     sub: 'Think longer for better answers', onPress: () => { onSelectTool?.('thinking'); onClose(); } },
-    { id: 'deep-research',icon: 'search-outline',         iconColor: '#5AC8FA', label: 'Deep research',sub: 'Get a detailed report', onPress: () => { onDeepResearch?.(); onClose(); } },
-    { id: 'web-search',   icon: 'globe-outline',         iconColor: '#007AFF', label: 'Web search',   sub: 'Find real-time news and info', onPress: () => { onSelectTool?.('web-search'); onClose(); } },
-    { id: 'add-files',    icon: 'attach-outline',         iconColor: '#8E8E93', label: 'Add files',    sub: 'Analyze or summarize', onPress: () => { handleFiles(); } },
-    { id: 'quiz',         icon: 'albums-outline',         iconColor: '#5AC8FA', label: 'Study & learn',sub: 'Quiz and flashcard mode', onPress: () => { onOpenQuiz?.(); onClose(); } },
-    { id: 'apps',         icon: 'apps-outline',           iconColor: '#FF9F0A', label: 'Explore apps', sub: 'Chat with apps in Dawinix', onPress: () => { onConnectApp?.(); onClose(); }, chevron: true },
+  // ── Tools grids ──────────────────────────────────────────────────────────
+  const tools = [
+    { id: 'camera',  label: 'Camera',  icon: 'camera-outline',          action: handleCamera },
+    { id: 'photos',  label: 'Photos',  icon: 'image-outline',           action: handlePhotos },
+    { id: 'files',   label: 'Files',   icon: 'arrow-up-circle-outline', action: handleFiles  },
+    { id: 'quizzes', label: 'Quizzes', icon: 'albums-outline',          action: () => { onOpenQuiz?.(); onClose(); } },
+    { id: 'voice',   label: 'Call',    icon: 'call-outline',            action: () => { router.push('/voice-control'); onClose(); } },
+    { id: 'presets', label: 'Presets', icon: 'cube-outline',            action: () => { onOpenPresets?.(); onClose(); } },
+    { id: 'deep-research', label: 'Research', icon: 'search-outline',   action: () => { onDeepResearch?.(); onClose(); } },
   ];
 
-  // ── SHEET CONTENT ─────────────────────────────────────────────────────────
-  const sheetContent = (
-    <View style={{ flex: 0 }}>
-      {/* Drag Handle */}
-      <View style={styles.handleWrap}>
-        <View style={[styles.handle, { backgroundColor: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.2)' }]} />
-      </View>
+  if (!visible && !rendered) return null;
 
-      {/* Header row */}
-      <View style={styles.headerRow}>
-        <Text style={[styles.headerTitle, { color: textPrimary }]}>Dawinix</Text>
-        <TouchableOpacity onPress={handleAllPhotos} disabled={loading === 'allphotos'} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          {loading === 'allphotos'
-            ? <ActivityIndicator size="small" color={accentBlue} />
-            : <Text style={[styles.allPhotosBtn, { color: accentBlue }]}>All Photos</Text>}
-        </TouchableOpacity>
+  const bottomPad = Math.max(insets.bottom, 8);
+  const hasPendingPhotos = selectedRecentUris.size > 0;
+
+  const sheetContent = (
+    <>
+      {/* Drag handle */}
+      <View style={styles.handleWrap}>
+        <View style={[styles.handle, { backgroundColor: isDark ? 'rgba(255,255,255,0.3)' : '#C7C7CC' }]} />
       </View>
 
       <ScrollView
         showsVerticalScrollIndicator={false}
         bounces={false}
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ paddingBottom: bottomPad }}
+        contentContainerStyle={styles.scrollContent}
       >
-        {/* ── Photo Strip ─────────────────────────────────────────────── */}
-        {!isGuest ? (
-          <>
+        {/* Recent Photos Carousel — free plan only */}
+        {showCarousel && recentPhotos.length > 0 ? (
+          <View style={{ marginBottom: 14 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, paddingHorizontal: 2 }}>
+              <Text style={{ fontSize: 15, fontWeight: '700', color: isDark ? '#FFF' : THEME.text }}>Photos</Text>
+              <TouchableOpacity onPress={handlePhotos}>
+                <Text style={{ fontSize: 14, color: THEME.accent, fontWeight: '500' }}>Show All</Text>
+              </TouchableOpacity>
+            </View>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.photoStrip}
+              contentContainerStyle={{ gap: 6, paddingHorizontal: 2 }}
             >
               {/* Camera tile */}
               <TouchableOpacity
-                style={[styles.cameraTile, { backgroundColor: isDark ? 'rgba(60,60,67,0.5)' : 'rgba(0,0,0,0.07)' }]}
+                style={[photoStyles.tile, { backgroundColor: isDark ? 'rgba(60,60,67,0.6)' : 'rgba(0,0,0,0.06)', alignItems: 'center', justifyContent: 'center' }]}
                 onPress={handleCamera}
-                disabled={!!loading}
-                activeOpacity={0.75}
               >
-                {loading === 'camera'
-                  ? <ActivityIndicator color={isDark ? '#FFF' : '#555'} />
-                  : <Ionicons name="camera" size={28} color={isDark ? 'rgba(255,255,255,0.65)' : '#8E8E93'} />}
+                <Ionicons name="camera-outline" size={26} color={isDark ? 'rgba(255,255,255,0.7)' : '#8E8E93'} />
               </TouchableOpacity>
-
-              {/* Recent photos */}
               {recentPhotos.map((photo) => {
-                const order = selectedPhotos.get(photo.uri);
-                const isSelected = order !== undefined;
-                const isLimitReached = selectedPhotos.size >= photoLimit && !isSelected;
-
+                const isSelected = selectedRecentUris.has(photo.uri);
                 return (
                   <TouchableOpacity
-                    key={photo.id}
-                    style={[styles.photoTile, isLimitReached && styles.photoTileBlocked]}
-                    onPress={() => !isLimitReached && togglePhoto(photo.uri)}
-                    activeOpacity={isLimitReached ? 1 : 0.85}
-                    disabled={isLimitReached}
+                    key={photo.id || photo.uri}
+                    onPress={() => toggleRecentPhoto(photo.uri)}
+                    activeOpacity={0.82}
+                    style={{ position: 'relative' }}
                   >
                     <Image
                       source={{ uri: photo.uri }}
-                      style={[StyleSheet.absoluteFill, { borderRadius: 10 }]}
+                      style={[photoStyles.tile, isSelected && { opacity: 0.72 }]}
                       contentFit="cover"
                       transition={100}
                     />
-                    {/* Dim overlay when limit reached and not selected */}
-                    {isLimitReached && (
-                      <View style={styles.photoBlockOverlay} />
-                    )}
-                    {/* Selection badge / circle */}
-                    <View style={[
-                      styles.selCircle,
-                      isSelected && styles.selCircleActive,
-                    ]}>
-                      {isSelected
-                        ? <Text style={styles.selNumber}>{order}</Text>
-                        : null}
+                    <View style={[photoStyles.selCircle, isSelected && photoStyles.selCircleActive]}>
+                      {isSelected ? <Ionicons name="checkmark" size={11} color="#FFF" /> : null}
                     </View>
-                    {/* Blue border when selected */}
-                    {isSelected && <View style={styles.selectedBorder} />}
                   </TouchableOpacity>
                 );
               })}
             </ScrollView>
-
-            {/* Divider */}
-            <View style={[styles.divider, { backgroundColor: dividerColor }]} />
-          </>
+            {hasPendingPhotos ? (
+              <TouchableOpacity
+                style={[photoStyles.addBtn, { backgroundColor: THEME.accent }]}
+                onPress={sendRecentPhotos}
+                disabled={loading === 'recent'}
+                activeOpacity={0.85}
+              >
+                {loading === 'recent' ? (
+                  <ActivityIndicator size="small" color="#FFF" />
+                ) : (
+                  <>
+                    <Ionicons name="arrow-up" size={16} color="#FFF" />
+                    <Text style={{ color: '#FFF', fontWeight: '700', fontSize: 14 }}>
+                      Add {selectedRecentUris.size} photo{selectedRecentUris.size !== 1 ? 's' : ''}
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            ) : null}
+          </View>
         ) : null}
 
-        {/* ── Tool List ───────────────────────────────────────────────── */}
-        <View style={{ paddingHorizontal: 0 }}>
-          {toolItems.map((tool, i) => (
-            <TouchableOpacity
-              key={tool.id}
-              style={[
-                styles.toolRow,
-                i < toolItems.length - 1 && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: dividerColor },
-              ]}
-              onPress={tool.onPress}
-              activeOpacity={0.65}
-            >
-              {/* Icon */}
-              <View style={[styles.toolIconWrap, { backgroundColor: (tool.iconColor || '#888') + '1A' }]}>
-                <Ionicons name={tool.icon as any} size={22} color={tool.iconColor || textPrimary} />
-              </View>
-              {/* Text */}
-              <View style={styles.toolTextWrap}>
-                <Text style={[styles.toolLabel, { color: textPrimary }]}>{tool.label}</Text>
-                <Text style={[styles.toolSub, { color: textSecondary }]} numberOfLines={1}>{tool.sub}</Text>
-              </View>
-              {(tool as any).chevron
-                ? <Ionicons name="chevron-forward" size={16} color={isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.25)'} />
-                : null}
-            </TouchableOpacity>
-          ))}
+        {/* 3×N Icon Grid */}
+        <View style={styles.grid}>
+          {tools.map((tool, i) => {
+            const isLoading = loading === tool.id;
+            return (
+              <Animated.View
+                key={tool.id}
+                entering={FadeInUp.delay(i * 45).duration(300).springify()}
+                style={styles.cellWrap}
+              >
+                <TouchableOpacity
+                  style={[styles.cell, { backgroundColor: isDark ? 'rgba(60,60,67,0.6)' : 'rgba(255,255,255,0.85)' }]}
+                  activeOpacity={0.7}
+                  onPress={tool.action}
+                  disabled={!!loading}
+                >
+                  {isLoading ? (
+                    <ActivityIndicator color={isDark ? '#FFF' : '#555'} />
+                  ) : (
+                    <>
+                      <View style={styles.iconWrap}>
+                        <Ionicons name={tool.icon as any} size={28} color={isDark ? '#FFFFFF' : THEME.text} />
+                      </View>
+                      <Text style={[styles.cellLabel, { color: isDark ? '#FFFFFF' : THEME.text }]}>{tool.label}</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </Animated.View>
+            );
+          })}
         </View>
-      </ScrollView>
 
-      {/* ── "Add N photos" CTA ─────────────────────────────────────────── */}
-      {hasSelectedPhotos && (
-        <View style={[styles.addPhotosBtnWrap, { paddingBottom: bottomPad }]}>
+        {/* Files Preview */}
+        {selectedFilesPreview.length > 0 ? (
+          <Animated.View entering={FadeInUp.duration(300)} style={[
+            fpStyles.previewCard,
+            { backgroundColor: isDark ? 'rgba(60,60,67,0.6)' : 'rgba(255,255,255,0.85)' },
+          ]}>
+            <View style={fpStyles.previewHeader}>
+              <Text style={[fpStyles.previewTitle, { color: isDark ? '#FFF' : THEME.text }]}>
+                {selectedFilesPreview.length} file{selectedFilesPreview.length > 1 ? 's' : ''} ready
+              </Text>
+              <TouchableOpacity onPress={() => setSelectedFilesPreview([])}>
+                <Ionicons name="close" size={18} color={THEME.sub} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={{ maxHeight: 200 }} showsVerticalScrollIndicator nestedScrollEnabled>
+              {selectedFilesPreview.map((file, idx) => {
+                const ext = (file.name || '').split('.').pop()?.toLowerCase() || '';
+                const { icon, color } = getMimeIcon(file.mimeType, ext);
+                return (
+                  <View key={idx} style={fpStyles.fileRow}>
+                    {file.isImage ? (
+                      <Image source={{ uri: file.uri }} style={fpStyles.fileThumb} contentFit="cover" />
+                    ) : (
+                      <View style={[fpStyles.fileIconBox, { backgroundColor: color + '18' }]}>
+                        <Ionicons name={icon} size={24} color={color} />
+                      </View>
+                    )}
+                    <View style={fpStyles.fileMeta}>
+                      <Text style={[fpStyles.fileName, { color: isDark ? '#FFF' : THEME.text }]} numberOfLines={1}>{file.name}</Text>
+                      <Text style={fpStyles.fileSize}>{formatBytes(file.size)}</Text>
+                    </View>
+                    <TouchableOpacity onPress={() => removeFile(idx)} style={fpStyles.removeBtn}>
+                      <Ionicons name="close-circle" size={20} color={THEME.sub} />
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
+            </ScrollView>
+            <TouchableOpacity style={fpStyles.sendBtn} onPress={confirmSendFiles}>
+              <Ionicons name="arrow-up-circle" size={18} color="#FFF" />
+              <Text style={fpStyles.sendBtnText}>Attach {selectedFilesPreview.length} file{selectedFilesPreview.length > 1 ? 's' : ''}</Text>
+            </TouchableOpacity>
+          </Animated.View>
+        ) : null}
+
+        {/* Bottom rows */}
+        <Animated.View
+          entering={FadeInUp.delay(200).duration(300)}
+          style={[styles.rowsContainer, { backgroundColor: isDark ? 'rgba(60,60,67,0.6)' : 'rgba(255,255,255,0.85)' }]}
+        >
+          {/* Web search */}
           <TouchableOpacity
-            style={[styles.addPhotosBtn, { backgroundColor: isDark ? '#FFFFFF' : '#000000' }]}
-            onPress={handleAddPhotos}
-            disabled={loading === 'photos_send'}
-            activeOpacity={0.88}
+            style={styles.rowItem}
+            activeOpacity={0.7}
+            onPress={() => setShowWebOptions(!showWebOptions)}
           >
-            {loading === 'photos_send'
-              ? <ActivityIndicator color={isDark ? '#000' : '#FFF'} />
-              : <Text style={[styles.addPhotosBtnText, { color: isDark ? '#000000' : '#FFFFFF' }]}>
-                  Add {selectedCount} photo{selectedCount !== 1 ? 's' : ''}
-                </Text>}
+            <View style={styles.rowLeft}>
+              <View style={[styles.rowIconWrap, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : '#F2F2F7' }]}>
+                <Ionicons name="globe-outline" size={20} color={isDark ? '#FFFFFF' : THEME.text} />
+              </View>
+              <Text style={[styles.rowItemLabel, { color: isDark ? '#FFFFFF' : THEME.text }]}>Web search</Text>
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <Text style={styles.rowItemRight}>{webMode === 'auto' ? 'Auto' : 'Off'}</Text>
+              <Ionicons name="chevron-forward" size={16} color="#C7C7CC" />
+            </View>
           </TouchableOpacity>
-        </View>
-      )}
-    </View>
+
+          {showWebOptions ? (
+            <View style={[styles.webOptions, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]}>
+              {(['auto', 'off'] as const).map((mode) => (
+                <TouchableOpacity
+                  key={mode}
+                  style={[styles.webOption, webMode === mode && styles.webOptionActive]}
+                  onPress={() => { setWebMode(mode); setTimeout(() => setShowWebOptions(false), 250); }}
+                >
+                  <View>
+                    <Text style={[styles.webOptTitle, { color: isDark ? '#FFF' : THEME.text }]}>{mode === 'auto' ? 'Auto' : 'Off'}</Text>
+                    <Text style={styles.webOptSub}>{mode === 'auto' ? 'Browses the web when needed' : 'No web access'}</Text>
+                  </View>
+                  {webMode === mode ? <Ionicons name="checkmark" size={20} color={THEME.accent} /> : null}
+                </TouchableOpacity>
+              ))}
+            </View>
+          ) : null}
+
+          <View style={[styles.rowDivider, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : THEME.border }]} />
+
+          {/* Connect with App */}
+          <TouchableOpacity
+            style={styles.rowItem}
+            activeOpacity={0.7}
+            onPress={() => { onConnectApp?.(); onClose(); }}
+          >
+            <View style={styles.rowLeft}>
+              <View style={[styles.rowIconWrap, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : '#F2F2F7' }]}>
+                <Ionicons name="apps-outline" size={20} color={isDark ? '#FFFFFF' : THEME.text} />
+              </View>
+              <Text style={[styles.rowItemLabel, { color: isDark ? '#FFFFFF' : THEME.text }]}>Connect with App</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color="#C7C7CC" />
+          </TouchableOpacity>
+        </Animated.View>
+      </ScrollView>
+    </>
   );
 
   return (
     <Modal visible={visible} transparent animationType="none" statusBarTranslucent onRequestClose={onClose}>
       <View style={{ flex: 1, justifyContent: 'flex-end' }}>
-        {/* Backdrop — semi-transparent, tap to close */}
-        <Animated.View style={[StyleSheet.absoluteFill, backdropOpacity]}>
-          <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' }} onPress={onClose} />
+        {/* Blurred backdrop */}
+        <Animated.View style={[StyleSheet.absoluteFill, backdropStyle]}>
+          {Platform.OS === 'ios' ? (
+            <BlurView intensity={50} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
+          ) : null}
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0.25)' }]} />
+          <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onClose} />
         </Animated.View>
 
-        {/* Bottom sheet — BLUR is on the sheet itself, not the backdrop */}
         <GestureDetector gesture={pan}>
           <Animated.View style={[styles.sheetOuter, modalStyle]}>
             {Platform.OS === 'ios' ? (
               <BlurView
-                intensity={isDark ? 82 : 75}
+                intensity={isDark ? 80 : 70}
                 tint={isDark ? 'dark' : 'extraLight'}
-                style={styles.sheetBlur}
-                experimentalBlurMethod="dimezisBlurView"
+                style={[styles.sheetInner, { paddingBottom: bottomPad }]}
               >
                 {sheetContent}
               </BlurView>
             ) : (
-              <View style={[styles.sheetBlur, { backgroundColor: isDark ? 'rgba(22,22,24,0.97)' : 'rgba(248,248,250,0.98)' }]}>
+              <View style={[styles.sheetInner, { backgroundColor: isDark ? '#1C1C1E' : '#F2F2F7', paddingBottom: bottomPad }]}>
                 {sheetContent}
               </View>
             )}
@@ -498,137 +614,93 @@ export function ToolsModal({
   );
 }
 
-const TILE_SIZE = 82;
-
-const styles = StyleSheet.create({
-  sheetOuter: {
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -6 },
-    shadowOpacity: 0.25,
-    shadowRadius: 24,
-    elevation: 28,
-  },
-  sheetBlur: {
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    overflow: 'hidden',
-  },
-
-  handleWrap: { alignItems: 'center', paddingTop: 10, paddingBottom: 2 },
-  handle: { width: 36, height: 5, borderRadius: 3 },
-
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 10,
-    paddingBottom: 12,
-  },
-  headerTitle: { fontSize: 17, fontWeight: '700' },
-  allPhotosBtn: { fontSize: 15, fontWeight: '500' },
-
-  // Photo strip
-  photoStrip: {
-    paddingHorizontal: 14,
-    gap: 8,
-    paddingBottom: 14,
-  },
-  cameraTile: {
-    width: TILE_SIZE,
-    height: TILE_SIZE,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  photoTile: {
-    width: TILE_SIZE,
-    height: TILE_SIZE,
+const photoStyles = StyleSheet.create({
+  tile: {
+    width: 72,
+    height: 72,
     borderRadius: 10,
     overflow: 'hidden',
-    position: 'relative',
-  },
-  photoTileBlocked: {
-    opacity: 0.35,
-  },
-  photoBlockOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.3)',
-    borderRadius: 10,
-  },
-  selectedBorder: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: 10,
-    borderWidth: 2.5,
-    borderColor: '#007AFF',
   },
   selCircle: {
     position: 'absolute',
-    top: 5,
-    right: 5,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    top: 4,
+    right: 4,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.9)',
-    backgroundColor: 'rgba(0,0,0,0.25)',
+    borderColor: '#FFF',
+    backgroundColor: 'rgba(0,0,0,0.3)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   selCircleActive: {
-    backgroundColor: 'rgba(0,0,0,0.75)',
-    borderColor: '#FFF',
+    backgroundColor: '#007AFF',
+    borderColor: '#007AFF',
   },
-  selNumber: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '800',
-    lineHeight: 14,
-  },
-
-  divider: {
-    height: StyleSheet.hairlineWidth,
-    marginBottom: 4,
-  },
-
-  // Tool rows
-  toolRow: {
+  addBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    gap: 14,
-  },
-  toolIconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    alignItems: 'center',
     justifyContent: 'center',
+    gap: 6,
+    borderRadius: 20,
+    paddingVertical: 10,
+    marginTop: 8,
   },
-  toolTextWrap: { flex: 1 },
-  toolLabel: { fontSize: 16, fontWeight: '600', marginBottom: 2 },
-  toolSub: { fontSize: 13, lineHeight: 17 },
+});
 
-  // Add photos CTA
-  addPhotosBtnWrap: {
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(128,128,128,0.15)',
+const styles = StyleSheet.create({
+  sheetOuter: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 24,
   },
-  addPhotosBtn: {
-    borderRadius: 50,
-    paddingVertical: 16,
+  sheetInner: {},
+  handleWrap: { alignItems: 'center', paddingTop: 10, paddingBottom: 6 },
+  handle: { width: 36, height: 5, borderRadius: 3 },
+  scrollContent: { paddingHorizontal: 14, paddingTop: 4, paddingBottom: 16 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 10, marginBottom: 12 },
+  cellWrap: { width: (SCREEN_WIDTH - 48) / 3 },
+  cell: {
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 4,
+    minHeight: 92,
   },
-  addPhotosBtnText: {
-    fontSize: 16,
-    fontWeight: '700',
-  },
+  iconWrap: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', marginBottom: 5 },
+  cellLabel: { fontSize: 13, fontWeight: '500', textAlign: 'center' },
+  rowsContainer: { borderRadius: 14, overflow: 'hidden', marginBottom: 0 },
+  rowItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 13, paddingHorizontal: 16 },
+  rowLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  rowIconWrap: { width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  rowItemLabel: { fontSize: 16, fontWeight: '400' },
+  rowItemRight: { fontSize: 15, color: THEME.sub },
+  rowDivider: { height: StyleSheet.hairlineWidth, marginLeft: 60 },
+  webOptions: { marginHorizontal: 8, marginBottom: 8, borderRadius: 12, padding: 4 },
+  webOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 12, borderRadius: 8 },
+  webOptionActive: { backgroundColor: 'rgba(0,122,255,0.08)' },
+  webOptTitle: { fontSize: 15, fontWeight: '600', marginBottom: 2 },
+  webOptSub: { fontSize: 13, color: THEME.sub },
+});
+
+const fpStyles = StyleSheet.create({
+  previewCard: { borderRadius: 14, padding: 14, marginBottom: 12 },
+  previewHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  previewTitle: { fontSize: 13, fontWeight: '700' },
+  fileRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
+  fileThumb: { width: 40, height: 40, borderRadius: 8 },
+  fileIconBox: { width: 40, height: 40, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  fileMeta: { flex: 1, gap: 2 },
+  fileName: { fontSize: 13, fontWeight: '600' },
+  fileSize: { fontSize: 11, color: THEME.sub },
+  removeBtn: { padding: 4 },
+  sendBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: THEME.accent, borderRadius: 10, paddingVertical: 10, marginTop: 8 },
+  sendBtnText: { fontSize: 14, fontWeight: '700', color: '#FFF' },
 });
