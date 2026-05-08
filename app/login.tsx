@@ -24,6 +24,7 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 import * as Linking from 'expo-linking';
+import * as AppleAuthentication from 'expo-apple-authentication';
 
 // ── AI Logo ──
 const AI_LOGO_URL = 'https://uzxmmddivzqjhcnnrkns.supabase.co/storage/v1/object/public/logo/logo.png';
@@ -59,6 +60,29 @@ const COUNTRIES: Country[] = [
   { name: 'Mexico', code: 'MX', flag: '🇲🇽', dialCode: '+52' },
   { name: 'Brazil', code: 'BR', flag: '🇧🇷', dialCode: '+55' },
   { name: 'India', code: 'IN', flag: '🇮🇳', dialCode: '+91' },
+
+  // ➕ 20 more countries
+  { name: 'Italy', code: 'IT', flag: '🇮🇹', dialCode: '+39' },
+  { name: 'Spain', code: 'ES', flag: '🇪🇸', dialCode: '+34' },
+  { name: 'Portugal', code: 'PT', flag: '🇵🇹', dialCode: '+351' },
+  { name: 'Netherlands', code: 'NL', flag: '🇳🇱', dialCode: '+31' },
+  { name: 'Belgium', code: 'BE', flag: '🇧🇪', dialCode: '+32' },
+  { name: 'Switzerland', code: 'CH', flag: '🇨🇭', dialCode: '+41' },
+  { name: 'Sweden', code: 'SE', flag: '🇸🇪', dialCode: '+46' },
+  { name: 'Norway', code: 'NO', flag: '🇳🇴', dialCode: '+47' },
+  { name: 'Denmark', code: 'DK', flag: '🇩🇰', dialCode: '+45' },
+  { name: 'Finland', code: 'FI', flag: '🇫🇮', dialCode: '+358' },
+
+  { name: 'Nigeria', code: 'NG', flag: '🇳🇬', dialCode: '+234' },
+  { name: 'South Africa', code: 'ZA', flag: '🇿🇦', dialCode: '+27' },
+  { name: 'Kenya', code: 'KE', flag: '🇰🇪', dialCode: '+254' },
+  { name: 'Ghana', code: 'GH', flag: '🇬🇭', dialCode: '+233' },
+  { name: 'Egypt', code: 'EG', flag: '🇪🇬', dialCode: '+20' },
+
+  { name: 'China', code: 'CN', flag: '🇨🇳', dialCode: '+86' },
+  { name: 'Japan', code: 'JP', flag: '🇯🇵', dialCode: '+81' },
+  { name: 'South Korea', code: 'KR', flag: '🇰🇷', dialCode: '+82' },
+  { name: 'Philippines', code: 'PH', flag: '🇵🇭', dialCode: '+63' },
 ];
 
 const logoStyles = StyleSheet.create({
@@ -133,7 +157,8 @@ export default function LoginScreen() {
 
   useEffect(() => {
     if (user) {
-      router.replace('/home');
+      // Let index.tsx / RootScreen drive the redirect via auth state
+      router.replace('/');
     }
   }, [user]);
 
@@ -343,23 +368,49 @@ export default function LoginScreen() {
     }
     setAppleLoading(true);
     try {
-      const redirectUrl = Linking.createURL('/');
-      const { data, error } = await appleSupabase.auth.signInWithOAuth({
-        provider: 'apple',
-        options: {
-          redirectTo: redirectUrl,
-          skipBrowserRedirect: true,
-        },
+      // Use native expo-apple-authentication — stays fully in-app, no browser
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
       });
-      if (error) {
-        showAlert('Sign In Failed', error.message || 'Failed to start Apple Sign In.');
+
+      const { identityToken } = credential;
+      if (!identityToken) {
+        showAlert('Sign In Failed', 'No identity token returned from Apple.');
         return;
       }
-      if (data?.url) {
-        const result = await Linking.openURL(data.url);
-        console.log('Apple OAuth opened:', result);
+
+      // Exchange Apple identity token with Supabase
+      const { data, error } = await appleSupabase.auth.signInWithIdToken({
+        provider: 'apple',
+        token: identityToken,
+      });
+
+      if (error) {
+        showAlert('Sign In Failed', error.message || 'Apple Sign In failed.');
+        return;
+      }
+
+      if (data?.session) {
+        // Also sign in the main supabase client so AuthProvider picks it up
+        const supabase = getSupabaseClient();
+        await supabase.auth.setSession({
+          access_token: data.session.access_token,
+          refresh_token: data.session.refresh_token,
+        });
+        // Send login confirmation email non-blocking
+        if (data.session.user) {
+          sendLoginConfirmationEmail(data.session.user.id, data.session.user.email || '');
+        }
+        router.replace('/home');
       }
     } catch (e: any) {
+      if (e?.code === 'ERR_REQUEST_CANCELED') {
+        // User cancelled — silent
+        return;
+      }
       const msg = (e?.message || '').toLowerCase();
       const isCancellation = msg.includes('cancel') || msg.includes('dismiss') || msg.includes('closed');
       if (!isCancellation) {

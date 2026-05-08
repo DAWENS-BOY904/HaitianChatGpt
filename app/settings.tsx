@@ -14,7 +14,7 @@ import {
   KeyboardAvoidingView,
   Animated,
 } from 'react-native';
-import VersionCheck from 'react-native-version-check';
+// react-native-version-check replaced with expo-compatible implementation
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { useTheme } from '../hooks/useTheme';
@@ -655,24 +655,35 @@ export default function SettingsScreen() {
   const checkUpdate = async () => {
     setUpdateStatus('checking');
     try {
-      const latest = await VersionCheck.getLatestVersion();
-      const current = VersionCheck.getCurrentVersion();
-      if (latest !== current) {
-        setUpdateStatus('update');
-      } else {
-        setUpdateStatus('no-update');
-        setTimeout(() => {
-          setUpdateStatus('version');
-          setTimeout(() => { setUpdateStatus('no-update'); }, 3000);
-        }, 3000);
+      // Use expo-updates for OTA update checks when available
+      if (Platform.OS !== 'web') {
+        try {
+          const Updates = require('expo-updates');
+          const update = await Updates.checkForUpdateAsync();
+          if (update.isAvailable) {
+            setUpdateStatus('update');
+            return;
+          }
+        } catch (_e) {
+          // expo-updates not configured or in dev mode — fall through
+        }
       }
+      setUpdateStatus('no-update');
+      setTimeout(() => {
+        setUpdateStatus('version');
+        setTimeout(() => { setUpdateStatus('no-update'); }, 3000);
+      }, 3000);
     } catch (e) {
       setUpdateStatus('idle');
     }
   };
 
   const openStore = () => {
-    const url = VersionCheck.getStoreUrl();
+    // Open the appropriate store page
+    const appId = 'app.onspace.dawinix2027';
+    const url = Platform.OS === 'ios'
+      ? `https://apps.apple.com/app/id${appId}`
+      : `https://play.google.com/store/apps/details?id=${appId}`;
     Linking.openURL(url);
   };
 

@@ -111,7 +111,7 @@ export default function VerifyCodeScreen() {
           setCode(['', '', '', '', '', '']);
           inputRefs.current[0]?.focus();
         } else if (data?.user) {
-          setTimeout(() => router.replace('/home'), 100);
+          setTimeout(() => router.replace('/'), 100);
         }
       } catch (err: any) {
         showAlert('Error', err?.message || 'Verification failed');
@@ -128,7 +128,7 @@ export default function VerifyCodeScreen() {
         setCode(['', '', '', '', '', '']);
         inputRefs.current[0]?.focus();
       } else if (otpUser) {
-        setTimeout(() => router.replace('/home'), 100);
+        setTimeout(() => router.replace('/'), 100);
       }
       return;
     }
@@ -229,7 +229,7 @@ export default function VerifyCodeScreen() {
     <View style={styles.container}>
       <StatusBar barStyle={colors.text === '#FFFFFF' ? 'light-content' : 'dark-content'} />
 
-      <TouchableOpacity style={styles.closeButton} onPress={() => router.replace('/home')}>
+      <TouchableOpacity style={styles.closeButton} onPress={() => router.back()}>
         <Ionicons name="close" size={28} color={colors.text} />
       </TouchableOpacity>
 
