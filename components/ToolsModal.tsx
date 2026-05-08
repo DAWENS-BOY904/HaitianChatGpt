@@ -304,8 +304,6 @@ function ProToolsModal({
     { id: 'voice', icon: 'call-outline', label: 'Call', onPress: () => { router.push('/voice-control'); onClose(); } },
     { id: 'presets', icon: 'cube-outline', label: 'Presets', onPress: () => { onOpenPresets?.(); onClose(); } },
     { id: 'research', icon: 'search-outline', label: 'Research', onPress: () => { onDeepResearch?.(); } },
-    { id: 'web', icon: 'globe-outline', label: 'Web Search', onPress: () => { onWebSearch?.(); } },
-    { id: 'think', icon: 'bulb-outline', label: 'Thinking', onPress: () => { onThinkingMode?.(); } },
   ];
 
   const listTools = [
