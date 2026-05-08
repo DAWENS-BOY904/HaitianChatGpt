@@ -45,6 +45,7 @@ export default function RootLayout() {
                     <RevenueCatInit />
                     <Stack screenOptions={{ headerShown: false }}>
                     <Stack.Screen name="index" />
+                    <Stack.Screen name="(tabs)" />
                     <Stack.Screen name="login" />
                     <Stack.Screen name="login-password" />
                     <Stack.Screen name="signup" />
