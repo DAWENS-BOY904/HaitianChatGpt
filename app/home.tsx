@@ -2453,65 +2453,26 @@ export default function HomeScreen() {
 
   const renderInlineMediaPreviews = useCallback(() => {
     if (selectedMedia.length === 0) return null;
-
-    if (selectedMedia.length === 1 && selectedMedia[0].type === 'image') {
-      const media = selectedMedia[0];
-      return (
-        <View style={{ marginBottom: 8, flexDirection: 'row', alignItems: 'flex-start' }}>
-          <View style={{ position: 'relative' }}>
-            <View style={{ width: 72, height: 72, borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.1)' }}>
-              <ExpoImage source={{ uri: media.uri }} style={{ width: 72, height: 72 }} contentFit="cover" />
-            </View>
-            <TouchableOpacity style={{ position: 'absolute', top: -7, right: -7, width: 22, height: 22, borderRadius: 11, backgroundColor: isDark ? '#555' : '#888', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: isDark ? '#1C1C1E' : '#F0F0F5', zIndex: 10 }} onPress={() => removeMedia(0)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-              <Ionicons name="close" size={11} color="#FFF" />
-            </TouchableOpacity>
-          </View>
-        </View>
-      );
-    }
-
-    if (selectedMedia.length === 1 && selectedMedia[0].type === 'document') {
-      const media = selectedMedia[0];
-      return (
-        <View style={{ marginBottom: 8 }}>
-          <View style={{ position: 'relative', alignSelf: 'flex-start' }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? '#2A2A2E' : '#EBEBF0', borderRadius: 14, paddingHorizontal: 10, paddingVertical: 8, gap: 8, maxWidth: 220, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.07)' }}>
-              <View style={{ width: 34, height: 34, borderRadius: 8, backgroundColor: isDark ? '#3A3A3C' : '#D1D1D6', alignItems: 'center', justifyContent: 'center' }}>
-                <Ionicons name="document-text" size={18} color={colors.primary} />
-              </View>
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={{ fontSize: 12, color: colors.text, fontWeight: '600' }} numberOfLines={1}>{media.name || 'File'}</Text>
-                <Text style={{ fontSize: 10, color: colors.textSecondary, marginTop: 2 }}>{(media.mimeType || '').split('/')[1]?.toUpperCase() || 'FILE'}</Text>
-              </View>
-            </View>
-            <TouchableOpacity style={{ position: 'absolute', top: -7, right: -7, width: 22, height: 22, borderRadius: 11, backgroundColor: isDark ? '#555' : '#888', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: isDark ? '#1C1C1E' : '#F0F0F5', zIndex: 10 }} onPress={() => removeMedia(0)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-              <Ionicons name="close" size={11} color="#FFF" />
-            </TouchableOpacity>
-          </View>
-        </View>
-      );
-    }
-
     return (
-      <View style={{ marginBottom: 8 }}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8, paddingBottom: 2 }}>
+      <View style={{ marginBottom: 6, paddingTop: 4 }}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8, paddingHorizontal: 2, paddingBottom: 2 }}>
           {selectedMedia.map((media, index) => (
             <View key={`${media.uri}-${index}`} style={{ position: 'relative' }}>
               {media.type === 'image' ? (
-                <View style={{ width: 64, height: 64, borderRadius: 10, overflow: 'hidden', borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.1)' }}>
-                  <ExpoImage source={{ uri: media.uri }} style={{ width: 64, height: 64 }} contentFit="cover" />
+                <View style={{ width: 60, height: 60, borderRadius: 10, overflow: 'hidden', borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.1)' }}>
+                  <ExpoImage source={{ uri: media.uri }} style={{ width: 60, height: 60 }} contentFit="cover" />
                 </View>
               ) : media.type === 'video' ? (
-                <View style={{ width: 64, height: 64, borderRadius: 10, backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)' }}>
-                  <Ionicons name="videocam" size={24} color={colors.textSecondary} />
+                <View style={{ width: 60, height: 60, borderRadius: 10, backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)' }}>
+                  <Ionicons name="videocam" size={22} color={colors.textSecondary} />
                 </View>
               ) : (
-                <View style={{ width: 64, height: 64, borderRadius: 10, backgroundColor: isDark ? '#2A2A2E' : '#EBEBF0', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.07)' }}>
-                  <Ionicons name="document-text" size={24} color={colors.primary} />
-                  <Text style={{ fontSize: 8, color: colors.textSecondary, marginTop: 2, fontWeight: '700' }} numberOfLines={1}>{(media.name || '').slice(0, 6)}</Text>
+                <View style={{ width: 60, height: 44, borderRadius: 10, backgroundColor: isDark ? '#2A2A2E' : '#EBEBF0', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.07)', paddingHorizontal: 8, flexDirection: 'row', gap: 4 }}>
+                  <Ionicons name="document-text" size={16} color={colors.primary} />
+                  <Text style={{ fontSize: 9, color: colors.textSecondary, fontWeight: '700' }} numberOfLines={1}>{(media.name || '').slice(0, 5)}</Text>
                 </View>
               )}
-              <TouchableOpacity style={{ position: 'absolute', top: -7, right: -7, width: 20, height: 20, borderRadius: 10, backgroundColor: isDark ? '#555' : '#888', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: isDark ? '#1C1C1E' : '#F0F0F5', zIndex: 10 }} onPress={() => removeMedia(index)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+              <TouchableOpacity style={{ position: 'absolute', top: -6, right: -6, width: 18, height: 18, borderRadius: 9, backgroundColor: isDark ? '#555' : '#888', alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: isDark ? '#1C1C1E' : '#F0F0F5', zIndex: 10 }} onPress={() => removeMedia(index)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
                 <Ionicons name="close" size={9} color="#FFF" />
               </TouchableOpacity>
             </View>
@@ -2537,7 +2498,7 @@ export default function HomeScreen() {
     blurText: { fontSize: 24, fontWeight: 'bold', color: 'white', marginTop: 16 },
     messagesContainer: { flex: 1 },
     inputContainer: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 10, paddingBottom: Platform.select({ ios: insets.bottom + 6, android: insets.bottom + 6, default: 6 }), paddingTop: 6, gap: 8, backgroundColor: Platform.OS === 'ios' ? 'transparent' : colors.background },
-    inputWrapper: { flex: 1, borderRadius: 28, paddingHorizontal: 14, paddingTop: 10, paddingBottom: 8, minHeight: 50, maxHeight: 420, borderWidth: 1 },
+    inputWrapper: { flex: 1, borderRadius: 28, paddingHorizontal: 14, paddingTop: 12, paddingBottom: 10, minHeight: 52, maxHeight: 420, borderWidth: 1 },
     inputRow: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 32 },
     input: { flex: 1, fontSize: 16, color: colors.text, paddingVertical: 0, maxHeight: 160, minHeight: 22, lineHeight: 22 },
     recordingRow: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 36 },
@@ -3089,40 +3050,44 @@ export default function HomeScreen() {
                           </View>
                         </View>
                       ) : null}
-                      {/* Mode chips */}
-                      {(quizMode || deepResearchMode || webSearchMode || thinkingModeActive) ? (
-                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
-                          {quizMode ? (
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(90,200,250,0.15)', borderRadius: 16, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: 'rgba(90,200,250,0.3)' }}>
-                              <Ionicons name="albums-outline" size={14} color="#5AC8FA" />
-                              <Text style={{ color: '#5AC8FA', fontSize: 13, fontWeight: '700' }}>Quizzes</Text>
-                              <TouchableOpacity onPress={() => setQuizMode(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}><Ionicons name="close" size={12} color="#5AC8FA" /></TouchableOpacity>
+                      {/* Mode chips + media previews — always inside input wrapper */}
+                      {(quizMode || deepResearchMode || webSearchMode || thinkingModeActive || selectedMedia.length > 0) ? (
+                        <View style={{ marginBottom: 6 }}>
+                          {(quizMode || deepResearchMode || webSearchMode || thinkingModeActive) ? (
+                            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: selectedMedia.length > 0 ? 6 : 0 }}>
+                              {quizMode ? (
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: isDark ? 'rgba(90,200,250,0.2)' : 'rgba(90,200,250,0.15)', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1, borderColor: 'rgba(90,200,250,0.35)' }}>
+                                  <Ionicons name="albums-outline" size={14} color="#5AC8FA" />
+                                  <Text style={{ color: '#5AC8FA', fontSize: 13, fontWeight: '700' }}>Quizzes</Text>
+                                  <TouchableOpacity onPress={() => setQuizMode(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}><Ionicons name="close" size={12} color="#5AC8FA" /></TouchableOpacity>
+                                </View>
+                              ) : null}
+                              {deepResearchMode ? (
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: isDark ? 'rgba(90,200,250,0.18)' : 'rgba(90,200,250,0.12)', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1, borderColor: 'rgba(90,200,250,0.35)' }}>
+                                  <Ionicons name="telescope-outline" size={14} color="#5AC8FA" />
+                                  <Text style={{ color: '#5AC8FA', fontSize: 13, fontWeight: '700' }}>Research</Text>
+                                  <TouchableOpacity onPress={() => setDeepResearchMode(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}><Ionicons name="close" size={12} color="#5AC8FA" /></TouchableOpacity>
+                                </View>
+                              ) : null}
+                              {webSearchMode ? (
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: isDark ? 'rgba(52,199,89,0.18)' : 'rgba(52,199,89,0.12)', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1, borderColor: 'rgba(52,199,89,0.35)' }}>
+                                  <Ionicons name="globe-outline" size={14} color="#34C759" />
+                                  <Text style={{ color: '#34C759', fontSize: 13, fontWeight: '700' }}>Web Search</Text>
+                                  <TouchableOpacity onPress={() => setWebSearchMode(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}><Ionicons name="close" size={12} color="#34C759" /></TouchableOpacity>
+                                </View>
+                              ) : null}
+                              {thinkingModeActive ? (
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: isDark ? 'rgba(191,90,242,0.18)' : 'rgba(191,90,242,0.12)', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1, borderColor: 'rgba(191,90,242,0.35)' }}>
+                                  <Ionicons name="bulb-outline" size={14} color="#BF5AF2" />
+                                  <Text style={{ color: '#BF5AF2', fontSize: 13, fontWeight: '700' }}>Thinking</Text>
+                                  <TouchableOpacity onPress={() => setThinkingModeActive(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}><Ionicons name="close" size={12} color="#BF5AF2" /></TouchableOpacity>
+                                </View>
+                              ) : null}
                             </View>
                           ) : null}
-                          {deepResearchMode ? (
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(90,200,250,0.12)', borderRadius: 16, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: 'rgba(90,200,250,0.3)' }}>
-                              <Ionicons name="search" size={14} color="#5AC8FA" />
-                              <Text style={{ color: '#5AC8FA', fontSize: 13, fontWeight: '700' }}>Research</Text>
-                              <TouchableOpacity onPress={() => setDeepResearchMode(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}><Ionicons name="close" size={12} color="#5AC8FA" /></TouchableOpacity>
-                            </View>
-                          ) : null}
-                          {webSearchMode ? (
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(52,199,89,0.12)', borderRadius: 16, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: 'rgba(52,199,89,0.3)' }}>
-                              <Ionicons name="globe-outline" size={14} color="#34C759" />
-                              <Text style={{ color: '#34C759', fontSize: 13, fontWeight: '700' }}>Web Search</Text>
-                              <TouchableOpacity onPress={() => setWebSearchMode(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}><Ionicons name="close" size={12} color="#34C759" /></TouchableOpacity>
-                            </View>
-                          ) : null}
-                          {thinkingModeActive ? (
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(191,90,242,0.12)', borderRadius: 16, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: 'rgba(191,90,242,0.3)' }}>
-                              <Ionicons name="bulb-outline" size={14} color="#BF5AF2" />
-                              <Text style={{ color: '#BF5AF2', fontSize: 13, fontWeight: '700' }}>Thinking</Text>
-                              <TouchableOpacity onPress={() => setThinkingModeActive(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}><Ionicons name="close" size={12} color="#BF5AF2" /></TouchableOpacity>
-                            </View>
-                          ) : null}
+                          {renderInlineMediaPreviews()}
                         </View>
                       ) : null}
-                      {renderInlineMediaPreviews()}
                       {isRecording || isProcessing ? (
                         <View style={styles.recordingRow}>
                           <WaveformAnimation isRecording={isRecording} />
@@ -3184,16 +3149,20 @@ export default function HomeScreen() {
                         </View>
                       </View>
                     ) : null}
-                    {/* Mode chips */}
-                    {(quizMode || deepResearchMode || webSearchMode || thinkingModeActive) ? (
-                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
-                        {quizMode ? (<View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(90,200,250,0.15)', borderRadius: 16, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: 'rgba(90,200,250,0.3)' }}><Ionicons name="albums-outline" size={14} color="#5AC8FA" /><Text style={{ color: '#5AC8FA', fontSize: 13, fontWeight: '700' }}>Quizzes</Text><TouchableOpacity onPress={() => setQuizMode(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}><Ionicons name="close" size={12} color="#5AC8FA" /></TouchableOpacity></View>) : null}
-                        {deepResearchMode ? (<View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(90,200,250,0.12)', borderRadius: 16, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: 'rgba(90,200,250,0.3)' }}><Ionicons name="search" size={14} color="#5AC8FA" /><Text style={{ color: '#5AC8FA', fontSize: 13, fontWeight: '700' }}>Research</Text><TouchableOpacity onPress={() => setDeepResearchMode(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}><Ionicons name="close" size={12} color="#5AC8FA" /></TouchableOpacity></View>) : null}
-                        {webSearchMode ? (<View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(52,199,89,0.12)', borderRadius: 16, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: 'rgba(52,199,89,0.3)' }}><Ionicons name="globe-outline" size={14} color="#34C759" /><Text style={{ color: '#34C759', fontSize: 13, fontWeight: '700' }}>Web Search</Text><TouchableOpacity onPress={() => setWebSearchMode(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}><Ionicons name="close" size={12} color="#34C759" /></TouchableOpacity></View>) : null}
-                        {thinkingModeActive ? (<View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(191,90,242,0.12)', borderRadius: 16, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: 'rgba(191,90,242,0.3)' }}><Ionicons name="bulb-outline" size={14} color="#BF5AF2" /><Text style={{ color: '#BF5AF2', fontSize: 13, fontWeight: '700' }}>Thinking</Text><TouchableOpacity onPress={() => setThinkingModeActive(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}><Ionicons name="close" size={12} color="#BF5AF2" /></TouchableOpacity></View>) : null}
+                    {/* Mode chips + media — always inside input wrapper (Android) */}
+                    {(quizMode || deepResearchMode || webSearchMode || thinkingModeActive || selectedMedia.length > 0) ? (
+                      <View style={{ marginBottom: 6 }}>
+                        {(quizMode || deepResearchMode || webSearchMode || thinkingModeActive) ? (
+                          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: selectedMedia.length > 0 ? 6 : 0 }}>
+                            {quizMode ? (<View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: isDark ? 'rgba(90,200,250,0.2)' : 'rgba(90,200,250,0.15)', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1, borderColor: 'rgba(90,200,250,0.35)' }}><Ionicons name="albums-outline" size={14} color="#5AC8FA" /><Text style={{ color: '#5AC8FA', fontSize: 13, fontWeight: '700' }}>Quizzes</Text><TouchableOpacity onPress={() => setQuizMode(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}><Ionicons name="close" size={12} color="#5AC8FA" /></TouchableOpacity></View>) : null}
+                            {deepResearchMode ? (<View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: isDark ? 'rgba(90,200,250,0.18)' : 'rgba(90,200,250,0.12)', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1, borderColor: 'rgba(90,200,250,0.35)' }}><Ionicons name="telescope-outline" size={14} color="#5AC8FA" /><Text style={{ color: '#5AC8FA', fontSize: 13, fontWeight: '700' }}>Research</Text><TouchableOpacity onPress={() => setDeepResearchMode(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}><Ionicons name="close" size={12} color="#5AC8FA" /></TouchableOpacity></View>) : null}
+                            {webSearchMode ? (<View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: isDark ? 'rgba(52,199,89,0.18)' : 'rgba(52,199,89,0.12)', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1, borderColor: 'rgba(52,199,89,0.35)' }}><Ionicons name="globe-outline" size={14} color="#34C759" /><Text style={{ color: '#34C759', fontSize: 13, fontWeight: '700' }}>Web Search</Text><TouchableOpacity onPress={() => setWebSearchMode(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}><Ionicons name="close" size={12} color="#34C759" /></TouchableOpacity></View>) : null}
+                            {thinkingModeActive ? (<View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: isDark ? 'rgba(191,90,242,0.18)' : 'rgba(191,90,242,0.12)', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1, borderColor: 'rgba(191,90,242,0.35)' }}><Ionicons name="bulb-outline" size={14} color="#BF5AF2" /><Text style={{ color: '#BF5AF2', fontSize: 13, fontWeight: '700' }}>Thinking</Text><TouchableOpacity onPress={() => setThinkingModeActive(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}><Ionicons name="close" size={12} color="#BF5AF2" /></TouchableOpacity></View>) : null}
+                          </View>
+                        ) : null}
+                        {renderInlineMediaPreviews()}
                       </View>
                     ) : null}
-                    {renderInlineMediaPreviews()}
                     {isRecording || isProcessing ? (
                       <View style={styles.recordingRow}>
                         <WaveformAnimation isRecording={isRecording} />
@@ -3259,16 +3228,16 @@ export default function HomeScreen() {
 
             {showScrollToBottom && hasMessages && (
               <TouchableOpacity
-                style={{ position: 'absolute', bottom: 90, alignSelf: 'center', left: '50%', marginLeft: -20, width: 40, height: 40, borderRadius: 20, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 8, zIndex: 50 }}
+                style={{ position: 'absolute', bottom: 92, alignSelf: 'center', left: '50%', marginLeft: -22, width: 44, height: 44, borderRadius: 22, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: isDark ? 0.5 : 0.22, shadowRadius: 10, elevation: 10, zIndex: 50 }}
                 onPress={() => { flatListRef.current?.scrollToEnd({ animated: true }); setIsAtBottom(true); setShowScrollToBottom(false); }}
               >
                 {Platform.OS === 'ios' ? (
-                  <BlurView intensity={isDark ? 70 : 55} tint={isDark ? 'dark' : 'light'} style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-                    <Ionicons name="chevron-down" size={20} color={colors.text} />
+                  <BlurView intensity={isDark ? 80 : 65} tint={isDark ? 'dark' : 'light'} style={{ flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 22, borderWidth: StyleSheet.hairlineWidth, borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)' }}>
+                    <Ionicons name="arrow-down" size={20} color={isDark ? '#FFFFFF' : '#000000'} />
                   </BlurView>
                 ) : (
-                  <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: isDark ? 'rgba(44,44,46,0.92)' : 'rgba(240,240,245,0.92)' }}>
-                    <Ionicons name="chevron-down" size={20} color={colors.text} />
+                  <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: isDark ? 'rgba(36,36,40,0.96)' : 'rgba(238,238,242,0.96)', borderRadius: 22, borderWidth: StyleSheet.hairlineWidth, borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)' }}>
+                    <Ionicons name="arrow-down" size={20} color={isDark ? '#FFFFFF' : '#000000'} />
                   </View>
                 )}
               </TouchableOpacity>
