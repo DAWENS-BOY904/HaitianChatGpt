@@ -8,7 +8,6 @@ import {
   StatusBar,
   Platform,
   ActivityIndicator,
-  Alert,
   Modal,
   ScrollView,
 } from 'react-native';
@@ -24,15 +23,15 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 import * as Linking from 'expo-linking';
-import * as AppleAuthentication from 'expo-apple-authentication';
 
 // ── AI Logo ──
 const AI_LOGO_URL = 'https://uzxmmddivzqjhcnnrkns.supabase.co/storage/v1/object/public/logo/logo.png';
 
-// ── NOUVO SUPABASE POU APPLE LOGIN AK PHONE LOGIN ──
+// ── NOUVO SUPABASE POU APPLE LOGIN SELMAN ──
 const MY_SUPABASE_URL = 'https://uzxmmddivzqjhcnnrkns.supabase.co';
 const MY_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV6eG1tZGRpdnpxamhjbm5ya25zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY0MTY5MjEsImV4cCI6MjA5MTk5MjkyMX0.6PYtbRps9YJjvX5ibxGy346uA82RadEEpFrhSHa1UIE';
 
+// Kreye yon new kliyan Supabase pou Apple login selman
 const appleSupabase = createClient(MY_SUPABASE_URL, MY_SUPABASE_ANON_KEY, {
   auth: {
     autoRefreshToken: true,
@@ -41,48 +40,25 @@ const appleSupabase = createClient(MY_SUPABASE_URL, MY_SUPABASE_ANON_KEY, {
   },
 });
 
-// ── COUNTRY LIST (10 peyi) ──
+// ── 10 PEYI SELMAN ──
 interface Country {
-  name: string;
   code: string;
-  flag: string;
+  name: string;
   dialCode: string;
+  flag: string;
 }
 
 const COUNTRIES: Country[] = [
-  { name: 'United States', code: 'US', flag: '🇺🇸', dialCode: '+1' },
-  { name: 'United Kingdom', code: 'GB', flag: '🇬🇧', dialCode: '+44' },
-  { name: 'Canada', code: 'CA', flag: '🇨🇦', dialCode: '+1' },
-  { name: 'France', code: 'FR', flag: '🇫🇷', dialCode: '+33' },
-  { name: 'Germany', code: 'DE', flag: '🇩🇪', dialCode: '+49' },
-  { name: 'Haiti', code: 'HT', flag: '🇭🇹', dialCode: '+509' },
-  { name: 'Jamaica', code: 'JM', flag: '🇯🇲', dialCode: '+1' },
-  { name: 'Mexico', code: 'MX', flag: '🇲🇽', dialCode: '+52' },
-  { name: 'Brazil', code: 'BR', flag: '🇧🇷', dialCode: '+55' },
-  { name: 'India', code: 'IN', flag: '🇮🇳', dialCode: '+91' },
-
-  // ➕ 20 more countries
-  { name: 'Italy', code: 'IT', flag: '🇮🇹', dialCode: '+39' },
-  { name: 'Spain', code: 'ES', flag: '🇪🇸', dialCode: '+34' },
-  { name: 'Portugal', code: 'PT', flag: '🇵🇹', dialCode: '+351' },
-  { name: 'Netherlands', code: 'NL', flag: '🇳🇱', dialCode: '+31' },
-  { name: 'Belgium', code: 'BE', flag: '🇧🇪', dialCode: '+32' },
-  { name: 'Switzerland', code: 'CH', flag: '🇨🇭', dialCode: '+41' },
-  { name: 'Sweden', code: 'SE', flag: '🇸🇪', dialCode: '+46' },
-  { name: 'Norway', code: 'NO', flag: '🇳🇴', dialCode: '+47' },
-  { name: 'Denmark', code: 'DK', flag: '🇩🇰', dialCode: '+45' },
-  { name: 'Finland', code: 'FI', flag: '🇫🇮', dialCode: '+358' },
-
-  { name: 'Nigeria', code: 'NG', flag: '🇳🇬', dialCode: '+234' },
-  { name: 'South Africa', code: 'ZA', flag: '🇿🇦', dialCode: '+27' },
-  { name: 'Kenya', code: 'KE', flag: '🇰🇪', dialCode: '+254' },
-  { name: 'Ghana', code: 'GH', flag: '🇬🇭', dialCode: '+233' },
-  { name: 'Egypt', code: 'EG', flag: '🇪🇬', dialCode: '+20' },
-
-  { name: 'China', code: 'CN', flag: '🇨🇳', dialCode: '+86' },
-  { name: 'Japan', code: 'JP', flag: '🇯🇵', dialCode: '+81' },
-  { name: 'South Korea', code: 'KR', flag: '🇰🇷', dialCode: '+82' },
-  { name: 'Philippines', code: 'PH', flag: '🇵🇭', dialCode: '+63' },
+  { code: 'US', name: 'United States', dialCode: '+1', flag: '🇺🇸' },
+  { code: 'HT', name: 'Haiti', dialCode: '+509', flag: '🇭🇹' },
+  { code: 'CA', name: 'Canada', dialCode: '+1', flag: '🇨🇦' },
+  { code: 'FR', name: 'France', dialCode: '+33', flag: '🇫🇷' },
+  { code: 'GB', name: 'United Kingdom', dialCode: '+44', flag: '🇬🇧' },
+  { code: 'JM', name: 'Jamaica', dialCode: '+1', flag: '🇯🇲' },
+  { code: 'DO', name: 'Dominican Republic', dialCode: '+1', flag: '🇩🇴' },
+  { code: 'BR', name: 'Brazil', dialCode: '+55', flag: '🇧🇷' },
+  { code: 'MX', name: 'Mexico', dialCode: '+52', flag: '🇲🇽' },
+  { code: 'IN', name: 'India', dialCode: '+91', flag: '🇮🇳' },
 ];
 
 const logoStyles = StyleSheet.create({
@@ -109,6 +85,7 @@ function AILogo({ size = 64 }: { size?: number }) {
   );
 }
 
+// ── Helper: send login confirmation email ──
 async function sendLoginConfirmationEmail(userId: string, email: string) {
   try {
     const supabase = getSupabaseClient();
@@ -143,25 +120,25 @@ export default function LoginScreen() {
   const [appleLoading, setAppleLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [guestModalVisible, setGuestModalVisible] = useState(false);
-  
-  // ── PHONE STATE ──
   const [isPhoneMode, setIsPhoneMode] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState('');
   const [selectedCountry, setSelectedCountry] = useState<Country>(COUNTRIES[0]);
   const [showCountryList, setShowCountryList] = useState(false);
   const [phoneLoading, setPhoneLoading] = useState(false);
 
+  // On mount: check for existing passkeys
   useEffect(() => {
     checkForPasskeyLogin();
   }, []);
 
+  // Watch for user changes and navigate when authenticated
   useEffect(() => {
     if (user) {
-      // Let index.tsx / RootScreen drive the redirect via auth state
-      router.replace('/');
+      router.replace('/home');
     }
   }, [user]);
 
+  // ── PASSKEY LOGIC ──
   const checkForPasskeyLogin = async () => {
     if (Platform.OS === 'web') return;
     try {
@@ -242,6 +219,7 @@ export default function LoginScreen() {
 
   const [adminCodeSending, setAdminCodeSending] = useState(false);
 
+  // ── EMAIL LOGIN ──
   const handleEmailContinue = async () => {
     if (!email.trim()) {
       showAlert('Error', 'Please enter your email address');
@@ -270,15 +248,12 @@ export default function LoginScreen() {
     }
   };
 
-  // ═══════════════════════════════════════════════════════════════
-  // ── PHONE LOGIN AK MEME SUPABASE KI APPLE (DIRÈKT) ──
-  // ═══════════════════════════════════════════════════════════════
+  // ── PHONE LOGIN AK SUPABASE DIRÈKTEMAN ──
   const handlePhoneContinue = async () => {
     if (!phoneNumber.trim()) {
       showAlert('Error', 'Please enter your phone number');
       return;
     }
-    
     const digits = phoneNumber.replace(/\D/g, '');
     if (digits.length < 6) {
       showAlert('Error', 'Please enter a valid phone number');
@@ -287,16 +262,16 @@ export default function LoginScreen() {
 
     setPhoneLoading(true);
     try {
-      // SENBOL: Itilize appleSupabase (menm kliyan ak Apple Sign In)
       const fullPhone = `${selectedCountry.dialCode}${digits}`;
       
+      // SENBOL: Itilize MEME SUPABASE URL ak ANON KEY tankou Apple
       const { error: otpError } = await appleSupabase.auth.signInWithOtp({ 
         phone: fullPhone 
       });
 
       if (otpError) throw otpError;
 
-      // Si OTP voye kòrèkteman, navige nan verify-code
+      // Si succes, navige nan verify-code
       router.push({
         pathname: '/verify-code',
         params: {
@@ -312,6 +287,7 @@ export default function LoginScreen() {
     }
   };
 
+  // ── GOOGLE LOGIN ──
   const handleGoogleSignIn = async () => {
     if (googleLoading) return;
     setGoogleLoading(true);
@@ -335,6 +311,7 @@ export default function LoginScreen() {
     router.replace('/home');
   };
 
+  // ── TOGGLE PHONE/EMAIL MODE ──
   const togglePhoneMode = () => {
     setIsPhoneMode(!isPhoneMode);
     setEmail('');
@@ -361,6 +338,7 @@ export default function LoginScreen() {
     return `${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6, 10)} ${digits.slice(10)}`;
   };
 
+  // ── APPLE SIGN IN (via Supabase OAuth) ──
   const handleAppleSignIn = async () => {
     if (Platform.OS !== 'ios') {
       showAlert('Not Available', 'Apple Sign In is only available on iOS devices.');
@@ -368,49 +346,22 @@ export default function LoginScreen() {
     }
     setAppleLoading(true);
     try {
-      // Use native expo-apple-authentication — stays fully in-app, no browser
-      const credential = await AppleAuthentication.signInAsync({
-        requestedScopes: [
-          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
-          AppleAuthentication.AppleAuthenticationScope.EMAIL,
-        ],
-      });
-
-      const { identityToken } = credential;
-      if (!identityToken) {
-        showAlert('Sign In Failed', 'No identity token returned from Apple.');
-        return;
-      }
-
-      // Exchange Apple identity token with Supabase
-      const { data, error } = await appleSupabase.auth.signInWithIdToken({
+      const redirectUrl = Linking.createURL('/');
+      const { data, error } = await appleSupabase.auth.signInWithOAuth({
         provider: 'apple',
-        token: identityToken,
+        options: {
+          redirectTo: redirectUrl,
+          skipBrowserRedirect: true,
+        },
       });
-
       if (error) {
-        showAlert('Sign In Failed', error.message || 'Apple Sign In failed.');
+        showAlert('Sign In Failed', error.message || 'Failed to start Apple Sign In.');
         return;
       }
-
-      if (data?.session) {
-        // Also sign in the main supabase client so AuthProvider picks it up
-        const supabase = getSupabaseClient();
-        await supabase.auth.setSession({
-          access_token: data.session.access_token,
-          refresh_token: data.session.refresh_token,
-        });
-        // Send login confirmation email non-blocking
-        if (data.session.user) {
-          sendLoginConfirmationEmail(data.session.user.id, data.session.user.email || '');
-        }
-        router.replace('/home');
+      if (data?.url) {
+        await Linking.openURL(data.url);
       }
     } catch (e: any) {
-      if (e?.code === 'ERR_REQUEST_CANCELED') {
-        // User cancelled — silent
-        return;
-      }
       const msg = (e?.message || '').toLowerCase();
       const isCancellation = msg.includes('cancel') || msg.includes('dismiss') || msg.includes('closed');
       if (!isCancellation) {
@@ -439,14 +390,7 @@ export default function LoginScreen() {
       ...Typography.body, color: colors.textSecondary,
       textAlign: 'center', marginBottom: Spacing.xxl, lineHeight: 22,
     },
-    inputContainer: {
-      backgroundColor: colors.surface, borderRadius: BorderRadius.lg,
-      paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm,
-      marginBottom: Spacing.md, borderWidth: 1, borderColor: colors.border,
-    },
-    inputLabel: { ...Typography.caption, color: colors.textSecondary, fontSize: 12, marginBottom: 4 },
-    input: { ...Typography.body, color: colors.text, fontSize: 16, padding: 0 },
-    // PHONE STYLES
+    // PHONE INPUT STYLES
     countrySelector: {
       flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
       backgroundColor: colors.surface, borderRadius: BorderRadius.lg,
@@ -464,6 +408,7 @@ export default function LoginScreen() {
     },
     phoneInputLabel: { ...Typography.caption, color: colors.textSecondary, fontSize: 12, marginBottom: 4 },
     phoneInput: { ...Typography.body, color: colors.text, fontSize: 16, padding: 0 },
+    // COUNTRY LIST STYLES
     countryListContainer: {
       backgroundColor: colors.surface, borderRadius: BorderRadius.lg,
       marginTop: 6, marginBottom: Spacing.md,
@@ -476,6 +421,14 @@ export default function LoginScreen() {
     countryItemLeft: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
     countryItemText: { ...Typography.body, color: colors.text, fontSize: 15 },
     countryItemDial: { ...Typography.body, color: colors.textSecondary, fontSize: 14 },
+    // EMAIL INPUT
+    inputContainer: {
+      backgroundColor: colors.surface, borderRadius: BorderRadius.lg,
+      paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm,
+      marginBottom: Spacing.md, borderWidth: 1, borderColor: colors.border,
+    },
+    inputLabel: { ...Typography.caption, color: colors.textSecondary, fontSize: 12, marginBottom: 4 },
+    input: { ...Typography.body, color: colors.text, fontSize: 16, padding: 0 },
     continueButton: {
       backgroundColor: colors.text, borderRadius: BorderRadius.full,
       padding: Spacing.md, alignItems: 'center', marginBottom: Spacing.md,
@@ -488,9 +441,8 @@ export default function LoginScreen() {
     appleButton: {
       flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
       backgroundColor: '#000000', borderRadius: BorderRadius.full,
-      padding: Spacing.md, marginBottom: Spacing.md,
-      borderWidth: 1, borderColor: '#000000', gap: Spacing.sm,
-      opacity: appleLoading ? 0.7 : 1,
+      padding: Spacing.md, marginBottom: Spacing.md, borderWidth: 1, borderColor: '#000000',
+      gap: Spacing.sm, opacity: appleLoading ? 0.7 : 1,
     },
     appleButtonText: { ...Typography.body, color: '#FFFFFF', fontSize: 16, fontWeight: '500' },
     oauthButton: {
@@ -555,7 +507,7 @@ export default function LoginScreen() {
         <Text style={styles.title}>Log in or sign up</Text>
         <Text style={styles.description}>You will get smarter responses and can upload files, images and more.</Text>
 
-        {/* PHONE INPUT OR EMAIL INPUT */}
+        {/* PHONE INPUT */}
         {isPhoneMode ? (
           <>
             {/* Country Selector */}
@@ -568,7 +520,7 @@ export default function LoginScreen() {
               <Ionicons name={showCountryList ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textSecondary} />
             </TouchableOpacity>
 
-            {/* Country List */}
+            {/* Country List Dropdown */}
             {showCountryList && (
               <View style={styles.countryListContainer}>
                 <ScrollView showsVerticalScrollIndicator={false}>
@@ -590,7 +542,7 @@ export default function LoginScreen() {
               </View>
             )}
 
-            {/* Phone Input */}
+            {/* Phone Number Input */}
             <View style={styles.phoneInputContainer}>
               <Text style={styles.phoneInputLabel}>Phone number</Text>
               <TextInput
@@ -606,6 +558,7 @@ export default function LoginScreen() {
             </View>
           </>
         ) : (
+          /* EMAIL INPUT */
           <View style={styles.inputContainer}>
             <Text style={styles.inputLabel}>Email</Text>
             <TextInput
@@ -638,11 +591,15 @@ export default function LoginScreen() {
           style={[styles.continueButton, (isPhoneMode ? !phoneNumber.trim() : !email.trim()) && styles.continueButtonDisabled]}
           onPress={isPhoneMode ? handlePhoneContinue : handleEmailContinue}
           disabled={(isPhoneMode ? !phoneNumber.trim() : !email.trim()) || operationLoading || adminCodeSending || phoneLoading}
+          accessibilityLabel={isPhoneMode ? "Continue with phone" : "Continue with email"}
+          accessibilityRole="button"
         >
           {adminCodeSending || phoneLoading ? (
             <ActivityIndicator size="small" color={colors.background} />
           ) : (
-            <Text style={styles.continueButtonText}>{operationLoading ? 'Processing...' : 'Continue'}</Text>
+            <Text style={styles.continueButtonText}>
+              {operationLoading ? 'Processing...' : 'Continue'}
+            </Text>
           )}
         </TouchableOpacity>
 
@@ -652,29 +609,41 @@ export default function LoginScreen() {
           <View style={styles.dividerLine} />
         </View>
 
-        {/* Google */}
-        <TouchableOpacity style={[styles.oauthButton, { opacity: googleLoading ? 0.7 : 1 }]} onPress={handleGoogleSignIn} disabled={googleLoading || operationLoading}>
+        {/* Google Button */}
+        <TouchableOpacity
+          style={[styles.oauthButton, { opacity: googleLoading ? 0.7 : 1 }]}
+          onPress={handleGoogleSignIn}
+          disabled={googleLoading || operationLoading}
+        >
           {googleLoading ? <ActivityIndicator size="small" color={colors.text} /> : (
-            <><Ionicons name="logo-google" size={20} color={colors.text} /><Text style={styles.oauthButtonText}>Continue with Google</Text></>
+            <>
+              <Ionicons name="logo-google" size={20} color={colors.text} />
+              <Text style={styles.oauthButtonText}>Continue with Google</Text>
+            </>
           )}
         </TouchableOpacity>
 
-        {/* Apple */}
+        {/* Apple Sign In */}
         {Platform.OS === 'ios' && (
           <TouchableOpacity style={styles.appleButton} onPress={handleAppleSignIn} disabled={appleLoading}>
             {appleLoading ? <ActivityIndicator size="small" color="#FFFFFF" /> : (
-              <><Ionicons name="logo-apple" size={20} color="#FFFFFF" /><Text style={styles.appleButtonText}>Sign in with Apple</Text></>
+              <>
+                <Ionicons name="logo-apple" size={20} color="#FFFFFF" />
+                <Text style={styles.appleButtonText}>Sign in with Apple</Text>
+              </>
             )}
           </TouchableOpacity>
         )}
 
-        {/* Toggle Phone/Email */}
+        {/* TOGGLE BUTTON: Continue with Phone OR Continue with Email */}
         <TouchableOpacity style={styles.oauthButton} onPress={togglePhoneMode} disabled={operationLoading || phoneLoading}>
           <Ionicons name={isPhoneMode ? "mail-outline" : "call"} size={20} color={colors.text} />
-          <Text style={styles.oauthButtonText}>{isPhoneMode ? 'Continue with email' : 'Continue with phone'}</Text>
+          <Text style={styles.oauthButtonText}>
+            {isPhoneMode ? 'Continue with email' : 'Continue with phone'}
+          </Text>
         </TouchableOpacity>
 
-        {/* Guest */}
+        {/* Continue as Guest Button */}
         <TouchableOpacity style={[styles.oauthButton, { marginTop: 4 }]} onPress={() => setGuestModalVisible(true)}>
           <Ionicons name="person-outline" size={20} color={colors.text} />
           <Text style={styles.oauthButtonText}>Continue as guest</Text>
@@ -687,16 +656,32 @@ export default function LoginScreen() {
           <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setGuestModalVisible(false)} />
           <View style={guestStyles.sheet}>
             <View style={guestStyles.handle} />
-            <View style={guestStyles.iconWrap}><Ionicons name="person-outline" size={32} color="#FFF" /></View>
+            <View style={guestStyles.iconWrap}>
+              <Ionicons name="person-outline" size={32} color="#FFF" />
+            </View>
             <Text style={guestStyles.title}>Continue as Guest</Text>
-            <Text style={guestStyles.body}>{'You can chat with AI without creating an account. Guest sessions are limited to 35 messages and do not save history.'}</Text>
+            <Text style={guestStyles.body}>
+              {'You can chat with AI without creating an account. Guest sessions are limited to 35 messages and do not save history.'}
+            </Text>
             <View style={guestStyles.featureList}>
-              {[{ icon: 'checkmark-circle', text: '35 free messages', ok: true }, { icon: 'close-circle', text: 'No chat history saved', ok: false }, { icon: 'close-circle', text: 'No file uploads', ok: false }, { icon: 'checkmark-circle', text: 'Basic AI responses', ok: true }].map((f, i) => (
-                <View key={i} style={guestStyles.featureRow}><Ionicons name={f.icon as any} size={18} color={f.ok ? '#34C759' : '#FF453A'} /><Text style={guestStyles.featureText}>{f.text}</Text></View>
+              {[
+                { icon: 'checkmark-circle', text: '35 free messages', ok: true },
+                { icon: 'close-circle', text: 'No chat history saved', ok: false },
+                { icon: 'close-circle', text: 'No file uploads', ok: false },
+                { icon: 'checkmark-circle', text: 'Basic AI responses', ok: true },
+              ].map((f, i) => (
+                <View key={i} style={guestStyles.featureRow}>
+                  <Ionicons name={f.icon as any} size={18} color={f.ok ? '#34C759' : '#FF453A'} />
+                  <Text style={guestStyles.featureText}>{f.text}</Text>
+                </View>
               ))}
             </View>
-            <TouchableOpacity style={guestStyles.primaryBtn} onPress={() => { setGuestModalVisible(false); handleGuestMode(); }}><Text style={guestStyles.primaryBtnText}>Start as Guest</Text></TouchableOpacity>
-            <TouchableOpacity style={guestStyles.secondaryBtn} onPress={() => setGuestModalVisible(false)}><Text style={guestStyles.secondaryBtnText}>Create Account Instead</Text></TouchableOpacity>
+            <TouchableOpacity style={guestStyles.primaryBtn} onPress={() => { setGuestModalVisible(false); handleGuestMode(); }}>
+              <Text style={guestStyles.primaryBtnText}>Start as Guest</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={guestStyles.secondaryBtn} onPress={() => setGuestModalVisible(false)}>
+              <Text style={guestStyles.secondaryBtnText}>Create Account Instead</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
