@@ -389,17 +389,7 @@ const styles = StyleSheet.create({
 export default function RootScreen() {
   const { user, loading } = useAuth();
   const { isDark } = useTheme();
-  const router = useRouter();
-
-  // After login completes, redirect to home — using useEffect prevents
-  // the white-screen race between auth state update and Stack navigation.
-  useEffect(() => {
-    if (!loading && user) {
-      router.replace('/home');
-    }
-  }, [user, loading]);
-
   if (loading) return <SplashScreen />;
-  if (user) return <SplashScreen />; // show splash while effect fires
+  if (user) return <Redirect href="/home" />;
   return <WelcomeScreen />;
 }
