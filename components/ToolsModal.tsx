@@ -472,7 +472,6 @@ function FreeToolsModal({
     { id: 'deep-research', icon: 'search-outline', iconColor: '#5AC8FA', label: 'Deep research', sub: 'Get a detailed report', onPress: () => { onDeepResearch?.(); onClose(); } },
     { id: 'web-search', icon: 'globe-outline', iconColor: '#007AFF', label: 'Web search', sub: 'Find real-time news and info', onPress: () => { onSelectTool?.('web-search'); onClose(); } },
     { id: 'add-files', icon: 'attach-outline', iconColor: '#8E8E93', label: 'Add files', sub: 'Analyze or summarize', onPress: () => { handleFiles(); } },
-    { id: 'apple-music', icon: 'musical-notes', iconColor: '#FF2D55', label: 'Apple Music', sub: 'Connect to Apple Music to play songs', onPress: () => { onClose(); } },
     { id: 'spotify', icon: 'logo-spotify', iconColor: '#1DB954', label: 'Spotify', sub: 'Explore music and podcasts', onPress: () => { onConnectApp?.(); onClose(); } },
     { id: 'apps', icon: 'apps-outline', iconColor: '#007AFF', label: 'Explore apps', sub: 'Chat with apps in Dawinix', onPress: () => { onConnectApp?.(); onClose(); }, chevron: true },
   ];
@@ -493,7 +492,7 @@ function FreeToolsModal({
         </TouchableOpacity>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} bounces={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: bottomPad + (selectedCount > 0 ? 76 : 0) }}>
+      <ScrollView showsVerticalScrollIndicator={false} bounces={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: bottomPad + (selectedCount > 0 ? 68 : 0) }}>
         {/* Photo strip */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.photoStrip}>
           <TouchableOpacity
@@ -531,7 +530,7 @@ function FreeToolsModal({
         <View style={[s.divider, { backgroundColor: dividerColor }]} />
 
         {/* Tool list */}
-        <View>
+        <View style={[s.toolListCard, { backgroundColor: isDark ? 'rgba(44,44,48,0.7)' : 'rgba(255,255,255,0.85)', marginHorizontal: 12, marginBottom: 8 }]}>
           {toolItems.map((tool, i) => (
             <TouchableOpacity
               key={tool.id}
@@ -540,7 +539,7 @@ function FreeToolsModal({
               activeOpacity={0.65}
             >
               <View style={[s.toolIconWrap, { backgroundColor: (tool.iconColor || '#888') + '1A' }]}>
-                <Ionicons name={tool.icon as any} size={22} color={tool.iconColor || textPrimary} />
+                <Ionicons name={tool.icon as any} size={20} color={tool.iconColor || textPrimary} />
               </View>
               <View style={s.toolTextWrap}>
                 <Text style={[s.toolLabel, { color: textPrimary }]}>{tool.label}</Text>
@@ -635,7 +634,7 @@ function GuestToolsModal({
         </TouchableOpacity>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} bounces={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: bottomPad + (selectedCount > 0 ? 76 : 0) }}>
+      <ScrollView showsVerticalScrollIndicator={false} bounces={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: bottomPad + (selectedCount > 0 ? 68 : 0) }}>
         {/* Photo strip — guests can select photos (limited to 3 per 20h) */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.photoStrip}>
           <TouchableOpacity
@@ -673,7 +672,7 @@ function GuestToolsModal({
         <View style={[s.divider, { backgroundColor: dividerColor }]} />
 
         {/* Tool list — limited for guests */}
-        <View>
+        <View style={[s.toolListCard, { backgroundColor: isDark ? 'rgba(44,44,48,0.7)' : 'rgba(255,255,255,0.85)', marginHorizontal: 12, marginBottom: 8 }]}>
           {toolItems.map((tool, i) => (
             <TouchableOpacity
               key={tool.id}
@@ -682,7 +681,7 @@ function GuestToolsModal({
               activeOpacity={0.65}
             >
               <View style={[s.toolIconWrap, { backgroundColor: (tool.iconColor || '#888') + '1A' }]}>
-                <Ionicons name={tool.icon as any} size={22} color={tool.iconColor || textPrimary} />
+                <Ionicons name={tool.icon as any} size={20} color={tool.iconColor || textPrimary} />
               </View>
               <View style={s.toolTextWrap}>
                 <Text style={[s.toolLabel, { color: textPrimary }]}>{tool.label}</Text>
@@ -750,11 +749,11 @@ const s = StyleSheet.create({
   handle: { width: 36, height: 5, borderRadius: 3 },
   headerRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 20, paddingTop: 10, paddingBottom: 10,
+    paddingHorizontal: 20, paddingTop: 8, paddingBottom: 8,
   },
   headerTitle: { fontSize: 17, fontWeight: '700' },
   allPhotosBtn: { fontSize: 15, fontWeight: '500' },
-  photoStrip: { paddingHorizontal: 14, gap: 8, paddingBottom: 12 },
+  photoStrip: { paddingHorizontal: 14, gap: 7, paddingBottom: 10 },
   cameraTile: { width: TILE_SIZE, height: TILE_SIZE, borderRadius: 10, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   photoTile: { width: TILE_SIZE, height: TILE_SIZE, borderRadius: 10, overflow: 'hidden', position: 'relative' },
   photoTileBlocked: { opacity: 0.3 },
@@ -768,13 +767,14 @@ const s = StyleSheet.create({
   selCircleActive: { backgroundColor: 'rgba(0,0,0,0.72)', borderColor: '#FFF' },
   selNumber: { color: '#FFFFFF', fontSize: 12, fontWeight: '800', lineHeight: 14 },
   divider: { height: StyleSheet.hairlineWidth, marginBottom: 2, marginHorizontal: 0 },
-  toolRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 13, gap: 14 },
-  toolIconWrap: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  toolListCard: { borderRadius: 16, overflow: 'hidden' },
+  toolRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10, gap: 12 },
+  toolIconWrap: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   toolTextWrap: { flex: 1 },
-  toolLabel: { fontSize: 16, fontWeight: '600', marginBottom: 1 },
-  toolSub: { fontSize: 13, lineHeight: 17 },
-  addPhotosBtnWrap: { paddingHorizontal: 16, paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth },
-  addPhotosBtn: { borderRadius: 50, paddingVertical: 15, alignItems: 'center', justifyContent: 'center' },
+  toolLabel: { fontSize: 15, fontWeight: '600', marginBottom: 1 },
+  toolSub: { fontSize: 12, lineHeight: 15 },
+  addPhotosBtnWrap: { paddingHorizontal: 16, paddingTop: 8, borderTopWidth: StyleSheet.hairlineWidth },
+  addPhotosBtn: { borderRadius: 50, paddingVertical: 14, alignItems: 'center', justifyContent: 'center' },
   addPhotosBtnText: { fontSize: 16, fontWeight: '700' },
 });
 
