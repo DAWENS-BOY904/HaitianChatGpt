@@ -204,7 +204,7 @@ export default function MessageDetailScreen() {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Provide Feedback</Text>
-          <Text style={[styles.infoLabel, { marginBottom: Spacing.sm }]}>
+          <Text style={styles.infoLabel} style={{ marginBottom: Spacing.sm }}>
             Help us improve this response
           </Text>
 

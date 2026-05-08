@@ -18,26 +18,7 @@ import { Spacing, Typography, BorderRadius } from '../constants/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getSupabaseClient } from '@/template';
 import * as ImagePicker from 'expo-image-picker';
-// base64 to ArrayBuffer conversion (native, no external library needed)
-function decodeBase64(base64: string): ArrayBuffer {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-  const lookup = new Uint8Array(256);
-  for (let i = 0; i < chars.length; i++) lookup[chars.charCodeAt(i)] = i;
-  const cleaned = base64.replace(/[^A-Za-z0-9+/]/g, '');
-  const len = cleaned.length;
-  const bufLen = len * 3 / 4 - (cleaned[len - 1] === '=' ? 1 : 0) - (cleaned[len - 2] === '=' ? 1 : 0);
-  const buf = new ArrayBuffer(bufLen);
-  const arr = new Uint8Array(buf);
-  let p = 0;
-  for (let i = 0; i < len; i += 4) {
-    const a = lookup[cleaned.charCodeAt(i)], b = lookup[cleaned.charCodeAt(i + 1)];
-    const c = lookup[cleaned.charCodeAt(i + 2)], d = lookup[cleaned.charCodeAt(i + 3)];
-    arr[p++] = (a << 2) | (b >> 4);
-    if (p < bufLen) arr[p++] = ((b & 15) << 4) | (c >> 2);
-    if (p < bufLen) arr[p++] = ((c & 3) << 6) | (d & 63);
-  }
-  return buf;
-}
+import { decode } from 'base64-arraybuffer';
 
 interface User {
   id: string;
@@ -123,7 +104,7 @@ export default function AdminEmailScreen() {
         
         const { data, error } = await supabase.storage
           .from('chat-images')
-          .upload(filePath, decodeBase64(asset.base64!), {
+          .upload(filePath, decode(asset.base64!), {
             contentType: 'image/jpeg',
           });
 

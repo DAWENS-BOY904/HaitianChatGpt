@@ -130,8 +130,7 @@ export class AuthService {
     return {
       id: sessionUser.id,
       email: sessionUser.email || '',
-      username: sessionUser.user_metadata?.username || 
-               sessionUser.user_metadata?.full_name || 
+      username: sessionUser.user_metadata?.full_name || 
                sessionUser.user_metadata?.name || 
                sessionUser.email?.split('@')[0] || 
                `user_${sessionUser.id.slice(0, 8)}`,
