@@ -399,14 +399,8 @@ export default function LoginScreen() {
         console.log('[Apple Sign In] Module error:', moduleErr?.message);
         // Check if it's a native module error (common in Expo Go vs dev builds)
         const errMsg = moduleErr?.message || '';
-        if (errMsg.includes('Native module') || errMsg.includes('cannot find') || errMsg.includes('undefined')) {
-          showAlert(
-            'Development Build Required',
-            'Apple Sign In requires a native iOS development build. It does not work in Expo Go. Please build with "eas build --profile development" and install the .ipa on your device.'
-          );
-        } else {
-          showAlert('Not Available', 'Apple Sign In is not available. Make sure you are signed into iCloud with Apple ID.');
-        }
+        // Silently skip — don't show error for unavailable/not-linked cases
+        console.log('[Apple Sign In] Not available:', errMsg);
         setAppleLoading(false);
         return;
       }
