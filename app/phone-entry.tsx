@@ -1,705 +1,446 @@
-import React, { useState, useEffect } from 'react';
+/**
+ * PHONE ENTRY - PHONE AUTHENTICATION
+ * Static Country List, Auto-Detection & Formatting (no external deps)
+ */
+
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  StatusBar,
-  Platform,
-  ActivityIndicator,
-  Modal,
   ScrollView,
+  Modal,
+  ActivityIndicator,
+  Platform,
+  Keyboard,
+  KeyboardAvoidingView,
+  TouchableWithoutFeedback,
 } from 'react-native';
-import { Image } from 'expo-image';
-import { BlurView } from 'expo-blur';
-import { useAuth, useAlert, getSupabaseClient } from '@/template';
-import { useTheme } from '../hooks/useTheme';
-import { Spacing, Typography, BorderRadius } from '../constants/theme';
 import { Ionicons } from '@expo/vector-icons';
+import { useTheme } from '../hooks/useTheme';
 import { useRouter } from 'expo-router';
+import { Spacing, Typography, BorderRadius } from '../constants/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import * as LocalAuthentication from 'expo-local-authentication';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { createClient } from '@supabase/supabase-js';
-import * as Linking from 'expo-linking';
+import { getSupabaseClient } from '@/template';
+import * as Localization from 'expo-localization';
 
-// ── AI Logo ──
-const AI_LOGO_URL = 'https://uzxmmddivzqjhcnnrkns.supabase.co/storage/v1/object/public/logo/logo.png';
-
-// ── NOUVO SUPABASE POU APPLE LOGIN SELMAN ──
-const MY_SUPABASE_URL = 'https://uzxmmddivzqjhcnnrkns.supabase.co';
-const MY_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV6eG1tZGRpdnpxamhjbm5ya25zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY0MTY5MjEsImV4cCI6MjA5MTk5MjkyMX0.6PYtbRps9YJjvX5ibxGy346uA82RadEEpFrhSHa1UIE';
-
-// Kreye yon new kliyan Supabase pou Apple login selman
-const appleSupabase = createClient(MY_SUPABASE_URL, MY_SUPABASE_ANON_KEY, {
-  auth: {
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: false,
-  },
-});
-
-// ── 10 PEYI SELMAN ──
 interface Country {
   code: string;
   name: string;
   dialCode: string;
   flag: string;
+  region: string;
 }
 
 const COUNTRIES: Country[] = [
-  { code: 'US', name: 'United States', dialCode: '+1', flag: '🇺🇸' },
-  { code: 'HT', name: 'Haiti', dialCode: '+509', flag: '🇭🇹' },
-  { code: 'CA', name: 'Canada', dialCode: '+1', flag: '🇨🇦' },
-  { code: 'FR', name: 'France', dialCode: '+33', flag: '🇫🇷' },
-  { code: 'GB', name: 'United Kingdom', dialCode: '+44', flag: '🇬🇧' },
-  { code: 'JM', name: 'Jamaica', dialCode: '+1', flag: '🇯🇲' },
-  { code: 'DO', name: 'Dominican Republic', dialCode: '+1', flag: '🇩🇴' },
-  { code: 'BR', name: 'Brazil', dialCode: '+55', flag: '🇧🇷' },
-  { code: 'MX', name: 'Mexico', dialCode: '+52', flag: '🇲🇽' },
-  { code: 'IN', name: 'India', dialCode: '+91', flag: '🇮🇳' },
+  { code: 'US', name: 'United States', dialCode: '+1', flag: '🇺🇸', region: 'North America' },
+  { code: 'CA', name: 'Canada', dialCode: '+1', flag: '🇨🇦', region: 'North America' },
+  { code: 'MX', name: 'Mexico', dialCode: '+52', flag: '🇲🇽', region: 'North America' },
+  { code: 'HT', name: 'Haiti', dialCode: '+509', flag: '🇭🇹', region: 'North America' },
+  { code: 'CU', name: 'Cuba', dialCode: '+53', flag: '🇨🇺', region: 'North America' },
+  { code: 'DO', name: 'Dominican Republic', dialCode: '+1', flag: '🇩🇴', region: 'North America' },
+  { code: 'JM', name: 'Jamaica', dialCode: '+1', flag: '🇯🇲', region: 'North America' },
+  { code: 'BS', name: 'Bahamas', dialCode: '+1', flag: '🇧🇸', region: 'North America' },
+  { code: 'BZ', name: 'Belize', dialCode: '+501', flag: '🇧🇿', region: 'North America' },
+  { code: 'CR', name: 'Costa Rica', dialCode: '+506', flag: '🇨🇷', region: 'North America' },
+  { code: 'SV', name: 'El Salvador', dialCode: '+503', flag: '🇸🇻', region: 'North America' },
+  { code: 'GT', name: 'Guatemala', dialCode: '+502', flag: '🇬🇹', region: 'North America' },
+  { code: 'HN', name: 'Honduras', dialCode: '+504', flag: '🇭🇳', region: 'North America' },
+  { code: 'NI', name: 'Nicaragua', dialCode: '+505', flag: '🇳🇮', region: 'North America' },
+  { code: 'PA', name: 'Panama', dialCode: '+507', flag: '🇵🇦', region: 'North America' },
+  { code: 'TT', name: 'Trinidad and Tobago', dialCode: '+1', flag: '🇹🇹', region: 'North America' },
+  { code: 'BR', name: 'Brazil', dialCode: '+55', flag: '🇧🇷', region: 'South America' },
+  { code: 'AR', name: 'Argentina', dialCode: '+54', flag: '🇦🇷', region: 'South America' },
+  { code: 'CL', name: 'Chile', dialCode: '+56', flag: '🇨🇱', region: 'South America' },
+  { code: 'CO', name: 'Colombia', dialCode: '+57', flag: '🇨🇴', region: 'South America' },
+  { code: 'PE', name: 'Peru', dialCode: '+51', flag: '🇵🇪', region: 'South America' },
+  { code: 'VE', name: 'Venezuela', dialCode: '+58', flag: '🇻🇪', region: 'South America' },
+  { code: 'EC', name: 'Ecuador', dialCode: '+593', flag: '🇪🇨', region: 'South America' },
+  { code: 'BO', name: 'Bolivia', dialCode: '+591', flag: '🇧🇴', region: 'South America' },
+  { code: 'PY', name: 'Paraguay', dialCode: '+595', flag: '🇵🇾', region: 'South America' },
+  { code: 'UY', name: 'Uruguay', dialCode: '+598', flag: '🇺🇾', region: 'South America' },
+  { code: 'GY', name: 'Guyana', dialCode: '+592', flag: '🇬🇾', region: 'South America' },
+  { code: 'GB', name: 'United Kingdom', dialCode: '+44', flag: '🇬🇧', region: 'Europe' },
+  { code: 'FR', name: 'France', dialCode: '+33', flag: '🇫🇷', region: 'Europe' },
+  { code: 'DE', name: 'Germany', dialCode: '+49', flag: '🇩🇪', region: 'Europe' },
+  { code: 'IT', name: 'Italy', dialCode: '+39', flag: '🇮🇹', region: 'Europe' },
+  { code: 'ES', name: 'Spain', dialCode: '+34', flag: '🇪🇸', region: 'Europe' },
+  { code: 'PT', name: 'Portugal', dialCode: '+351', flag: '🇵🇹', region: 'Europe' },
+  { code: 'NL', name: 'Netherlands', dialCode: '+31', flag: '🇳🇱', region: 'Europe' },
+  { code: 'BE', name: 'Belgium', dialCode: '+32', flag: '🇧🇪', region: 'Europe' },
+  { code: 'CH', name: 'Switzerland', dialCode: '+41', flag: '🇨🇭', region: 'Europe' },
+  { code: 'AT', name: 'Austria', dialCode: '+43', flag: '🇦🇹', region: 'Europe' },
+  { code: 'SE', name: 'Sweden', dialCode: '+46', flag: '🇸🇪', region: 'Europe' },
+  { code: 'NO', name: 'Norway', dialCode: '+47', flag: '🇳🇴', region: 'Europe' },
+  { code: 'DK', name: 'Denmark', dialCode: '+45', flag: '🇩🇰', region: 'Europe' },
+  { code: 'FI', name: 'Finland', dialCode: '+358', flag: '🇫🇮', region: 'Europe' },
+  { code: 'PL', name: 'Poland', dialCode: '+48', flag: '🇵🇱', region: 'Europe' },
+  { code: 'CZ', name: 'Czech Republic', dialCode: '+420', flag: '🇨🇿', region: 'Europe' },
+  { code: 'HU', name: 'Hungary', dialCode: '+36', flag: '🇭🇺', region: 'Europe' },
+  { code: 'RO', name: 'Romania', dialCode: '+40', flag: '🇷🇴', region: 'Europe' },
+  { code: 'BG', name: 'Bulgaria', dialCode: '+359', flag: '🇧🇬', region: 'Europe' },
+  { code: 'HR', name: 'Croatia', dialCode: '+385', flag: '🇭🇷', region: 'Europe' },
+  { code: 'IE', name: 'Ireland', dialCode: '+353', flag: '🇮🇪', region: 'Europe' },
+  { code: 'GR', name: 'Greece', dialCode: '+30', flag: '🇬🇷', region: 'Europe' },
+  { code: 'RU', name: 'Russia', dialCode: '+7', flag: '🇷🇺', region: 'Europe' },
+  { code: 'UA', name: 'Ukraine', dialCode: '+380', flag: '🇺🇦', region: 'Europe' },
+  { code: 'TR', name: 'Turkey', dialCode: '+90', flag: '🇹🇷', region: 'Europe' },
+  { code: 'ZA', name: 'South Africa', dialCode: '+27', flag: '🇿🇦', region: 'Africa' },
+  { code: 'NG', name: 'Nigeria', dialCode: '+234', flag: '🇳🇬', region: 'Africa' },
+  { code: 'EG', name: 'Egypt', dialCode: '+20', flag: '🇪🇬', region: 'Africa' },
+  { code: 'KE', name: 'Kenya', dialCode: '+254', flag: '🇰🇪', region: 'Africa' },
+  { code: 'ET', name: 'Ethiopia', dialCode: '+251', flag: '🇪🇹', region: 'Africa' },
+  { code: 'GH', name: 'Ghana', dialCode: '+233', flag: '🇬🇭', region: 'Africa' },
+  { code: 'TZ', name: 'Tanzania', dialCode: '+255', flag: '🇹🇿', region: 'Africa' },
+  { code: 'MA', name: 'Morocco', dialCode: '+212', flag: '🇲🇦', region: 'Africa' },
+  { code: 'DZ', name: 'Algeria', dialCode: '+213', flag: '🇩🇿', region: 'Africa' },
+  { code: 'TN', name: 'Tunisia', dialCode: '+216', flag: '🇹🇳', region: 'Africa' },
+  { code: 'SN', name: 'Senegal', dialCode: '+221', flag: '🇸🇳', region: 'Africa' },
+  { code: 'CI', name: 'Ivory Coast', dialCode: '+225', flag: '🇨🇮', region: 'Africa' },
+  { code: 'CM', name: 'Cameroon', dialCode: '+237', flag: '🇨🇲', region: 'Africa' },
+  { code: 'CD', name: 'DR Congo', dialCode: '+243', flag: '🇨🇩', region: 'Africa' },
+  { code: 'AO', name: 'Angola', dialCode: '+244', flag: '🇦🇴', region: 'Africa' },
+  { code: 'MZ', name: 'Mozambique', dialCode: '+258', flag: '🇲🇿', region: 'Africa' },
+  { code: 'MG', name: 'Madagascar', dialCode: '+261', flag: '🇲🇬', region: 'Africa' },
+  { code: 'MU', name: 'Mauritius', dialCode: '+230', flag: '🇲🇺', region: 'Africa' },
+  { code: 'CN', name: 'China', dialCode: '+86', flag: '🇨🇳', region: 'Asia' },
+  { code: 'JP', name: 'Japan', dialCode: '+81', flag: '🇯🇵', region: 'Asia' },
+  { code: 'IN', name: 'India', dialCode: '+91', flag: '🇮🇳', region: 'Asia' },
+  { code: 'KR', name: 'South Korea', dialCode: '+82', flag: '🇰🇷', region: 'Asia' },
+  { code: 'ID', name: 'Indonesia', dialCode: '+62', flag: '🇮🇩', region: 'Asia' },
+  { code: 'TH', name: 'Thailand', dialCode: '+66', flag: '🇹🇭', region: 'Asia' },
+  { code: 'VN', name: 'Vietnam', dialCode: '+84', flag: '🇻🇳', region: 'Asia' },
+  { code: 'MY', name: 'Malaysia', dialCode: '+60', flag: '🇲🇾', region: 'Asia' },
+  { code: 'PH', name: 'Philippines', dialCode: '+63', flag: '🇵🇭', region: 'Asia' },
+  { code: 'SG', name: 'Singapore', dialCode: '+65', flag: '🇸🇬', region: 'Asia' },
+  { code: 'BD', name: 'Bangladesh', dialCode: '+880', flag: '🇧🇩', region: 'Asia' },
+  { code: 'PK', name: 'Pakistan', dialCode: '+92', flag: '🇵🇰', region: 'Asia' },
+  { code: 'LK', name: 'Sri Lanka', dialCode: '+94', flag: '🇱🇰', region: 'Asia' },
+  { code: 'NP', name: 'Nepal', dialCode: '+977', flag: '🇳🇵', region: 'Asia' },
+  { code: 'SA', name: 'Saudi Arabia', dialCode: '+966', flag: '🇸🇦', region: 'Asia' },
+  { code: 'AE', name: 'UAE', dialCode: '+971', flag: '🇦🇪', region: 'Asia' },
+  { code: 'QA', name: 'Qatar', dialCode: '+974', flag: '🇶🇦', region: 'Asia' },
+  { code: 'KW', name: 'Kuwait', dialCode: '+965', flag: '🇰🇼', region: 'Asia' },
+  { code: 'BH', name: 'Bahrain', dialCode: '+973', flag: '🇧🇭', region: 'Asia' },
+  { code: 'OM', name: 'Oman', dialCode: '+968', flag: '🇴🇲', region: 'Asia' },
+  { code: 'JO', name: 'Jordan', dialCode: '+962', flag: '🇯🇴', region: 'Asia' },
+  { code: 'LB', name: 'Lebanon', dialCode: '+961', flag: '🇱🇧', region: 'Asia' },
+  { code: 'IL', name: 'Israel', dialCode: '+972', flag: '🇮🇱', region: 'Asia' },
+  { code: 'IR', name: 'Iran', dialCode: '+98', flag: '🇮🇷', region: 'Asia' },
+  { code: 'AF', name: 'Afghanistan', dialCode: '+93', flag: '🇦🇫', region: 'Asia' },
+  { code: 'TW', name: 'Taiwan', dialCode: '+886', flag: '🇹🇼', region: 'Asia' },
+  { code: 'HK', name: 'Hong Kong', dialCode: '+852', flag: '🇭🇰', region: 'Asia' },
+  { code: 'AU', name: 'Australia', dialCode: '+61', flag: '🇦🇺', region: 'Oceania' },
+  { code: 'NZ', name: 'New Zealand', dialCode: '+64', flag: '🇳🇿', region: 'Oceania' },
+  { code: 'FJ', name: 'Fiji', dialCode: '+679', flag: '🇫🇯', region: 'Oceania' },
+  { code: 'PG', name: 'Papua New Guinea', dialCode: '+675', flag: '🇵🇬', region: 'Oceania' },
 ];
 
-const logoStyles = StyleSheet.create({
-  logoWrapper: {
-    overflow: 'hidden',
-    borderWidth: 2,
-    borderColor: 'rgba(0, 150, 255, 0.5)',
-    ...Platform.select({
-      ios: { shadowColor: '#0096FF', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.5, shadowRadius: 8 },
-      android: { elevation: 6 },
-    }),
-  },
-});
+const SORTED_COUNTRIES = [...COUNTRIES].sort((a, b) => a.name.localeCompare(b.name));
 
-function AILogo({ size = 64 }: { size?: number }) {
-  return (
-    <View style={[logoStyles.logoWrapper, { width: size, height: size, borderRadius: size / 2 }]}>
-      <Image
-        source={{ uri: AI_LOGO_URL }}
-        style={{ width: size, height: size, borderRadius: size / 2 }}
-        contentFit="cover"
-      />
-    </View>
-  );
+function basicValidatePhone(number: string): boolean {
+  const digits = number.replace(/\D/g, '');
+  return digits.length >= 6 && digits.length <= 15;
 }
 
-// ── Helper: send login confirmation email ──
-async function sendLoginConfirmationEmail(userId: string, email: string) {
-  try {
-    const supabase = getSupabaseClient();
-    await supabase.functions.invoke('send-login-email', {
-      body: {
-        userId,
-        email,
-        platform: Platform.OS,
-        loginTime: new Date().toISOString(),
-      },
-    });
-  } catch (e) {
-    console.warn('Login email send failed:', e);
-  }
+function formatPhoneDisplay(raw: string): string {
+  const digits = raw.replace(/\D/g, '');
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 6) return `${digits.slice(0, 3)} ${digits.slice(3)}`;
+  if (digits.length <= 10) return `${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6)}`;
+  return `${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6, 10)} ${digits.slice(10)}`;
 }
 
-
-
-export default function LoginScreen() {
+export default function PhoneEntryScreen() {
   const { colors } = useTheme();
-  const { signInWithPassword, signInWithGoogle, operationLoading, user } = useAuth();
-  const { showAlert } = useAlert();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const supabase = getSupabaseClient();
 
-  const [suggestions, setSuggestions] = useState<string[]>([]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const [email, setEmail] = useState('');
-  const [showPasskeyPrompt, setShowPasskeyPrompt] = useState(false);
-  const [passkeyBiometricLabel, setPasskeyBiometricLabel] = useState('Biometrics');
-  const [passkeyLoading, setPasskeyLoading] = useState(false);
-  const [appleLoading, setAppleLoading] = useState(false);
-  const [googleLoading, setGoogleLoading] = useState(false);
-  const [guestModalVisible, setGuestModalVisible] = useState(false);
-  const [isPhoneMode, setIsPhoneMode] = useState(false);
+  const [selectedCountry, setSelectedCountry] = useState<Country>(
+    SORTED_COUNTRIES.find(c => c.code === 'US') || SORTED_COUNTRIES[0]
+  );
   const [phoneNumber, setPhoneNumber] = useState('');
-  const [selectedCountry, setSelectedCountry] = useState<Country>(COUNTRIES[0]);
-  const [showCountryList, setShowCountryList] = useState(false);
-  const [phoneLoading, setPhoneLoading] = useState(false);
+  const [showCountryPicker, setShowCountryPicker] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  // On mount: check for existing passkeys
+  const phoneInputRef = useRef<TextInput>(null);
+
+  const filteredCountries = useMemo(() => {
+    if (!searchQuery.trim()) return SORTED_COUNTRIES;
+    const q = searchQuery.toLowerCase();
+    return SORTED_COUNTRIES.filter(c =>
+      c.name.toLowerCase().includes(q) || c.dialCode.includes(q) || c.code.toLowerCase().includes(q)
+    );
+  }, [searchQuery]);
+
+  const groupedCountries = useMemo(() => {
+    const groups: Record<string, Country[]> = {};
+    filteredCountries.forEach(c => {
+      if (!groups[c.region]) groups[c.region] = [];
+      groups[c.region].push(c);
+    });
+    const order = ['North America', 'South America', 'Europe', 'Africa', 'Asia', 'Oceania'];
+    return Object.entries(groups).sort(([a], [b]) => {
+      const ia = order.indexOf(a), ib = order.indexOf(b);
+      return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+    });
+  }, [filteredCountries]);
+
   useEffect(() => {
-    checkForPasskeyLogin();
+    try {
+      const region = (Localization as any).region || '';
+      if (region) {
+        const found = SORTED_COUNTRIES.find(c => c.code === region.toUpperCase());
+        if (found) setSelectedCountry(found);
+      }
+    } catch (_) {}
   }, []);
 
-  // Watch for user changes and navigate when authenticated
-  useEffect(() => {
-    if (user) {
-      router.replace('/home');
-    }
-  }, [user]);
-
-  // ── PASSKEY LOGIC ──
-  const checkForPasskeyLogin = async () => {
-    if (Platform.OS === 'web') return;
-    try {
-      const supabase = getSupabaseClient();
-      const cleared = await AsyncStorage.getItem('passkey_session_active');
-      if (cleared === 'false') return;
-
-      const { data: sessionData } = await supabase.auth.getSession();
-      const userId = sessionData?.session?.user?.id;
-      if (!userId) return;
-
-      const { data: passkeys } = await supabase
-        .from('user_api_keys')
-        .select('id, key_value')
-        .eq('user_id', userId)
-        .eq('key_name', 'passkey')
-        .eq('is_active', true)
-        .limit(1);
-
-      if (!passkeys || passkeys.length === 0) return;
-
-      const compatible = await LocalAuthentication.hasHardwareAsync();
-      const enrolled = await LocalAuthentication.isEnrolledAsync();
-      if (!compatible || !enrolled) return;
-
-      const types = await LocalAuthentication.supportedAuthenticationTypesAsync();
-      let label = 'Biometrics';
-      if (types.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION)) label = 'Face ID';
-      else if (types.includes(LocalAuthentication.AuthenticationType.FINGERPRINT)) label = Platform.OS === 'ios' ? 'Touch ID' : 'Fingerprint';
-
-      setPasskeyBiometricLabel(label);
-      setShowPasskeyPrompt(true);
-    } catch (err) {
-      console.log('Passkey check error:', err);
-    }
-  };
-
-  const handlePasskeyAuthenticate = async () => {
-    setPasskeyLoading(true);
-    try {
-      const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: `Sign in with ${passkeyBiometricLabel}`,
-        fallbackLabel: 'Use password instead',
-        cancelLabel: 'Cancel',
-        disableDeviceFallback: false,
-      });
-      if (result.success) {
-        await AsyncStorage.setItem('passkey_session_active', 'true');
-        router.replace('/home');
-      } else {
-        setShowPasskeyPrompt(false);
-      }
-    } catch {
-      setShowPasskeyPrompt(false);
-    } finally {
-      setPasskeyLoading(false);
-    }
-  };
-
-  const emailDomains = [
-    '@gmail.com', '@icloud.com', '@yahoo.com',
-    '@outlook.com', '@hotmail.com', '@proton.me',
-  ];
-
-  const handleEmailChange = (text: string) => {
-    setEmail(text);
-    if (text.includes('@')) {
-      setShowSuggestions(false);
-      return;
-    }
-    if (text.length > 0) {
-      setSuggestions(emailDomains.map(domain => text + domain));
-      setShowSuggestions(true);
-    } else {
-      setShowSuggestions(false);
-    }
-  };
-
-  const [adminCodeSending, setAdminCodeSending] = useState(false);
-
-  // ── EMAIL LOGIN ──
-  const handleEmailContinue = async () => {
-    if (!email.trim()) {
-      showAlert('Error', 'Please enter your email address');
-      return;
-    }
-    const adminEmails = ['berryxoe@gmail.com', 'newdawens@gmail.com', 'kontgithub@gmail.com'];
-    if (adminEmails.includes(email.toLowerCase())) {
-      setAdminCodeSending(true);
-      try {
-        const supabase = getSupabaseClient();
-        const { error: otpError } = await supabase.auth.signInWithOtp({
-          email: email.toLowerCase(),
-          options: { shouldCreateUser: false },
-        });
-        if (otpError) throw new Error(otpError.message);
-      } catch (e: any) {
-        showAlert('Error', e?.message || 'Failed to send admin code.');
-        setAdminCodeSending(false);
-        return;
-      } finally {
-        setAdminCodeSending(false);
-      }
-      router.push({ pathname: '/verify-code', params: { email: email.toLowerCase(), mode: 'admin_login' } });
-    } else {
-      router.push({ pathname: '/login-password', params: { email } });
-    }
-  };
-
-  // ── PHONE LOGIN AK SUPABASE DIRÈKTEMAN ──
-  const handlePhoneContinue = async () => {
-    if (!phoneNumber.trim()) {
-      showAlert('Error', 'Please enter your phone number');
-      return;
-    }
-    const digits = phoneNumber.replace(/\D/g, '');
-    if (digits.length < 6) {
-      showAlert('Error', 'Please enter a valid phone number');
-      return;
-    }
-
-    setPhoneLoading(true);
-    try {
-      const fullPhone = `${selectedCountry.dialCode}${digits}`;
-      
-      // SENBOL: Itilize MEME SUPABASE URL ak ANON KEY tankou Apple
-      const { error: otpError } = await appleSupabase.auth.signInWithOtp({ 
-        phone: fullPhone 
-      });
-
-      if (otpError) throw otpError;
-
-      // Si succes, navige nan verify-code
-      router.push({
-        pathname: '/verify-code',
-        params: {
-          phone: fullPhone,
-          formattedPhone: `${selectedCountry.flag} ${selectedCountry.dialCode} ${formatPhoneDisplay(digits)}`,
-          mode: 'phone_login',
-        },
-      });
-    } catch (err: any) {
-      showAlert('Error', err?.message || 'Failed to send verification code.');
-    } finally {
-      setPhoneLoading(false);
-    }
-  };
-
-  // ── GOOGLE LOGIN ──
-  const handleGoogleSignIn = async () => {
-    if (googleLoading) return;
-    setGoogleLoading(true);
-    try {
-      const { error } = await signInWithGoogle();
-      if (error) {
-        const lower = (error || '').toLowerCase();
-        const isCancellation = lower.includes('cancel') || lower.includes('dismiss') || lower.includes('closed');
-        if (!isCancellation) showAlert('Error', error);
-      }
-    } catch (err: any) {
-      const msg = (err?.message || '').toLowerCase();
-      const isCancellation = msg.includes('cancel') || msg.includes('dismiss') || msg.includes('closed');
-      if (!isCancellation) showAlert('Error', err?.message || 'Google sign-in failed.');
-    } finally {
-      setGoogleLoading(false);
-    }
-  };
-
-  const handleGuestMode = () => {
-    router.replace('/home');
-  };
-
-  // ── TOGGLE PHONE/EMAIL MODE ──
-  const togglePhoneMode = () => {
-    setIsPhoneMode(!isPhoneMode);
-    setEmail('');
-    setPhoneNumber('');
-    setShowSuggestions(false);
-    setShowCountryList(false);
-  };
-
-  const selectCountry = (country: Country) => {
+  const handleCountrySelect = useCallback((country: Country) => {
     setSelectedCountry(country);
-    setShowCountryList(false);
-  };
+    setShowCountryPicker(false);
+    setSearchQuery('');
+    setTimeout(() => phoneInputRef.current?.focus(), 100);
+  }, []);
 
   const handlePhoneChange = (text: string) => {
     const digits = text.replace(/\D/g, '');
     setPhoneNumber(digits);
+    setError('');
   };
 
-  const formatPhoneDisplay = (raw: string): string => {
-    const digits = raw.replace(/\D/g, '');
-    if (digits.length <= 3) return digits;
-    if (digits.length <= 6) return `${digits.slice(0, 3)} ${digits.slice(3)}`;
-    if (digits.length <= 10) return `${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6)}`;
-    return `${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6, 10)} ${digits.slice(10)}`;
-  };
-
-  // ── APPLE SIGN IN (via Supabase OAuth) ──
-  const handleAppleSignIn = async () => {
-    if (Platform.OS !== 'ios') {
-      showAlert('Not Available', 'Apple Sign In is only available on iOS devices.');
-      return;
-    }
-    setAppleLoading(true);
+  const handleContinue = async () => {
+    Keyboard.dismiss();
+    if (!phoneNumber.trim()) { setError('Please enter your phone number'); return; }
+    if (!basicValidatePhone(phoneNumber)) { setError('Please enter a valid phone number'); return; }
+    setLoading(true);
+    setError('');
     try {
-      const redirectUrl = Linking.createURL('/');
-      const { data, error } = await appleSupabase.auth.signInWithOAuth({
-        provider: 'apple',
-        options: {
-          redirectTo: redirectUrl,
-          skipBrowserRedirect: true,
+      const fullPhone = `${selectedCountry.dialCode}${phoneNumber}`;
+      const { error: otpError } = await supabase.auth.signInWithOtp({ phone: fullPhone });
+      if (otpError) throw otpError;
+      router.push({
+        pathname: '/verify-code',
+        params: {
+          phone: fullPhone,
+          formattedPhone: `${selectedCountry.flag} ${selectedCountry.dialCode} ${formatPhoneDisplay(phoneNumber)}`,
+          countryCode: selectedCountry.code,
         },
       });
-      if (error) {
-        showAlert('Sign In Failed', error.message || 'Failed to start Apple Sign In.');
-        return;
-      }
-      if (data?.url) {
-        await Linking.openURL(data.url);
-      }
-    } catch (e: any) {
-      const msg = (e?.message || '').toLowerCase();
-      const isCancellation = msg.includes('cancel') || msg.includes('dismiss') || msg.includes('closed');
-      if (!isCancellation) {
-        showAlert('Sign In Error', e?.message || 'Apple Sign In failed.');
-      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to send verification code. Please try again.');
     } finally {
-      setAppleLoading(false);
+      setLoading(false);
     }
   };
 
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
-    closeButton: {
-      position: 'absolute',
-      top: Platform.select({ ios: insets.top + 16, android: insets.top + 16, default: 16 }),
-      right: 20, width: 40, height: 40, borderRadius: 20,
-      backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center',
-      zIndex: 10, borderWidth: 1, borderColor: colors.border,
+    header: {
+      flexDirection: 'row', alignItems: 'center',
+      paddingHorizontal: Spacing.md,
+      paddingTop: insets.top + Spacing.sm,
+      paddingBottom: Spacing.sm,
+      borderBottomWidth: 1, borderBottomColor: colors.border,
     },
-    content: {
-      flex: 1, paddingHorizontal: Spacing.xl,
-      paddingTop: Platform.select({ ios: insets.top + 80, android: insets.top + 80, default: 80 }),
-    },
-    title: { fontSize: 34, fontWeight: '700', color: colors.text, marginBottom: Spacing.xl, textAlign: 'center' },
-    description: {
-      ...Typography.body, color: colors.textSecondary,
-      textAlign: 'center', marginBottom: Spacing.xxl, lineHeight: 22,
-    },
-    // PHONE INPUT STYLES
+    backButton: { padding: Spacing.sm },
+    headerTitle: { ...Typography.heading, fontSize: 20, marginLeft: Spacing.md, flex: 1, color: colors.text },
+    content: { flex: 1, padding: Spacing.xl },
+    title: { ...Typography.heading, fontSize: 28, fontWeight: '700', marginBottom: Spacing.sm, color: colors.text },
+    subtitle: { ...Typography.body, color: colors.textSecondary, marginBottom: Spacing.xl, fontSize: 16 },
+    label: { ...Typography.body, fontWeight: '600', marginBottom: Spacing.sm, color: colors.text },
+    inputGroup: { marginBottom: Spacing.xl },
     countrySelector: {
-      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+      flexDirection: 'row', alignItems: 'center',
       backgroundColor: colors.surface, borderRadius: BorderRadius.lg,
-      paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm,
-      marginBottom: Spacing.sm, borderWidth: 1, borderColor: colors.border,
-    },
-    countrySelectorLeft: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
-    countryFlag: { fontSize: 20 },
-    countryName: { ...Typography.body, color: colors.text, fontSize: 16 },
-    countryDialCode: { ...Typography.body, color: colors.textSecondary, fontSize: 14 },
-    phoneInputContainer: {
-      backgroundColor: colors.surface, borderRadius: BorderRadius.lg,
-      paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm,
-      marginBottom: Spacing.md, borderWidth: 1, borderColor: colors.border,
-    },
-    phoneInputLabel: { ...Typography.caption, color: colors.textSecondary, fontSize: 12, marginBottom: 4 },
-    phoneInput: { ...Typography.body, color: colors.text, fontSize: 16, padding: 0 },
-    // COUNTRY LIST STYLES
-    countryListContainer: {
-      backgroundColor: colors.surface, borderRadius: BorderRadius.lg,
-      marginTop: 6, marginBottom: Spacing.md,
-      borderWidth: 1, borderColor: colors.border, maxHeight: 250,
-    },
-    countryItem: {
-      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-      padding: 12, borderBottomWidth: 1, borderColor: colors.border,
-    },
-    countryItemLeft: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
-    countryItemText: { ...Typography.body, color: colors.text, fontSize: 15 },
-    countryItemDial: { ...Typography.body, color: colors.textSecondary, fontSize: 14 },
-    // EMAIL INPUT
-    inputContainer: {
-      backgroundColor: colors.surface, borderRadius: BorderRadius.lg,
-      paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm,
-      marginBottom: Spacing.md, borderWidth: 1, borderColor: colors.border,
-    },
-    inputLabel: { ...Typography.caption, color: colors.textSecondary, fontSize: 12, marginBottom: 4 },
-    input: { ...Typography.body, color: colors.text, fontSize: 16, padding: 0 },
-    continueButton: {
-      backgroundColor: colors.text, borderRadius: BorderRadius.full,
-      padding: Spacing.md, alignItems: 'center', marginBottom: Spacing.md,
-    },
-    continueButtonDisabled: { opacity: 0.3 },
-    continueButtonText: { ...Typography.body, color: colors.background, fontWeight: '600', fontSize: 16 },
-    divider: { flexDirection: 'row', alignItems: 'center', marginBottom: Spacing.xl },
-    dividerLine: { flex: 1, height: 1, backgroundColor: colors.border },
-    dividerText: { ...Typography.body, color: colors.textSecondary, paddingHorizontal: Spacing.md },
-    appleButton: {
-      flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-      backgroundColor: '#000000', borderRadius: BorderRadius.full,
-      padding: Spacing.md, marginBottom: Spacing.md, borderWidth: 1, borderColor: '#000000',
-      gap: Spacing.sm, opacity: appleLoading ? 0.7 : 1,
-    },
-    appleButtonText: { ...Typography.body, color: '#FFFFFF', fontSize: 16, fontWeight: '500' },
-    oauthButton: {
-      flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-      backgroundColor: colors.surface, borderRadius: BorderRadius.full,
       padding: Spacing.md, marginBottom: Spacing.md,
-      borderWidth: 1.5, borderColor: colors.border, gap: Spacing.sm,
-      opacity: operationLoading ? 0.7 : 1,
+      borderWidth: 1, borderColor: colors.border,
     },
-    oauthButtonText: { ...Typography.body, color: colors.text, fontSize: 16, fontWeight: '500' },
-  });
-
-  const pkStyles = StyleSheet.create({
-    overlay: {
-      ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.92)',
-      justifyContent: 'center', alignItems: 'center', zIndex: 999, paddingHorizontal: 32,
+    flag: { fontSize: 32, marginRight: Spacing.sm },
+    countryInfo: { flex: 1 },
+    countryName: { ...Typography.body, fontWeight: '600', color: colors.text },
+    dialCode: { ...Typography.caption, color: colors.textSecondary },
+    phoneInputContainer: {
+      flexDirection: 'row', alignItems: 'center',
+      backgroundColor: colors.surface, borderRadius: BorderRadius.lg,
+      borderWidth: 2, borderColor: colors.border, paddingHorizontal: Spacing.md,
     },
-    card: { width: '100%', alignItems: 'center', paddingVertical: 48 },
-    iconWrap: {
-      width: 100, height: 100, borderRadius: 50, backgroundColor: 'rgba(255,255,255,0.1)',
-      alignItems: 'center', justifyContent: 'center', marginBottom: 28,
-      borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)',
+    dialCodePrefix: { ...Typography.body, fontSize: 18, fontWeight: '600', color: colors.textSecondary, marginRight: Spacing.sm },
+    phoneInput: { flex: 1, ...Typography.body, fontSize: 18, color: colors.text, paddingVertical: Platform.OS === 'ios' ? Spacing.md : Spacing.sm },
+    hintText: { ...Typography.caption, color: colors.textSecondary, marginTop: Spacing.sm },
+    errorText: { ...Typography.caption, color: '#FF453A', marginTop: Spacing.sm },
+    continueButton: {
+      backgroundColor: colors.primary, borderRadius: BorderRadius.lg,
+      padding: Spacing.lg, alignItems: 'center', marginTop: 'auto',
     },
-    title: { fontSize: 26, fontWeight: '700', color: '#FFFFFF', marginBottom: 10, textAlign: 'center' },
-    subtitle: { fontSize: 15, color: 'rgba(255,255,255,0.55)', textAlign: 'center', lineHeight: 22, marginBottom: 48 },
-    primaryBtn: { width: '100%', backgroundColor: '#FFFFFF', borderRadius: 50, paddingVertical: 16, alignItems: 'center', marginBottom: 14 },
-    primaryBtnText: { fontSize: 17, fontWeight: '700', color: '#000000' },
-    secondaryBtn: { paddingVertical: 12, paddingHorizontal: 24 },
-    secondaryBtnText: { fontSize: 16, color: 'rgba(255,255,255,0.5)', fontWeight: '500' },
+    continueButtonDisabled: { opacity: 0.5 },
+    continueButtonText: { ...Typography.body, color: '#FFFFFF', fontWeight: '700', fontSize: 18 },
+    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+    modalContent: {
+      backgroundColor: colors.background,
+      borderTopLeftRadius: BorderRadius.xl, borderTopRightRadius: BorderRadius.xl,
+      maxHeight: '85%', paddingTop: Spacing.md,
+      paddingBottom: Math.max(insets.bottom, Spacing.md),
+    },
+    modalHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border, alignSelf: 'center', marginBottom: Spacing.md },
+    modalHeader: { paddingHorizontal: Spacing.md, marginBottom: Spacing.md },
+    modalTitle: { ...Typography.heading, fontSize: 20, marginBottom: Spacing.md, color: colors.text },
+    searchContainer: {
+      flexDirection: 'row', alignItems: 'center',
+      backgroundColor: colors.surface, borderRadius: BorderRadius.md,
+      paddingHorizontal: Spacing.md, borderWidth: 1, borderColor: colors.border,
+    },
+    searchIcon: { marginRight: Spacing.sm },
+    searchInput: { flex: 1, ...Typography.body, color: colors.text, paddingVertical: Spacing.md },
+    sectionHeader: {
+      backgroundColor: colors.background, paddingHorizontal: Spacing.md,
+      paddingVertical: Spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border,
+    },
+    sectionHeaderText: { ...Typography.caption, fontWeight: '700', color: colors.primary, textTransform: 'uppercase', letterSpacing: 0.5 },
+    countryItem: {
+      flexDirection: 'row', alignItems: 'center',
+      padding: Spacing.md, borderRadius: BorderRadius.md,
+      marginHorizontal: Spacing.md, marginBottom: 2,
+    },
+    countryItemSelected: { backgroundColor: `${colors.primary}18` },
+    countryItemFlag: { fontSize: 26, marginRight: Spacing.md, width: 36, textAlign: 'center' },
+    countryItemInfo: { flex: 1 },
+    countryItemName: { ...Typography.body, fontWeight: '500', color: colors.text },
+    countryItemCode: { ...Typography.caption, color: colors.textSecondary },
+    emptyContainer: { padding: Spacing.xl, alignItems: 'center' },
+    emptyText: { ...Typography.body, color: colors.textSecondary, marginTop: Spacing.md },
   });
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle={colors.text === '#FFFFFF' ? 'light-content' : 'dark-content'} />
-
-      {showPasskeyPrompt && (
-        <View style={pkStyles.overlay}>
-          <View style={pkStyles.card}>
-            <View style={pkStyles.iconWrap}>
-              <Ionicons name={passkeyBiometricLabel === 'Face ID' ? 'scan-outline' : 'finger-print-outline'} size={52} color="#FFFFFF" />
-            </View>
-            <Text style={pkStyles.title}>Sign in faster</Text>
-            <Text style={pkStyles.subtitle}>Use {passkeyBiometricLabel} to sign in to your account</Text>
-            <TouchableOpacity style={pkStyles.primaryBtn} onPress={handlePasskeyAuthenticate} disabled={passkeyLoading}>
-              {passkeyLoading ? <ActivityIndicator color="#000" /> : <Text style={pkStyles.primaryBtnText}>Sign in with {passkeyBiometricLabel}</Text>}
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <View style={styles.container}>
+          {/* Header */}
+          <View style={styles.header}>
+            <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+              <Ionicons name="arrow-back" size={24} color={colors.text} />
             </TouchableOpacity>
-            <TouchableOpacity style={pkStyles.secondaryBtn} onPress={() => setShowPasskeyPrompt(false)}>
-              <Text style={pkStyles.secondaryBtnText}>Use password instead</Text>
+            <Text style={styles.headerTitle}>Phone Login</Text>
+          </View>
+
+          <View style={styles.content}>
+            <Text style={styles.title}>Enter your phone</Text>
+            <Text style={styles.subtitle}>
+              {"We'll send you a verification code to confirm your number"}
+            </Text>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Country</Text>
+              <TouchableOpacity style={styles.countrySelector} onPress={() => setShowCountryPicker(true)}>
+                <Text style={styles.flag}>{selectedCountry.flag}</Text>
+                <View style={styles.countryInfo}>
+                  <Text style={styles.countryName}>{selectedCountry.name}</Text>
+                  <Text style={styles.dialCode}>{selectedCountry.dialCode}</Text>
+                </View>
+                <Ionicons name="chevron-down" size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
+
+              <Text style={styles.label}>Phone Number</Text>
+              <View style={[styles.phoneInputContainer, phoneNumber.length > 0 && { borderColor: colors.primary }]}>
+                <Text style={styles.dialCodePrefix}>{selectedCountry.dialCode}</Text>
+                <TextInput
+                  ref={phoneInputRef}
+                  style={styles.phoneInput}
+                  placeholder="Phone number"
+                  placeholderTextColor={colors.textSecondary}
+                  keyboardType="phone-pad"
+                  value={formatPhoneDisplay(phoneNumber)}
+                  onChangeText={handlePhoneChange}
+                  autoFocus
+                  textContentType="telephoneNumber"
+                  autoComplete="tel"
+                />
+              </View>
+
+              {error ? (
+                <Text style={styles.errorText}>{error}</Text>
+              ) : (
+                <Text style={styles.hintText}>
+                  {'Enter your phone number without the country code'}
+                </Text>
+              )}
+            </View>
+
+            <TouchableOpacity
+              style={[styles.continueButton, (loading || !phoneNumber) && styles.continueButtonDisabled]}
+              onPress={handleContinue}
+              disabled={loading || !phoneNumber}
+            >
+              {loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.continueButtonText}>Continue</Text>}
             </TouchableOpacity>
           </View>
         </View>
-      )}
+      </TouchableWithoutFeedback>
 
-      <TouchableOpacity style={styles.closeButton} onPress={() => router.back()}>
-        <Ionicons name="close" size={24} color={colors.text} />
-      </TouchableOpacity>
-
-      <View style={styles.content}>
-        <View style={{ alignItems: 'center', marginBottom: 16 }}>
-          <AILogo size={72} />
-        </View>
-        <Text style={styles.title}>Log in or sign up</Text>
-        <Text style={styles.description}>You will get smarter responses and can upload files, images and more.</Text>
-
-        {/* PHONE INPUT */}
-        {isPhoneMode ? (
-          <>
-            {/* Country Selector */}
-            <TouchableOpacity style={styles.countrySelector} onPress={() => setShowCountryList(!showCountryList)} activeOpacity={0.7}>
-              <View style={styles.countrySelectorLeft}>
-                <Text style={styles.countryFlag}>{selectedCountry.flag}</Text>
-                <Text style={styles.countryName}>{selectedCountry.name}</Text>
-                <Text style={styles.countryDialCode}>({selectedCountry.dialCode})</Text>
+      {/* Country Picker Modal — outside TouchableWithoutFeedback so it works correctly */}
+      <Modal visible={showCountryPicker} transparent animationType="slide" onRequestClose={() => setShowCountryPicker(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowCountryPicker(false)}>
+          <View style={styles.modalContent} onStartShouldSetResponder={() => true}>
+            <View style={styles.modalHandle} />
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Country</Text>
+              <View style={styles.searchContainer}>
+                <Ionicons name="search" size={20} color={colors.textSecondary} style={styles.searchIcon} />
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Search country or code..."
+                  placeholderTextColor={colors.textSecondary}
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  autoFocus
+                />
+                {searchQuery.length > 0 && (
+                  <TouchableOpacity onPress={() => setSearchQuery('')}>
+                    <Ionicons name="close-circle" size={20} color={colors.textSecondary} />
+                  </TouchableOpacity>
+                )}
               </View>
-              <Ionicons name={showCountryList ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textSecondary} />
-            </TouchableOpacity>
+            </View>
 
-            {/* Country List Dropdown */}
-            {showCountryList && (
-              <View style={styles.countryListContainer}>
-                <ScrollView showsVerticalScrollIndicator={false}>
-                  {COUNTRIES.map((country, index) => (
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {groupedCountries.map(([region, regionCountries]) => (
+                <View key={region}>
+                  <View style={styles.sectionHeader}>
+                    <Text style={styles.sectionHeaderText}>{region}</Text>
+                  </View>
+                  {regionCountries.map(country => (
                     <TouchableOpacity
                       key={country.code}
-                      style={[styles.countryItem, index === COUNTRIES.length - 1 && { borderBottomWidth: 0 }]}
-                      onPress={() => selectCountry(country)}
-                      activeOpacity={0.7}
+                      style={[styles.countryItem, selectedCountry.code === country.code && styles.countryItemSelected]}
+                      onPress={() => handleCountrySelect(country)}
                     >
-                      <View style={styles.countryItemLeft}>
-                        <Text style={styles.countryFlag}>{country.flag}</Text>
-                        <Text style={styles.countryItemText}>{country.name}</Text>
+                      <Text style={styles.countryItemFlag}>{country.flag}</Text>
+                      <View style={styles.countryItemInfo}>
+                        <Text style={styles.countryItemName}>{country.name}</Text>
+                        <Text style={styles.countryItemCode}>{country.dialCode}</Text>
                       </View>
-                      <Text style={styles.countryItemDial}>{country.dialCode}</Text>
+                      {selectedCountry.code === country.code && (
+                        <Ionicons name="checkmark-circle" size={22} color={colors.primary} />
+                      )}
                     </TouchableOpacity>
                   ))}
-                </ScrollView>
-              </View>
-            )}
-
-            {/* Phone Number Input */}
-            <View style={styles.phoneInputContainer}>
-              <Text style={styles.phoneInputLabel}>Phone number</Text>
-              <TextInput
-                style={styles.phoneInput}
-                placeholder={`${selectedCountry.dialCode} (305) 896-2443`}
-                placeholderTextColor={colors.textSecondary}
-                value={formatPhoneDisplay(phoneNumber)}
-                onChangeText={handlePhoneChange}
-                keyboardType="phone-pad"
-                editable={!operationLoading && !phoneLoading}
-                accessibilityLabel="Phone number"
-              />
-            </View>
-          </>
-        ) : (
-          /* EMAIL INPUT */
-          <View style={styles.inputContainer}>
-            <Text style={styles.inputLabel}>Email</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="" placeholderTextColor={colors.textSecondary}
-              value={email} onChangeText={handleEmailChange}
-              autoCapitalize="none" keyboardType="email-address"
-              editable={!operationLoading} accessibilityLabel="Email address"
-            />
-          </View>
-        )}
-
-        {/* EMAIL SUGGESTIONS */}
-        {!isPhoneMode && showSuggestions && (
-          <View style={{ backgroundColor: colors.surface, borderRadius: 10, marginTop: 6, borderWidth: 1, borderColor: colors.border }}>
-            {suggestions.map((item, index) => (
-              <TouchableOpacity
-                key={index}
-                style={{ padding: 12, borderBottomWidth: index !== suggestions.length - 1 ? 1 : 0, borderColor: colors.border }}
-                onPress={() => { setEmail(item); setShowSuggestions(false); }}
-              >
-                <Text style={{ color: colors.text }}>{item}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
-
-        {/* CONTINUE BUTTON */}
-        <TouchableOpacity
-          style={[styles.continueButton, (isPhoneMode ? !phoneNumber.trim() : !email.trim()) && styles.continueButtonDisabled]}
-          onPress={isPhoneMode ? handlePhoneContinue : handleEmailContinue}
-          disabled={(isPhoneMode ? !phoneNumber.trim() : !email.trim()) || operationLoading || adminCodeSending || phoneLoading}
-          accessibilityLabel={isPhoneMode ? "Continue with phone" : "Continue with email"}
-          accessibilityRole="button"
-        >
-          {adminCodeSending || phoneLoading ? (
-            <ActivityIndicator size="small" color={colors.background} />
-          ) : (
-            <Text style={styles.continueButtonText}>
-              {operationLoading ? 'Processing...' : 'Continue'}
-            </Text>
-          )}
-        </TouchableOpacity>
-
-        <View style={styles.divider}>
-          <View style={styles.dividerLine} />
-          <Text style={styles.dividerText}>OR</Text>
-          <View style={styles.dividerLine} />
-        </View>
-
-        {/* Google Button */}
-        <TouchableOpacity
-          style={[styles.oauthButton, { opacity: googleLoading ? 0.7 : 1 }]}
-          onPress={handleGoogleSignIn}
-          disabled={googleLoading || operationLoading}
-        >
-          {googleLoading ? <ActivityIndicator size="small" color={colors.text} /> : (
-            <>
-              <Ionicons name="logo-google" size={20} color={colors.text} />
-              <Text style={styles.oauthButtonText}>Continue with Google</Text>
-            </>
-          )}
-        </TouchableOpacity>
-
-        {/* Apple Sign In */}
-        {Platform.OS === 'ios' && (
-          <TouchableOpacity style={styles.appleButton} onPress={handleAppleSignIn} disabled={appleLoading}>
-            {appleLoading ? <ActivityIndicator size="small" color="#FFFFFF" /> : (
-              <>
-                <Ionicons name="logo-apple" size={20} color="#FFFFFF" />
-                <Text style={styles.appleButtonText}>Sign in with Apple</Text>
-              </>
-            )}
-          </TouchableOpacity>
-        )}
-
-        {/* TOGGLE BUTTON: Continue with Phone OR Continue with Email */}
-        <TouchableOpacity style={styles.oauthButton} onPress={togglePhoneMode} disabled={operationLoading || phoneLoading}>
-          <Ionicons name={isPhoneMode ? "mail-outline" : "call"} size={20} color={colors.text} />
-          <Text style={styles.oauthButtonText}>
-            {isPhoneMode ? 'Continue with email' : 'Continue with phone'}
-          </Text>
-        </TouchableOpacity>
-
-        {/* Continue as Guest Button */}
-        <TouchableOpacity style={[styles.oauthButton, { marginTop: 4 }]} onPress={() => setGuestModalVisible(true)}>
-          <Ionicons name="person-outline" size={20} color={colors.text} />
-          <Text style={styles.oauthButtonText}>Continue as guest</Text>
-        </TouchableOpacity>
-      </View>
-
-      <Modal visible={guestModalVisible} transparent animationType="fade" onRequestClose={() => setGuestModalVisible(false)}>
-        <View style={{ flex: 1, justifyContent: 'flex-end' }}>
-          <BlurView intensity={60} tint="dark" style={StyleSheet.absoluteFill} />
-          <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setGuestModalVisible(false)} />
-          <View style={guestStyles.sheet}>
-            <View style={guestStyles.handle} />
-            <View style={guestStyles.iconWrap}>
-              <Ionicons name="person-outline" size={32} color="#FFF" />
-            </View>
-            <Text style={guestStyles.title}>Continue as Guest</Text>
-            <Text style={guestStyles.body}>
-              {'You can chat with AI without creating an account. Guest sessions are limited to 35 messages and do not save history.'}
-            </Text>
-            <View style={guestStyles.featureList}>
-              {[
-                { icon: 'checkmark-circle', text: '35 free messages', ok: true },
-                { icon: 'close-circle', text: 'No chat history saved', ok: false },
-                { icon: 'close-circle', text: 'No file uploads', ok: false },
-                { icon: 'checkmark-circle', text: 'Basic AI responses', ok: true },
-              ].map((f, i) => (
-                <View key={i} style={guestStyles.featureRow}>
-                  <Ionicons name={f.icon as any} size={18} color={f.ok ? '#34C759' : '#FF453A'} />
-                  <Text style={guestStyles.featureText}>{f.text}</Text>
                 </View>
               ))}
-            </View>
-            <TouchableOpacity style={guestStyles.primaryBtn} onPress={() => { setGuestModalVisible(false); handleGuestMode(); }}>
-              <Text style={guestStyles.primaryBtnText}>Start as Guest</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={guestStyles.secondaryBtn} onPress={() => setGuestModalVisible(false)}>
-              <Text style={guestStyles.secondaryBtnText}>Create Account Instead</Text>
-            </TouchableOpacity>
+              {filteredCountries.length === 0 && (
+                <View style={styles.emptyContainer}>
+                  <Ionicons name="search-outline" size={48} color={colors.textSecondary} />
+                  <Text style={styles.emptyText}>No countries found</Text>
+                </View>
+              )}
+            </ScrollView>
           </View>
-        </View>
+        </TouchableOpacity>
       </Modal>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
-
-const guestStyles = StyleSheet.create({
-  sheet: { backgroundColor: '#1C1C1E', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 28, paddingBottom: 40 },
-  handle: { width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.3)', alignSelf: 'center', marginBottom: 24 },
-  iconWrap: { width: 64, height: 64, borderRadius: 32, backgroundColor: 'rgba(255,255,255,0.1)', alignItems: 'center', justifyContent: 'center', alignSelf: 'center', marginBottom: 16 },
-  title: { color: '#FFF', fontSize: 22, fontWeight: '700', textAlign: 'center', marginBottom: 10 },
-  body: { color: 'rgba(255,255,255,0.55)', fontSize: 14, textAlign: 'center', lineHeight: 21, marginBottom: 20 },
-  featureList: { gap: 10, marginBottom: 24 },
-  featureRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  featureText: { color: 'rgba(255,255,255,0.8)', fontSize: 15 },
-  primaryBtn: { backgroundColor: '#FFFFFF', borderRadius: 50, paddingVertical: 16, alignItems: 'center', marginBottom: 12 },
-  primaryBtnText: { color: '#000000', fontSize: 17, fontWeight: '700' },
-  secondaryBtn: { alignItems: 'center', paddingVertical: 10 },
-  secondaryBtnText: { color: 'rgba(255,255,255,0.45)', fontSize: 15 },
-});

@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
@@ -14,15 +15,6 @@ import { Spacing, Typography, BorderRadius } from '../constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
-// ── MEME SUPABASE KONFIGIRASYON KI NAN LoginScreen ──
-const MY_SUPABASE_URL = 'https://uzxmmddivzqjhcnnrkns.supabase.co';
-const MY_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV6eG1tZGRpdnpxamhjbm5ya25zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY0MTY5MjEsImV4cCI6MjA5MTk5MjkyMX0.6PYtbRps9YJjvX5ibxGy346uA82RadEEpFrhSHa1UIE';
-
-import { createClient } from '@supabase/supabase-js';
-const phoneSupabase = createClient(MY_SUPABASE_URL, MY_SUPABASE_ANON_KEY, {
-  auth: { autoRefreshToken: true, persistSession: true, detectSessionInUrl: false },
-});
 
 export default function VerifyCodeScreen() {
   const { colors } = useTheme();
@@ -46,11 +38,12 @@ export default function VerifyCodeScreen() {
   }>();
 
   const isAdminLogin = mode === 'admin_login';
-  const isPhoneMode = mode === 'phone_login' || !!phone;
+  const isPhoneMode = !!phone;
 
   const [code, setCode] = useState(['', '', '', '', '', '']);
   const inputRefs = useRef<(TextInput | null)[]>([]);
 
+  // Resend cooldown
   const [resendCount, setResendCount] = useState(0);
   const [cooldown, setCooldown] = useState(isPhoneMode ? 60 : 0);
   const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -71,11 +64,12 @@ export default function VerifyCodeScreen() {
   }, []);
 
   useEffect(() => {
+    // Phone mode: start 60s countdown immediately
     if (isPhoneMode) startCooldown(60);
     setTimeout(() => inputRefs.current[0]?.focus(), 100);
     return () => { cooldownRef.current && clearInterval(cooldownRef.current!); };
   }, [isPhoneMode, startCooldown]);
-
+  
   const handleCodeChange = (index: number, value: string) => {
     if (value && !/^\d+$/.test(value)) return;
     const newCode = [...code];
@@ -98,29 +92,24 @@ export default function VerifyCodeScreen() {
       return;
     }
 
-    // ── PHONE OTP VERIFY AK MEME SUPABASE ──
     if (isPhoneMode) {
-      try {
-        const { error, data } = await phoneSupabase.auth.verifyOtp({
-          phone: phone!,
-          token: otp,
-          type: 'sms',
-        });
-        if (error) {
-          showAlert('Error', error.message);
-          setCode(['', '', '', '', '', '']);
-          inputRefs.current[0]?.focus();
-        } else if (data?.user) {
-          setTimeout(() => router.replace('/home'), 100);
-        }
-      } catch (err: any) {
-        showAlert('Error', err?.message || 'Verification failed');
+      // Phone OTP: verify with Supabase directly
+      const supabase = getSupabaseClient();
+      const { error, data } = await supabase.auth.verifyOtp({
+        phone,
+        token: otp,
+        type: 'sms',
+      });
+      if (error) {
+        showAlert('Error', error.message);
         setCode(['', '', '', '', '', '']);
+        inputRefs.current[0]?.focus();
+      } else if (data?.user) {
+        setTimeout(() => router.replace('/home'), 100);
       }
       return;
     }
 
-    // Email OTP (pa chanje)
     if (isAdminLogin) {
       const { error: otpError, user: otpUser } = await verifyOTPAndLogin(email, otp);
       if (otpError) {
@@ -146,8 +135,8 @@ export default function VerifyCodeScreen() {
     setResendLoading(true);
     try {
       if (isPhoneMode) {
-        // ── RESEND PHONE OTP AK MEME SUPABASE ──
-        const { error } = await phoneSupabase.auth.signInWithOtp({ phone: phone! });
+        const supabase = getSupabaseClient();
+        const { error } = await supabase.auth.signInWithOtp({ phone });
         if (error) throw error;
         showAlert('Code Sent', `Verification code resent to ${formattedPhone || phone}.`);
       } else {
@@ -158,7 +147,7 @@ export default function VerifyCodeScreen() {
       setResendCount(c => c + 1);
       startCooldown(60);
     } catch (e: any) {
-      showAlert('Error', e?.message || 'Failed to resend code.');
+      showAlert('Error', e?.message || 'Failed to resend code. Please try again.');
     } finally {
       setResendLoading(false);
     }
@@ -172,12 +161,14 @@ export default function VerifyCodeScreen() {
       right: 20,
     },
     content: {
-      flex: 1, paddingHorizontal: Spacing.xl,
+      flex: 1,
+      paddingHorizontal: Spacing.xl,
       paddingTop: Platform.select({ ios: insets.top + 80, android: insets.top + 80, default: 80 }),
     },
     icon: {
       width: 64, height: 64, borderRadius: 32,
-      backgroundColor: colors.text, alignItems: 'center', justifyContent: 'center',
+      backgroundColor: colors.text,
+      alignItems: 'center', justifyContent: 'center',
       alignSelf: 'center', marginBottom: Spacing.xl,
     },
     iconSymbol: { fontSize: 32, fontWeight: '700', color: colors.background },
@@ -195,8 +186,10 @@ export default function VerifyCodeScreen() {
       gap: Spacing.sm, marginBottom: Spacing.xl,
     },
     codeInput: {
-      width: 50, height: 56, backgroundColor: colors.surface,
-      borderRadius: BorderRadius.lg, borderWidth: 2, borderColor: colors.border,
+      width: 50, height: 56,
+      backgroundColor: colors.surface,
+      borderRadius: BorderRadius.lg,
+      borderWidth: 2, borderColor: colors.border,
       textAlign: 'center', fontSize: 24, fontWeight: '600', color: colors.text,
     },
     codeInputFocused: { borderColor: colors.text },
@@ -298,6 +291,7 @@ export default function VerifyCodeScreen() {
         )}
       </View>
 
+      
       <View style={styles.footer}>
         <Text style={styles.footerLink}>Terms of Use</Text>
         <Text style={styles.footerLink}>•</Text>
