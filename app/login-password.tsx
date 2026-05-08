@@ -286,7 +286,7 @@ export default function LoginPasswordScreen() {
         </TouchableOpacity>
 
         <View style={styles.signupContainer}>
-          <Text style={styles.signupText}>Don't have an account?</Text>
+          <Text style={styles.signupText}>Don&apos;t have an account?</Text>
           <TouchableOpacity style={styles.signupButton} onPress={handleSignUp}>
             <Text style={styles.signupButtonText}>Sign up</Text>
           </TouchableOpacity>
