@@ -869,3 +869,4 @@ const styles = StyleSheet.create({
   },
   refreshText: { fontSize: 11 },
 }); 
+fix error cannot read property default of undefined.
