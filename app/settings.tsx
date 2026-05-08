@@ -1198,41 +1198,37 @@ export default function SettingsScreen() {
 <SectionLabel text="About" />
 
 <Card>
-  {/* BUG REPORT (PA CHANJE) */}
   <Row
     icon="bug-outline"
     label="Report bug"
     showChevron={false}
-    onPress={() => router.push('/bugreport')}
+    onPress={() => openLink('/bugreport')}
   />
 
-  {/* HELP CENTER */}
   <Row
     icon="help-circle-outline"
     label="Help Center"
     showChevron={false}
-    onPress={() => openLink('https://your-help-center.com')}
+    onPress={() => openLink('https://yourdomain.com/help')}
   />
 
-  {/* TERMS */}
   <Row
     icon="document-text-outline"
     label="Terms of Use"
     showChevron={false}
-    onPress={() => openLink('https://your-terms.com')}
+    onPress={() => openLink('https://yourdomain.com/terms')}
   />
 
-  {/* PRIVACY */}
   <Row
     icon="shield-checkmark-outline"
     label="Privacy Policy"
     showChevron={false}
-    onPress={() => openLink('https://your-privacy.com')}
+    onPress={() => openLink('https://yourdomain.com/privacy')}
   />
 
-  {/* CHECK FOR UPDATES */}
+  {/* CHECK UPDATE */}
   <Row
-    icon="cloud-download-outline"
+    icon={null} // ❌ remove old icon
     label="Check for updates"
     isLast
     showChevron={false}
@@ -1246,7 +1242,7 @@ export default function SettingsScreen() {
             width: 10,
             height: 10,
             borderRadius: 5,
-            backgroundColor: dotColor
+            backgroundColor: isDarkMode ? '#fff' : '#000' // ⚫⚪ dot
           }}
         />
       )
