@@ -63,25 +63,8 @@ import { AIMode } from '../components/AIModeSelectorModal';
 import { CalculatorModal, CalculatorCard, detectMathExpression } from '../components/CalculatorModal';
 import { SpotifyMusicCard, SpotifyTrack } from '../components/SpotifyMusicCard';
 import { ConnectedAppsModal, ConnectedApp } from '../components/ConnectedAppsModal';
-// Gesture handler — loaded conditionally to avoid native crash when reanimated/gesture-handler is not linked
-const noopGesture = {
-  activeOffsetX: () => noopGesture,
-  failOffsetY: () => noopGesture,
-  minDistance: () => noopGesture,
-  onEnd: () => noopGesture,
-};
-let GestureHandlerRootView: any = ({ children, style }: any) => <View style={[{ flex: 1 }, style]}>{children}</View>;
-let GestureDetector: any = ({ children }: any) => <>{children}</>;
-let Gesture: any = { Pan: () => noopGesture };
-let runOnJS: any = (fn: any) => fn;
-try {
-  const gh = require('react-native-gesture-handler');
-  const ra = require('react-native-reanimated');
-  GestureHandlerRootView = gh.GestureHandlerRootView;
-  GestureDetector = gh.GestureDetector;
-  Gesture = gh.Gesture;
-  runOnJS = ra.runOnJS;
-} catch (_e) {}
+import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
+import { runOnJS } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -1285,21 +1268,15 @@ export default function HomeScreen() {
     }
   }, [sideMenuVisible]);
 
-  const swipeGesture = (() => {
-    try {
-      const pan = Gesture.Pan();
-      if (!pan || typeof pan.activeOffsetX !== 'function') return null;
-      return pan
-        .activeOffsetX([55, 10000])
-        .failOffsetY([-25, 25])
-        .minDistance(55)
-        .onEnd((e: any) => {
-          if (e.translationX > 110 && e.velocityX > 250 && !sideMenuVisible) {
-            runOnJS(setSideMenuVisible)(true);
-          }
-        });
-    } catch (_e) { return null; }
-  })();
+  const swipeGesture = Gesture.Pan()
+    .activeOffsetX([55, 10000])
+    .failOffsetY([-25, 25])
+    .minDistance(55)
+    .onEnd((e) => {
+      if (e.translationX > 110 && e.velocityX > 250 && !sideMenuVisible) {
+        runOnJS(setSideMenuVisible)(true);
+      }
+    });
 
   useEffect(() => {
     checkAudioPermissions();
@@ -2468,7 +2445,7 @@ export default function HomeScreen() {
   return (
     <ErrorBoundary>
       <GestureHandlerRootView style={{ flex: 1 }}>
-        <GestureDetector gesture={swipeGesture ?? Gesture.Pan()}>
+        <GestureDetector gesture={swipeGesture}>
           <View style={{ flex: 1 }}>
             <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={0}>
               <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.background} />
