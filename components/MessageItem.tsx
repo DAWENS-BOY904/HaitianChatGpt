@@ -583,6 +583,9 @@ export const MessageItem = memo(function MessageItem({
   const ttsSound = useRef<any>(null);
   const [ttsPlaying, setTtsPlaying] = useState(false);
 
+  // For group chat: show sender label above assistant messages
+  const showSenderLabel = !isUser;
+
   const [phoneModalVisible, setPhoneModalVisible] = useState(false);
   const [pendingPhone, setPendingPhone] = useState('');
   const [imageViewerVisible, setImageViewerVisible] = useState(false);

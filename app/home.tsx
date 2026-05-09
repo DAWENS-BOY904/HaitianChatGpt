@@ -922,6 +922,60 @@ const imgOverlayStyles = StyleSheet.create({
   label: { color: 'rgba(255,255,255,0.82)', fontSize: 16, fontWeight: '500', letterSpacing: 0.2 },
 });
 
+function GroupMemberProfileContent({ member, isOwner, isAdmin, isDark, isSilenced, onClose, onRemove, onSilence, onReport, colors }: {
+  member: GroupMember | null;
+  isOwner: boolean;
+  isAdmin: boolean;
+  isDark: boolean;
+  isSilenced: boolean;
+  onClose: () => void;
+  onRemove: (id: string) => void;
+  onSilence: (id: string) => void;
+  onReport: () => void;
+  colors: any;
+}) {
+  if (!member) return null;
+  const textC = isDark ? '#FFF' : '#000';
+  const subC = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.45)';
+  const divC = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)';
+  const initials = (member.username || '?').slice(0,2).toUpperCase();
+  const canManage = isOwner || isAdmin;
+  return (
+    <View>
+      <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.18)', alignSelf: 'center', marginBottom: 24 }} />
+      <View style={{ alignItems: 'center', marginBottom: 20 }}>
+        {member.profile_photo_url ? (
+          <Image source={{ uri: member.profile_photo_url }} style={{ width: 88, height: 88, borderRadius: 44 }} />
+        ) : (
+          <View style={{ width: 88, height: 88, borderRadius: 44, backgroundColor: member.accent_color || '#555', alignItems: 'center', justifyContent: 'center' }}>
+            <Text style={{ color: '#FFF', fontSize: 28, fontWeight: '700' }}>{initials}</Text>
+          </View>
+        )}
+        <Text style={{ color: textC, fontSize: 22, fontWeight: '700', marginTop: 12, textAlign: 'center' }}>{member.username}</Text>
+        <Text style={{ color: subC, fontSize: 14, marginTop: 4 }}>@{member.username.toLowerCase().replace(/\s/g,'')}</Text>
+      </View>
+      <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: divC, marginBottom: 0 }}>
+        {canManage ? (
+          <>
+            <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 16, gap: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: divC }} onPress={() => onRemove(member.id)}>
+              <Ionicons name="exit-outline" size={22} color="#FF453A" />
+              <Text style={{ color: '#FF453A', fontSize: 17, fontWeight: '500' }}>Remove from group</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 16, gap: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: divC }} onPress={() => onSilence(member.id)}>
+              <Ionicons name={isSilenced ? 'volume-high-outline' : 'volume-mute-outline'} size={22} color="#FF9F0A" />
+              <Text style={{ color: '#FF9F0A', fontSize: 17, fontWeight: '500' }}>{isSilenced ? 'Unsilence user' : 'Silence user'}</Text>
+            </TouchableOpacity>
+          </>
+        ) : null}
+        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 16, gap: 14 }} onPress={onReport}>
+          <Ionicons name="flag-outline" size={22} color="#FF453A" />
+          <Text style={{ color: '#FF453A', fontSize: 17, fontWeight: '500' }}>Report</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
 export default function HomeScreen() {
   const { colors, isDark } = useTheme();
   const { settings, updateSetting } = useSettings();
@@ -1021,9 +1075,13 @@ export default function HomeScreen() {
   const [smartSuggestions, setSmartSuggestions] = useState<Array<{title: string; sub: string}>>([]);
   const [renameModalVisible, setRenameModalVisible] = useState(false);
   const [archiveConfirmVisible, setArchiveConfirmVisible] = useState(false);
+  const [groupMemberProfileModal, setGroupMemberProfileModal] = useState<{visible: boolean; member: GroupMember | null; isOwner: boolean}>({visible: false, member: null, isOwner: false});
+  const [silencedUsers, setSilencedUsers] = useState<Set<string>>(new Set());
   const [groupStartModalVisible, setGroupStartModalVisible] = useState(false);
   const [notifPermModalVisible, setNotifPermModalVisible] = useState(false);
   const [groupChatMode, setGroupChatMode] = useState(false);
+  // Track group members with their messages for the group view
+  const [groupMembersWithMessages, setGroupMembersWithMessages] = useState<GroupMember[]>([]);
   const [temporaryChatMode, setTemporaryChatModeLocal] = useState(false);
   const setTemporaryChatMode = (val: boolean) => {
     setTemporaryChatModeLocal(val);
@@ -2455,7 +2513,7 @@ export default function HomeScreen() {
     blurText: { fontSize: 24, fontWeight: 'bold', color: 'white', marginTop: 16 },
     messagesContainer: { flex: 1 },
     inputContainer: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 10, paddingBottom: Platform.select({ ios: insets.bottom + 6, android: insets.bottom + 6, default: 6 }), paddingTop: 6, gap: 8, backgroundColor: Platform.OS === 'ios' ? 'transparent' : colors.background },
-    inputWrapper: { flex: 1, borderRadius: 28, paddingHorizontal: 14, paddingTop: 10, paddingBottom: 8, minHeight: 50, maxHeight: 420, borderWidth: 1 },
+    inputWrapper: { flex: 1, borderRadius: 28, paddingHorizontal: 14, paddingTop: 10, paddingBottom: 8, minHeight: 50, maxHeight: 420, borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden' },
     inputRow: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 32 },
     input: { flex: 1, fontSize: 16, color: colors.text, paddingVertical: 0, maxHeight: 160, minHeight: 22, lineHeight: 22 },
     recordingRow: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 36 },
@@ -2890,12 +2948,12 @@ export default function HomeScreen() {
                 ) : null}
 
                 <Pressable
-                  style={[styles.inputWrapper, { backgroundColor: Platform.OS === 'ios' ? 'transparent' : (isDark ? '#1C1C1E' : '#EFEFEF'), borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)' }]}
+                  style={[styles.inputWrapper, { backgroundColor: Platform.OS === 'ios' ? 'transparent' : (isDark ? 'rgba(44,44,46,0.95)' : 'rgba(235,235,235,0.95)'), borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)' }]}
                   onPress={() => inputRef.current?.focus()}
                 >
                   {Platform.OS === 'ios' ? (
                     <BlurView
-                      intensity={isDark ? 65 : 50}
+                      intensity={isDark ? 75 : 62}
                       tint={isDark ? 'dark' : 'light'}
                       style={StyleSheet.absoluteFill}
                       pointerEvents="none"
@@ -3008,12 +3066,22 @@ export default function HomeScreen() {
             ) : null}
 
             {showScrollToBottom && hasMessages && (
-              <TouchableOpacity
-                style={{ position: 'absolute', bottom: 90, right: 16, width: 36, height: 36, borderRadius: 18, backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA', alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 6, elevation: 6, zIndex: 50 }}
-                onPress={() => { flatListRef.current?.scrollToEnd({ animated: true }); setIsAtBottom(true); setShowScrollToBottom(false); }}
-              >
-                <Ionicons name="chevron-down" size={20} color={colors.text} />
-              </TouchableOpacity>
+              <View style={{ position: 'absolute', bottom: 90, left: 0, right: 0, alignItems: 'center', zIndex: 50, pointerEvents: 'box-none' }}>
+                <TouchableOpacity
+                  onPress={() => { flatListRef.current?.scrollToEnd({ animated: true }); setIsAtBottom(true); setShowScrollToBottom(false); }}
+                  activeOpacity={0.85}
+                >
+                  {Platform.OS === 'ios' ? (
+                    <BlurView intensity={isDark ? 70 : 55} tint={isDark ? 'dark' : 'light'} style={{ width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.1)', shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.22, shadowRadius: 8 }}>
+                      <Ionicons name="chevron-down" size={20} color={colors.text} />
+                    </BlurView>
+                  ) : (
+                    <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: isDark ? 'rgba(44,44,46,0.92)' : 'rgba(255,255,255,0.92)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)', shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.22, shadowRadius: 8, elevation: 6 }}>
+                      <Ionicons name="chevron-down" size={20} color={colors.text} />
+                    </View>
+                  )}
+                </TouchableOpacity>
+              </View>
             )}
 
             <ToolsModal
@@ -3165,6 +3233,58 @@ export default function HomeScreen() {
             <RenameModal visible={renameModalVisible} currentTitle={currentConversation?.title || ''} onConfirm={async (title) => { setRenameModalVisible(false); await handleRenameConversation(title); }} onCancel={() => setRenameModalVisible(false)} />
             <ArchiveConfirmModal visible={archiveConfirmVisible} onConfirm={() => { setArchiveConfirmVisible(false); handleArchiveConversation(); }} onCancel={() => setArchiveConfirmVisible(false)} />
             <GroupStartModal visible={groupStartModalVisible} user={user} profilePhotoUrl={userProfilePhoto} onClose={() => setGroupStartModalVisible(false)} onStartGroup={handleStartGroupChat} isDark={isDark} onSetupProfile={() => { setGroupStartModalVisible(false); setTimeout(() => setProfileEditModalVisible(true), 200); }} />
+
+            {/* Group Member Profile Modal */}
+            <Modal visible={groupMemberProfileModal.visible} transparent animationType="slide" onRequestClose={() => setGroupMemberProfileModal({visible:false,member:null,isOwner:false})}>
+              <View style={{ flex: 1, justifyContent: 'flex-end' }}>
+                <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setGroupMemberProfileModal({visible:false,member:null,isOwner:false})} />
+                <View style={{ borderTopLeftRadius: 28, borderTopRightRadius: 28, overflow: 'hidden', maxHeight: '70%' }}>
+                  {Platform.OS === 'ios' ? (
+                    <BlurView intensity={isDark ? 85 : 75} tint={isDark ? 'dark' : 'extraLight'} style={{ padding: 28, paddingBottom: insets.bottom + 28 }}>
+                      <GroupMemberProfileContent
+                        member={groupMemberProfileModal.member}
+                        isOwner={groupMemberProfileModal.isOwner}
+                        isAdmin={isAdmin}
+                        isDark={isDark}
+                        isSilenced={groupMemberProfileModal.member ? silencedUsers.has(groupMemberProfileModal.member.id) : false}
+                        onClose={() => setGroupMemberProfileModal({visible:false,member:null,isOwner:false})}
+                        onRemove={(memberId) => {
+                          setGroupMemberProfileModal({visible:false,member:null,isOwner:false});
+                          showAlert('Removed', 'User removed from group.');
+                        }}
+                        onSilence={(memberId) => {
+                          setSilencedUsers(prev => { const n = new Set(prev); if (n.has(memberId)) n.delete(memberId); else n.add(memberId); return n; });
+                          setGroupMemberProfileModal({visible:false,member:null,isOwner:false});
+                        }}
+                        onReport={() => { setGroupMemberProfileModal({visible:false,member:null,isOwner:false}); setTimeout(() => setReportGroupVisible(true), 200); }}
+                        colors={colors}
+                      />
+                    </BlurView>
+                  ) : (
+                    <View style={{ backgroundColor: isDark ? '#1C1C1E' : '#F2F2F7', padding: 28, paddingBottom: insets.bottom + 28 }}>
+                      <GroupMemberProfileContent
+                        member={groupMemberProfileModal.member}
+                        isOwner={groupMemberProfileModal.isOwner}
+                        isAdmin={isAdmin}
+                        isDark={isDark}
+                        isSilenced={groupMemberProfileModal.member ? silencedUsers.has(groupMemberProfileModal.member.id) : false}
+                        onClose={() => setGroupMemberProfileModal({visible:false,member:null,isOwner:false})}
+                        onRemove={(memberId) => {
+                          setGroupMemberProfileModal({visible:false,member:null,isOwner:false});
+                          showAlert('Removed', 'User removed from group.');
+                        }}
+                        onSilence={(memberId) => {
+                          setSilencedUsers(prev => { const n = new Set(prev); if (n.has(memberId)) n.delete(memberId); else n.add(memberId); return n; });
+                          setGroupMemberProfileModal({visible:false,member:null,isOwner:false});
+                        }}
+                        onReport={() => { setGroupMemberProfileModal({visible:false,member:null,isOwner:false}); setTimeout(() => setReportGroupVisible(true), 200); }}
+                        colors={colors}
+                      />
+                    </View>
+                  )}
+                </View>
+              </View>
+            </Modal>
             <ProfileEditModal visible={profileEditModalVisible} user={user} profilePhotoUrl={userProfilePhoto} onClose={() => setProfileEditModalVisible(false)} isDark={isDark} onSave={(name, username, photo) => { if (photo) setUserProfilePhoto(photo); }} />
             <GroupChatActionsMenu visible={groupChatActionsVisible} onClose={() => setGroupChatActionsVisible(false)} onPeople={() => setPeopleModalVisible(true)} onAddPeople={handleAddPeople} onManageLink={() => setInviteLinkVisible(true)} onRenameGroup={() => setRenameGroupVisible(true)} onCustomize={() => setCustomizeAIVisible(true)} onMute={() => showAlert('Muted', 'Notifications muted for this group')} onReport={() => setReportGroupVisible(true)} onDeleteGroup={handleDeleteGroup} isDark={isDark} />
             <PeopleModal visible={peopleModalVisible} onClose={() => setPeopleModalVisible(false)} groupName={groupName} userName={userName} profilePhotoUrl={userProfilePhoto} isDark={isDark} isAdmin={isAdmin} />
