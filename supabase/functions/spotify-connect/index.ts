@@ -12,8 +12,25 @@ serve(async (req: Request) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
+  // ── Safe JSON parse (handles preflight or non-JSON bodies) ──────────────
+  let body: any = {};
   try {
-    const body = await req.json();
+    const rawText = await req.text();
+    if (!rawText || !rawText.trim().startsWith('{')) {
+      // Not JSON — return 400 cleanly
+      return new Response(JSON.stringify({ error: 'Invalid request body — expected JSON' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    body = JSON.parse(rawText);
+  } catch (parseErr: any) {
+    return new Response(JSON.stringify({ error: `Invalid JSON: ${parseErr.message}` }), {
+      status: 400,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+  try {
     const { action, query, code, redirectUri, accessToken, refreshToken, trackId } = body;
 
     const clientId = Deno.env.get('SPOTIFY_CLIENT_ID') || '';
