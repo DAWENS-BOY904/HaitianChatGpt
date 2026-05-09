@@ -137,49 +137,57 @@ serve(async (req: Request) => {
       });
     }
 
-    // ── SEARCH ─────────────────────────────────────────────────────────────
+    // ── SEARCH ──────────────────────────────────────────────────────────────────
     if (action === 'search') {
       if (!query) return respond({ error: 'Missing query' }, 400);
 
-      // Prefer user access token if provided (fuller results), fall back to client credentials
+      const safeParseJson = async (response: Response): Promise<any> => {
+        try {
+          const text = await response.text();
+          const trimmed = text.trim();
+          if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+            return JSON.parse(trimmed);
+          }
+        } catch (_e) {}
+        return {};
+      };
+
+      const doSearch = async (token: string): Promise<any> => {
+        const searchUrl = `https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=track,playlist&limit=8&market=US`;
+        try {
+          const res = await fetch(searchUrl, { headers: { Authorization: `Bearer ${token}` } });
+          if (!res.ok) {
+            console.error('[spotify-connect] search HTTP error:', res.status);
+            return {};
+          }
+          return await safeParseJson(res);
+        } catch (fetchErr) {
+          console.error('[spotify-connect] search fetch error:', fetchErr);
+          return {};
+        }
+      };
+
+      // Prefer user access token, fall back to client credentials
       let token: string;
       if (accessToken) {
         token = accessToken;
       } else {
-        token = await getClientToken();
-      }
-
-      const searchUrl = `https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=track,playlist&limit=8&market=US`;
-      const res = await fetch(searchUrl, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      // If token is expired and we used a user token, retry with client credentials
-      if (res.status === 401 && accessToken) {
-        const clientToken = await getClientToken();
-        const retryRes = await fetch(searchUrl, {
-          headers: { Authorization: `Bearer ${clientToken}` },
-        });
-        let retryData: any = {};
-        try {
-          const retryText = await retryRes.text();
-          if (retryText && retryText.trim().startsWith('{')) {
-            retryData = JSON.parse(retryText);
-          }
-        } catch (_e) {}
-        return respond({ results: formatSearchResults(retryData) });
-      }
-
-      // Safe JSON parse for search response
-      let data: any = {};
-      try {
-        const text = await res.text();
-        if (text && text.trim().startsWith('{')) {
-          data = JSON.parse(text);
+        try { token = await getClientToken(); } catch (e) {
+          console.error('[spotify-connect] getClientToken failed:', e);
+          return respond({ results: [] });
         }
-      } catch (parseErr) {
-        console.error('[spotify-connect] search parse error:', parseErr);
       }
+
+      let data = await doSearch(token);
+
+      // If user token expired (401), retry with client credentials
+      if (accessToken && (!data.tracks && !data.playlists)) {
+        try {
+          const clientToken = await getClientToken();
+          data = await doSearch(clientToken);
+        } catch (_e) {}
+      }
+
       return respond({ results: formatSearchResults(data) });
     }
 
