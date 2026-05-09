@@ -67,53 +67,6 @@ async function getValidAccessToken(supabase: any): Promise<string | null> {
   } catch { return null; }
 }
 
-// ── Fallback tracks for when Spotify API is unavailable ────────────────────
-const FALLBACK_WORKOUT = [
-  {
-    id: 'fallback-w1',
-    name: 'Eye of the Tiger',
-    owner: 'Survivor',
-    type: 'Song',
-    imageUrl: 'https://i.scdn.co/image/ab67616d0000b273f5b2a2f8e2f3a08c55a73e60',
-    previewUrl: null,
-    spotifyUrl: 'https://open.spotify.com/track/2HHtWyy5CgaQbC7XSoOb0e',
-    uri: 'spotify:track:2HHtWyy5CgaQbC7XSoOb0e',
-  },
-  {
-    id: 'fallback-w2',
-    name: 'Stronger',
-    owner: 'Kanye West',
-    type: 'Song',
-    imageUrl: 'https://i.scdn.co/image/ab67616d0000b2736f2f499c9a0dbba3a472c9c3',
-    previewUrl: null,
-    spotifyUrl: 'https://open.spotify.com/track/0j2T0R9dR9qdJYsB7ciXhf',
-    uri: 'spotify:track:0j2T0R9dR9qdJYsB7ciXhf',
-  },
-];
-
-const FALLBACK_CHILL = [
-  {
-    id: 'fallback-c1',
-    name: 'Sunflower',
-    owner: 'Post Malone',
-    type: 'Song',
-    imageUrl: 'https://i.scdn.co/image/ab67616d0000b273aw3QFQOy7Cs7LJlDxPRz3',
-    previewUrl: null,
-    spotifyUrl: 'https://open.spotify.com/track/3KkXRkHbMCARz0aVfEt68P',
-    uri: 'spotify:track:3KkXRkHbMCARz0aVfEt68P',
-  },
-  {
-    id: 'fallback-c2',
-    name: 'Blinding Lights',
-    owner: 'The Weeknd',
-    type: 'Song',
-    imageUrl: 'https://i.scdn.co/image/ab67616d0000b2738863bc11d2aa12b54f5aeb36',
-    previewUrl: null,
-    spotifyUrl: 'https://open.spotify.com/track/0VjIjW4GlUZAMYd2vXMi3b',
-    uri: 'spotify:track:0VjIjW4GlUZAMYd2vXMi3b',
-  },
-];
-
 // ── Spotify Logo ────────────────────────────────────────────────────────────
 function SpotifyLogo({ size = 80 }: { size?: number }) {
   return (
@@ -223,13 +176,10 @@ function RealPreviewCard({
         setTracks(results);
         await AsyncStorage.setItem(cacheKey, JSON.stringify({ data: results, ts: Date.now() }));
       } else {
-        // Fallback
-        const fallback = query.toLowerCase().includes('workout') ? FALLBACK_WORKOUT : FALLBACK_CHILL;
-        setTracks(fallback);
+        setTracks([]);
       }
     } catch {
-      const fallback = query.toLowerCase().includes('workout') ? FALLBACK_WORKOUT : FALLBACK_CHILL;
-      setTracks(fallback);
+      setTracks([]);
     } finally {
       setLoading(false);
     }
@@ -293,6 +243,11 @@ function RealPreviewCard({
       {loading ? (
         <View style={{ paddingVertical: 20, alignItems: 'center' }}>
           <ActivityIndicator size="small" color={SPOTIFY_GREEN} />
+        </View>
+      ) : tracks.length === 0 ? (
+        <View style={{ paddingVertical: 20, alignItems: 'center' }}>
+          <Ionicons name="musical-note" size={20} color={subC} />
+          <Text style={{ color: subC, fontSize: 12, marginTop: 6 }}>No songs found</Text>
         </View>
       ) : (
         tracks.map((track, i) => {
@@ -500,27 +455,32 @@ function InfoRow({ label, value, isDark, last, isLink, onPress, isLoading }: {
   label: string; value: string; isDark: boolean; last?: boolean;
   isLink?: boolean; onPress?: () => void; isLoading?: boolean;
 }) {
+  const linkColor = isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)';
   return (
     <TouchableOpacity
-      style={[irStyles.row, !last && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)' }]}
-      onPress={onPress} disabled={!isLink && !onPress} activeOpacity={isLink || onPress ? 0.6 : 1}
+      style={[irStyles.row, !last && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)' }]}
+      onPress={onPress} disabled={!isLink && !onPress} activeOpacity={isLink || onPress ? 0.5 : 1}
     >
-      <Text style={[irStyles.label, { color: isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.45)' }]}>{label}</Text>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+      <Text style={[irStyles.label, { color: isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.55)' }]}>{label}</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
         {isLoading ? (
           <ActivityIndicator size="small" color={isDark ? '#FFF' : '#000'} />
         ) : (
-          <Text style={[irStyles.value, { color: isDark ? '#FFF' : '#000' }, (isLink || onPress) && { color: SPOTIFY_GREEN, fontWeight: '600' }]}>{value}</Text>
+          <Text style={[irStyles.value, { color: isDark ? '#FFF' : '#000' }, (isLink || onPress) && { color: linkColor }]}>{value}</Text>
         )}
-        {(isLink || onPress) && <Ionicons name="open-outline" size={14} color={SPOTIFY_GREEN} />}
+        {(isLink || onPress) && (
+          <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)', alignItems: 'center', justifyContent: 'center' }}>
+            <Ionicons name="arrow-up-forward" size={12} color={linkColor} />
+          </View>
+        )}
       </View>
     </TouchableOpacity>
   );
 }
 
 const irStyles = StyleSheet.create({
-  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 16 },
-  label: { fontSize: 15 },
+  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 18 },
+  label: { fontSize: 15.5, fontWeight: '400' },
   value: { fontSize: 15, fontWeight: '500', maxWidth: '55%', textAlign: 'right' },
 });
 
@@ -646,9 +606,9 @@ export default function SpotifyConnectScreen() {
     { label: 'Capabilities', value: 'Interactive, Writes', isLink: false },
     { label: 'Developer', value: 'Spotify', isLink: false },
     { label: 'Version', value: appVersion, isLink: false },
-    { label: 'Privacy Policy', value: 'Open', isLink: true, onPress: () => handleOpenInAppBrowser('https://www.spotify.com/legal/privacy-policy/') },
-    { label: 'Terms of Service', value: 'Open', isLink: true, onPress: () => handleOpenInAppBrowser('https://www.spotify.com/legal/end-user-agreement/') },
-    { label: 'Customer support', value: 'Open', isLink: true, onPress: () => handleOpenInAppBrowser('https://support.spotify.com/us/article/contact-us/') },
+    { label: 'Privacy Policy', value: '', isLink: true, onPress: () => handleOpenInAppBrowser('https://www.spotify.com/legal/privacy-policy/') },
+    { label: 'Terms of Service', value: '', isLink: true, onPress: () => handleOpenInAppBrowser('https://www.spotify.com/legal/end-user-agreement/') },
+    { label: 'Customer Support', value: '', isLink: true, onPress: () => handleOpenInAppBrowser('https://support.spotify.com/us/article/contact-us/') },
   ];
 
   return (
@@ -726,9 +686,9 @@ export default function SpotifyConnectScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Information table */}
+        {/* Information */}
         <Text style={[spStyles.sectionTitle, { color: textC }]}>Information</Text>
-        <View style={[spStyles.infoCard, { backgroundColor: cardBg }]}>
+        <View style={[spStyles.infoCard, { backgroundColor: cardBg, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }]}>
           {infoRows.map((row, i, arr) => (
             <InfoRow
               key={row.label} label={row.label} value={row.value} isDark={isDark}
@@ -768,5 +728,5 @@ const spStyles = StyleSheet.create({
   connectBtn: { backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 50, paddingHorizontal: 28, paddingVertical: 11, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
   connectBtnText: { fontSize: 16, fontWeight: '600' },
   sectionTitle: { fontSize: 22, fontWeight: '700', paddingHorizontal: 16, marginBottom: 12 },
-  infoCard: { marginHorizontal: 16, borderRadius: 18, overflow: 'hidden' },
+  infoCard: { marginHorizontal: 16, borderRadius: 20, overflow: 'hidden' },
 });
