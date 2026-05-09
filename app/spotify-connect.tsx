@@ -121,17 +121,66 @@ function PlaybackBars({ playing }: { playing: boolean }) {
   );
 }
 
+// ── Fallback tracks shown when Spotify API returns nothing ──────────────────
+const FALLBACK_TRACKS_WORKOUT = [
+  {
+    id: 'fallback_workout_1',
+    name: 'Eye of the Tiger',
+    owner: 'Survivor',
+    type: 'Song',
+    imageUrl: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=200&q=80',
+    previewUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
+    spotifyUrl: 'https://open.spotify.com/track/2HHtWyy5CgaQbC7XSoOb0e',
+    uri: 'spotify:track:2HHtWyy5CgaQbC7XSoOb0e',
+  },
+  {
+    id: 'fallback_workout_2',
+    name: 'Lose Yourself',
+    owner: 'Eminem',
+    type: 'Song',
+    imageUrl: 'https://images.unsplash.com/photo-1571019614242-c5c5dee9f50b?w=200&q=80',
+    previewUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3',
+    spotifyUrl: 'https://open.spotify.com/track/5Z01UMMf7V1o0MzF86s6WJ',
+    uri: 'spotify:track:5Z01UMMf7V1o0MzF86s6WJ',
+  },
+];
+
+const FALLBACK_TRACKS_CHILL = [
+  {
+    id: 'fallback_chill_1',
+    name: 'Weightless',
+    owner: 'Marconi Union',
+    type: 'Song',
+    imageUrl: 'https://images.unsplash.com/photo-1519389950473-47ba0277781c?w=200&q=80',
+    previewUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3',
+    spotifyUrl: 'https://open.spotify.com/track/7M9HGmhjYnzUFLMo8nYBtN',
+    uri: 'spotify:track:7M9HGmhjYnzUFLMo8nYBtN',
+  },
+  {
+    id: 'fallback_chill_2',
+    name: 'Lofi Study Beats',
+    owner: 'Chillhop Music',
+    type: 'Playlist',
+    imageUrl: 'https://images.unsplash.com/photo-1483062288757-dde0b97b12b2?w=200&q=80',
+    previewUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3',
+    spotifyUrl: 'https://open.spotify.com/playlist/0vvXsWCC9xrXsKd4euo806',
+    uri: 'spotify:playlist:0vvXsWCC9xrXsKd4euo806',
+  },
+];
+
 // ── Real Preview Card with Spotify data ─────────────────────────────────────
 function RealPreviewCard({
   title,
   query,
   isDark,
   supabase,
+  fallbackTracks,
 }: {
   title: string;
   query: string;
   isDark: boolean;
   supabase: any;
+  fallbackTracks: any[];
 }) {
   const [tracks, setTracks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -147,21 +196,27 @@ function RealPreviewCard({
   useEffect(() => {
     loadTracks();
     return () => {
-      soundRef.current?.unloadAsync().catch(() => {});
-      if (timerRef.current) clearInterval(timerRef.current);
+      stopAndUnloadSound();
     };
   }, []);
+
+  const stopAndUnloadSound = async () => {
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    if (soundRef.current) {
+      try { await soundRef.current.stopAsync(); } catch {}
+      try { await soundRef.current.unloadAsync(); } catch {}
+      soundRef.current = null;
+    }
+  };
 
   const loadTracks = async () => {
     setLoading(true);
     try {
       const cacheKey = `spotify_preview_${query.replace(/\s/g, '_')}`;
-      // Check cache (valid for 30 min with slight randomness for variety)
       const cachedRaw = await AsyncStorage.getItem(cacheKey);
       if (cachedRaw) {
         const { data, ts } = JSON.parse(cachedRaw);
         const age = Date.now() - ts;
-        // Use cache 60% of the time if <30 min old for consistency
         if (age < 30 * 60 * 1000 && Math.random() < 0.6 && Array.isArray(data) && data.length > 0) {
           setTracks(data.slice(0, 2));
           setLoading(false);
@@ -176,10 +231,11 @@ function RealPreviewCard({
         setTracks(results);
         await AsyncStorage.setItem(cacheKey, JSON.stringify({ data: results, ts: Date.now() }));
       } else {
-        setTracks([]);
+        // API failed or empty — use fallback tracks
+        setTracks(fallbackTracks);
       }
     } catch {
-      setTracks([]);
+      setTracks(fallbackTracks);
     } finally {
       setLoading(false);
     }
@@ -188,25 +244,31 @@ function RealPreviewCard({
   const formatTime = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
 
   const handlePlay = async (track: any) => {
+    // If this track is already playing — STOP it
     if (playingId === track.id) {
-      // Stop
-      if (timerRef.current) clearInterval(timerRef.current);
-      try { await soundRef.current?.stopAsync(); await soundRef.current?.unloadAsync(); } catch {}
-      soundRef.current = null;
+      await stopAndUnloadSound();
       setPlayingId(null);
       return;
     }
-    // Stop previous
-    if (timerRef.current) clearInterval(timerRef.current);
-    try { await soundRef.current?.stopAsync(); await soundRef.current?.unloadAsync(); } catch {}
-    soundRef.current = null;
+
+    // Stop any currently playing track first
+    await stopAndUnloadSound();
+    setPlayingId(null);
 
     if (track.previewUrl) {
+      // Play audio INSIDE the app — never open outside
       try {
         setPlayingId(track.id);
         setPlaybackSeconds(prev => ({ ...prev, [track.id]: 0 }));
-        await Audio.setAudioModeAsync({ playsInSilentModeIOS: true, staysActiveInBackground: true, allowsRecordingIOS: false });
-        const { sound } = await Audio.Sound.createAsync({ uri: track.previewUrl }, { shouldPlay: true });
+        await Audio.setAudioModeAsync({
+          playsInSilentModeIOS: true,
+          staysActiveInBackground: true,
+          allowsRecordingIOS: false,
+        });
+        const { sound } = await Audio.Sound.createAsync(
+          { uri: track.previewUrl },
+          { shouldPlay: true, progressUpdateIntervalMillis: 1000 }
+        );
         soundRef.current = sound;
         timerRef.current = setInterval(() => {
           setPlaybackSeconds(prev => ({ ...prev, [track.id]: (prev[track.id] || 0) + 1 }));
@@ -214,19 +276,27 @@ function RealPreviewCard({
         sound.setOnPlaybackStatusUpdate((status: any) => {
           if (status.isLoaded && status.didJustFinish) {
             setPlayingId(null);
-            if (timerRef.current) clearInterval(timerRef.current);
+            if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+          }
+          // Handle errors
+          if (!status.isLoaded && status.error) {
+            setPlayingId(null);
+            if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
           }
         });
-      } catch { setPlayingId(null); }
+      } catch {
+        setPlayingId(null);
+        await stopAndUnloadSound();
+      }
     } else {
-      // Open in Spotify app
+      // No preview URL — open in Spotify app (full play, external)
       try {
         const deepLink = track.type === 'Playlist'
           ? `spotify:playlist:${track.id}`
           : `spotify:track:${track.id}`;
         const canOpen = await Linking.canOpenURL(deepLink);
         if (canOpen) { await Linking.openURL(deepLink); }
-        else { await Linking.openURL(track.spotifyUrl); }
+        else if (track.spotifyUrl) { await Linking.openURL(track.spotifyUrl); }
       } catch {}
     }
   };
@@ -243,11 +313,6 @@ function RealPreviewCard({
       {loading ? (
         <View style={{ paddingVertical: 20, alignItems: 'center' }}>
           <ActivityIndicator size="small" color={SPOTIFY_GREEN} />
-        </View>
-      ) : tracks.length === 0 ? (
-        <View style={{ paddingVertical: 20, alignItems: 'center' }}>
-          <Ionicons name="musical-note" size={20} color={subC} />
-          <Text style={{ color: subC, fontSize: 12, marginTop: 6 }}>No songs found</Text>
         </View>
       ) : (
         tracks.map((track, i) => {
@@ -663,12 +728,14 @@ export default function SpotifyConnectScreen() {
             query="best workout songs gym energy"
             isDark={isDark}
             supabase={supabase}
+            fallbackTracks={FALLBACK_TRACKS_WORKOUT}
           />
           <RealPreviewCard
             title="Find me chill music for studying"
             query="chill music for studying focus"
             isDark={isDark}
             supabase={supabase}
+            fallbackTracks={FALLBACK_TRACKS_CHILL}
           />
         </ScrollView>
 
