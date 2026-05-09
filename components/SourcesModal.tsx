@@ -40,15 +40,17 @@ interface SourcesModalProps {
 
 // ── Helpers ──
 function getDomain(url: string): string {
+  if (!url || typeof url !== 'string') return 'unknown';
   try {
     const u = new URL(url);
     return u.hostname.replace('www.', '');
   } catch {
-    return url.slice(0, 30);
+    return (url || '').slice(0, 30);
   }
 }
 
 function getFaviconUrl(url: string): string {
+  if (!url || typeof url !== 'string') return '';
   try {
     const u = new URL(url);
     return `https://www.google.com/s2/favicons?domain=${u.hostname}&sz=128`;
@@ -692,4 +694,3 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
 });
-fix error slice of undefined

@@ -21,7 +21,7 @@ import * as Speech from 'expo-speech';
 import * as WebBrowser from 'expo-web-browser';
 import { BlurView } from 'expo-blur';
 import { CodeBlock } from './CodeBlock';
-import { SourcesListModal as SourcesModal } from './SourcesModal';
+import { SourcesListModal as SourcesModal, Source } from './SourcesModal';
 import { LinkSafetyModal } from './LinkSafetyModal';
 import * as Clipboard from 'expo-clipboard';
 
@@ -591,7 +591,7 @@ export const MessageItem = memo(function MessageItem({
   const [viewerImages, setViewerImages] = useState<string[]>([]);
   const [viewerIndex, setViewerIndex] = useState(0);
   const [sourcesModalVisible, setSourcesModalVisible] = useState(false);
-  const [sourcesData, setSourcesData] = useState<string[]>([]);
+  const [sourcesData, setSourcesData] = useState<Source[]>([]);
   const [linkSafetyVisible, setLinkSafetyVisible] = useState(false);
   const [pendingLink, setPendingLink] = useState('');
 
@@ -1043,7 +1043,15 @@ export const MessageItem = memo(function MessageItem({
                 {sourcesBlock ? (
                   <SourcesBadge
                     sources={sourcesBlock.sources!}
-                    onPress={() => { setSourcesData(sourcesBlock.sources!); setSourcesModalVisible(true); }}
+                    onPress={() => {
+                      const converted: Source[] = (sourcesBlock.sources || []).map(s => ({
+                        title: s,
+                        url: s.startsWith('http') ? s : `https://www.google.com/search?q=${encodeURIComponent(s)}`,
+                        domain: s.startsWith('http') ? undefined : s,
+                      }));
+                      setSourcesData(converted);
+                      setSourcesModalVisible(true);
+                    }}
                   />
                 ) : null}
               </>
