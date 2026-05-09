@@ -133,42 +133,6 @@ const loadStyles = StyleSheet.create({
   },
 });
 
-// ── Playback bar mini-animation ──────────────────────────────────────────────
-function PlaybackBars({ playing }: { playing: boolean }) {
-  const bars = [useRef(new Animated.Value(0.4)).current, useRef(new Animated.Value(0.7)).current, useRef(new Animated.Value(0.5)).current];
-  useEffect(() => {
-    if (playing) {
-      const anims = bars.map((b, i) =>
-        Animated.loop(Animated.sequence([
-          Animated.delay(i * 120),
-          Animated.timing(b, { toValue: 1, duration: 300 + i * 80, useNativeDriver: true }),
-          Animated.timing(b, { toValue: 0.3, duration: 300 + i * 80, useNativeDriver: true }),
-        ]))
-      );
-      anims.forEach(a => a.start());
-      return () => anims.forEach(a => a.stop());
-    } else {
-      bars.forEach(b => b.setValue(0.4));
-    }
-  }, [playing]);
-  return (
-    <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 2, height: 14 }}>
-      {bars.map((b, i) => (
-        <Animated.View
-          key={i}
-          style={{
-            width: 3,
-            height: 14,
-            borderRadius: 2,
-            backgroundColor: SPOTIFY_GREEN,
-            transform: [{ scaleY: b }],
-          }}
-        />
-      ))}
-    </View>
-  );
-}
-
 // ── Main SpotifyMusicCard ───────────────────────────────────────────────────
 interface Props {
   tracks: SpotifyTrack[];
@@ -182,45 +146,25 @@ interface Props {
 
 export function SpotifyMusicCard({ tracks, hasAccount, isDark, isGuest, isLoading, searchQuery, onConnectSpotify }: Props) {
   const [playingId, setPlayingId] = useState<string | null>(null);
-  const [playbackSeconds, setPlaybackSeconds] = useState<Record<string, number>>({});
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
   const [savingId, setSavingId] = useState<string | null>(null);
-  const [savedTooltipId, setSavedTooltipId] = useState<string | null>(null);
   const soundRef = useRef<Audio.Sound | null>(null);
-  const playbackTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const supabase = getSupabaseClient();
 
-  const bg = isDark !== false ? '#111113' : '#F0F0F5';
-  const cardBg = isDark !== false ? '#161618' : '#FFF';
-  const textC = isDark !== false ? '#FFF' : '#000';
-  const subC = isDark !== false ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)';
-  const borderC = isDark !== false ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.08)';
+  const bg = isDark ? '#111113' : '#F0F0F5';
+  const cardBg = isDark ? '#161618' : '#FFF';
+  const textC = isDark ? '#FFF' : '#000';
+  const subC = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)';
+  const borderC = isDark ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.08)';
 
-  // Cleanup on unmount
+  // Cleanup sound on unmount
   useEffect(() => {
     return () => {
       soundRef.current?.unloadAsync().catch(() => {});
-      if (playbackTimerRef.current) clearInterval(playbackTimerRef.current);
     };
   }, []);
 
-  const stopPlaybackTimer = useCallback(() => {
-    if (playbackTimerRef.current) {
-      clearInterval(playbackTimerRef.current);
-      playbackTimerRef.current = null;
-    }
-  }, []);
-
-  const startPlaybackTimer = useCallback((trackId: string) => {
-    stopPlaybackTimer();
-    setPlaybackSeconds(prev => ({ ...prev, [trackId]: 0 }));
-    playbackTimerRef.current = setInterval(() => {
-      setPlaybackSeconds(prev => ({ ...prev, [trackId]: (prev[trackId] || 0) + 1 }));
-    }, 1000);
-  }, [stopPlaybackTimer]);
-
   const stopCurrentSound = useCallback(async () => {
-    stopPlaybackTimer();
     try {
       if (soundRef.current) {
         await soundRef.current.stopAsync();
@@ -228,13 +172,7 @@ export function SpotifyMusicCard({ tracks, hasAccount, isDark, isGuest, isLoadin
         soundRef.current = null;
       }
     } catch (_e) {}
-  }, [stopPlaybackTimer]);
-
-  const formatTime = (seconds: number) => {
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return `${m}:${s.toString().padStart(2, '0')}`;
-  };
+  }, []);
 
   const handlePreview = useCallback(async (track: SpotifyTrack) => {
     // If already playing this track — stop it
@@ -246,6 +184,7 @@ export function SpotifyMusicCard({ tracks, hasAccount, isDark, isGuest, isLoadin
     await stopCurrentSound();
 
     if (!track.previewUrl) {
+      // No preview URL available from Spotify (very common) — show info
       setPlayingId(null);
       return;
     }
@@ -262,20 +201,19 @@ export function SpotifyMusicCard({ tracks, hasAccount, isDark, isGuest, isLoadin
         { shouldPlay: true, volume: 1.0 }
       );
       soundRef.current = sound;
-      startPlaybackTimer(track.id);
       sound.setOnPlaybackStatusUpdate((status: any) => {
         if (status.isLoaded && status.didJustFinish) {
           setPlayingId(null);
-          stopPlaybackTimer();
           soundRef.current = null;
         }
       });
     } catch (_e) {
       setPlayingId(null);
     }
-  }, [playingId, stopCurrentSound, startPlaybackTimer, stopPlaybackTimer]);
+  }, [playingId, stopCurrentSound]);
 
   const handlePlay = useCallback(async (track: SpotifyTrack) => {
+    // Open in Spotify app — deep link first, fallback to web URL
     try {
       const deepLink = track.type === 'Playlist'
         ? `spotify:playlist:${track.id}`
@@ -301,6 +239,7 @@ export function SpotifyMusicCard({ tracks, hasAccount, isDark, isGuest, isLoadin
 
     setSavingId(track.id);
     try {
+      // Get stored access token, refreshing if needed
       const tokenRaw = await AsyncStorage.getItem('spotify_access_token');
       const expiryRaw = await AsyncStorage.getItem('spotify_token_expiry');
       let accessToken = tokenRaw;
@@ -330,13 +269,9 @@ export function SpotifyMusicCard({ tracks, hasAccount, isDark, isGuest, isLoadin
         body: { action, accessToken, trackId: track.id },
       });
       setSavedIds(prev => new Set([...prev, track.id]));
-      // Show "Added to Your Library" tooltip
-      setSavedTooltipId(track.id);
-      setTimeout(() => setSavedTooltipId(null), 2500);
     } catch (_e) {
+      // Optimistically mark as saved even on error
       setSavedIds(prev => new Set([...prev, track.id]));
-      setSavedTooltipId(track.id);
-      setTimeout(() => setSavedTooltipId(null), 2500);
     } finally {
       setSavingId(null);
     }
@@ -345,7 +280,7 @@ export function SpotifyMusicCard({ tracks, hasAccount, isDark, isGuest, isLoadin
   // Show loading state
   if (isLoading) {
     return (
-      <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
+      <View style={{ paddingHorizontal: 16, marginBottom: 8, position: 'relative' }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
           <SpotifyLogo size={20} />
           <Text style={{ color: textC, fontSize: 15, fontWeight: '600' }}>Spotify</Text>
@@ -366,21 +301,19 @@ export function SpotifyMusicCard({ tracks, hasAccount, isDark, isGuest, isLoadin
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
         <SpotifyLogo size={20} />
         <Text style={{ color: textC, fontSize: 15, fontWeight: '600' }}>Spotify</Text>
+        <View style={{ flex: 1 }} />
+        <Text style={{ color: subC, fontSize: 11, fontWeight: '500' }}>EDG Connect</Text>
       </View>
 
       {/* Card */}
       <View style={[scStyles.card, { backgroundColor: cardBg, borderColor: borderC }]}>
         {/* Info banner */}
         <View style={[scStyles.banner, { borderBottomColor: borderC }]}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Text style={{ color: subC, fontSize: 12, fontWeight: '500' }}>From Spotify</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-              <Ionicons name="phone-portrait-outline" size={13} color={subC} />
-              <Text style={{ color: subC, fontSize: 12, fontWeight: '500' }}>Devices</Text>
-            </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Text style={{ color: subC, fontSize: 12, fontWeight: '500', flex: 1 }}>From Spotify</Text>
           </View>
           {!hasAccount ? (
-            <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginTop: 8 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginTop: 6 }}>
               <Ionicons name="information-circle-outline" size={14} color={subC} style={{ marginTop: 1 }} />
               <Text style={{ color: subC, fontSize: 11, flex: 1, lineHeight: 16 }}>
                 You can only create playlists and make advanced requests with Spotify Premium.
@@ -394,9 +327,6 @@ export function SpotifyMusicCard({ tracks, hasAccount, isDark, isGuest, isLoadin
           const isPlaying = playingId === track.id;
           const isSaved = savedIds.has(track.id);
           const isSaving = savingId === track.id;
-          const showTooltip = savedTooltipId === track.id;
-          const seconds = playbackSeconds[track.id] || 0;
-
           return (
             <View
               key={track.id + idx}
@@ -414,60 +344,45 @@ export function SpotifyMusicCard({ tracks, hasAccount, isDark, isGuest, isLoadin
                   transition={200}
                 />
               ) : (
-                <View style={[scStyles.albumArtFallback, { backgroundColor: isDark !== false ? '#2C2C2E' : '#E5E5EA' }]}>
+                <View style={[scStyles.albumArtFallback, { backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA' }]}>
                   <Ionicons name="musical-notes" size={24} color={SPOTIFY_GREEN} />
                 </View>
               )}
 
               {/* Info + Preview */}
-              <View style={{ flex: 1, gap: 3, minWidth: 0 }}>
+              <View style={{ flex: 1, gap: 3 }}>
                 <Text style={{ color: textC, fontSize: 15, fontWeight: '600', lineHeight: 20 }} numberOfLines={2}>
                   {track.name}
                 </Text>
-                <Text style={{ color: subC, fontSize: 12 }} numberOfLines={1}>
+                <Text style={{ color: subC, fontSize: 13 }} numberOfLines={1}>
                   {track.owner} · {track.type}
                 </Text>
-
-                {/* Preview button — shows timer when playing */}
                 <TouchableOpacity
                   style={[
                     scStyles.previewBtn,
                     {
                       borderColor: isPlaying
                         ? SPOTIFY_GREEN
-                        : (isDark !== false ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.2)'),
-                      backgroundColor: isPlaying ? 'transparent' : 'transparent',
+                        : (isDark ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.2)'),
+                      backgroundColor: isPlaying ? SPOTIFY_GREEN + '18' : 'transparent',
                     },
                   ]}
                   onPress={() => handlePreview(track)}
                   activeOpacity={0.75}
                 >
-                  {isPlaying ? (
-                    <>
-                      <PlaybackBars playing={true} />
-                      <Text style={{ color: textC, fontSize: 13, fontWeight: '500' }}>
-                        {formatTime(seconds)}
-                      </Text>
-                    </>
-                  ) : (
-                    <>
-                      <Ionicons name="play-skip-back-outline" size={13} color={textC} />
-                      <Text style={{ color: textC, fontSize: 13, fontWeight: '500' }}>Preview</Text>
-                    </>
-                  )}
+                  <Ionicons
+                    name={isPlaying ? 'pause' : 'play-skip-back-outline'}
+                    size={13}
+                    color={isPlaying ? SPOTIFY_GREEN : textC}
+                  />
+                  <Text style={{ color: isPlaying ? SPOTIFY_GREEN : textC, fontSize: 13, fontWeight: '500' }}>
+                    {isPlaying ? 'Pause' : 'Preview'}
+                  </Text>
                 </TouchableOpacity>
               </View>
 
               {/* Actions: + and Play */}
-              <View style={{ gap: 10, alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
-                {/* "Added to Your Library" tooltip */}
-                {showTooltip ? (
-                  <View style={scStyles.tooltip}>
-                    <Text style={scStyles.tooltipText}>Added to Your Library.</Text>
-                    <View style={scStyles.tooltipArrow} />
-                  </View>
-                ) : null}
-
+              <View style={{ gap: 10, alignItems: 'center', justifyContent: 'center' }}>
                 {/* + save to library */}
                 <TouchableOpacity
                   style={[
@@ -475,7 +390,7 @@ export function SpotifyMusicCard({ tracks, hasAccount, isDark, isGuest, isLoadin
                     {
                       borderColor: isSaved
                         ? SPOTIFY_GREEN
-                        : (isDark !== false ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.2)'),
+                        : (isDark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.15)'),
                     },
                   ]}
                   onPress={() => handleSave(track)}
@@ -534,7 +449,7 @@ export function SpotifyMusicCard({ tracks, hasAccount, isDark, isGuest, isLoadin
 const scStyles = StyleSheet.create({
   card: {
     borderRadius: 16,
-    overflow: 'visible',
+    overflow: 'hidden',
     borderWidth: StyleSheet.hairlineWidth,
   },
   banner: {
@@ -548,18 +463,17 @@ const scStyles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 14,
     gap: 12,
-    overflow: 'visible',
   },
   albumArt: {
-    width: 68,
-    height: 68,
-    borderRadius: 6,
+    width: 72,
+    height: 72,
+    borderRadius: 8,
     flexShrink: 0,
   },
   albumArtFallback: {
-    width: 68,
-    height: 68,
-    borderRadius: 6,
+    width: 72,
+    height: 72,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
@@ -567,14 +481,13 @@ const scStyles = StyleSheet.create({
   previewBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 5,
     borderWidth: 1,
     borderRadius: 50,
     paddingHorizontal: 12,
-    paddingVertical: 7,
+    paddingVertical: 6,
     alignSelf: 'flex-start',
-    marginTop: 6,
-    minWidth: 90,
+    marginTop: 4,
   },
   actionCircle: {
     width: 36,
@@ -611,41 +524,5 @@ const scStyles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 9,
     flexShrink: 0,
-  },
-  tooltip: {
-    position: 'absolute',
-    right: 44,
-    top: 4,
-    backgroundColor: 'rgba(240,240,240,0.97)',
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    zIndex: 999,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
-    elevation: 8,
-    minWidth: 160,
-  },
-  tooltipText: {
-    color: '#000',
-    fontSize: 13,
-    fontWeight: '500',
-    whiteSpace: 'nowrap',
-  } as any,
-  tooltipArrow: {
-    position: 'absolute',
-    right: -6,
-    top: '50%',
-    width: 0,
-    height: 0,
-    borderTopWidth: 5,
-    borderBottomWidth: 5,
-    borderLeftWidth: 6,
-    borderTopColor: 'transparent',
-    borderBottomColor: 'transparent',
-    borderLeftColor: 'rgba(240,240,240,0.97)',
-    marginTop: -5,
   },
 });

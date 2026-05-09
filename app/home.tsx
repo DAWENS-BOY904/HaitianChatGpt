@@ -1905,31 +1905,7 @@ export default function HomeScreen() {
     setInputText(''); setSelectedMedia([]); setEditingMessageId(null); clearDraft();
     // Clear previous Spotify results on new message
     setSpotifyResults([]);
-    setSpotifySearchQuery('');
-
-    // ── Spotify dominant mode: when chip is active, ALL messages go to Spotify ──
-    if (spotifyActive) {
-      const mq = (currentText || '').trim() || 'popular songs';
-      setSpotifySearchQuery(mq);
-      setSpotifyOverlayVisible(true);
-      setSpotifySearching(true);
-      searchSpotify(mq);
-      // Also send a contextual AI response about the Spotify results
-      setSending(true); setGenerating(true); setThinkingMode('thinking');
-      let spotifyConvId = currentConversation?.id;
-      if (!spotifyConvId) {
-        try { spotifyConvId = await createConversation(); } catch (_e) {}
-      }
-      if (spotifyConvId) {
-        const spotifyAIPrompt = `The user said: "${mq}". You are acting as a music assistant connected to Spotify. The app is fetching Spotify results for this query and displaying them as music cards above. Write a short, friendly 1-2 sentence response acknowledging what you found or are searching for on Spotify. Be conversational and music-focused.`;
-        try {
-          await sendMessage(spotifyAIPrompt, undefined, undefined, false, currentAIModel);
-        } catch (_e) {}
-      }
-      setSending(false); setGenerating(false);
-      return;
-    }
-
+      setSpotifySearchQuery('');
     const lowerText = (currentText || '').toLowerCase();
     const isImageIntent = ['create a logo', 'create logo', 'generate logo', 'make a logo', 'design a logo', 'generate a logo', 'make me a logo', 'create an image', 'create image', 'generate image', 'make an image', 'generate a photo', 'create a photo', 'make a photo', 'generate a picture', 'make a picture', 'create a picture', 'draw me a', 'draw me an', 'create art', 'generate art', 'make art', 'kreye logo', 'fe logo', 'fe imaj', 'kreye yon imaj', 'kreye imaj', 'fè logo', 'fè yon logo', 'fè imaj', 'fè yon imaj', 'créer un logo', 'générer une image', 'créer une image', 'crear un logo', 'generar una imagen'].some(kw => lowerText.includes(kw));
     setThinkingMode(isImageIntent ? 'creating_image' : 'thinking');
@@ -1993,8 +1969,8 @@ export default function HomeScreen() {
       await sendMessage(prefixedText, filePayloadArr.length > 0 ? filePayloadArr : undefined, base64Image, false, currentAIModel);
       setShowCompletionStatus(true);
       setTimeout(() => setShowCompletionStatus(false), 2000);
-      // Spotify EDG Function: trigger when connected and music intent detected (non-dominant mode)
-      if (!spotifyActive && spotifyConnected && isMusicQuery(currentText)) {
+      // Spotify EDG Function: trigger if active OR Spotify connected and music intent detected
+      if ((spotifyActive || spotifyConnected) && isMusicQuery(currentText)) {
         const mq = currentText.replace(/(?:search|play|find|show me|get me|look for|listen to)/gi, '').trim() || currentText;
         setSpotifySearchQuery(mq);
         setSpotifyActive(true);
