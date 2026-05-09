@@ -61,7 +61,7 @@ import { ChatHistoryModal } from '../components/ChatHistoryModal';
 import { ImageSearchResults } from '../components/ImageSearchResults';
 import { AIMode } from '../components/AIModeSelectorModal';
 import { CalculatorModal, CalculatorCard, detectMathExpression } from '../components/CalculatorModal';
-import { SpotifyMusicCard, SpotifyTrack } from '../components/SpotifyMusicCard';
+import { SpotifyMusicCard, SpotifyLoadingOverlay, SpotifyTrack } from '../components/SpotifyMusicCard';
 import { ConnectedAppsModal, ConnectedApp } from '../components/ConnectedAppsModal';
 // Gesture handler — loaded conditionally to avoid native crash when reanimated/gesture-handler is not linked 
 const noopGesture = {
@@ -1122,6 +1122,8 @@ export default function HomeScreen() {
   const [spotifyActive, setSpotifyActive] = useState(false);
   const [spotifyResults, setSpotifyResults] = useState<SpotifyTrack[]>([]);
   const [spotifySearching, setSpotifySearching] = useState(false);
+  const [spotifySearchQuery, setSpotifySearchQuery] = useState('');
+  const [spotifyOverlayVisible, setSpotifyOverlayVisible] = useState(false);
   const [connectedAppsModalVisible, setConnectedAppsModalVisible] = useState(false);
 
   const handleOpenMessageActions = useCallback((msg: any) => {
@@ -1878,6 +1880,7 @@ export default function HomeScreen() {
     setInputText(''); setSelectedMedia([]); setEditingMessageId(null); clearDraft();
     // Clear previous Spotify results on new message
     setSpotifyResults([]);
+      setSpotifySearchQuery('');
     const lowerText = (currentText || '').toLowerCase();
     const isImageIntent = ['create a logo', 'create logo', 'generate logo', 'make a logo', 'design a logo', 'generate a logo', 'make me a logo', 'create an image', 'create image', 'generate image', 'make an image', 'generate a photo', 'create a photo', 'make a photo', 'generate a picture', 'make a picture', 'create a picture', 'draw me a', 'draw me an', 'create art', 'generate art', 'make art', 'kreye logo', 'fe logo', 'fe imaj', 'kreye yon imaj', 'kreye imaj', 'fè logo', 'fè yon logo', 'fè imaj', 'fè yon imaj', 'créer un logo', 'générer une image', 'créer une image', 'crear un logo', 'generar una imagen'].some(kw => lowerText.includes(kw));
     setThinkingMode(isImageIntent ? 'creating_image' : 'thinking');
@@ -1941,9 +1944,12 @@ export default function HomeScreen() {
       await sendMessage(prefixedText, filePayloadArr.length > 0 ? filePayloadArr : undefined, base64Image, false, currentAIModel);
       setShowCompletionStatus(true);
       setTimeout(() => setShowCompletionStatus(false), 2000);
-      // Spotify search if active and music-related
-      if (spotifyActive && isMusicQuery(currentText)) {
-        searchSpotify(currentText);
+      // Spotify EDG Function: trigger if active OR Spotify connected and music intent detected
+      if ((spotifyActive || spotifyConnected) && isMusicQuery(currentText)) {
+        const mq = currentText.replace(/(?:search|play|find|show me|get me|look for|listen to)/gi, '').trim() || currentText;
+        setSpotifySearchQuery(mq);
+        setSpotifyActive(true);
+        searchSpotify(mq);
       }
       if (user && !isUnlimited && !isAdmin) {
         if (sessionBonusMessages > 0) setSessionBonusMessages(prev => prev - 1);
@@ -2000,6 +2006,7 @@ export default function HomeScreen() {
 
   const searchSpotify = useCallback(async (query: string) => {
     setSpotifySearching(true);
+    setSpotifyOverlayVisible(true);
     try {
       // Try to get a valid (possibly refreshed) access token
       const storedToken = await (async () => {
@@ -2033,7 +2040,10 @@ export default function HomeScreen() {
         setSpotifyResults(data.results);
       }
     } catch (_e) {}
-    finally { setSpotifySearching(false); }
+    finally {
+      setSpotifySearching(false);
+      setTimeout(() => setSpotifyOverlayVisible(false), 500);
+    }
   }, [supabase]);
 
   const connectedAppsList: ConnectedApp[] = spotifyConnected
@@ -2859,12 +2869,15 @@ export default function HomeScreen() {
                               <Text style={{ color: isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.5)', fontSize: 14 }}>Searching Spotify...</Text>
                             </View>
                           ) : null}
-                          {spotifyResults.length > 0 && !spotifySearching ? (
+                          {(spotifySearching || spotifyResults.length > 0) ? (
                             <SpotifyMusicCard
                               tracks={spotifyResults}
                               hasAccount={spotifyHasAccount}
                               isDark={isDark}
                               isGuest={isGuest}
+                              isLoading={spotifySearching}
+                              searchQuery={spotifySearchQuery}
+                              onConnectSpotify={() => router.push('/spotify-connect' as any)}
                             />
                           ) : null}
                           {(sending || generating) && !streamingMessageId ? (
@@ -3521,6 +3534,8 @@ export default function HomeScreen() {
             />
 
             {thinkingMode === 'creating_image' && (generating || sending) ? <ImageCreatingOverlay /> : null}
+
+            <SpotifyLoadingOverlay visible={spotifyOverlayVisible && spotifyResults.length === 0} query={spotifySearchQuery} />
 
             {imageAnalyzingOverlay ? (
               <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.78)', zIndex: 9998, alignItems: 'center', justifyContent: 'center' }}>
