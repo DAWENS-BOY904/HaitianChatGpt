@@ -2880,7 +2880,7 @@ export default function HomeScreen() {
 
               {/* Input Area */}
               <View style={[styles.inputContainer, Platform.OS === 'ios' && { backgroundColor: 'transparent' }]}>
-                {/* + button OUTSIDE (circular) when keyboard is visible */}
+                {/* + button OUTSIDE when keyboard open, INSIDE when keyboard hidden */}
                 {keyboardVisible && !editingMessageId && !isRecording && !isProcessing ? (
                   <TouchableOpacity style={styles.addBtn} onPress={() => setToolsVisible(true)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
                     <View style={[styles.addBtnCircle, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)', borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)' }]}>
@@ -2948,16 +2948,6 @@ export default function HomeScreen() {
                     </View>
                   ) : (
                     <View style={styles.inputRow}>
-                      {/* + button INSIDE input when keyboard is hidden */}
-                      {!keyboardVisible && !editingMessageId ? (
-                        <TouchableOpacity
-                          onPress={() => setToolsVisible(true)}
-                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                          style={{ marginRight: 4 }}
-                        >
-                          <Ionicons name="add" size={22} color={colors.textSecondary} />
-                        </TouchableOpacity>
-                      ) : null}
                       <TextInput
                         ref={inputRef}
                         style={styles.input}
