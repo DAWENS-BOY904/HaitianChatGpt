@@ -726,3 +726,4 @@ const spStyles = StyleSheet.create({
   sectionTitle: { fontSize: 22, fontWeight: '700', paddingHorizontal: 16, marginBottom: 12 },
   infoCard: { marginHorizontal: 16, borderRadius: 20, overflow: 'hidden' },
 });
+fix real spotify song and fallback music
