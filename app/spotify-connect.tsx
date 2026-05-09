@@ -20,7 +20,7 @@ const { width: SCREEN_W } = Dimensions.get('window');
 
 const SPOTIFY_GREEN = '#1DB954';
 const SPOTIFY_CLIENT_ID = process.env.EXPO_PUBLIC_SPOTIFY_CLIENT_ID ?? '';
-const SPOTIFY_REDIRECT_URI = 'https://njpuoozygqtpvlzhnjpu.backend.onspace.ai/spotify/callback';
+const SPOTIFY_REDIRECT_URI = 'https://dawinix.app/spotify/callback';
 const SPOTIFY_SCOPES = [
   'user-library-modify',
   'user-read-private',
@@ -455,32 +455,28 @@ function InfoRow({ label, value, isDark, last, isLink, onPress, isLoading }: {
   label: string; value: string; isDark: boolean; last?: boolean;
   isLink?: boolean; onPress?: () => void; isLoading?: boolean;
 }) {
-  const linkColor = isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)';
+  const blurColor = isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)';
+  const textColor = isDark ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.75)';
   return (
     <TouchableOpacity
       style={[irStyles.row, !last && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)' }]}
       onPress={onPress} disabled={!isLink && !onPress} activeOpacity={isLink || onPress ? 0.5 : 1}
     >
-      <Text style={[irStyles.label, { color: isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.55)' }]}>{label}</Text>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+      <Text style={[irStyles.label, { color: isLink ? blurColor : textColor }]}>{label}</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
         {isLoading ? (
           <ActivityIndicator size="small" color={isDark ? '#FFF' : '#000'} />
-        ) : (
-          <Text style={[irStyles.value, { color: isDark ? '#FFF' : '#000' }, (isLink || onPress) && { color: linkColor }]}>{value}</Text>
-        )}
-        {(isLink || onPress) && (
-          <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)', alignItems: 'center', justifyContent: 'center' }}>
-            <Ionicons name="arrow-up-forward" size={12} color={linkColor} />
-          </View>
-        )}
+        ) : !isLink ? (
+          <Text style={[irStyles.value, { color: textColor }]}>{value}</Text>
+        ) : null}
       </View>
     </TouchableOpacity>
   );
 }
 
 const irStyles = StyleSheet.create({
-  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 18 },
-  label: { fontSize: 15.5, fontWeight: '400' },
+  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 15, paddingHorizontal: 18 },
+  label: { fontSize: 15, fontWeight: '400' },
   value: { fontSize: 15, fontWeight: '500', maxWidth: '55%', textAlign: 'right' },
 });
 
@@ -603,12 +599,12 @@ export default function SpotifyConnectScreen() {
 
   const infoRows = [
     { label: 'Category', value: 'Entertainment', isLink: false },
-    { label: 'Capabilities', value: 'Interactive, Writes', isLink: false },
-    { label: 'Developer', value: 'Spotify', isLink: false },
+    { label: 'Capabilities', value: 'Interactive', isLink: false },
+    { label: 'Developer', value: 'Spotify AB', isLink: false },
     { label: 'Version', value: appVersion, isLink: false },
     { label: 'Privacy Policy', value: '', isLink: true, onPress: () => handleOpenInAppBrowser('https://www.spotify.com/legal/privacy-policy/') },
     { label: 'Terms of Service', value: '', isLink: true, onPress: () => handleOpenInAppBrowser('https://www.spotify.com/legal/end-user-agreement/') },
-    { label: 'Customer Support', value: '', isLink: true, onPress: () => handleOpenInAppBrowser('https://support.spotify.com/us/article/contact-us/') },
+    { label: 'Support', value: '', isLink: true, onPress: () => handleOpenInAppBrowser('https://support.spotify.com/') },
   ];
 
   return (
