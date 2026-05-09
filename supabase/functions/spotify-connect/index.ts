@@ -13,19 +13,32 @@ serve(async (req: Request) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
-  // ── Safe JSON parse (handles preflight or non-JSON bodies) ──────────────
+  // ── Safe JSON parse (handles preflight, health checks, or non-JSON bodies) ──────────────
   let body: any = {};
   try {
     const rawText = await req.text();
-    if (!rawText || !rawText.trim().startsWith('{')) {
-      // Not JSON — return 400 cleanly
+    const trimmed = rawText.trim();
+
+    // Handle empty body (health checks, keep-alive pings)
+    if (!trimmed) {
+      return new Response(JSON.stringify({ ok: true, message: 'Spotify Connect edge function is active' }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Handle non-JSON body (browser preflight, plain text pings, etc.)
+    if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) {
+      console.log('[spotify-connect] Non-JSON body received:', trimmed.slice(0, 100));
       return new Response(JSON.stringify({ error: 'Invalid request body — expected JSON' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
-    body = JSON.parse(rawText);
+
+    body = JSON.parse(trimmed);
   } catch (parseErr: any) {
+    console.error('[spotify-connect] JSON parse error:', parseErr.message);
     return new Response(JSON.stringify({ error: `Invalid JSON: ${parseErr.message}` }), {
       status: 400,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -184,8 +197,8 @@ serve(async (req: Request) => {
 
     return respond({ error: 'Unknown action' }, 400);
   } catch (err: any) {
-    console.error('[spotify-connect]', err);
-    return new Response(JSON.stringify({ error: err.message || 'Internal server error' }), {
+    console.error('[spotify-connect] Unhandled error:', err);
+    return new Response(JSON.stringify({ error: err.message || 'Internal server error', stack: err.stack }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
