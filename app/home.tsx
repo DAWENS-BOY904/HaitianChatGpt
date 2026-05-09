@@ -3650,3 +3650,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
+added MUSIC_KEYWORDS_SPOTIFY constant at module level to fix the runtime reference error, and implemented Spotify result persistence — results are now saved as a special assistant message in the conversation so they reload when navigating back to any chat.
