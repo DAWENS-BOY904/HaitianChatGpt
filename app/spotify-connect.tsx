@@ -770,3 +770,12 @@ const spStyles = StyleSheet.create({
   sectionTitle: { fontSize: 22, fontWeight: '700', paddingHorizontal: 16, marginBottom: 12 },
   infoCard: { marginHorizontal: 16, borderRadius: 18, overflow: 'hidden' },
 });
+{
+  "eventMessage": "POST | 500 | http://njpuoozygqtpvlzhnjpu.backend.onspace.ai/functions/v1/spotify-connect | Internal Server Error",
+  "functionId": "spotify-connect",
+  "id": "3da4280b-c101-4a07-a04a-487db570f76b",
+  "logLevel": "ERROR",
+  "method": "POST",
+  "statusCode": 500,
+  "timestamp": 1778302816
+}
