@@ -692,3 +692,4 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
 });
+fix error slice of undefined
