@@ -26,7 +26,6 @@ import { LinkSafetyModal } from './LinkSafetyModal';
 import * as Clipboard from 'expo-clipboard';
 
 // ── Types ────────────────────────────────────────────────────────────────────
-
 interface Message {
   id: string;
   content: string;
