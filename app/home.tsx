@@ -3427,6 +3427,3 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-for ai press long copy message add Native long-press on selectable text → shows the iOS/Android native menu with Copy/Paste/Select All
-On Android: drag handles allow selecting partial text, then Copy copies only the selection
-On iOS: RN's <Text selectable> copies the whole text block — this is a known React Native platform limitation that can't be fixed without a native module https://github.com/facebook/react-native/issues/31404 in blur mode 
