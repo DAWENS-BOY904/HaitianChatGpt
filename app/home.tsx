@@ -590,7 +590,7 @@ const GROUP_REPORT_CATEGORIES = [
   { label: 'Bullying & harassment', subs: ['Targeted harassment', 'Hate speech', 'Doxxing'] },
   { label: 'Spam, fraud & deception', subs: ['Phishing', 'Scams', 'Misinformation'] },
   { label: 'Privacy violation', subs: ['Sharing personal info', 'Non-consensual recording'] },
-  { label: 'Something else', subs: ['Other concern'] },
+  { label: 'Something else', subs: ['Other concern'] },  
 ];
 
 function ReportGroupModal({ visible, onClose, isDark }: { visible: boolean; onClose: () => void; isDark: boolean }) {
