@@ -946,6 +946,7 @@ export default function HomeScreen() {
 
   const [isAppActive, setIsAppActive] = useState(true);
   const [showBlurOverlay, setShowBlurOverlay] = useState(false);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [inputText, setInputText] = useState('');
   const draftSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [toolsVisible, setToolsVisible] = useState(false);
@@ -1085,6 +1086,12 @@ export default function HomeScreen() {
   const autoLockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const processingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inactivityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
+    return () => { showSub.remove(); hideSub.remove(); };
+  }, []);
 
   useEffect(() => {
     if (params.fromImages === '1' && params.imageBase64) {
@@ -2873,7 +2880,8 @@ export default function HomeScreen() {
 
               {/* Input Area */}
               <View style={[styles.inputContainer, Platform.OS === 'ios' && { backgroundColor: 'transparent' }]}>
-                {!editingMessageId && !isRecording && !isProcessing ? (
+                {/* + button OUTSIDE when keyboard open, INSIDE when keyboard hidden */}
+                {keyboardVisible && !editingMessageId && !isRecording && !isProcessing ? (
                   <TouchableOpacity style={styles.addBtn} onPress={() => setToolsVisible(true)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
                     <View style={[styles.addBtnCircle, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)', borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)' }]}>
                       <Ionicons name="add" size={22} color={colors.text} />
@@ -2881,7 +2889,18 @@ export default function HomeScreen() {
                   </TouchableOpacity>
                 ) : null}
 
-                <Pressable style={[styles.inputWrapper, { backgroundColor: isDark ? '#1C1C1E' : '#EFEFEF', borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)' }]} onPress={() => inputRef.current?.focus()}>
+                <Pressable
+                  style={[styles.inputWrapper, { backgroundColor: Platform.OS === 'ios' ? 'transparent' : (isDark ? '#1C1C1E' : '#EFEFEF'), borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)' }]}
+                  onPress={() => inputRef.current?.focus()}
+                >
+                  {Platform.OS === 'ios' ? (
+                    <BlurView
+                      intensity={isDark ? 65 : 50}
+                      tint={isDark ? 'dark' : 'light'}
+                      style={StyleSheet.absoluteFill}
+                      pointerEvents="none"
+                    />
+                  ) : null}
                   {/* Spotify chip — shows when Spotify is connected */}
                   {spotifyActive ? (
                     <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
