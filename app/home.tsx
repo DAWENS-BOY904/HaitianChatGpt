@@ -63,7 +63,7 @@ import { AIMode } from '../components/AIModeSelectorModal';
 import { CalculatorModal, CalculatorCard, detectMathExpression } from '../components/CalculatorModal';
 import { SpotifyMusicCard, SpotifyTrack } from '../components/SpotifyMusicCard';
 import { ConnectedAppsModal, ConnectedApp } from '../components/ConnectedAppsModal';
-// Gesture handler — loaded conditionally to avoid native crash when reanimated/gesture-handler is not linked
+// Gesture handler — loaded conditionally to avoid native crash when reanimated/gesture-handler is not linked 
 const noopGesture = {
   activeOffsetX: () => noopGesture,
   failOffsetY: () => noopGesture,
