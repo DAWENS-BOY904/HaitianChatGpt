@@ -41,7 +41,7 @@ function SpotifyLogo({ size = 20 }: { size?: number }) {
   );
 }
 
-// ── Spotify loading overlay ─────────────────────────────────────────────────
+// ── Spotify loading overlay ───────────────────────────────────────────────── 
 export function SpotifyLoadingOverlay({ visible, query }: { visible: boolean; query?: string }) {
   const pulseAnim = useRef(new Animated.Value(0.7)).current;
   const scaleAnim = useRef(new Animated.Value(0.88)).current;
