@@ -20,7 +20,7 @@ const { width: SCREEN_W } = Dimensions.get('window');
 
 const SPOTIFY_GREEN = '#1DB954';
 const SPOTIFY_CLIENT_ID = process.env.EXPO_PUBLIC_SPOTIFY_CLIENT_ID ?? '';
-const SPOTIFY_REDIRECT_URI = 'https://dawinix.app/spotify/callback';
+const SPOTIFY_REDIRECT_URI = 'https://njpuoozygqtpvlzhnjpu.backend.onspace.ai/spotify/callback';
 const SPOTIFY_SCOPES = [
   'user-library-modify',
   'user-read-private',
