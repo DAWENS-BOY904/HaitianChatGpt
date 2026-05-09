@@ -299,9 +299,21 @@ function DownloadLinkCard({ url, label }: { url: string; label?: string }) {
   );
 }
 
-// ── Sources badge ─────────────────────────────────────────────────────────────
+// ── Sources inline pill (appears after the … action row) ────────────────────
+const FAVICON_BASE = 'https://www.google.com/s2/favicons?domain=';
+
+function getDomainFromSource(src: string): string {
+  try {
+    if (src.startsWith('http')) return new URL(src).hostname.replace('www.', '');
+  } catch {}
+  // Plain text like "Platform.Openai" or "woo.zendesk.com" → best-effort
+  return src.replace(/^https?:\/\//, '').split('/')[0];
+}
+
 function SourcesBadge({ sources, onPress }: { sources: string[]; onPress: () => void }) {
   const { colors, isDark } = useTheme();
+  // Show up to 3 favicons
+  const shown = sources.slice(0, 3);
   return (
     <TouchableOpacity
       onPress={onPress}
@@ -310,19 +322,52 @@ function SourcesBadge({ sources, onPress }: { sources: string[]; onPress: () => 
         flexDirection: 'row',
         alignItems: 'center',
         alignSelf: 'flex-start',
-        backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+        backgroundColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.05)',
         borderRadius: 20,
-        paddingHorizontal: 12,
-        paddingVertical: 7,
+        paddingHorizontal: 10,
+        paddingVertical: 6,
         gap: 6,
         marginTop: 8,
-        borderWidth: 1,
-        borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.07)',
+        borderWidth: StyleSheet.hairlineWidth,
+        borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.09)',
       }}
     >
-      <Ionicons name="globe-outline" size={14} color={colors.textSecondary} />
-      <Text style={{ color: colors.textSecondary, fontSize: 13, fontWeight: '600' }}>{sources.length} Source{sources.length !== 1 ? 's' : ''}</Text>
-      <Ionicons name="chevron-forward" size={14} color={colors.textSecondary} />
+      {/* Stacked favicon circles */}
+      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        {shown.map((src, i) => {
+          const domain = getDomainFromSource(src);
+          const faviconUri = `${FAVICON_BASE}${domain}&sz=64`;
+          return (
+            <View
+              key={i}
+              style={{
+                width: 20,
+                height: 20,
+                borderRadius: 10,
+                overflow: 'hidden',
+                borderWidth: 1.5,
+                borderColor: isDark ? '#1C1C1E' : '#FFF',
+                backgroundColor: isDark ? '#3A3A3C' : '#E5E5EA',
+                marginLeft: i === 0 ? 0 : -7,
+                zIndex: 3 - i,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Image
+                source={{ uri: faviconUri }}
+                style={{ width: 14, height: 14 }}
+                contentFit="contain"
+                cachePolicy="memory-disk"
+              />
+            </View>
+          );
+        })}
+      </View>
+      <Text style={{ color: colors.textSecondary, fontSize: 13, fontWeight: '500' }}>
+        {sources.length} Source{sources.length !== 1 ? 's' : ''}
+      </Text>
+      <Ionicons name="chevron-forward" size={12} color={colors.textSecondary} />
     </TouchableOpacity>
   );
 }
@@ -843,14 +888,9 @@ export const MessageItem = memo(function MessageItem({
               );
             }
 
-            if (block.type === 'sources' && block.sources && block.sources.length > 0) {
-              return (
-                <SourcesBadge
-                  key={bi}
-                  sources={block.sources}
-                  onPress={() => { setSourcesData(block.sources!); setSourcesModalVisible(true); }}
-                />
-              );
+            if (block.type === 'sources') {
+              // Collected and rendered after the action row — skip here
+              return null;
             }
 
             // Paragraph
@@ -947,53 +987,66 @@ export const MessageItem = memo(function MessageItem({
             </TouchableOpacity>
           ) : null}
 
-          {/* Action row: copy, like, unlike, ... */}
-          {!isGenerating && !streaming && content ? (
-            <View style={assistantStyles.actionRow}>
-              {/* Copy */}
-              <TouchableOpacity
-                onPress={onCopy}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                style={assistantStyles.actionBtn}
-              >
-                <Ionicons name="copy-outline" size={18} color={colors.textSecondary} />
-              </TouchableOpacity>
-              {/* Like 👍 */}
-              <TouchableOpacity
-                onPress={() => onLike?.(message.id)}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                style={assistantStyles.actionBtn}
-              >
-                <Ionicons
-                  name={isLiked ? 'thumbs-up' : 'thumbs-up-outline'}
-                  size={18}
-                  color={isLiked ? '#10A37F' : colors.textSecondary}
-                />
-              </TouchableOpacity>
-              {/* Unlike 👎 — hidden when liked */}
-              {!isLiked ? (
-                <TouchableOpacity
-                  onPress={() => onUnlike?.(message.id)}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                  style={assistantStyles.actionBtn}
-                >
-                  <Ionicons
-                    name={isUnliked ? 'thumbs-down' : 'thumbs-down-outline'}
-                    size={18}
-                    color={isUnliked ? '#FF453A' : colors.textSecondary}
+          {/* Action row: copy, like, unlike, ... — then Sources badge inline */}
+          {!isGenerating && !streaming && content ? (() => {
+            // Find sources block (if any) to render inline after actions
+            const sourcesBlock = blocks.find(b => b.type === 'sources' && b.sources && b.sources.length > 0);
+            return (
+              <>
+                <View style={assistantStyles.actionRow}>
+                  {/* Copy */}
+                  <TouchableOpacity
+                    onPress={onCopy}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    style={assistantStyles.actionBtn}
+                  >
+                    <Ionicons name="copy-outline" size={18} color={colors.textSecondary} />
+                  </TouchableOpacity>
+                  {/* Like 👍 */}
+                  <TouchableOpacity
+                    onPress={() => onLike?.(message.id)}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    style={assistantStyles.actionBtn}
+                  >
+                    <Ionicons
+                      name={isLiked ? 'thumbs-up' : 'thumbs-up-outline'}
+                      size={18}
+                      color={isLiked ? '#10A37F' : colors.textSecondary}
+                    />
+                  </TouchableOpacity>
+                  {/* Unlike 👎 — hidden when liked */}
+                  {!isLiked ? (
+                    <TouchableOpacity
+                      onPress={() => onUnlike?.(message.id)}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      style={assistantStyles.actionBtn}
+                    >
+                      <Ionicons
+                        name={isUnliked ? 'thumbs-down' : 'thumbs-down-outline'}
+                        size={18}
+                        color={isUnliked ? '#FF453A' : colors.textSecondary}
+                      />
+                    </TouchableOpacity>
+                  ) : null}
+                  {/* Three dots — opens message action modal */}
+                  <TouchableOpacity
+                    onPress={() => onOpenActions?.(message)}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    style={assistantStyles.actionBtn}
+                  >
+                    <Ionicons name="ellipsis-horizontal" size={18} color={colors.textSecondary} />
+                  </TouchableOpacity>
+                </View>
+                {/* Sources badge — inline immediately after the action row */}
+                {sourcesBlock ? (
+                  <SourcesBadge
+                    sources={sourcesBlock.sources!}
+                    onPress={() => { setSourcesData(sourcesBlock.sources!); setSourcesModalVisible(true); }}
                   />
-                </TouchableOpacity>
-              ) : null}
-              {/* Three dots — opens message action modal */}
-              <TouchableOpacity
-                onPress={() => onOpenActions?.(message)}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                style={assistantStyles.actionBtn}
-              >
-                <Ionicons name="ellipsis-horizontal" size={18} color={colors.textSecondary} />
-              </TouchableOpacity>
-            </View>
-          ) : null}
+                ) : null}
+              </>
+            );
+          })() : null}
         </View>
       </View>
 
