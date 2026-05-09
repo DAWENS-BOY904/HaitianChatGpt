@@ -274,6 +274,31 @@ const mentionStyles = StyleSheet.create({
   name: { fontSize: 15, fontWeight: '500' },
 });
 
+const MUSIC_KEYWORDS_SPOTIFY = [
+  'play music', 'play song', 'play track', 'play artist',
+  'find music', 'search music', 'give me music', 'show me music',
+  'recommend music', 'suggest music', 'music recommendation',
+  'new songs', 'new music', 'latest music',
+  'spotify music', 'spotify playlist', 'spotify song',
+  'listen music', 'listen song',
+  'music for me', 'songs for me',
+  'best songs', 'top songs',
+  'music mix', 'music playlist', 'i need song', 'i want a songs', 'party music',
+  'play a song', 'play some music', 'play my music', 'play trending music',
+  'play popular songs', 'play hit songs', 'play top hits', 'play chill music',
+  'play relaxing music', 'play workout music', 'play gym music', 'play focus music',
+  'play study music', 'play sleep music', 'play sad songs', 'play happy songs',
+  'play love songs', 'play romantic songs', 'play dance music', 'play party songs',
+  'find songs', 'find songs for me', 'search songs', 'search for songs',
+  'get me music', 'get me songs', 'load music', 'load songs',
+  'open music', 'open spotify', 'start music', 'start songs',
+  'resume music', 'resume song', 'next song', 'previous song',
+  'skip song', 'shuffle music', 'repeat song',
+  'song recommendation', 'music suggestions', 'top music', 'hot songs',
+  'viral songs', 'trending songs', 'latest songs', 'best music',
+  'good music', 'cool songs', 'fire songs', 'banger songs', 'music now',
+];
+
 const SUPPORTED_AI_MODELS = {
   gemini: 'Gemini',
   openai: 'OpenAI',
@@ -1992,72 +2017,6 @@ export default function HomeScreen() {
   }, [cancelSendMessage]);
 
   // ── Spotify music search ─────────────────────────────────────────────────
-  const MUSIC_KEYWORDS_EN = [
-  'play music', 'play song', 'play track', 'play artist',
-  'find music', 'search music', 'give me music', 'show me music',
-  'recommend music', 'suggest music', 'music recommendation',
-  'new songs', 'new music', 'latest music',
-  'spotify music', 'spotify playlist', 'spotify song',
-  'listen music', 'listen song',
-  'music for me', 'songs for me',
-  'best songs', 'top songs',
-  'music mix', 'music playlist', 'i need song', 'i want a songs', 'party music',
-
-  // 🔥 +50 MORE ADDED
-  'play a song',
-  'play some music',
-  'play my music',
-  'play trending music',
-  'play popular songs',
-  'play hit songs',
-  'play top hits',
-  'play chill music',
-  'play relaxing music',
-  'play workout music',
-  'play gym music',
-  'play focus music',
-  'play study music',
-  'play sleep music',
-  'play sad songs',
-  'play happy songs',
-  'play love songs',
-  'play romantic songs',
-  'play dance music',
-  'play party songs',
-  'find songs',
-  'find songs for me',
-  'search songs',
-  'search for songs',
-  'get me music',
-  'get me songs',
-  'load music',
-  'load songs',
-  'open music',
-  'open spotify',
-  'start music',
-  'start songs',
-  'resume music',
-  'resume song',
-  'next song',
-  'previous song',
-  'skip song',
-  'shuffle music',
-  'repeat song',
-  'song recommendation',
-  'music suggestions',
-  'top music',
-  'hot songs',
-  'viral songs',
-  'trending songs',
-  'latest songs',
-  'best music',
-  'good music',
-  'cool songs',
-  'fire songs',
-  'banger songs',
-  'music now'
-];
-
   const isMusicQuery = useCallback((text: string): boolean => {
     const lower = text.toLowerCase();
     return MUSIC_KEYWORDS_SPOTIFY.some(k => lower.includes(k));
@@ -3650,4 +3609,3 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-added MUSIC_KEYWORDS_SPOTIFY constant at module level to fix the runtime reference error, and implemented Spotify result persistence — results are now saved as a special assistant message in the conversation so they reload when navigating back to any chat.
