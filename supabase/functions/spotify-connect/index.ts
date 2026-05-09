@@ -159,26 +159,11 @@ serve(async (req: Request) => {
         const retryRes = await fetch(searchUrl, {
           headers: { Authorization: `Bearer ${clientToken}` },
         });
-        let retryData: any = {};
-        try {
-          const retryText = await retryRes.text();
-          if (retryText && retryText.trim().startsWith('{')) {
-            retryData = JSON.parse(retryText);
-          }
-        } catch (_e) {}
-        return respond({ results: formatSearchResults(retryData) });
+        const data = await retryRes.json();
+        return respond({ results: formatSearchResults(data) });
       }
 
-      // Safe JSON parse for search response
-      let data: any = {};
-      try {
-        const text = await res.text();
-        if (text && text.trim().startsWith('{')) {
-          data = JSON.parse(text);
-        }
-      } catch (parseErr) {
-        console.error('[spotify-connect] search parse error:', parseErr);
-      }
+      const data = await res.json();
       return respond({ results: formatSearchResults(data) });
     }
 
@@ -191,16 +176,9 @@ serve(async (req: Request) => {
           Authorization: `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify([trackId]),
       });
       if (res.status === 401) return respond({ error: 'token_expired', needsRefresh: true }, 401);
-      // Spotify returns 200 (no content) on success — do NOT call res.json()
-      if (!res.ok) {
-        const errText = await res.text().catch(() => 'Unknown error');
-        console.error('[spotify-connect] save_to_library error:', res.status, errText);
-        // Still treat as success for UX — Spotify Premium may be required but save is acknowledged
-      }
-      return respond({ success: true, status: res.status });
+      return respond({ success: res.ok, status: res.status });
     }
 
     // ── FOLLOW PLAYLIST ────────────────────────────────────────────────────
@@ -212,15 +190,9 @@ serve(async (req: Request) => {
           Authorization: `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ public: false }),
       });
       if (res.status === 401) return respond({ error: 'token_expired', needsRefresh: true }, 401);
-      // Spotify returns 200 (no content) on success — do NOT call res.json()
-      if (!res.ok) {
-        const errText = await res.text().catch(() => 'Unknown error');
-        console.error('[spotify-connect] follow_playlist error:', res.status, errText);
-      }
-      return respond({ success: true, status: res.status });
+      return respond({ success: res.ok });
     }
 
     return respond({ error: 'Unknown action' }, 400);
