@@ -19,7 +19,7 @@ import { useSettings } from '../hooks/useSettings';
 import { getSupabaseClient } from '@/template';
 import { Audio } from 'expo-av';
 import * as Speech from 'expo-speech';
-import * as WebBrowser from 'expo-web-browser';
+import * as WebBrowser from '../utils/web-browser';
 import { BlurView } from 'expo-blur';
 import { CodeBlock } from './CodeBlock';
 import { SourcesListModal as SourcesModal, Source } from './SourcesModal';
