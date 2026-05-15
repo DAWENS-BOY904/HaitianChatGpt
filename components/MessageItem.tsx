@@ -1146,3 +1146,4 @@ const assistantStyles = StyleSheet.create({
     borderRadius: 10,
   },
 });
+allow multi image user show in home page in carousel.
