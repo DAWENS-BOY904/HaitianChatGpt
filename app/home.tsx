@@ -1105,6 +1105,8 @@ export default function HomeScreen() {
   const [groupStartModalVisible, setGroupStartModalVisible] = useState(false);
   const [notifPermModalVisible, setNotifPermModalVisible] = useState(false);
   const [groupChatMode, setGroupChatMode] = useState(false);
+  const [groupChatLoading, setGroupChatLoading] = useState(false);
+  const groupChatLoadingAnim = useRef(new Animated.Value(0)).current;
   // Track group members with their messages for the group view
   const [groupMembersWithMessages, setGroupMembersWithMessages] = useState<GroupMember[]>([]);
   const [temporaryChatMode, setTemporaryChatModeLocal] = useState(false);
@@ -2307,8 +2309,12 @@ export default function HomeScreen() {
 
   const handleStartGroupChat = useCallback(async () => {
     setGroupStartModalVisible(false);
-    setGroupChatMode(true);
-    setTemporaryChatMode(false);
+    setGroupChatLoading(true);
+    groupChatLoadingAnim.setValue(0);
+    Animated.timing(groupChatLoadingAnim, { toValue: 1, duration: 300, useNativeDriver: true }).start();
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    // Allow 5 seconds for all group functions to initialize
+    await new Promise(r => setTimeout(r, 5000));
     const newGroupName = 'New group chat';
     setGroupName(newGroupName);
     try {
@@ -2316,8 +2322,12 @@ export default function HomeScreen() {
       if (convId) { await updateConversationTitle(convId, newGroupName); selectConversation(convId); }
     } catch (e) { console.log('[GroupChat] Failed to create conversation:', e); }
     setInputText(''); setSelectedMedia([]); setEditingMessageId(null);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-  }, [createConversation, updateConversationTitle, selectConversation]);
+    setTemporaryChatMode(false);
+    Animated.timing(groupChatLoadingAnim, { toValue: 0, duration: 250, useNativeDriver: true }).start(() => {
+      setGroupChatLoading(false);
+      setGroupChatMode(true);
+    });
+  }, [createConversation, updateConversationTitle, selectConversation, groupChatLoadingAnim]);
 
   const handleSaveGroupName = useCallback(async (newName: string) => {
     if (!newName.trim()) { setRenameGroupVisible(false); return; }
@@ -3577,6 +3587,20 @@ export default function HomeScreen() {
 
             {thinkingMode === 'creating_image' && (generating || sending) ? <ImageCreatingOverlay /> : null}
 
+            {/* Group chat loading overlay */}
+            {groupChatLoading ? (
+              <Animated.View style={[StyleSheet.absoluteFillObject, { zIndex: 9990, backgroundColor: isDark ? 'rgba(0,0,0,0.85)' : 'rgba(255,255,255,0.9)', justifyContent: 'center', alignItems: 'center', opacity: groupChatLoadingAnim }]}>
+                {Platform.OS === 'ios' ? <BlurView intensity={isDark ? 70 : 55} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} /> : null}
+                <View style={{ alignItems: 'center', gap: 20, paddingHorizontal: 40 }}>
+                  <View style={{ width: 72, height: 72, borderRadius: 36, backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)' }}>
+                    <ActivityIndicator size="large" color={accentColor} />
+                  </View>
+                  <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 19, fontWeight: '700', textAlign: 'center' }}>Setting up group chat...</Text>
+                  <Text style={{ color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)', fontSize: 14, textAlign: 'center', lineHeight: 21 }}>Initializing all group functions. This will only take a moment.</Text>
+                </View>
+              </Animated.View>
+            ) : null}
+
             <SpotifyLoadingOverlay visible={spotifyOverlayVisible && spotifyResults.length === 0} query={spotifySearchQuery} />
 
             {imageAnalyzingOverlay ? (
@@ -3633,4 +3657,3 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-In home, when entering group chat mode (handleStartGroupChat), add a 5-second loading state with an animated spinner and 'Setting up group chat...' overlay before showing the chat interface, ensuring all group functions initialize properly before the user can interact.
