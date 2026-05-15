@@ -234,7 +234,7 @@ export default function ImagesScreen() {
   // ── Navigate to image-prompt page with selected photo + style ──
   const goToImagePromptPage = (imageUri: string, base64: string, stylePrompt: string) => {
     router.push({
-      pathname: '/image-prompt',
+      pathname: '/home',
       params: { imageUri, base64, stylePrompt },
     });
   };
@@ -394,7 +394,7 @@ export default function ImagesScreen() {
     } else {
       // Text-only → image prompt page
       router.push({
-        pathname: '/image-prompt',
+        pathname: '/home',
         params: { stylePrompt: customDescription },
       });
       setCustomDescription('');
