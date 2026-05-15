@@ -3633,4 +3633,3 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-hello ai please if see this don’t skip make change Fix the quiz modal in home.tsx to properly use dark/light theme blur — apply BlurView with correct tint based on isDark for the quiz topic sheet and connect modal background overlay Optimize FlatList performance in home.tsx: increase initialNumToRender to 15, add getItemLayout for fixed-height messages, enable windowSize=21, and use React.memo on MessageItem to reduce unnecessary re-renders Improve the SpotifyMusicCard component: better album art display, real playback progress bar, add/save to library button with feedback, and smooth loading skeleton state instead of blank cards.
