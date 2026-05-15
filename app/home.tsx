@@ -3658,3 +3658,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
   }
 }
 
+fix input button more fast change.
