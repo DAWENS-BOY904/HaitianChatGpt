@@ -201,3 +201,4 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12, paddingVertical: 7,
   },
 });
+please ai add white/dark them support and blur.
