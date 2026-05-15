@@ -929,9 +929,6 @@ export function SideMenu({
   );
 }
 
-// Re-export useAnimatedStyle alias for internal use
-const { useAnimatedStyle } = require('react-native-reanimated');
-
 const styles = StyleSheet.create({
   overlay: {
     ...StyleSheet.absoluteFillObject,
