@@ -683,7 +683,7 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
       const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
       const edgeFunctionUrl = `${supabaseUrl}/functions/v1/chat`;
 
-      // @ts-ignore 
+      // @ts-ignore
       const abortController = new AbortController();
       abortControllerRef.current = abortController;
 
