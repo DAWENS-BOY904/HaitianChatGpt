@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, useRef, useEffect, memo } from 'react';
 import {
   View,
@@ -381,7 +382,7 @@ interface TextSegment {
 function parseInlineMarkdown(text: string): TextSegment[] {
   const segments: TextSegment[] = [];
   // Combined pattern: **bold**, *italic*, `code`, [link](url), phone numbers, plain URLs
-  const pattern = /(\*\*([^*]+)\*\*|\*([^*]+)\*|`([^`]+)`|\[([^\]]+)\]\((https?:\/\/[^\)]+)\)|(https?:\/\/[^\s"')]+\.(?:jpg|jpeg|png|webp|gif)(?:\?[^\s"')]*)?)|(\+?[\d\s\-\(\)]{10,})|( https?:\/\/[^\s"')]+))/g;
+  const pattern = /(\*\*([^*]+)\*\*|\*([^*]+)\*|`([^`]+)`|\[([^\]]+)\]\((https?:\/\/[^\)]+)\)|(https?:\/\/[^\s"')]+\.(?:jpg|jpeg|png|webp|gif)(?:\?[^\s"')]*)?)|(\+?[\d\s\-\(\)]{10,})|(https?:\/\/[^\s"')]+))/g;
   let lastIndex = 0;
   let match;
 
@@ -720,15 +721,17 @@ export const MessageItem = memo(function MessageItem({
 
     // Support both camelCase (imageUrl) and snake_case (image_url) field names
     const displayImage = message.imageUrl || (message as any).image_url || null;
-    // Determine if message has media — media messages cannot be edited
-    const hasMedia = !!displayImage || !!(message as any).file_url;
+    // Accept both http URLs and local data: URIs
+    const hasValidImage = displayImage && (displayImage.startsWith('http') || displayImage.startsWith('data:') || displayImage.startsWith('file:'));
+
+    const hasMedia = hasValidImage || !!(message as any).file_url;
 
     return (
       <>
         <View style={userStyles.container}>
-          {displayImage ? (
+          {hasValidImage ? (
             <TouchableOpacity
-              onPress={() => handleImagePress(displayImage, [displayImage], 0)}
+              onPress={() => handleImagePress(displayImage!, [displayImage!], 0)}
               activeOpacity={0.88}
               style={{ alignSelf: 'flex-end', marginHorizontal: 16, marginBottom: content ? 6 : 0 }}
             >
@@ -750,7 +753,7 @@ export const MessageItem = memo(function MessageItem({
           ) : null}
         </View>
 
-        {displayImage ? (
+        {hasValidImage ? (
           <Modal visible={imageViewerVisible} transparent animationType="fade" onRequestClose={() => setImageViewerVisible(false)} statusBarTranslucent>
             <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.93)', justifyContent: 'center', alignItems: 'center' }}>
               <TouchableOpacity style={{ position: 'absolute', top: Platform.OS === 'ios' ? 56 : 24, right: 20, zIndex: 10, width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' }} onPress={() => setImageViewerVisible(false)}>
