@@ -3633,3 +3633,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
+make more page more fast better also fix spotify card overlay and also music card better show music and real play music in the page and fix quiz modal with dark/light system blur.
