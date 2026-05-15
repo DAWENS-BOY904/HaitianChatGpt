@@ -1905,7 +1905,7 @@ export default function HomeScreen() {
     }
 
     setInputText(''); setSelectedMedia([]); setEditingMessageId(null); clearDraft();
-    // Clear previous Spotify results on new message
+    // Keep firstImageUri for inline preview in the sent message
     setSpotifyResults([]);
     setSpotifySearchQuery('');
 
@@ -1945,25 +1945,43 @@ export default function HomeScreen() {
       }
 
       let base64Image: string | undefined;
+      let firstImageUri: string | undefined; // for local preview
       let fileContextStr = '';
       let filePayloadArr: Array<{name: string; type: string; content: string}> = [];
       for (const media of currentMedia) {
         if (media.type === 'image') {
           if (!base64Image) {
-            if (media.base64) { base64Image = media.base64; }
-            else if (media.uri) { try { base64Image = await FileSystem.readAsStringAsync(media.uri, { encoding: FileSystem.EncodingType.Base64 }); } catch (e) {} }
+            if (!firstImageUri) firstImageUri = media.uri;
+            try {
+              let raw: string;
+              if (media.base64) {
+                raw = media.base64;
+              } else {
+                raw = await FileSystem.readAsStringAsync(media.uri, { encoding: FileSystem.EncodingType.Base64 });
+              }
+              // Strip data URL prefix if present
+              base64Image = raw.replace(/^data:image\/[a-z+]+;base64,/i, '');
+              if (!base64Image || base64Image.length < 100) base64Image = undefined;
+            } catch (e) {
+              console.log('[Home] base64 read error:', e);
+            }
           }
         } else if (media.type === 'document') {
           try {
             const rawContent = await FileSystem.readAsStringAsync(media.uri, { encoding: FileSystem.EncodingType.UTF8 });
-            const preview = rawContent.slice(0, 12000);
-            filePayloadArr.push({ name: media.name || 'document', type: media.mimeType || 'text/plain', content: preview + (rawContent.length > 12000 ? '\n...(truncated)' : '') });
-            fileContextStr += `\n\n[File: ${media.name || 'document'}]\n${preview}`;
+            const preview = rawContent.slice(0, 14000);
+            const truncated = rawContent.length > 14000;
+            filePayloadArr.push({
+              name: media.name || 'document',
+              type: media.mimeType || 'text/plain',
+              content: preview + (truncated ? '\n...(content truncated for length)' : '')
+            });
+            fileContextStr += `\n\n[FILE ATTACHED: ${media.name || 'document'} (${media.mimeType || 'text'})\nContent:\n${preview}${truncated ? '\n...(truncated)' : ''}]`;
           } catch (e) {
-            fileContextStr += `\n\n[Attached file: ${media.name || 'document'} (${media.mimeType || 'binary'})]`;
+            fileContextStr += `\n\n[File attached: ${media.name || 'document'} — could not read as text, binary file]`;
           }
         } else if (media.type === 'video') {
-          fileContextStr += `\n\n[Video attached: ${media.name || 'video.mp4'} — please describe/analyze this video content]`;
+          fileContextStr += `\n\n[VIDEO ATTACHED: ${media.name || 'video.mp4'} — The user has shared a video file. Acknowledge you received it and ask what they would like help with regarding this video.]`;
         }
       }
 
@@ -1992,7 +2010,9 @@ export default function HomeScreen() {
         }
       } catch (_e) {}
 
-      await sendMessage(prefixedText, filePayloadArr.length > 0 ? filePayloadArr : undefined, base64Image, false, currentAIModel);
+      // Pass firstImageUri as local preview for the user message bubble
+      const imagePayload = base64Image ? base64Image : undefined;
+      await sendMessage(prefixedText, filePayloadArr.length > 0 ? filePayloadArr : undefined, imagePayload, false, currentAIModel);
       setShowCompletionStatus(true);
       setTimeout(() => setShowCompletionStatus(false), 2000);
       // Spotify EDG Function: trigger when connected and music intent detected (non-dominant mode)
@@ -2494,11 +2514,13 @@ export default function HomeScreen() {
 
     if (selectedMedia.length === 1 && selectedMedia[0].type === 'image') {
       const media = selectedMedia[0];
+      // Use file URI for preview — never try to render raw base64 as Image source
+      const previewUri = media.uri;
       return (
         <View style={{ marginBottom: 8, flexDirection: 'row', alignItems: 'flex-start' }}>
           <View style={{ position: 'relative' }}>
             <View style={{ width: 72, height: 72, borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.1)' }}>
-              <ExpoImage source={{ uri: media.uri }} style={{ width: 72, height: 72 }} contentFit="cover" />
+              <ExpoImage source={{ uri: previewUri }} style={{ width: 72, height: 72 }} contentFit="cover" />
             </View>
             <TouchableOpacity style={{ position: 'absolute', top: -7, right: -7, width: 22, height: 22, borderRadius: 11, backgroundColor: isDark ? '#555' : '#888', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: isDark ? '#1C1C1E' : '#F0F0F5', zIndex: 10 }} onPress={() => removeMedia(0)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
               <Ionicons name="close" size={11} color="#FFF" />
@@ -2558,6 +2580,9 @@ export default function HomeScreen() {
       </View>
     );
   }, [selectedMedia, removeMedia, colors, isDark]);
+
+  // Pre-render ToolsModal for instant open (mount once, toggle visibility)
+  // No changes needed — toolsVisible state already handles this
 
   const styles = useMemo(() => StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background, paddingTop: Platform.select({ ios: insets.top, android: StatusBar.currentHeight || 0, default: 0 }) },
@@ -3005,7 +3030,11 @@ export default function HomeScreen() {
               <View style={[styles.inputContainer, Platform.OS === 'ios' && { backgroundColor: 'transparent' }]}>
                 {/* + button OUTSIDE (circular) when keyboard is visible */}
                 {keyboardVisible && !editingMessageId && !isRecording && !isProcessing ? (
-                  <TouchableOpacity style={styles.addBtn} onPress={() => setToolsVisible(true)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                  <TouchableOpacity
+                    style={styles.addBtn}
+                    onPress={() => setToolsVisible(true)}
+                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                  >
                     <View style={[styles.addBtnCircle, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)', borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)' }]}>
                       <Ionicons name="add" size={22} color={colors.text} />
                     </View>
@@ -3074,7 +3103,9 @@ export default function HomeScreen() {
                       {/* + button INSIDE input when keyboard is hidden */}
                       {!keyboardVisible && !editingMessageId ? (
                         <TouchableOpacity
-                          onPress={() => setToolsVisible(true)}
+                          onPress={() => {
+                            setToolsVisible(true);
+                          }}
                           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                           style={{ marginRight: 4 }}
                         >
