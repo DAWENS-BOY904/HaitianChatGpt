@@ -14,7 +14,7 @@ import { Audio } from 'expo-av';
 import { useTheme } from '../hooks/useTheme';
 import { getSupabaseClient } from '@/template';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as WebBrowser from 'expo-web-browser';
+import * as WebBrowser from '../utils/web-browser';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
