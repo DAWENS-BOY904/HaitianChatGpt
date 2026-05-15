@@ -16,7 +16,6 @@ interface Message {
   role: 'user' | 'assistant';
   content: string;
   image_url?: string;
-  image_urls?: string[];
   file_url?: string;
   file_name?: string;
   file_type?: string;
@@ -71,7 +70,7 @@ interface ConversationContextType {
   checkAccountStatus: () => Promise<void>;
   createConversation: () => Promise<string | null>;
   selectConversation: (id: string) => Promise<void>;
-  sendMessage: (content: string, fileContents?: Array<{name: string; type: string; content: string}> | string, base64Image?: string, isImageGeneration?: boolean, aiModel?: string, base64Images?: string[]) => Promise<void>;
+  sendMessage: (content: string, fileContents?: Array<{name: string; type: string; content: string}> | string, base64Image?: string, isImageGeneration?: boolean, aiModel?: string) => Promise<void>;
   sendAudioMessage: (audioBase64: string, duration: number, transcription?: string) => Promise<void>;
   updateMessage: (messageId: string, newContent: string) => Promise<void>;
   updateMessageAndRegenerate: (messageId: string, newContent: string, aiModel?: string) => Promise<void>;
@@ -433,8 +432,7 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
     fileContents?: Array<{name: string; type: string; content: string}> | string,
     base64Image?: string,
     isImageGeneration: boolean = false,
-    aiModel?: string,
-    base64Images?: string[]
+    aiModel?: string
   ) => {
     const imageUrl = typeof fileContents === 'string' ? fileContents : undefined;
     const filePayload = Array.isArray(fileContents) ? fileContents : undefined;
@@ -606,35 +604,6 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    // ── Upload additional images for multi-image carousel support ──
-    const allUploadedImageUrls: string[] = [];
-    if (finalImageUrl && !finalImageUrl.startsWith('data:')) allUploadedImageUrls.push(finalImageUrl);
-    if (base64Images && base64Images.length > 0) {
-      for (let imgIdx = 0; imgIdx < base64Images.length; imgIdx++) {
-        const imgB64 = base64Images[imgIdx];
-        if (!imgB64 || imgB64 === base64Image) continue; // skip first (already uploaded above)
-        try {
-          const mFileName = `${Date.now()}_${imgIdx}.jpg`;
-          const mFilePath = `${user.id}/${conversationId || 'tmp'}/${mFileName}`;
-          const mCleanB64 = imgB64.replace(/^data:image\/[a-z+]+;base64,/i, '');
-          const mBinaryStr = globalThis.atob ? globalThis.atob(mCleanB64) : imgB64;
-          const mBytes = new Uint8Array(mBinaryStr.length);
-          for (let i = 0; i < mBinaryStr.length; i++) mBytes[i] = mBinaryStr.charCodeAt(i);
-          const { error: mUpErr } = await supabase.storage.from('chat-images').upload(mFilePath, mBytes, { contentType: 'image/jpeg', upsert: true });
-          if (!mUpErr) {
-            const { data: mUrlD } = supabase.storage.from('chat-images').getPublicUrl(mFilePath);
-            if (mUrlD.publicUrl && !allUploadedImageUrls.includes(mUrlD.publicUrl)) {
-              allUploadedImageUrls.push(mUrlD.publicUrl);
-            }
-          }
-        } catch (_mErr) {}
-      }
-    }
-    // Local previews for immediate display (before upload completes)
-    const localImagePreviews: string[] = base64Images && base64Images.length > 1
-      ? base64Images.map(b64 => `data:image/jpeg;base64,${b64.replace(/^data:image\/[a-z+]+;base64,/i, '')}`)
-      : (localImagePreview ? [localImagePreview] : []);
-
     // ── Add user message to UI immediately with local preview ──
     const tempUserMessage: Message = {
       id: userMessageId,
@@ -642,7 +611,6 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
       content,
       // Use local preview first so image shows instantly, then gets replaced by public URL
       image_url: localImagePreview || finalImageUrl,
-      image_urls: localImagePreviews.length > 1 ? localImagePreviews : undefined,
       created_at: new Date().toISOString(),
     };
     setMessages(prev => [...prev, tempUserMessage]);
@@ -807,19 +775,12 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
       const isTransientId = conversationId.startsWith('guest-') || conversationId.startsWith('local-');
       // Use public URL if available, otherwise fallback to local data URI
       const storedImageUrl = (finalImageUrl && !finalImageUrl.startsWith('data:')) ? finalImageUrl : null;
-      const storedImageUrls = allUploadedImageUrls.filter(u => !u.startsWith('data:'));
       const { data: savedUserMessage } = isTransientId ? { data: null } : await supabase
-        .from('messages').insert({
-          conversation_id: conversationId,
-          role: 'user',
-          content,
-          image_url: storedImageUrl,
-          image_urls: storedImageUrls.length > 1 ? storedImageUrls : null
-        }).select().single();
+        .from('messages').insert({ conversation_id: conversationId, role: 'user', content, image_url: storedImageUrl }).select().single();
       // Replace temp user message: keep local preview if no public URL yet
       if (savedUserMessage) {
         setMessages(prev => prev.map(m => m.id === userMessageId
-          ? { ...savedUserMessage, image_url: storedImageUrl || localImagePreview, image_urls: storedImageUrls.length > 1 ? storedImageUrls : undefined }
+          ? { ...savedUserMessage, image_url: storedImageUrl || localImagePreview }
           : m
         ));
       }
