@@ -129,8 +129,8 @@ const FALLBACK_TRACKS_WORKOUT = [
     owner: 'Survivor',
     type: 'Song',
     imageUrl: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=200&q=80',
-    previewUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
-    spotifyUrl: 'https://open.spotify.com/track/2HHtWyy5CgaQbC7XSoOb0e',
+    previewUrl: 'https://rythm.fm/t/154008311430123520',
+    spotifyUrl: 'https://rythm.fm/t/154008311430123520',
     uri: 'spotify:track:2HHtWyy5CgaQbC7XSoOb0e',
   },
   {
