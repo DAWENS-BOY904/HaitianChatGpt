@@ -721,22 +721,56 @@ export const MessageItem = memo(function MessageItem({
 
     // Support both camelCase (imageUrl) and snake_case (image_url) field names
     const displayImage = message.imageUrl || (message as any).image_url || null;
+    // Support multiple images stored as JSON array or comma-separated
+    const multiImages: string[] = (() => {
+      const raw = (message as any).image_urls;
+      if (Array.isArray(raw) && raw.length > 0) return raw;
+      if (typeof raw === 'string') {
+        try { const parsed = JSON.parse(raw); if (Array.isArray(parsed)) return parsed; } catch {}
+        return raw.split(',').map((s: string) => s.trim()).filter(Boolean);
+      }
+      return displayImage ? [displayImage] : [];
+    })();
     // Accept both http URLs and local data: URIs
-    const hasValidImage = displayImage && (displayImage.startsWith('http') || displayImage.startsWith('data:') || displayImage.startsWith('file:'));
+    const hasValidImage = multiImages.length > 0;
 
     const hasMedia = hasValidImage || !!(message as any).file_url;
 
     return (
       <>
         <View style={userStyles.container}>
-          {hasValidImage ? (
+          {hasValidImage && multiImages.length > 1 ? (
+            <View style={{ alignSelf: 'flex-end', marginHorizontal: 16, marginBottom: content ? 6 : 0 }}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ gap: 8 }}
+                style={{ maxHeight: 180 }}
+              >
+                {multiImages.map((uri, idx) => (
+                  <TouchableOpacity
+                    key={`user-img-${idx}`}
+                    onPress={() => handleImagePress(uri, multiImages, idx)}
+                    activeOpacity={0.88}
+                  >
+                    <Image
+                      source={{ uri }}
+                      style={{ width: 150, height: 150, borderRadius: 14 }}
+                      contentFit="cover"
+                      transition={200}
+                    />
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          ) : hasValidImage ? (
             <TouchableOpacity
-              onPress={() => handleImagePress(displayImage!, [displayImage!], 0)}
+              onPress={() => handleImagePress(multiImages[0], multiImages, 0)}
               activeOpacity={0.88}
               style={{ alignSelf: 'flex-end', marginHorizontal: 16, marginBottom: content ? 6 : 0 }}
             >
               <Image
-                source={{ uri: displayImage }}
+                source={{ uri: multiImages[0] }}
                 style={{ width: 220, height: 220, borderRadius: 18 }}
                 contentFit="cover"
                 transition={200}
@@ -753,7 +787,7 @@ export const MessageItem = memo(function MessageItem({
           ) : null}
         </View>
 
-        {hasValidImage ? (
+        {hasValidImage && multiImages.length > 0 ? (
           <Modal visible={imageViewerVisible} transparent animationType="fade" onRequestClose={() => setImageViewerVisible(false)} statusBarTranslucent>
             <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.93)', justifyContent: 'center', alignItems: 'center' }}>
               <TouchableOpacity style={{ position: 'absolute', top: Platform.OS === 'ios' ? 56 : 24, right: 20, zIndex: 10, width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' }} onPress={() => setImageViewerVisible(false)}>
@@ -1146,4 +1180,3 @@ const assistantStyles = StyleSheet.create({
     borderRadius: 10,
   },
 });
-allow multi image user show in home page in carousel.
