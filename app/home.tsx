@@ -3633,4 +3633,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-for group create wait 5s poul load all function better with no error or fake data.
+In home, when entering group chat mode (handleStartGroupChat), add a 5-second loading state with an animated spinner and 'Setting up group chat...' overlay before showing the chat interface, ensuring all group functions initialize properly before the user can interact.
