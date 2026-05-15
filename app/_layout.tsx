@@ -3,7 +3,6 @@ import { AlertProvider, AuthProvider } from '@/template';
 import { ThemeProvider } from '../contexts/ThemeContext';
 import { ConversationProvider } from '../contexts/ConversationContext';
 import { SettingsProvider } from '../contexts/SettingsContext';
-import { SocialProvider } from '../contexts/SocialContext';
 import { SubscriptionProvider } from '../contexts/SubscriptionContext';
 import { GuestLimitsProvider } from '../contexts/GuestLimitsContext';
 import { ProfileProvider } from '../contexts/ProfileContext';
@@ -50,7 +49,6 @@ export default function RootLayout() {
             <SubscriptionProvider>
               <GuestLimitsProvider>
                 <ProfileProvider>
-                <SocialProvider>
                   <ConversationProvider>
                     <RevenueCatInit />
                     <Stack screenOptions={{ headerShown: false }}>
@@ -132,7 +130,6 @@ export default function RootLayout() {
                     <Stack.Screen name="subscription-success" />
                     </Stack>
                   </ConversationProvider>
-                </SocialProvider>
                 </ProfileProvider>
               </GuestLimitsProvider>
             </SubscriptionProvider>
