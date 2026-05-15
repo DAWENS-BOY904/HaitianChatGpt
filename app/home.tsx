@@ -122,6 +122,19 @@ function isValidBase64(str: string): boolean {
   } catch (_e) { return false; }
 }
 
+// ── Content moderation ─────────────────────────────────────────────────────
+const INAPPROPRIATE_KEYWORDS = [
+  'nude', 'naked', 'porn', 'porno', 'pornographic', 'sex girl', 'sex woman',
+  'sexual content', 'xxx', 'nsfw', 'explicit nudity', 'erotic', 'hentai',
+  'nude girl', 'nude woman', 'nude man', 'nude boy', 'naked girl',
+  'naked woman', 'naked man', 'create sex', 'generate sex', 'make sex',
+  'sex photo', 'sex image', 'sex picture', 'nude photo', 'nude image',
+];
+function isInappropriatePrompt(text: string): boolean {
+  const lower = text.toLowerCase();
+  return INAPPROPRIATE_KEYWORDS.some(kw => lower.includes(kw));
+}
+
 const INPUT_PERSIST_KEY = 'home_input_draft';
 const CONV_PERSIST_KEY = 'home_current_conv_id';
 const INPUT_PERSIST_TTL = 8 * 60 * 1000;
@@ -1632,6 +1645,15 @@ export default function HomeScreen() {
     }
   };
 
+  const cancelVoiceRecording = useCallback(async () => {
+    if (stopTimeoutRef.current) { clearTimeout(stopTimeoutRef.current); stopTimeoutRef.current = null; }
+    if (processingTimeoutRef.current) { clearTimeout(processingTimeoutRef.current); processingTimeoutRef.current = null; }
+    await cleanupRecording();
+    setRecordingState('idle');
+    setRecordingDuration(0);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  }, [cleanupRecording]);
+
   const stopVoiceRecording = async () => {
     if (!recordingRef.current || !isRecordingRef.current) return;
     if (stopTimeoutRef.current) { clearTimeout(stopTimeoutRef.current); stopTimeoutRef.current = null; }
@@ -1667,10 +1689,9 @@ export default function HomeScreen() {
   };
 
   const toggleRecording = useCallback(() => {
-    if (processingTimeoutRef.current) { clearTimeout(processingTimeoutRef.current); processingTimeoutRef.current = null; }
     if (recordingState === 'idle') startVoiceRecording();
     else if (recordingState === 'recording') stopVoiceRecording();
-    else if (recordingState === 'processing') { setRecordingState('idle'); isRecordingRef.current = false; }
+    // processing: user can cancel via the X button
   }, [recordingState]);
 
   const BAD_WORDS = ['fuck', 'shit', 'bitch', 'asshole', 'bastard', 'cunt', 'damn', 'dick', 'pussy', 'cock', 'nigger', 'nigga', 'faggot', 'whore', 'slut', 'ass', 'motherfucker', 'fucker', 'piss', 'retard', 'kaka', 'manman', 'degage'];
@@ -1763,6 +1784,15 @@ export default function HomeScreen() {
   }, [currentConversation, createConversation, sendMessage, currentAIModel, showAlert]);
 
   const handleSend = async () => {
+    // Content moderation: block inappropriate prompts
+    if (isInappropriatePrompt(inputText.trim())) {
+      showAlert(
+        'Inappropriate Content',
+        'Your message contains inappropriate or explicit content. Please revise your request and try again.'
+      );
+      return;
+    }
+
     if (deepResearchMode && inputText.trim()) {
       const query = inputText.trim();
       setInputText(''); setSelectedMedia([]); clearDraft(); Keyboard.dismiss();
@@ -1842,6 +1872,21 @@ export default function HomeScreen() {
           setGuestPhotoCount(newPhotoCount);
           AsyncStorage.setItem('guest_photo_count', String(newPhotoCount)).catch(() => {});
         }
+      }
+    }
+
+    // Content moderation: check uploaded image filenames for suspicious patterns
+    if (imageFiles.length > 0) {
+      const susNames = imageFiles.filter(m =>
+        /porn|nude|naked|nsfw|sex|xxx|adult/i.test(m.name || m.uri || '')
+      );
+      if (susNames.length > 0) {
+        showAlert(
+          'Inappropriate Image',
+          'This image appears to contain inappropriate content (nudity/sexual content). Please upload a different image.'
+        );
+        setSelectedMedia([]);
+        return;
       }
     }
 
@@ -2621,8 +2666,8 @@ export default function HomeScreen() {
     suggestionSub: { color: colors.textSecondary, fontSize: 11, lineHeight: 15 },
     groupActionBtn: { borderRadius: 20, paddingHorizontal: 18, paddingVertical: 10, borderWidth: 1, borderColor: 'rgba(0,122,255,0.4)' },
     groupActionBtnText: { color: '#007AFF', fontSize: 15, fontWeight: '600' },
-    searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, margin: Spacing.md, paddingHorizontal: Spacing.md, borderRadius: BorderRadius.lg, height: 40 },
-    searchInput: { flex: 1, fontSize: 16, color: colors.text, marginLeft: Spacing.sm },
+    searchContainer: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: Spacing.md, marginVertical: 6, paddingHorizontal: 12, borderRadius: 22, height: 44 },
+    searchInput: { flex: 1, fontSize: 15, color: colors.text, paddingVertical: 0 },
   }), [colors, insets, isDark]);
 
   const showSendButton = inputText.trim().length > 0 || selectedMedia.length > 0;
@@ -2845,13 +2890,29 @@ export default function HomeScreen() {
               )}
 
               {isSearchMode ? (
-                <View style={styles.searchContainer}>
-                  <Ionicons name="search" size={20} color={colors.textSecondary} />
-                  <TextInput style={styles.searchInput} placeholder="Search messages..." placeholderTextColor={colors.textSecondary} value={searchQuery} onChangeText={setSearchQuery} autoFocus />
-                  <TouchableOpacity onPress={() => { setIsSearchMode(false); setSearchQuery(''); }}>
-                    <Ionicons name="close" size={20} color={colors.textSecondary} />
-                  </TouchableOpacity>
-                </View>
+                Platform.OS === 'ios' ? (
+                  <BlurView intensity={isDark ? 70 : 55} tint={isDark ? 'dark' : 'light'} style={[styles.searchContainer, { overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.1)' }]}>
+                    <Ionicons name="search" size={17} color={colors.textSecondary} />
+                    <TextInput style={styles.searchInput} placeholder="Search messages..." placeholderTextColor={colors.textSecondary} value={searchQuery} onChangeText={setSearchQuery} autoFocus clearButtonMode="while-editing" returnKeyType="search" />
+                    <TouchableOpacity onPress={() => { setIsSearchMode(false); setSearchQuery(''); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                      <Text style={{ color: colors.primary, fontSize: 15, fontWeight: '600' }}>Cancel</Text>
+                    </TouchableOpacity>
+                  </BlurView>
+                ) : (
+                  <View style={[styles.searchContainer, { backgroundColor: isDark ? 'rgba(44,44,50,0.95)' : 'rgba(235,235,242,0.95)', borderWidth: StyleSheet.hairlineWidth, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)' }]}>
+                    <Ionicons name="search" size={17} color={colors.textSecondary} />
+                    <TextInput style={styles.searchInput} placeholder="Search messages..." placeholderTextColor={colors.textSecondary} value={searchQuery} onChangeText={setSearchQuery} autoFocus returnKeyType="search" />
+                    {searchQuery.length > 0 ? (
+                      <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                        <Ionicons name="close-circle" size={17} color={colors.textSecondary} />
+                      </TouchableOpacity>
+                    ) : (
+                      <TouchableOpacity onPress={() => { setIsSearchMode(false); setSearchQuery(''); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                        <Text style={{ color: colors.primary, fontSize: 15, fontWeight: '600' }}>Cancel</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                )
               ) : null}
 
               <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
@@ -3028,16 +3089,18 @@ export default function HomeScreen() {
 
               {/* Input Area */}
               <View style={[styles.inputContainer, Platform.OS === 'ios' && { backgroundColor: 'transparent' }]}>
-                {/* + button OUTSIDE (circular) when keyboard is visible */}
+                {/* + button OUTSIDE (circular, glassmorphism) when keyboard is visible */}
                 {keyboardVisible && !editingMessageId && !isRecording && !isProcessing ? (
-                  <TouchableOpacity
-                    style={styles.addBtn}
-                    onPress={() => setToolsVisible(true)}
-                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                  >
-                    <View style={[styles.addBtnCircle, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)', borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)' }]}>
-                      <Ionicons name="add" size={22} color={colors.text} />
-                    </View>
+                  <TouchableOpacity style={styles.addBtn} onPress={() => setToolsVisible(true)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                    {Platform.OS === 'ios' ? (
+                      <BlurView intensity={isDark ? 72 : 56} tint={isDark ? 'dark' : 'light'} style={[styles.addBtnCircle, { overflow: 'hidden', borderColor: isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.11)' }]}>
+                        <Ionicons name="add" size={22} color={colors.text} />
+                      </BlurView>
+                    ) : (
+                      <View style={[styles.addBtnCircle, { backgroundColor: isDark ? 'rgba(60,60,68,0.92)' : 'rgba(240,240,248,0.92)', borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.09)' }]}>
+                        <Ionicons name="add" size={22} color={colors.text} />
+                      </View>
+                    )}
                   </TouchableOpacity>
                 ) : null}
 
@@ -3097,19 +3160,28 @@ export default function HomeScreen() {
                     <View style={styles.recordingRow}>
                       <WaveformAnimation isRecording={isRecording} />
                       <Text style={styles.recordingDuration}>{isProcessing ? 'Processing...' : formatDuration(recordingDuration)}</Text>
+                      <TouchableOpacity
+                        onPress={cancelVoiceRecording}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        style={{ marginLeft: 4, width: 30, height: 30, borderRadius: 15, backgroundColor: isDark ? 'rgba(255,69,58,0.18)' : 'rgba(255,69,58,0.12)', alignItems: 'center', justifyContent: 'center' }}
+                      >
+                        <Ionicons name="close" size={16} color="#FF453A" />
+                      </TouchableOpacity>
                     </View>
                   ) : (
                     <View style={styles.inputRow}>
-                      {/* + button INSIDE input when keyboard is hidden */}
+                      {/* + button INSIDE input (glassmorphism) when keyboard is hidden */}
                       {!keyboardVisible && !editingMessageId ? (
-                        <TouchableOpacity
-                          onPress={() => {
-                            setToolsVisible(true);
-                          }}
-                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                          style={{ marginRight: 4 }}
-                        >
-                          <Ionicons name="add" size={22} color={colors.textSecondary} />
+                        <TouchableOpacity onPress={() => setToolsVisible(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ marginRight: 4 }}>
+                          {Platform.OS === 'ios' ? (
+                            <BlurView intensity={isDark ? 65 : 50} tint={isDark ? 'dark' : 'light'} style={{ width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: isDark ? 'rgba(255,255,255,0.16)' : 'rgba(0,0,0,0.1)' }}>
+                              <Ionicons name="add" size={20} color={colors.text} />
+                            </BlurView>
+                          ) : (
+                            <View style={{ width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: isDark ? 'rgba(60,60,68,0.88)' : 'rgba(240,240,248,0.88)', borderWidth: StyleSheet.hairlineWidth, borderColor: isDark ? 'rgba(255,255,255,0.13)' : 'rgba(0,0,0,0.09)' }}>
+                              <Ionicons name="add" size={20} color={colors.text} />
+                            </View>
+                          )}
                         </TouchableOpacity>
                       ) : null}
                       <TextInput
@@ -3688,4 +3760,3 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-search the entire codebase for any remaining direct 'expo-web-browser' imports in app/ and components/ files and replace them all with the '../utils/web-browser' shim so no future web bundling errors occur
