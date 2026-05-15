@@ -86,7 +86,7 @@ import * as Haptics from 'expo-haptics';
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// ── Deep Researchs Progress Card ──────────────────────────────────────────────
+// ── Deep Researchs Progress Card  ──────────────────────────────────────────────
 const DeepResearchCard = memo(function DeepResearchCard({ step, label, done, colors }: { step: number; label: string; done: boolean; colors: any }) {
   const pulse = useRef(new Animated.Value(0.5)).current;
   useEffect(() => {
