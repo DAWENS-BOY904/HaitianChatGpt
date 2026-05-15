@@ -3657,4 +3657,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-hello ai if see this dont skip Audit all screens and modals to ensure consistent dark/light theme support using the ThemeContext, fixing any hardcoded colors.
+
