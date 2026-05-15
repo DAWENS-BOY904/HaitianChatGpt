@@ -62,7 +62,6 @@ export default function RootLayout() {
                     <Stack.Screen name="verify-code" />
                     <Stack.Screen name="home" />
                     <Stack.Screen name="settings" options={{ presentation: 'modal', headerShown: false, animation: 'slide_from_bottom' }} />
-                    <Stack.Screen name="social" />
                     <Stack.Screen name="chat" />
                     <Stack.Screen name="about" />
                     <Stack.Screen name="subscription" />
@@ -75,9 +74,6 @@ export default function RootLayout() {
                     <Stack.Screen name="think-mode" />
                     <Stack.Screen name="deep-research" />
                     <Stack.Screen name="web-search" />
-                    <Stack.Screen name="privacy-policy" />
-                    <Stack.Screen name="terms-of-use" />
-                    <Stack.Screen name="study-learn" />
                     <Stack.Screen name="languages" />
                     <Stack.Screen name="payment" />
                     <Stack.Screen name="groupinfo" />
@@ -104,7 +100,6 @@ export default function RootLayout() {
                     <Stack.Screen name="admin-content" />
                     <Stack.Screen name="content-viewer" />
                     <Stack.Screen name="images" />
-                    <Stack.Screen name="image-prompt" />
                     <Stack.Screen name="image-viewer" />
                     <Stack.Screen name="share-chat" />
                     <Stack.Screen name="admin-verify" />
