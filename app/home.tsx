@@ -3688,4 +3688,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-
+search the entire codebase for any remaining direct 'expo-web-browser' imports in app/ and components/ files and replace them all with the '../utils/web-browser' shim so no future web bundling errors occur
