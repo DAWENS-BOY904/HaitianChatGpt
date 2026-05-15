@@ -129,7 +129,7 @@ const FALLBACK_TRACKS_WORKOUT = [
     owner: 'Survivor',
     type: 'Song',
     imageUrl: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=200&q=80',
-    previewUrl: 'https://rythm.fm/t/154008311430123520',
+    previewUrl: 'https://videotourl.com/audio/1778875621467-fb69ff20-a294-4c84-948b-a29928d5a89b.mp3',
     spotifyUrl: 'https://rythm.fm/t/154008311430123520',
     uri: 'spotify:track:2HHtWyy5CgaQbC7XSoOb0e',
   },
