@@ -3130,32 +3130,36 @@ export default function HomeScreen() {
                               onConnectSpotify={() => router.push('/spotify-connect' as any)}
                             />
                           ) : null}
-                          {/* ── Shazam Card (photo 5/7) ── */}
+                          {/* ── Shazam Card (in-chat, photo 5/7 style) ── */}
                           {shazamCardVisible ? (
                             <View style={{ marginHorizontal: 16, marginBottom: 12 }}>
-                              {/* Shazam label */}
-                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                                <View style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: '#0D72EA', alignItems: 'center', justifyContent: 'center' }}>
+                              {/* Shazam label row */}
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                                <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: '#0D72EA', alignItems: 'center', justifyContent: 'center' }}>
                                   <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-                                    <View style={{ width: 12, height: 12, borderRadius: 6, borderWidth: 2, borderColor: 'rgba(255,255,255,0.9)', borderBottomColor: 'transparent', borderLeftColor: 'transparent', transform: [{ rotate: '-45deg' }], marginBottom: -3 }} />
-                                    <View style={{ width: 12, height: 12, borderRadius: 6, borderWidth: 2, borderColor: 'rgba(255,255,255,0.9)', borderTopColor: 'transparent', borderRightColor: 'transparent', transform: [{ rotate: '-45deg' }], marginTop: -3 }} />
+                                    <View style={{ width: 13, height: 13, borderRadius: 6.5, borderWidth: 2, borderColor: 'rgba(255,255,255,0.9)', borderBottomColor: 'transparent', borderLeftColor: 'transparent', transform: [{ rotate: '-45deg' }], marginBottom: -3 }} />
+                                    <View style={{ width: 13, height: 13, borderRadius: 6.5, borderWidth: 2, borderColor: 'rgba(255,255,255,0.9)', borderTopColor: 'transparent', borderRightColor: 'transparent', transform: [{ rotate: '-45deg' }], marginTop: -3 }} />
                                   </View>
                                 </View>
-                                <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 14, fontWeight: '600' }}>Shazam</Text>
+                                <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 15, fontWeight: '700' }}>Shazam</Text>
                               </View>
-                              {/* Carousel - tap card + result card */}
+
+                              {/* Carousel: Card 1 = Tap to Shazam, Card 2 = Result */}
                               <ScrollView
-                                horizontal pagingEnabled
+                                horizontal
+                                pagingEnabled
                                 showsHorizontalScrollIndicator={false}
                                 scrollEnabled={!!shazamResult}
+                                style={{ width: Dimensions.get('window').width - 32 }}
                                 onMomentumScrollEnd={(e) => {
                                   const idx = Math.round(e.nativeEvent.contentOffset.x / (Dimensions.get('window').width - 32));
                                   setShazamCarouselIndex(idx);
                                 }}
                               >
+                                {/* Card 1: Tap to listen */}
                                 <View style={{ width: Dimensions.get('window').width - 32 }}>
                                   <TouchableOpacity
-                                    style={[shazamCardStyles.tapCard, { backgroundColor: isDark ? '#1C1C1E' : '#FFF' }]}
+                                    style={[shazamCardStyles.tapCard, { backgroundColor: isDark ? '#1C1C1E' : '#F8F8FA' }]}
                                     onPress={() => { setShazamWebViewUrl('https://www.shazam.com'); setShazamWebViewVisible(true); setShazamListening(true); }}
                                     activeOpacity={0.88}
                                   >
@@ -3165,40 +3169,49 @@ export default function HomeScreen() {
                                         <View style={{ width: 44, height: 44, borderRadius: 22, borderWidth: 6, borderColor: 'rgba(255,255,255,0.9)', borderTopColor: 'transparent', borderRightColor: 'transparent', transform: [{ rotate: '-45deg' }], marginTop: -8 }} />
                                       </View>
                                     </View>
-                                    <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 18, fontWeight: '700', marginTop: 16, marginBottom: 6, textAlign: 'center' }}>
+                                    <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 18, fontWeight: '700', marginTop: 18, marginBottom: 6, textAlign: 'center' }}>
                                       {shazamListening ? 'Listening...' : "Let's find and name your song"}
                                     </Text>
                                     <Text style={{ color: isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.5)', fontSize: 14 }}>Tap to get started</Text>
                                   </TouchableOpacity>
                                 </View>
-                                  <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 18, fontWeight: '700', marginTop: 16, marginBottom: 6 }}>
-                                    {"Let's find and name your song"}
-                                  </Text>
-                                  <Text style={{ color: isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.5)', fontSize: 14 }}>Tap to get started</Text>
-                                </TouchableOpacity>
-                              </View>
 
-                              {/* Card 2: Song result - auto-shows after Shazam identifies */}
-                              {shazamResult ? (
+                                {/* Card 2: Song result — only when Shazam identified */}
+                                {shazamResult ? (
                                   <View style={{ width: Dimensions.get('window').width - 32 }}>
                                     <TouchableOpacity
                                       style={[shazamCardStyles.resultCard, { backgroundColor: isDark ? '#1C1C1E' : '#FFF' }]}
                                       onPress={() => {
-                                        setShazamWebViewUrl(shazamResult.shazamUrl || `https://www.shazam.com/search?term=${encodeURIComponent((shazamResult.title || '') + ' ' + (shazamResult.subtitle || ''))}`);
+                                        const url = shazamResult.shazamUrl || `https://www.shazam.com/search?term=${encodeURIComponent((shazamResult.title || '') + ' ' + (shazamResult.subtitle || ''))}`;
+                                        setShazamWebViewUrl(url);
                                         setShazamWebViewVisible(true);
                                       }}
                                       activeOpacity={0.88}
                                     >
                                       {shazamResult.imageUrl ? (
-                                        <Image source={{ uri: shazamResult.imageUrl }} style={shazamCardStyles.albumArt} resizeMode="cover" />
+                                        <ExpoImage
+                                          source={{ uri: shazamResult.imageUrl }}
+                                          style={shazamCardStyles.albumArt}
+                                          contentFit="cover"
+                                          transition={200}
+                                        />
                                       ) : (
                                         <View style={[shazamCardStyles.albumArt, { backgroundColor: '#0D72EA', alignItems: 'center', justifyContent: 'center' }]}>
-                                          <Ionicons name="musical-notes" size={48} color="rgba(255,255,255,0.7)" />
+                                          <Ionicons name="musical-notes" size={52} color="rgba(255,255,255,0.7)" />
                                         </View>
                                       )}
                                       <View style={shazamCardStyles.songInfo}>
-                                        <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 18, fontWeight: '800', marginBottom: 4 }}>{shazamResult.title || 'Song Found'}</Text>
-                                        <Text style={{ color: isDark ? 'rgba(255,255,255,0.65)' : 'rgba(0,0,0,0.6)', fontSize: 14, marginBottom: 10 }}>{shazamResult.subtitle}</Text>
+                                        <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 19, fontWeight: '800', marginBottom: 4 }} numberOfLines={2}>{shazamResult.title || 'Song Found'}</Text>
+                                        <Text style={{ color: isDark ? 'rgba(255,255,255,0.65)' : 'rgba(0,0,0,0.6)', fontSize: 14, marginBottom: 4 }} numberOfLines={1}>{shazamResult.subtitle}</Text>
+                                        {shazamResult.count ? (
+                                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 12 }}>
+                                            <View style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: '#0D72EA', alignItems: 'center', justifyContent: 'center' }}>
+                                              <View style={{ width: 7, height: 7, borderRadius: 3.5, borderWidth: 1, borderColor: '#FFF', borderBottomColor: 'transparent', borderLeftColor: 'transparent', transform: [{ rotate: '-45deg' }], marginBottom: -1.5 }} />
+                                              <View style={{ width: 7, height: 7, borderRadius: 3.5, borderWidth: 1, borderColor: '#FFF', borderTopColor: 'transparent', borderRightColor: 'transparent', transform: [{ rotate: '-45deg' }], marginTop: -1.5 }} />
+                                            </View>
+                                            <Text style={{ color: isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.5)', fontSize: 12 }}>{shazamResult.count}</Text>
+                                          </View>
+                                        ) : null}
                                         <TouchableOpacity
                                           style={shazamCardStyles.saveBtn}
                                           onPress={() => {
@@ -3216,8 +3229,12 @@ export default function HomeScreen() {
                                       <TouchableOpacity
                                         style={shazamCardStyles.playBtn}
                                         onPress={() => {
-                                          if (shazamResult.previewUrl) { Linking.openURL(shazamResult.previewUrl).catch(() => {}); }
-                                          else { setShazamWebViewUrl(shazamResult.shazamUrl || 'https://www.shazam.com'); setShazamWebViewVisible(true); }
+                                          if (shazamResult.previewUrl) {
+                                            Linking.openURL(shazamResult.previewUrl).catch(() => {});
+                                          } else {
+                                            setShazamWebViewUrl(shazamResult.shazamUrl || 'https://www.shazam.com');
+                                            setShazamWebViewVisible(true);
+                                          }
                                         }}
                                         activeOpacity={0.8}
                                       >
@@ -3225,20 +3242,29 @@ export default function HomeScreen() {
                                       </TouchableOpacity>
                                     </TouchableOpacity>
                                   </View>
-                              ) : null}
+                                ) : null}
                               </ScrollView>
-                              {/* Carousel dots */}
+
+                              {/* Carousel dots — only show when result is available */}
                               {shazamResult ? (
-                                <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 6, marginTop: 8 }}>
+                                <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 6, marginTop: 10 }}>
                                   {[0, 1].map(dotI => (
-                                    <View key={dotI} style={{ width: dotI === shazamCarouselIndex ? 16 : 6, height: 6, borderRadius: 3, backgroundColor: dotI === shazamCarouselIndex ? '#0D72EA' : (isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.2)') }} />
+                                    <View
+                                      key={dotI}
+                                      style={{
+                                        width: dotI === shazamCarouselIndex ? 18 : 6,
+                                        height: 6, borderRadius: 3,
+                                        backgroundColor: dotI === shazamCarouselIndex
+                                          ? '#0D72EA'
+                                          : (isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.18)'),
+                                      }}
+                                    />
                                   ))}
                                 </View>
                               ) : null}
-                                </TouchableOpacity>
-                              )}
+
                               {/* Powered by Shazam */}
-                              <Text style={{ color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)', fontSize: 12, marginTop: 8 }}>
+                              <Text style={{ color: isDark ? 'rgba(255,255,255,0.38)' : 'rgba(0,0,0,0.38)', fontSize: 11, marginTop: 8 }}>
                                 Powered by Shazam
                               </Text>
                             </View>
