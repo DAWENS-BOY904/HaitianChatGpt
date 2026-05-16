@@ -1,2 +1,5 @@
-// CodeBlock.tsx — re-exports from StreamingCodeBlock
-export { CodeBlock, StreamingCodeBlock } from './StreamingCodeBlock';
+// CodeBlock.tsx — exports StreamingCodeBlock as CodeBlock
+import { StreamingCodeBlock } from './StreamingCodeBlock';
+export { StreamingCodeBlock } from './StreamingCodeBlock';
+export { StreamingCodeBlock as CodeBlock } from './StreamingCodeBlock';
+export default StreamingCodeBlock;

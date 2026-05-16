@@ -1211,6 +1211,8 @@ export default function HomeScreen() {
   const [shazamResult, setShazamResult] = useState<any>(null);
   const [shazamWebViewVisible, setShazamWebViewVisible] = useState(false);
   const [shazamWebViewUrl, setShazamWebViewUrl] = useState('https://www.shazam.com');
+  const [shazamListening, setShazamListening] = useState(false);
+  const [shazamCarouselIndex, setShazamCarouselIndex] = useState(0);
   const [atMentionModalVisible, setAtMentionModalVisible] = useState(false);
   const [atMentionQuery, setAtMentionQuery] = useState('');
 
@@ -2013,13 +2015,22 @@ export default function HomeScreen() {
     setSpotifyResults([]);
     setSpotifySearchQuery('');
 
-    // ── Shazam dominant mode: when chip active, bypass AI and open WebView ──
+    // ── Shazam dominant mode: when chip active, show inline card (stays in app) ──
     if (shazamActive) {
       setShazamCardVisible(true);
       setShazamResult(null);
-      setShazamWebViewUrl('https://www.shazam.com');
-      setShazamWebViewVisible(true);
+      setShazamCarouselIndex(0);
       Keyboard.dismiss();
+      // Send the message text to AI as context
+      const shazamText = currentText || 'What song is this?';
+      setInputText(''); setSelectedMedia([]); clearDraft();
+      setSending(true); setGenerating(true); setThinkingMode('thinking');
+      let shazamConvId = currentConversation?.id;
+      if (!shazamConvId) { try { shazamConvId = await createConversation(); } catch (_e) {} }
+      if (shazamConvId) {
+        try { await sendMessage(shazamText, undefined, undefined, false, currentAIModel); } catch (_e) {}
+      }
+      setSending(false); setGenerating(false);
       return;
     }
 
@@ -2139,6 +2150,7 @@ export default function HomeScreen() {
         setShazamActive(true);
         setShazamCardVisible(true);
         setShazamResult(null);
+        setShazamCarouselIndex(0);
       }
       // Spotify EDG Function: trigger when connected and music intent detected (non-dominant mode)
       if (!spotifyActive && spotifyConnected && isMusicQuery(currentText)) {
@@ -3131,90 +3143,98 @@ export default function HomeScreen() {
                                 </View>
                                 <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 14, fontWeight: '600' }}>Shazam</Text>
                               </View>
-                              {shazamResult ? (
-                                /* Photo 7 — identified song card */
-                                <TouchableOpacity
-                                  style={[
-                                    shazamCardStyles.resultCard,
-                                    { backgroundColor: isDark ? '#1C1C1E' : '#FFF' },
-                                  ]}
-                                  onPress={() => {
-                                    setShazamWebViewUrl(shazamResult.shazamUrl || 'https://www.shazam.com');
-                                    setShazamWebViewVisible(true);
-                                  }}
-                                  activeOpacity={0.88}
-                                >
-                                  {shazamResult.imageUrl ? (
-                                    <Image
-                                      source={{ uri: shazamResult.imageUrl }}
-                                      style={shazamCardStyles.albumArt}
-                                      resizeMode="cover"
-                                    />
-                                  ) : null}
-                                  <View style={shazamCardStyles.songInfo}>
-                                    <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 17, fontWeight: '700', marginBottom: 4 }}>{shazamResult.title}</Text>
-                                    <Text style={{ color: isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.55)', fontSize: 14, marginBottom: 8 }}>{shazamResult.subtitle}</Text>
-                                    {shazamResult.count ? (
-                                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                                        <View style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: '#0D72EA' }} />
-                                        <Text style={{ color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.45)', fontSize: 12 }}>{shazamResult.count}</Text>
-                                      </View>
-                                    ) : null}
-                                    {/* Save to Shazam button */}
-                                    <TouchableOpacity
-                                      style={shazamCardStyles.saveBtn}
-                                      onPress={() => {
-                                        const storeUrl = Platform.OS === 'ios'
-                                          ? 'https://apps.apple.com/app/shazam-find-music-concerts/id284993459'
-                                          : 'https://play.google.com/store/apps/details?id=com.shazam.android';
-                                        Linking.openURL(storeUrl).catch(() => {});
-                                      }}
-                                      activeOpacity={0.8}
-                                    >
-                                      <Ionicons name="add" size={16} color="#FFF" />
-                                      <Text style={{ color: '#FFF', fontSize: 14, fontWeight: '700' }}>Save to Shazam</Text>
-                                    </TouchableOpacity>
-                                  </View>
-                                  {/* Play button */}
+                              {/* Carousel - tap card + result card */}
+                              <ScrollView
+                                horizontal pagingEnabled
+                                showsHorizontalScrollIndicator={false}
+                                scrollEnabled={!!shazamResult}
+                                onMomentumScrollEnd={(e) => {
+                                  const idx = Math.round(e.nativeEvent.contentOffset.x / (Dimensions.get('window').width - 32));
+                                  setShazamCarouselIndex(idx);
+                                }}
+                              >
+                                <View style={{ width: Dimensions.get('window').width - 32 }}>
                                   <TouchableOpacity
-                                    style={shazamCardStyles.playBtn}
-                                    onPress={() => {
-                                      if (shazamResult.previewUrl) {
-                                        // Play preview audio
-                                        Linking.openURL(shazamResult.previewUrl).catch(() => {});
-                                      } else {
-                                        setShazamWebViewUrl(shazamResult.shazamUrl || 'https://www.shazam.com');
-                                        setShazamWebViewVisible(true);
-                                      }
-                                    }}
-                                    activeOpacity={0.8}
+                                    style={[shazamCardStyles.tapCard, { backgroundColor: isDark ? '#1C1C1E' : '#FFF' }]}
+                                    onPress={() => { setShazamWebViewUrl('https://www.shazam.com'); setShazamWebViewVisible(true); setShazamListening(true); }}
+                                    activeOpacity={0.88}
                                   >
-                                    <Ionicons name="play" size={18} color="#000" style={{ marginLeft: 2 }} />
-                                  </TouchableOpacity>
-                                </TouchableOpacity>
-                              ) : (
-                                /* Photo 5 — tap to Shazam card */
-                                <TouchableOpacity
-                                  style={[
-                                    shazamCardStyles.tapCard,
-                                    { backgroundColor: isDark ? '#1C1C1E' : '#FFF' },
-                                  ]}
-                                  onPress={() => {
-                                    setShazamWebViewUrl('https://www.shazam.com');
-                                    setShazamWebViewVisible(true);
-                                  }}
-                                  activeOpacity={0.88}
-                                >
-                                  <View style={shazamCardStyles.shazamCircle}>
-                                    <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-                                      <View style={{ width: 44, height: 44, borderRadius: 22, borderWidth: 6, borderColor: 'rgba(255,255,255,0.85)', borderBottomColor: 'transparent', borderLeftColor: 'transparent', transform: [{ rotate: '-45deg' }], marginBottom: -8 }} />
-                                      <View style={{ width: 44, height: 44, borderRadius: 22, borderWidth: 6, borderColor: 'rgba(255,255,255,0.85)', borderTopColor: 'transparent', borderRightColor: 'transparent', transform: [{ rotate: '-45deg' }], marginTop: -8 }} />
+                                    <View style={shazamCardStyles.shazamCircle}>
+                                      <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+                                        <View style={{ width: 44, height: 44, borderRadius: 22, borderWidth: 6, borderColor: 'rgba(255,255,255,0.9)', borderBottomColor: 'transparent', borderLeftColor: 'transparent', transform: [{ rotate: '-45deg' }], marginBottom: -8 }} />
+                                        <View style={{ width: 44, height: 44, borderRadius: 22, borderWidth: 6, borderColor: 'rgba(255,255,255,0.9)', borderTopColor: 'transparent', borderRightColor: 'transparent', transform: [{ rotate: '-45deg' }], marginTop: -8 }} />
+                                      </View>
                                     </View>
-                                  </View>
+                                    <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 18, fontWeight: '700', marginTop: 16, marginBottom: 6, textAlign: 'center' }}>
+                                      {shazamListening ? 'Listening...' : "Let's find and name your song"}
+                                    </Text>
+                                    <Text style={{ color: isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.5)', fontSize: 14 }}>Tap to get started</Text>
+                                  </TouchableOpacity>
+                                </View>
                                   <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 18, fontWeight: '700', marginTop: 16, marginBottom: 6 }}>
                                     {"Let's find and name your song"}
                                   </Text>
                                   <Text style={{ color: isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.5)', fontSize: 14 }}>Tap to get started</Text>
+                                </TouchableOpacity>
+                              </View>
+
+                              {/* Card 2: Song result - auto-shows after Shazam identifies */}
+                              {shazamResult ? (
+                                  <View style={{ width: Dimensions.get('window').width - 32 }}>
+                                    <TouchableOpacity
+                                      style={[shazamCardStyles.resultCard, { backgroundColor: isDark ? '#1C1C1E' : '#FFF' }]}
+                                      onPress={() => {
+                                        setShazamWebViewUrl(shazamResult.shazamUrl || `https://www.shazam.com/search?term=${encodeURIComponent((shazamResult.title || '') + ' ' + (shazamResult.subtitle || ''))}`);
+                                        setShazamWebViewVisible(true);
+                                      }}
+                                      activeOpacity={0.88}
+                                    >
+                                      {shazamResult.imageUrl ? (
+                                        <Image source={{ uri: shazamResult.imageUrl }} style={shazamCardStyles.albumArt} resizeMode="cover" />
+                                      ) : (
+                                        <View style={[shazamCardStyles.albumArt, { backgroundColor: '#0D72EA', alignItems: 'center', justifyContent: 'center' }]}>
+                                          <Ionicons name="musical-notes" size={48} color="rgba(255,255,255,0.7)" />
+                                        </View>
+                                      )}
+                                      <View style={shazamCardStyles.songInfo}>
+                                        <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 18, fontWeight: '800', marginBottom: 4 }}>{shazamResult.title || 'Song Found'}</Text>
+                                        <Text style={{ color: isDark ? 'rgba(255,255,255,0.65)' : 'rgba(0,0,0,0.6)', fontSize: 14, marginBottom: 10 }}>{shazamResult.subtitle}</Text>
+                                        <TouchableOpacity
+                                          style={shazamCardStyles.saveBtn}
+                                          onPress={() => {
+                                            const storeUrl = Platform.OS === 'ios'
+                                              ? 'https://apps.apple.com/app/shazam-find-music-concerts/id284993459'
+                                              : 'https://play.google.com/store/apps/details?id=com.shazam.android';
+                                            Linking.openURL(storeUrl).catch(() => {});
+                                          }}
+                                          activeOpacity={0.8}
+                                        >
+                                          <Ionicons name="add" size={16} color="#FFF" />
+                                          <Text style={{ color: '#FFF', fontSize: 14, fontWeight: '700' }}>Save to Shazam</Text>
+                                        </TouchableOpacity>
+                                      </View>
+                                      <TouchableOpacity
+                                        style={shazamCardStyles.playBtn}
+                                        onPress={() => {
+                                          if (shazamResult.previewUrl) { Linking.openURL(shazamResult.previewUrl).catch(() => {}); }
+                                          else { setShazamWebViewUrl(shazamResult.shazamUrl || 'https://www.shazam.com'); setShazamWebViewVisible(true); }
+                                        }}
+                                        activeOpacity={0.8}
+                                      >
+                                        <Ionicons name="play" size={18} color="#000" style={{ marginLeft: 2 }} />
+                                      </TouchableOpacity>
+                                    </TouchableOpacity>
+                                  </View>
+                              ) : null}
+                              </ScrollView>
+                              {/* Carousel dots */}
+                              {shazamResult ? (
+                                <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 6, marginTop: 8 }}>
+                                  {[0, 1].map(dotI => (
+                                    <View key={dotI} style={{ width: dotI === shazamCarouselIndex ? 16 : 6, height: 6, borderRadius: 3, backgroundColor: dotI === shazamCarouselIndex ? '#0D72EA' : (isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.2)') }} />
+                                  ))}
+                                </View>
+                              ) : null}
                                 </TouchableOpacity>
                               )}
                               {/* Powered by Shazam */}
@@ -3315,8 +3335,8 @@ export default function HomeScreen() {
                 >
                   {Platform.OS === 'ios' ? (
                     <BlurView
-                      intensity={isDark ? 75 : 62}
-                      tint={isDark ? 'dark' : 'light'}
+                      intensity={isDark ? 90 : 78}
+                      tint={isDark ? 'dark' : 'extraLight'}
                       style={StyleSheet.absoluteFill}
                       pointerEvents="none"
                     />
@@ -3920,50 +3940,46 @@ export default function HomeScreen() {
 
             <SpotifyLoadingOverlay visible={spotifyOverlayVisible && spotifyResults.length === 0} query={spotifySearchQuery} />
 
-            {/* ── Shazam WebView Modal (photo 6) ── */}
-            <Modal visible={shazamWebViewVisible} animationType="slide" transparent={false} onRequestClose={() => setShazamWebViewVisible(false)}>
-              <View style={{ flex: 1, backgroundColor: '#1C1C1E', paddingTop: insets.top }}>
-                {/* Browser-style header */}
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 10, backgroundColor: '#FFF', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#E0E0E0' }}>
-                  <TouchableOpacity
-                    onPress={() => setShazamWebViewVisible(false)}
-                    style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.07)', alignItems: 'center', justifyContent: 'center' }}
-                  >
-                    <Ionicons name="close" size={18} color="#000" />
+            {/* ── Shazam WebView Modal ── */}
+            <Modal visible={shazamWebViewVisible} animationType="slide" transparent={false} onRequestClose={() => { setShazamWebViewVisible(false); setShazamListening(false); }}>
+              <View style={{ flex: 1, backgroundColor: isDark ? '#000' : '#F2F2F7', paddingTop: insets.top }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 10, backgroundColor: isDark ? '#111' : '#FFF', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: isDark ? 'rgba(255,255,255,0.1)' : '#E0E0E0' }}>
+                  <TouchableOpacity onPress={() => { setShazamWebViewVisible(false); setShazamListening(false); }} style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.07)', alignItems: 'center', justifyContent: 'center' }}>
+                    <Ionicons name="close" size={18} color={isDark ? '#FFF' : '#000'} />
                   </TouchableOpacity>
-                  <Text style={{ fontSize: 15, fontWeight: '600', color: '#000' }}>shazam.com</Text>
+                  <Text style={{ fontSize: 15, fontWeight: '600', color: isDark ? '#FFF' : '#000' }}>shazam.com</Text>
                   <View style={{ width: 36 }} />
                 </View>
                 <WebView
                   source={{ uri: shazamWebViewUrl }}
                   style={{ flex: 1 }}
-                  javaScriptEnabled
-                  domStorageEnabled
-                  allowsInlineMediaPlayback
+                  javaScriptEnabled domStorageEnabled allowsInlineMediaPlayback
                   mediaPlaybackRequiresUserAction={false}
                   onNavigationStateChange={(state) => {
-                    // When shazam identifies a song, parse URL or title
-                    if (state.url && state.url.includes('shazam.com/track')) {
-                      // Song identified — close webview and show result card
-                      const titleMatch = state.title ? state.title.split(' - ') : [];
-                      if (titleMatch.length >= 1) {
-                        setShazamResult({
-                          title: titleMatch[0] || 'Song identified',
-                          subtitle: titleMatch[1] || '',
-                          imageUrl: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&q=80',
-                          shazamUrl: state.url,
-                          count: null,
-                        });
-                      }
+                    if (state.url && (state.url.includes('shazam.com/track') || state.url.includes('/t/'))) {
+                      const parts = (state.title || '').split(' - ');
+                      const songTitle = parts[0]?.trim() || 'Song Identified';
+                      const artist = parts[1]?.trim() || '';
+                      setShazamResult({ title: songTitle, subtitle: artist, imageUrl: null, shazamUrl: state.url, previewUrl: null, count: null });
+                      setShazamListening(false);
+                      setShazamCarouselIndex(1);
                       setShazamWebViewVisible(false);
+                      // Enrich with real Shazam API data
+                      supabase.functions.invoke('shazam-identify', { body: { action: 'search', query: songTitle + ' ' + artist } })
+                        .then(({ data: sd }) => {
+                          if (sd?.results?.[0]) {
+                            const r = sd.results[0];
+                            setShazamResult((prev: any) => ({ ...prev, imageUrl: r.images?.coverart || r.images?.background || prev.imageUrl, count: r.shazam_count ? `${(r.shazam_count / 1e6).toFixed(1)}M` : null, shazamUrl: r.share?.href || prev.shazamUrl, previewUrl: r.hub?.actions?.find((a: any) => a.type === 'uri')?.uri || null }));
+                          }
+                        }).catch(() => {});
                     }
                   }}
                 />
                 <TouchableOpacity
-                  style={{ backgroundColor: '#FFF', paddingVertical: 16, alignItems: 'center', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#E0E0E0', paddingBottom: insets.bottom + 8 }}
-                  onPress={() => setShazamWebViewVisible(false)}
+                  style={{ backgroundColor: isDark ? '#111' : '#FFF', paddingVertical: 16, alignItems: 'center', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: isDark ? 'rgba(255,255,255,0.1)' : '#E0E0E0', paddingBottom: insets.bottom + 8 }}
+                  onPress={() => { setShazamWebViewVisible(false); setShazamListening(false); }}
                 >
-                  <Text style={{ color: '#0D72EA', fontSize: 15, fontWeight: '600' }}>Close window to continue</Text>
+                  <Text style={{ color: '#0D72EA', fontSize: 15, fontWeight: '600' }}>Close window to continue on Dawinix</Text>
                 </TouchableOpacity>
               </View>
             </Modal>
