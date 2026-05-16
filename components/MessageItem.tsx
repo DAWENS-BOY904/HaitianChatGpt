@@ -1180,3 +1180,4 @@ const assistantStyles = StyleSheet.create({
     borderRadius: 10,
   },
 });
+hello ai please add more tex interface ui more format ai lan ka display and also table format depan message.
