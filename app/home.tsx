@@ -1212,7 +1212,6 @@ export default function HomeScreen() {
   const [shazamWebViewVisible, setShazamWebViewVisible] = useState(false);
   const [shazamWebViewUrl, setShazamWebViewUrl] = useState('https://www.shazam.com');
   const [atMentionModalVisible, setAtMentionModalVisible] = useState(false);
-  const [atMentionQuery, setAtMentionQuery] = useState('');
 
   const handleOpenMessageActions = useCallback((msg: any) => {
     setMsgActionsMsg(msg);
@@ -1338,14 +1337,11 @@ export default function HomeScreen() {
     if (draftSaveTimer.current) clearTimeout(draftSaveTimer.current);
     draftSaveTimer.current = setTimeout(() => saveDraft(safeTxt), 300);
     try { setCodeLangChips(/```\w*$/.test(safeTxt)); } catch (_e) { setCodeLangChips(false); }
-    // @ mention — show app list popup with live filtering
-    const atMentionMatch = safeTxt.match(/@(\w*)$/);
-    if (atMentionMatch !== null) {
+    // @ mention — show app list popup (photo 4)
+    if (safeTxt === '@' || /(?:^|\s)@$/.test(safeTxt)) {
       setAtMentionModalVisible(true);
-      setAtMentionQuery(atMentionMatch[1] || '');
     } else {
       setAtMentionModalVisible(false);
-      setAtMentionQuery('');
     }
     if (groupChatMode) {
       const atMatch = safeTxt.match(/@(\w*)$/);
@@ -2010,23 +2006,11 @@ export default function HomeScreen() {
     }
 
     setInputText(''); setSelectedMedia([]); setEditingMessageId(null); clearDraft();
+    // Keep firstImageUri for inline preview in the sent message
     setSpotifyResults([]);
     setSpotifySearchQuery('');
-
-    // ── Shazam dominant mode: when chip active, bypass AI and open WebView ──
-    if (shazamActive) {
-      setShazamCardVisible(true);
-      setShazamResult(null);
-      setShazamWebViewUrl('https://www.shazam.com');
-      setShazamWebViewVisible(true);
-      Keyboard.dismiss();
-      return;
-    }
-
-    if (!shazamActive) {
-      setShazamCardVisible(false);
-      setShazamResult(null);
-    }
+    setShazamCardVisible(false);
+    setShazamResult(null);
 
     // ── Spotify dominant mode: when chip is active, ALL messages go to Spotify ──
     if (spotifyActive) {
@@ -2202,12 +2186,6 @@ export default function HomeScreen() {
       'what song is playing', 'recognize this song', 'name this song',
       'shazam this', 'ki chanson sa', 'ki ti music sa', 'how can i find this music',
       'what music is that', 'identify song', 'song recognition',
-      'what is that song', 'how can i find this music',
-      'name that tune', 'what is this music',
-      'kisa ki musik sa', 'kisa ki chanson sa', 'ki ti son sa',
-      'identify this music', 'what is playing', 'what is the song',
-      'music identification', 'find the song', 'detect song',
-      'shazam song', 'recognize music', 'find music playing',
     ];
     return shazamKws.some(k => lower.includes(k));
   }, []);
@@ -3971,22 +3949,20 @@ export default function HomeScreen() {
             {/* ── @ Mention App List (photo 4) ── */}
             <ConnectedAppsModal
               visible={atMentionModalVisible}
-              onClose={() => { setAtMentionModalVisible(false); setAtMentionQuery(''); }}
+              onClose={() => setAtMentionModalVisible(false)}
               connectedApps={connectedAppsList}
               mentionMode
-              mentionQuery={atMentionQuery}
               onSelectApp={(app) => {
                 setAtMentionModalVisible(false);
-                setAtMentionQuery('');
                 if (app.id === 'spotify') {
                   setSpotifyActive(true);
-                  const newText = inputText.replace(/@\w*$/, '@Spotify ');
+                  const newText = inputText.replace(/@$/, '@Spotify ');
                   setInputText(newText);
                 } else if (app.id === 'shazam') {
                   setShazamActive(true);
                   setShazamCardVisible(true);
                   setShazamResult(null);
-                  const newText = inputText.replace(/@\w*$/, '@Shazam ');
+                  const newText = inputText.replace(/@$/, '@Shazam ');
                   setInputText(newText);
                 }
                 setTimeout(() => inputRef.current?.focus(), 100);
