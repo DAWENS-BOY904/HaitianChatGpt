@@ -1,347 +1,652 @@
-import React, { useState, useCallback, memo } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  ScrollView,
-  StyleSheet,
-  Platform,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import * as Clipboard from 'expo-clipboard';
-import { useTheme } from '../hooks/useTheme';
+"use client";
 
-interface StreamingCodeBlockProps {
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import {
+  CheckIcon,
+  ChevronDownIcon,
+  CopyIcon,
+  DownloadIcon,
+  ExternalLinkIcon,
+  Maximize2Icon,
+  Minimize2Icon,
+} from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+  type ComponentProps,
+  createContext,
+  type HTMLAttributes,
+  useCallback,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import type { BundledLanguage, ShikiTransformer } from "shiki";
+
+type CodeBlockProps = HTMLAttributes<HTMLDivElement> & {
   code: string;
   language?: string;
-  isStreaming?: boolean;
-}
-
-// Language → display label
-const LANGUAGE_LABELS: Record<string, string> = {
-  javascript: 'JavaScript',
-  js: 'JavaScript',
-  typescript: 'TypeScript',
-  ts: 'TypeScript',
-  tsx: 'TSX',
-  jsx: 'JSX',
-  python: 'Python',
-  py: 'Python',
-  java: 'Java',
-  c: 'C',
-  cpp: 'C++',
-  csharp: 'C#',
-  cs: 'C#',
-  go: 'Go',
-  rust: 'Rust',
-  ruby: 'Ruby',
-  rb: 'Ruby',
-  php: 'PHP',
-  swift: 'Swift',
-  kotlin: 'Kotlin',
-  bash: 'Bash',
-  sh: 'Shell',
-  shell: 'Shell',
-  zsh: 'Zsh',
-  html: 'HTML',
-  css: 'CSS',
-  scss: 'SCSS',
-  sql: 'SQL',
-  json: 'JSON',
-  yaml: 'YAML',
-  yml: 'YAML',
-  xml: 'XML',
-  markdown: 'Markdown',
-  md: 'Markdown',
-  plaintext: 'Plain Text',
-  text: 'Plain Text',
+  showLineNumbers?: boolean;
 };
 
-function getLanguageLabel(lang?: string): string {
-  if (!lang) return 'Code';
-  return LANGUAGE_LABELS[lang.toLowerCase()] || lang.toUpperCase();
-}
-
-// Simple syntax-aware token colors (dark theme)
-const TOKEN_COLORS = {
-  keyword: '#FF7AB2',
-  string: '#FC9A59',
-  comment: '#6C6C6C',
-  number: '#D9C97C',
-  function: '#6BDFFF',
-  type: '#DABAFF',
-  default: '#E4E4E4',
+type CodeBlockContextType = {
+  code: string;
 };
 
-function tokenizeLine(line: string, lang: string): Array<{ text: string; color: string }> {
-  const l = lang.toLowerCase();
-  const isCode = ['javascript','js','typescript','ts','tsx','jsx','python','py',
-    'java','c','cpp','csharp','cs','go','rust','ruby','rb','php','swift','kotlin'].includes(l);
+const CodeBlockContext = createContext<CodeBlockContextType>({
+  code: "",
+});
 
-  if (!isCode) return [{ text: line, color: TOKEN_COLORS.default }];
+// Detect and strip prefixed line numbers coming from tools like ReadFile (cat -n style)
+const LINE_NO_PATTERNS: RegExp[] = [
+  /^\s{0,6}(\d+)\t/, // e.g. "     4\timport ..."
+  /^\s{0,6}(\d+)\s{2,}/, // e.g. "     4    import ..."
+  /^\s*(\d+):\s/, // e.g. "12: import ..."
+];
 
-  const tokens: Array<{ text: string; color: string }> = [];
+const HIGHLIGHT_CACHE_LIMIT = 50;
+const DEFAULT_DOWNLOAD_EXTENSION = "txt";
+const DOWNLOAD_EXTENSION_BY_LANGUAGE: Record<string, string> = {
+  bash: "sh",
+  sh: "sh",
+  shell: "sh",
+  zsh: "sh",
+  fish: "fish",
+  javascript: "js",
+  js: "js",
+  jsx: "jsx",
+  typescript: "ts",
+  ts: "ts",
+  tsx: "tsx",
+  json: "json",
+  yaml: "yaml",
+  yml: "yml",
+  markdown: "md",
+  md: "md",
+  python: "py",
+  py: "py",
+  go: "go",
+  rust: "rs",
+  java: "java",
+  c: "c",
+  cpp: "cpp",
+  csharp: "cs",
+  html: "html",
+  css: "css",
+  sql: "sql",
+};
 
-  // Simple tokenizer: comments → strings → keywords → numbers → rest
-  const commentPatterns: Record<string, RegExp> = {
-    python: /^(#.*)$/,
-    rb: /^(#.*)$/,
-  };
-  const lineCommentRe = commentPatterns[l] || /^(\/\/.*)$/;
-  const blockCommentRe = /^(\/\*.*?\*\/)(.*)$/s;
-  const stringRe = /("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)/g;
-  const keywords = /\b(const|let|var|function|return|if|else|for|while|class|import|export|from|async|await|try|catch|throw|new|this|super|extends|implements|interface|type|enum|switch|case|break|continue|default|static|public|private|protected|void|null|undefined|true|false|in|of|do|yield|def|print|pass|not|and|or|lambda|with|as|assert|del|elif|except|finally|global|nonlocal|raise|None|True|False|package|func|struct|map|range|go|chan|select|defer|goto|fallthrough)\b/g;
-  const numberRe = /\b(\d+\.?\d*)\b/g;
-  const functionRe = /\b([a-zA-Z_$][a-zA-Z0-9_$]*)\s*(?=\()/g;
+type HighlightCacheEntry = {
+  light: string;
+  dark: string;
+};
 
-  // Check for full-line comment
-  const commentMatch = line.match(lineCommentRe);
-  if (commentMatch && line.trim().startsWith(l === 'python' || l === 'rb' ? '#' : '//')) {
-    return [{ text: line, color: TOKEN_COLORS.comment }];
+type ShikiModule = typeof import("shiki");
+
+let shikiModulePromise: Promise<ShikiModule> | null = null;
+
+const loadShikiModule = async (): Promise<ShikiModule> => {
+  if (!shikiModulePromise) {
+    shikiModulePromise = import("shiki");
   }
+  return shikiModulePromise;
+};
 
-  // Fall back to splitting by strings, then colorizing keywords in remaining text
-  let remaining = line;
-  let result: Array<{ text: string; color: string }> = [];
+const isBundledLanguage = (
+  languages: Record<string, unknown>,
+  language: string,
+): language is BundledLanguage =>
+  Object.prototype.hasOwnProperty.call(languages, language);
 
-  // Split by string literals
-  const parts = remaining.split(stringRe);
-  for (const part of parts) {
-    if (/^(".*"|'.*'|`.*`)$/s.test(part)) {
-      result.push({ text: part, color: TOKEN_COLORS.string });
-    } else {
-      // Within non-string text, highlight keywords + numbers
-      let sub = part;
-      const subParts: Array<{ text: string; color: string }> = [];
-      const combined = new RegExp(`(${keywords.source}|${numberRe.source}|${functionRe.source}|[^\\w]+|\\w+)`, 'g');
-      let m: RegExpExecArray | null;
-      combined.lastIndex = 0;
-      while ((m = combined.exec(sub)) !== null) {
-        const tok = m[0];
-        if (/^(const|let|var|function|return|if|else|for|while|class|import|export|from|async|await|try|catch|throw|new|this|super|extends|implements|interface|type|enum|switch|case|break|continue|default|static|public|private|protected|void|null|undefined|true|false|in|of|do|yield|def|print|pass|not|and|or|lambda|with|as|assert|del|elif|except|finally|global|nonlocal|raise|None|True|False|package|func|struct|map|range|go|chan|select|defer|goto|fallthrough)$/.test(tok)) {
-          subParts.push({ text: tok, color: TOKEN_COLORS.keyword });
-        } else if (/^\d+\.?\d*$/.test(tok)) {
-          subParts.push({ text: tok, color: TOKEN_COLORS.number });
-        } else {
-          subParts.push({ text: tok, color: TOKEN_COLORS.default });
-        }
-      }
-      result = result.concat(subParts);
+// Cache avoids async highlight reflows that can transiently measure as 0 height.
+const highlightCache = new Map<string, HighlightCacheEntry>();
+
+function getHighlightCacheKey(
+  code: string,
+  language: string,
+  showLineNumbers: boolean,
+  lineNumbers?: number[],
+): string {
+  const lineKey = lineNumbers
+    ? `${lineNumbers[0] ?? 0}:${lineNumbers.length}`
+    : "none";
+  return `${language}|${showLineNumbers ? "lines" : "plain"}|${lineKey}|${code}`;
+}
+
+function getHighlightCache(key: string): HighlightCacheEntry | undefined {
+  const entry = highlightCache.get(key);
+  if (!entry) {
+    return undefined;
+  }
+  highlightCache.delete(key);
+  highlightCache.set(key, entry);
+  return entry;
+}
+
+function setHighlightCache(key: string, entry: HighlightCacheEntry) {
+  highlightCache.set(key, entry);
+  if (highlightCache.size <= HIGHLIGHT_CACHE_LIMIT) {
+    return;
+  }
+  const oldestKey = highlightCache.keys().next().value;
+  if (oldestKey !== undefined) {
+    highlightCache.delete(oldestKey);
+  }
+}
+
+function getDownloadExtension(language?: string): string {
+  if (!language) {
+    return DEFAULT_DOWNLOAD_EXTENSION;
+  }
+  const normalized = language.toLowerCase();
+  const mapped = DOWNLOAD_EXTENSION_BY_LANGUAGE[normalized];
+  if (mapped) {
+    return mapped;
+  }
+  const sanitized = normalized.replace(/[^a-z0-9]+/g, "");
+  return sanitized.length > 0 ? sanitized : DEFAULT_DOWNLOAD_EXTENSION;
+}
+
+function getDownloadFilename(language?: string): string {
+  return `code.${getDownloadExtension(language)}`;
+}
+
+function sanitizeCodeForLineNumbers(raw: string): {
+  code: string;
+  hadLineNumbers: boolean;
+  numbers?: number[];
+} {
+  const text = typeof raw === "string" ? raw : String(raw ?? "");
+  const lines = text.replace(/\r\n/g, "\n").split("\n");
+  const nonEmpty = lines
+    .map((l, i) => ({ l, i }))
+    .filter(({ l }) => l.length > 0);
+  if (nonEmpty.length < 3) return { code: text, hadLineNumbers: false };
+
+  // Score each pattern by how many lines it matches
+  const scores = LINE_NO_PATTERNS.map((re) =>
+    nonEmpty.reduce((acc, { l }) => (re.test(l) ? acc + 1 : acc), 0),
+  );
+  const bestIdx = scores.indexOf(Math.max(...scores));
+  const bestScore = scores[bestIdx] ?? 0;
+  const ratio = bestScore / nonEmpty.length;
+  if (bestScore < 3 || ratio < 0.6)
+    return { code: text, hadLineNumbers: false };
+
+  const re = LINE_NO_PATTERNS[bestIdx]!;
+
+  // Find the first matched line to infer the base number
+  let firstIdx = -1;
+  let firstNum = 1;
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i]?.match(re);
+    if (m) {
+      firstIdx = i;
+      firstNum = Number.parseInt(m[1]!, 10) || 1;
+      break;
     }
   }
+  const numbers: number[] = new Array(lines.length)
+    .fill(0)
+    .map((_, i) => (firstIdx >= 0 ? firstNum + (i - firstIdx) : i + 1));
 
-  return result.length > 0 ? result : [{ text: line, color: TOKEN_COLORS.default }];
+  const stripped = lines.map((l) => l.replace(re, "")).join("\n");
+  return { code: stripped, hadLineNumbers: true, numbers };
 }
 
-const COLLAPSE_LINES = 20;
+function makeLineNumberTransformer(numbers?: number[]): ShikiTransformer {
+  return {
+    name: "line-numbers",
+    line(node, line) {
+      const display =
+        Array.isArray(numbers) && numbers[line - 1] != null
+          ? numbers[line - 1]
+          : line;
+      node.children.unshift({
+        type: "element",
+        tagName: "span",
+        properties: {
+          className: [
+            "inline-block",
+            "min-w-10",
+            "mr-4",
+            "text-right",
+            "select-none",
+            "text-muted-foreground",
+          ],
+        },
+        children: [{ type: "text", value: String(display) }],
+      });
+    },
+  };
+}
 
-export const StreamingCodeBlock = memo(function StreamingCodeBlock({
+export async function highlightCode(
+  code: string,
+  language: string,
+  showLineNumbers = false,
+  lineNumbers?: number[],
+): Promise<HighlightCacheEntry | null> {
+  const { bundledLanguages, codeToHtml } = await loadShikiModule();
+  if (!isBundledLanguage(bundledLanguages, language)) {
+    return null;
+  }
+
+  const transformers: ShikiTransformer[] =
+    showLineNumbers || (lineNumbers && lineNumbers.length > 0)
+      ? [makeLineNumberTransformer(lineNumbers)]
+      : [];
+
+  const [light, dark] = await Promise.all([
+    codeToHtml(code, {
+      lang: language,
+      theme: "one-light",
+      transformers,
+    }),
+    codeToHtml(code, {
+      lang: language,
+      theme: "one-dark-pro",
+      transformers,
+    }),
+  ]);
+
+  return { light, dark };
+}
+
+const COLLAPSE_THRESHOLD = 300;
+
+export const CodeBlock = ({
   code,
-  language = 'plaintext',
-  isStreaming = false,
-}: StreamingCodeBlockProps) {
-  const { isDark } = useTheme();
-  const [copied, setCopied] = useState(false);
-  const [expanded, setExpanded] = useState(false);
+  language,
+  showLineNumbers = false,
+  className,
+  children,
+  ...props
+}: CodeBlockProps) => {
+  const [html, setHtml] = useState<string>("");
+  const [darkHtml, setDarkHtml] = useState<string>("");
+  const [isOverflowing, setIsOverflowing] = useState(false);
+  const [isTall, setIsTall] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-  const handleCopy = useCallback(async () => {
-    try {
-      await Clipboard.setStringAsync(code);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (_e) {}
-  }, [code]);
+  const checkOverflow = useCallback(() => {
+    const el = scrollContainerRef.current;
+    if (el) {
+      setIsTall(el.scrollHeight > COLLAPSE_THRESHOLD);
+      setIsOverflowing(el.scrollHeight > el.clientHeight);
+    }
+  }, []);
 
-  const langLabel = getLanguageLabel(language);
-  const lines = (code || '').split('\n');
-  const isTall = lines.length > COLLAPSE_LINES;
-  const displayLines = isTall && !expanded ? lines.slice(0, COLLAPSE_LINES) : lines;
+  // Use useLayoutEffect for the initial measurement to prevent flash
+  // (measure before paint so tall blocks start collapsed).
+  // ResizeObserver handles subsequent size changes.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: html/darkHtml are intentional triggers to re-measure when highlighted content loads
+  useLayoutEffect(() => {
+    checkOverflow();
+  }, [checkOverflow, html, darkHtml]);
 
-  const bg = isDark ? '#1E1E1E' : '#F5F5F5';
-  const headerBg = isDark ? '#252526' : '#E8E8E8';
-  const borderColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
-  const lineNumColor = isDark ? '#555' : '#AAA';
-  const textColor = isDark ? TOKEN_COLORS.default : '#1A1A1A';
+  useEffect(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+
+    const observer = new ResizeObserver(checkOverflow);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [checkOverflow]);
+  const {
+    code: sanitizedCode,
+    hadLineNumbers,
+    numbers,
+  } = useMemo(() => sanitizeCodeForLineNumbers(code ?? ""), [code]);
+  const copyText = sanitizedCode;
+  const wantLineNumbers = showLineNumbers || hadLineNumbers;
+  const cacheKey = useMemo(() => {
+    if (!language) {
+      return null;
+    }
+    return getHighlightCacheKey(
+      sanitizedCode,
+      language,
+      wantLineNumbers,
+      numbers,
+    );
+  }, [sanitizedCode, language, wantLineNumbers, numbers]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setHtml("");
+    setDarkHtml("");
+    if (!language || !cacheKey) {
+      return () => {
+        cancelled = true;
+      };
+    }
+    const cached = getHighlightCache(cacheKey);
+    if (cached) {
+      setHtml(cached.light);
+      setDarkHtml(cached.dark);
+      return () => {
+        cancelled = true;
+      };
+    }
+    highlightCode(sanitizedCode, language, wantLineNumbers, numbers).then(
+      (highlighted) => {
+        if (cancelled || !highlighted) {
+          return;
+        }
+        setHighlightCache(cacheKey, highlighted);
+        setHtml(highlighted.light);
+        setDarkHtml(highlighted.dark);
+      },
+    );
+
+    return () => {
+      cancelled = true;
+    };
+  }, [cacheKey, language, numbers, sanitizedCode, wantLineNumbers]);
+
+  // Keep fallback layout close to highlighted output to minimize height deltas.
+  const contentClassName = [
+    "[&>pre]:m-0",
+    "[&>pre]:whitespace-pre",
+    "[&>pre]:bg-card!",
+    "[&>pre]:p-3",
+    "[&>pre]:text-foreground!",
+    "[&>pre]:text-xs",
+    "[&_code]:font-mono",
+    "[&_code]:text-xs",
+  ].join(" ");
 
   return (
-    <View style={[styles.container, { backgroundColor: bg, borderColor }]}>
-      {/* Header */}
-      <View style={[styles.header, { backgroundColor: headerBg, borderBottomColor: borderColor }]}>
-        <View style={styles.headerLeft}>
-          <View style={[styles.langDot, { backgroundColor: isDark ? '#10A37F' : '#10A37F' }]} />
-          <Text style={[styles.langLabel, { color: isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.55)' }]}>
-            {langLabel}
-          </Text>
-          {isStreaming ? (
-            <View style={[styles.streamingBadge, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }]}>
-              <Text style={[styles.streamingText, { color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)' }]}>●</Text>
-            </View>
-          ) : null}
-        </View>
-        <TouchableOpacity
-          onPress={handleCopy}
-          style={[styles.copyBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }]}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          activeOpacity={0.7}
-        >
-          <Ionicons
-            name={copied ? 'checkmark' : 'copy-outline'}
-            size={14}
-            color={copied ? '#34C759' : (isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.5)')}
-          />
-          <Text style={[styles.copyLabel, { color: copied ? '#34C759' : (isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.5)') }]}>
-            {copied ? 'Copied!' : 'Copy'}
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Code content */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        bounces={false}
-        style={{ maxHeight: isTall && !expanded ? 320 : undefined }}
+    <CodeBlockContext.Provider value={{ code: copyText }}>
+      <div
+        className={cn(
+          "group relative w-full rounded border border-term-border bg-card text-foreground",
+          className,
+        )}
+        {...props}
       >
-        <View style={styles.codeContent}>
-          {displayLines.map((line, i) => {
-            const tokens = tokenizeLine(line, language);
-            const lineNum = i + 1;
-            return (
-              <View key={i} style={styles.codeLine}>
-                <Text style={[styles.lineNumber, { color: lineNumColor }]}>
-                  {String(lineNum).padStart(String(lines.length).length, ' ')}
-                </Text>
-                <Text style={styles.lineContent}>
-                  {tokens.map((tok, ti) => (
-                    <Text key={ti} style={{ color: isDark ? tok.color : textColor }}>
-                      {tok.text}
-                    </Text>
-                  ))}
-                </Text>
-              </View>
-            );
-          })}
-          {isTall && !expanded ? (
-            <View style={styles.fadeOverlay} pointerEvents="none" />
-          ) : null}
-        </View>
-      </ScrollView>
+        {/* Icons fixed at the top right, do not scroll with content */}
+        <div className="hover-reveal absolute top-1.5 right-1.5 z-10 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          {isTall && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  className="shrink-0"
+                  onClick={() => setIsExpanded(!isExpanded)}
+                  size="icon-xs"
+                  variant="ghost"
+                >
+                  {isExpanded ? <Minimize2Icon className="size-3.5" /> : <Maximize2Icon className="size-3.5" />}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent className="px-1.5 py-0.5">
+                <p className="text-[12px]">{isExpanded ? "Collapse" : "Expand"}</p>
+              </TooltipContent>
+            </Tooltip>
+          )}
+          {language === "html" && <CodeBlockPreviewButton />}
+          <CodeBlockDownloadButton language={language} />
+          <CodeBlockCopyButton />
+          {children}
+        </div>
 
-      {/* Expand / Collapse toggle */}
-      {isTall ? (
-        <TouchableOpacity
-          style={[styles.expandBtn, { borderTopColor: borderColor, backgroundColor: headerBg }]}
-          onPress={() => setExpanded(v => !v)}
-          activeOpacity={0.7}
-        >
-          <Ionicons
-            name={expanded ? 'chevron-up' : 'chevron-down'}
-            size={14}
-            color={isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.45)'}
-          />
-          <Text style={[styles.expandLabel, { color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.45)' }]}>
-            {expanded ? 'Show less' : `Show ${lines.length - COLLAPSE_LINES} more lines`}
-          </Text>
-        </TouchableOpacity>
-      ) : null}
-    </View>
+        {/* Scrolling container: only contain overscroll when content overflows */}
+        <div className="relative">
+          <div
+            ref={scrollContainerRef}
+            className={cn(
+              "overflow-auto",
+              isTall && !isExpanded
+                ? "max-h-[200px] overflow-hidden"
+                : "max-h-[60vh]",
+              isOverflowing && isExpanded && "overscroll-contain",
+            )}
+          >
+            <div className="relative">
+              {html ? (
+                <div
+                  className={cn("dark:hidden", contentClassName)}
+                  // biome-ignore lint/security/noDangerouslySetInnerHtml: "this is needed."
+                  dangerouslySetInnerHTML={{ __html: html }}
+                />
+              ) : (
+                <div className={cn("dark:hidden", contentClassName)}>
+                  <pre>
+                    <code>{copyText}</code>
+                  </pre>
+                </div>
+              )}
+              {darkHtml ? (
+                <div
+                  className={cn("hidden dark:block", contentClassName)}
+                  // biome-ignore lint/security/noDangerouslySetInnerHtml: "this is needed."
+                  dangerouslySetInnerHTML={{ __html: darkHtml }}
+                />
+              ) : (
+                <div className={cn("hidden dark:block", contentClassName)}>
+                  <pre>
+                    <code>{copyText}</code>
+                  </pre>
+                </div>
+              )}
+            </div>
+          </div>
+          {/* Gradient fade when collapsed */}
+          {isTall && !isExpanded && (
+            <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-card to-transparent pointer-events-none" />
+          )}
+        </div>
+        {/* Expand/collapse toggle */}
+        {isTall && (
+          <button
+            type="button"
+            className="flex w-full items-center justify-center gap-1 border-t border-term-border py-1 text-xs text-muted-foreground cursor-pointer hover:text-foreground hover:bg-muted/30 transition-colors"
+            onClick={() => setIsExpanded(!isExpanded)}
+          >
+            <ChevronDownIcon
+              className={cn(
+                "size-3 transition-transform duration-200",
+                isExpanded && "rotate-180",
+              )}
+            />
+            {isExpanded ? "Show less" : "Show more"}
+          </button>
+        )}
+      </div>
+    </CodeBlockContext.Provider>
   );
-});
+};
 
-const styles = StyleSheet.create({
-  container: {
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    overflow: 'hidden',
-    marginVertical: 6,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  langDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  langLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-  },
-  streamingBadge: {
-    borderRadius: 6,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
-  streamingText: {
-    fontSize: 10,
-  },
-  copyBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  copyLabel: {
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  codeContent: {
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    minWidth: '100%',
-  },
-  codeLine: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 1,
-  },
-  lineNumber: {
-    fontSize: 12,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-    lineHeight: 20,
-    marginRight: 12,
-    minWidth: 20,
-    textAlign: 'right',
-    userSelect: 'none',
-  },
-  lineContent: {
-    fontSize: 13,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-    lineHeight: 20,
-    flex: 1,
-  },
-  fadeOverlay: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 48,
-  },
-  expandBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 8,
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
-  expandLabel: {
-    fontSize: 12,
-    fontWeight: '500',
-  },
-});
+export type CodeBlockCopyButtonProps = ComponentProps<typeof Button> & {
+  onCopy?: () => void;
+  onError?: (error: Error) => void;
+  timeout?: number;
+  tooltip?: string;
+};
 
-export default StreamingCodeBlock;
+export const CodeBlockCopyButton = ({
+  ref,
+  onCopy,
+  onError,
+  timeout = 2000,
+  tooltip = "Copy",
+  children,
+  className,
+  ...props
+}: CodeBlockCopyButtonProps) => {
+  const [isCopied, setIsCopied] = useState(false);
+  const { code } = useContext(CodeBlockContext);
+
+  const copyToClipboard = async () => {
+    if (typeof window === "undefined" || !navigator?.clipboard?.writeText) {
+      onError?.(new Error("Clipboard API not available"));
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(code);
+      setIsCopied(true);
+      onCopy?.();
+      setTimeout(() => setIsCopied(false), timeout);
+    } catch (error) {
+      onError?.(error as Error);
+    }
+  };
+
+  const Icon = isCopied ? CheckIcon : CopyIcon;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          ref={ref}
+          className={cn("shrink-0", className)}
+          onClick={copyToClipboard}
+          size="icon-xs"
+          variant="ghost"
+          {...props}
+        >
+          {children ?? <Icon className="size-3.5" />}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent className="px-1.5 py-0.5">
+        <p className="text-[12px]">{tooltip}</p>
+      </TooltipContent>
+    </Tooltip>
+  );
+};
+
+export type CodeBlockDownloadButtonProps = ComponentProps<typeof Button> & {
+  language?: string;
+  filename?: string;
+  mimeType?: string;
+  onDownload?: (filename: string) => void;
+  onError?: (error: Error) => void;
+  tooltip?: string;
+};
+
+export const CodeBlockDownloadButton = ({
+  ref,
+  language,
+  filename,
+  mimeType = "text/plain",
+  onDownload,
+  onError,
+  tooltip = "Download",
+  children,
+  className,
+  ...props
+}: CodeBlockDownloadButtonProps) => {
+  const { code } = useContext(CodeBlockContext);
+  const resolvedFilename = filename ?? getDownloadFilename(language);
+
+  const handleDownload = () => {
+    if (typeof window === "undefined" || typeof document === "undefined") {
+      onError?.(new Error("Download is not available"));
+      return;
+    }
+
+    try {
+      const blob = new Blob([code], { type: mimeType });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = resolvedFilename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+      onDownload?.(resolvedFilename);
+    } catch (error) {
+      const err =
+        error instanceof Error ? error : new Error("Failed to download code");
+      onError?.(err);
+    }
+  };
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          ref={ref}
+          className={cn("shrink-0", className)}
+          onClick={handleDownload}
+          size="icon-xs"
+          variant="ghost"
+          {...props}
+        >
+          {children ?? <DownloadIcon className="size-3.5" />}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent className="px-1.5 py-0.5">
+        <p className="text-[12px]">{tooltip}</p>
+      </TooltipContent>
+    </Tooltip>
+  );
+};
+
+export type CodeBlockPreviewButtonProps = ComponentProps<typeof Button> & {
+  onPreview?: () => void;
+  onError?: (error: Error) => void;
+  tooltip?: string;
+};
+
+export const CodeBlockPreviewButton = ({
+  ref,
+  onPreview,
+  onError,
+  tooltip = "Preview",
+  children,
+  className,
+  ...props
+}: CodeBlockPreviewButtonProps) => {
+  const { code } = useContext(CodeBlockContext);
+
+  const handlePreview = () => {
+    if (typeof window === "undefined") {
+      onError?.(new Error("Preview is not available"));
+      return;
+    }
+
+    try {
+      const blob = new Blob([code], { type: "text/html" });
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank");
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      onPreview?.();
+    } catch (error) {
+      const err =
+        error instanceof Error ? error : new Error("Failed to preview");
+      onError?.(err);
+    }
+  };
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          ref={ref}
+          className={cn("shrink-0", className)}
+          onClick={handlePreview}
+          size="icon-xs"
+          variant="ghost"
+          {...props}
+        >
+          {children ?? <ExternalLinkIcon className="size-3.5" />}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent className="px-1.5 py-0.5">
+        <p className="text-[12px]">{tooltip}</p>
+      </TooltipContent>
+    </Tooltip>
+  );
+};

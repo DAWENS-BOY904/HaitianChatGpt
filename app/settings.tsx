@@ -14,7 +14,6 @@ import {
   KeyboardAvoidingView,
   Animated,
   Share,
-  Keyboard,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
@@ -388,7 +387,7 @@ function VerifiedBadgeModal({ visible, onClose, isDark, tier }: {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// EDIT PROFILE MODAL - WITH KEYBOARD FIXES
+// EDIT PROFILE MODAL
 // ═══════════════════════════════════════════════════════════════════════════════
 function EditModalContent({
   isDark, editPhoto, initials, uploadingPhoto, editName, editUsername,
@@ -408,119 +407,98 @@ function EditModalContent({
   const borderColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)';
   const canChange = canChangeUsername();
   const daysLeft = daysUntilUsernameChange();
-  // FIX: Added refs for keyboard navigation
-  const nameInputRef = useRef<TextInput>(null);
-  const usernameInputRef = useRef<TextInput>(null);
 
-  // FIX: Wrapped in KeyboardAvoidingView for proper keyboard handling
   return (
-    <KeyboardAvoidingView 
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    <ScrollView
       style={{ flex: 1 }}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 20 : 0}
+      contentContainerStyle={{ padding: 20, paddingBottom: insets.bottom + 16 }}
+      keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator={false}
     >
-      <ScrollView
-        style={{ flex: 1 }}
-        contentContainerStyle={{ padding: 20, paddingBottom: insets.bottom + 32 }}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={{ alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)', marginBottom: 20 }} />
+      <View style={{ alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)', marginBottom: 20 }} />
 
-        <Text style={{ fontSize: 20, fontWeight: '700', color: primaryText, textAlign: 'center', marginBottom: 6 }}>Edit Profile</Text>
-        <Text style={{ fontSize: 13, color: secondaryText, textAlign: 'center', marginBottom: 16 }}>Your profile helps people recognize you.</Text>
+      <Text style={{ fontSize: 20, fontWeight: '700', color: primaryText, textAlign: 'center', marginBottom: 6 }}>Edit Profile</Text>
+      <Text style={{ fontSize: 13, color: secondaryText, textAlign: 'center', marginBottom: 16 }}>Your profile helps people recognize you.</Text>
 
-        <TouchableOpacity onPress={onPickPhoto} style={{ alignSelf: 'center', marginBottom: 18 }} activeOpacity={0.8}>
-          <View style={{ width: 90, height: 90, borderRadius: 45, overflow: 'hidden', backgroundColor: isDark ? '#3A3A3C' : '#E5E5EA', alignItems: 'center', justifyContent: 'center' }}>
-            {uploadingPhoto ? (
-              <ActivityIndicator color={primaryText} />
-            ) : editPhoto ? (
-              <Image source={{ uri: editPhoto }} style={{ width: 90, height: 90 }} contentFit="cover" />
-            ) : (
-              <Text style={{ fontSize: 36, fontWeight: '700', color: primaryText }}>{initials}</Text>
-            )}
-          </View>
-          <View style={{
-            position: 'absolute', bottom: 0, right: 0,
-            width: 28, height: 28, borderRadius: 14,
-            backgroundColor: '#10A37F', alignItems: 'center', justifyContent: 'center',
-            borderWidth: 2, borderColor: isDark ? '#1C1C1E' : '#F2F2F7',
-          }}>
-            <Ionicons name="camera" size={14} color="#FFF" />
-          </View>
-        </TouchableOpacity>
-
-        <Text style={{ fontSize: 13, fontWeight: '500', color: secondaryText, marginBottom: 6, marginLeft: 2 }}>Display Name</Text>
-        <TextInput
-          ref={nameInputRef}
-          style={{
-            backgroundColor: inputBg, borderRadius: 12, paddingHorizontal: 16,
-            paddingVertical: 12, fontSize: 16, color: primaryText, marginBottom: 12,
-            borderWidth: 1, borderColor,
-          }}
-          value={editName}
-          onChangeText={onChangeName}
-          placeholder="Your name"
-          placeholderTextColor={secondaryText}
-          returnKeyType="next"
-          // FIX: Auto-focus username field when pressing next
-          onSubmitEditing={() => usernameInputRef.current?.focus()}
-          blurOnSubmit={false}
-        />
-
-        <Text style={{ fontSize: 13, fontWeight: '500', color: secondaryText, marginBottom: 6, marginLeft: 2 }}>Username</Text>
-        <TextInput
-          ref={usernameInputRef}
-          style={{
-            backgroundColor: canChange ? inputBg : (isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)'),
-            borderRadius: 12, paddingHorizontal: 16,
-            paddingVertical: 14, fontSize: 16,
-            color: canChange ? primaryText : secondaryText, marginBottom: 6,
-            borderWidth: 1, borderColor,
-          }}
-          value={editUsername}
-          onChangeText={onChangeUsername}
-          placeholder="username"
-          placeholderTextColor={secondaryText}
-          editable={canChange}
-          autoCapitalize="none"
-          returnKeyType="done"
-          // FIX: Dismiss keyboard and save when pressing done
-          onSubmitEditing={() => {
-            Keyboard.dismiss();
-            onSave();
-          }}
-          blurOnSubmit={true}
-        />
-        {!canChange && (
-          <Text style={{ fontSize: 12, color: secondaryText, marginBottom: 12, marginLeft: 2 }}>
-            Username can be changed in {daysLeft} day{daysLeft !== 1 ? 's' : ''}
-          </Text>
-        )}
-        {canChange && <View style={{ marginBottom: 12 }} />}
-
-        <TouchableOpacity
-          style={{
-            backgroundColor: '#10A37F', borderRadius: 50, paddingVertical: 14,
-            alignItems: 'center', marginBottom: 10,
-            opacity: savingProfile ? 0.7 : 1,
-          }}
-          onPress={onSave}
-          disabled={savingProfile}
-          activeOpacity={0.8}
-        >
-          {savingProfile ? (
-            <ActivityIndicator color="#FFF" />
+      <TouchableOpacity onPress={onPickPhoto} style={{ alignSelf: 'center', marginBottom: 18 }} activeOpacity={0.8}>
+        <View style={{ width: 90, height: 90, borderRadius: 45, overflow: 'hidden', backgroundColor: isDark ? '#3A3A3C' : '#E5E5EA', alignItems: 'center', justifyContent: 'center' }}>
+          {uploadingPhoto ? (
+            <ActivityIndicator color={primaryText} />
+          ) : editPhoto ? (
+            <Image source={{ uri: editPhoto }} style={{ width: 90, height: 90 }} contentFit="cover" />
           ) : (
-            <Text style={{ fontSize: 17, fontWeight: '700', color: '#FFF' }}>Save Changes</Text>
+            <Text style={{ fontSize: 36, fontWeight: '700', color: primaryText }}>{initials}</Text>
           )}
-        </TouchableOpacity>
+        </View>
+        <View style={{
+          position: 'absolute', bottom: 0, right: 0,
+          width: 28, height: 28, borderRadius: 14,
+          backgroundColor: '#10A37F', alignItems: 'center', justifyContent: 'center',
+          borderWidth: 2, borderColor: isDark ? '#1C1C1E' : '#F2F2F7',
+        }}>
+          <Ionicons name="camera" size={14} color="#FFF" />
+        </View>
+      </TouchableOpacity>
 
-        <TouchableOpacity style={{ alignItems: 'center', paddingVertical: 10 }} onPress={onClose}>
-          <Text style={{ fontSize: 17, color: secondaryText }}>Cancel</Text>
-        </TouchableOpacity>
-      </ScrollView>
-    </KeyboardAvoidingView>
+      <Text style={{ fontSize: 13, fontWeight: '500', color: secondaryText, marginBottom: 6, marginLeft: 2 }}>Display Name</Text>
+      <TextInput
+        style={{
+          backgroundColor: inputBg, borderRadius: 12, paddingHorizontal: 16,
+          paddingVertical: 12, fontSize: 16, color: primaryText, marginBottom: 12,
+          borderWidth: 1, borderColor,
+        }}
+        value={editName}
+        onChangeText={onChangeName}
+        placeholder="Your name"
+        placeholderTextColor={secondaryText}
+        returnKeyType="next"
+      />
+
+      <Text style={{ fontSize: 13, fontWeight: '500', color: secondaryText, marginBottom: 6, marginLeft: 2 }}>Username</Text>
+      <TextInput
+        style={{
+          backgroundColor: canChange ? inputBg : (isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)'),
+          borderRadius: 12, paddingHorizontal: 16,
+          paddingVertical: 14, fontSize: 16,
+          color: canChange ? primaryText : secondaryText, marginBottom: 6,
+          borderWidth: 1, borderColor,
+        }}
+        value={editUsername}
+        onChangeText={onChangeUsername}
+        placeholder="username"
+        placeholderTextColor={secondaryText}
+        editable={canChange}
+        autoCapitalize="none"
+        returnKeyType="done"
+      />
+      {!canChange && (
+        <Text style={{ fontSize: 12, color: secondaryText, marginBottom: 12, marginLeft: 2 }}>
+          Username can be changed in {daysLeft} day{daysLeft !== 1 ? 's' : ''}
+        </Text>
+      )}
+      {canChange && <View style={{ marginBottom: 12 }} />}
+
+      <TouchableOpacity
+        style={{
+          backgroundColor: '#10A37F', borderRadius: 50, paddingVertical: 14,
+          alignItems: 'center', marginBottom: 10,
+          opacity: savingProfile ? 0.7 : 1,
+        }}
+        onPress={onSave}
+        disabled={savingProfile}
+        activeOpacity={0.8}
+      >
+        {savingProfile ? (
+          <ActivityIndicator color="#FFF" />
+        ) : (
+          <Text style={{ fontSize: 17, fontWeight: '700', color: '#FFF' }}>Save Changes</Text>
+        )}
+      </TouchableOpacity>
+
+      <TouchableOpacity style={{ alignItems: 'center', paddingVertical: 10 }} onPress={onClose}>
+        <Text style={{ fontSize: 17, color: secondaryText }}>Cancel</Text>
+      </TouchableOpacity>
+    </ScrollView>
   );
 }
 
@@ -629,7 +607,7 @@ const ACCENT_COLORS: Array<{ hex: string; name: string }> = [
 ];
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// MAIN SETTINGS SCREEN - HEADER REMOVED + BORDER RADIUS REMOVED
+// MAIN SETTINGS SCREEN
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function SettingsScreen() {
   const { colors, isDark } = useTheme();
@@ -672,10 +650,12 @@ export default function SettingsScreen() {
   const switchTrackFalse = isDark ? '#3A3A3C' : '#E5E5EA';
   const switchTrackTrue = '#34C759';
 
+  // FIX: Properly handle links - internal routes vs external URLs
   const openLink = async (url: string) => {
     if (url.startsWith('/')) {
       router.push(url as any);
     } else {
+      // FIX: Use WebBrowser for external links (in-app browser)
       try {
         await WebBrowser.openBrowserAsync(url, {
           toolbarColor: isDark ? '#000000' : '#FFFFFF',
@@ -948,9 +928,8 @@ export default function SettingsScreen() {
   const displayUsername = username || '';
   const initials = (displayName[0] || 'U').toUpperCase();
 
-  // FIX: Removed borderRadius: 16 from Card
   const Card = ({ children }: { children: React.ReactNode }) => (
-    <View style={{ backgroundColor: cardBg, overflow: 'hidden', marginHorizontal: 16 }}>
+    <View style={{ backgroundColor: cardBg, borderRadius: 16, overflow: 'hidden', marginHorizontal: 16 }}>
       {children}
     </View>
   );
@@ -1092,15 +1071,31 @@ export default function SettingsScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: bg }}>
-      {/* FIX: Retire header seulman — removed standalone Settings header completely */}
+      {/* HEADER */}
+      <View style={{
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+        paddingTop: insets.top + 16, paddingBottom: 16, paddingHorizontal: 20,
+      }}>
+        <Text style={{ fontSize: 17, fontWeight: '700', color: primaryText }}>Settings</Text>
+        <TouchableOpacity
+          style={{
+            position: 'absolute', right: 16, top: insets.top + 8,
+            width: 36, height: 36, borderRadius: 18,
+            backgroundColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.08)',
+            alignItems: 'center', justifyContent: 'center',
+          }}
+          onPress={() => router.back()}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="close" size={17} color={primaryText} />
+        </TouchableOpacity>
+      </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}>
         {/* PROFILE */}
-        {/* FIX: Added paddingTop to account for removed header */}
-        <View style={{ alignItems: 'center', paddingVertical: 20, paddingTop: insets.top + 20 }}>
-          {/* FIX: Removed borderRadius from outer avatar container */}
+        <View style={{ alignItems: 'center', paddingVertical: 20 }}>
           <View style={{
-            width: 84, height: 84, overflow: 'hidden',
+            width: 84, height: 84, borderRadius: 42, overflow: 'hidden',
             backgroundColor: isDark ? '#3A3A3C' : '#E5E5EA',
             alignItems: 'center', justifyContent: 'center', marginBottom: 12,
           }}>
@@ -1118,10 +1113,9 @@ export default function SettingsScreen() {
             />
           </View>
           {displayUsername ? <Text style={{ fontSize: 15, color: secondaryText, marginBottom: 14 }}>{displayUsername}</Text> : null}
-          {/* FIX: Removed borderRadius from Edit profile button */}
           <TouchableOpacity
             style={{
-              paddingHorizontal: 22, paddingVertical: 9, borderWidth: 1,
+              paddingHorizontal: 22, paddingVertical: 9, borderRadius: 20, borderWidth: 1,
               borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)',
               backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
             }}
@@ -1236,11 +1230,10 @@ export default function SettingsScreen() {
         </Card>
 
         {/* LOG OUT */}
-        {/* FIX: Removed borderRadius from logout button */}
         <View style={{ marginTop: 24, marginHorizontal: 16, marginBottom: 8 }}>
           <TouchableOpacity
             style={{
-              backgroundColor: cardBg,
+              backgroundColor: cardBg, borderRadius: 16,
               flexDirection: 'row', alignItems: 'center',
               paddingVertical: 16, paddingHorizontal: 20,
               shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
@@ -1260,9 +1253,8 @@ export default function SettingsScreen() {
         <View style={{ flex: 1, backgroundColor: isDark ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.3)' }}>
           <TouchableOpacity style={{ flex: 0.25 }} activeOpacity={1} onPress={() => setEditModalVisible(false)} />
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 0.75, maxHeight: 560 }}>
-            {/* FIX: Removed borderTopLeftRadius and borderTopRightRadius */}
             <View style={{
-              flex: 1,
+              flex: 1, borderTopLeftRadius: 24, borderTopRightRadius: 24,
               overflow: 'hidden', backgroundColor: isDark ? '#1C1C1E' : '#F2F2F7',
             }}>
               <EditModalContent
@@ -1309,8 +1301,7 @@ export default function SettingsScreen() {
         <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: isDark ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.3)' }}>
           <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setPhotoPickerVisible(false)} />
           <View style={{ paddingHorizontal: 12, paddingBottom: insets.bottom + 8 }}>
-            {/* FIX: Removed borderRadius from photo picker containers */}
-            <View style={{ overflow: 'hidden', marginBottom: 10, backgroundColor: cardBg }}>
+            <View style={{ borderRadius: 16, overflow: 'hidden', marginBottom: 10, backgroundColor: cardBg }}>
               <TouchableOpacity
                 style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 18, gap: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: divider }}
                 onPress={pickFromCamera} activeOpacity={0.7}
@@ -1327,7 +1318,7 @@ export default function SettingsScreen() {
               </TouchableOpacity>
             </View>
             <TouchableOpacity
-              style={{ overflow: 'hidden', backgroundColor: cardBg, paddingVertical: 18, alignItems: 'center' }}
+              style={{ borderRadius: 16, overflow: 'hidden', backgroundColor: cardBg, paddingVertical: 18, alignItems: 'center' }}
               onPress={() => setPhotoPickerVisible(false)} activeOpacity={0.8}
             >
               <Text style={{ fontSize: 17, fontWeight: '600', color: primaryText }}>Cancel</Text>
@@ -1340,16 +1331,14 @@ export default function SettingsScreen() {
       <Modal visible={accentPickerVisible} transparent animationType="slide" onRequestClose={() => setAccentPickerVisible(false)}>
         <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.45)' }}>
           <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setAccentPickerVisible(false)} />
-          {/* FIX: Removed borderTopLeftRadius and borderTopRightRadius */}
-          <View style={{ backgroundColor: cardBg, paddingBottom: insets.bottom + 16 }}>
+          <View style={{ backgroundColor: cardBg, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingBottom: insets.bottom + 16 }}>
             <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)', alignSelf: 'center', marginTop: 12, marginBottom: 16 }} />
             <Text style={{ fontSize: 18, fontWeight: '700', color: primaryText, textAlign: 'center', marginBottom: 4 }}>Accent Color</Text>
             <Text style={{ fontSize: 13, color: secondaryText, textAlign: 'center', marginBottom: 20, paddingHorizontal: 24 }}>Choose a color that reflects your style</Text>
 
             {(settings.accentColor || '#10A37F') === '#10A37F' ? (
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 16 }}>
-                {/* FIX: Removed borderRadius from default tag */}
-                <View style={{ backgroundColor: '#10A37F22', paddingHorizontal: 12, paddingVertical: 5, borderWidth: 1, borderColor: '#10A37F55' }}>
+                <View style={{ backgroundColor: '#10A37F22', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 5, borderWidth: 1, borderColor: '#10A37F55' }}>
                   <Text style={{ color: '#10A37F', fontSize: 13, fontWeight: '600' }}>Default — Green</Text>
                 </View>
               </View>
