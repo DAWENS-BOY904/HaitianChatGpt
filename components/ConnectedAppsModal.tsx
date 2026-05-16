@@ -1,8 +1,8 @@
 // BY DAWENS
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, Modal,
-  StyleSheet, Platform, ScrollView,
+  StyleSheet, Platform, ScrollView, Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
@@ -24,6 +24,7 @@ interface Props {
   onSelectApp: (app: ConnectedApp) => void;
   // for @ mention popup mode (photo 4)
   mentionMode?: boolean;
+  mentionQuery?: string;
 }
 
 function SpotifyIcon({ size = 44 }: { size?: number }) {
@@ -78,9 +79,21 @@ function ShazamIcon({ size = 44 }: { size?: number }) {
   );
 }
 
+function AppleMusicIcon({ size = 44 }: { size?: number }) {
+  return (
+    <View style={{
+      width: size, height: size, borderRadius: size / 2,
+      backgroundColor: '#FC3C44', alignItems: 'center', justifyContent: 'center',
+    }}>
+      <Ionicons name="musical-notes" size={size * 0.45} color="#FFF" />
+    </View>
+  );
+}
+
 function AppIcon({ app, size = 44 }: { app: ConnectedApp; size?: number }) {
   if (app.id === 'spotify') return <SpotifyIcon size={size} />;
   if (app.id === 'shazam') return <ShazamIcon size={size} />;
+  if (app.id === 'apple-music') return <AppleMusicIcon size={size} />;
   return (
     <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: app.color, alignItems: 'center', justifyContent: 'center' }}>
       <Ionicons name="musical-notes" size={size * 0.45} color="#FFF" />
@@ -95,7 +108,7 @@ const ALL_KNOWN_APPS = [
   { id: 'spotify', name: 'Spotify', description: 'Explore a new way to discover music and podcasts, with reco...', color: '#1DB954' },
 ];
 
-export function ConnectedAppsModal({ visible, onClose, connectedApps, onSelectApp, mentionMode }: Props) {
+export function ConnectedAppsModal({ visible, onClose, connectedApps, onSelectApp, mentionMode, mentionQuery }: Props) {
   const { isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -106,86 +119,134 @@ export function ConnectedAppsModal({ visible, onClose, connectedApps, onSelectAp
   const sheetBg = isDark ? '#1C1C1E' : '#F2F2F7';
   const divC = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)';
 
-  // ── @ Mention popup (photo 4) — floating card above input ─────────────────
+  // Slide-up animation for mention popup
+  const mentionSlideAnim = useRef(new Animated.Value(40)).current;
+  const mentionFadeAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (visible && mentionMode) {
+      Animated.parallel([
+        Animated.spring(mentionSlideAnim, { toValue: 0, tension: 340, friction: 28, useNativeDriver: true }),
+        Animated.timing(mentionFadeAnim, { toValue: 1, duration: 160, useNativeDriver: true }),
+      ]).start();
+    } else {
+      mentionSlideAnim.setValue(40);
+      mentionFadeAnim.setValue(0);
+    }
+  }, [visible, mentionMode]);
+
+  // Filter apps based on mentionQuery (live filtering as user types @sha, @sp etc.)
+  const filteredMentionApps = mentionQuery && mentionQuery.length > 0
+    ? ALL_KNOWN_APPS.filter(a => a.name.toLowerCase().startsWith(mentionQuery.toLowerCase()))
+    : ALL_KNOWN_APPS;
+
+  const handleMentionAppSelect = (appId: string) => {
+    const syntheticApp: ConnectedApp = {
+      id: appId,
+      name: ALL_KNOWN_APPS.find(a => a.id === appId)?.name || appId,
+      description: ALL_KNOWN_APPS.find(a => a.id === appId)?.description || '',
+      color: appId === 'spotify' ? '#1DB954' : appId === 'shazam' ? '#0D72EA' : '#FC3C44',
+    };
+    onSelectApp(syntheticApp);
+    onClose();
+  };
+
+  // ── @ Mention popup (photo 4) — floating animated card above input ──────────
   if (mentionMode) {
     return (
       <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
         <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onClose} />
-        <View style={{ paddingHorizontal: 12, paddingBottom: 80 }}>
+        <Animated.View
+          style={{
+            paddingHorizontal: 12,
+            paddingBottom: 80,
+            opacity: mentionFadeAnim,
+            transform: [{ translateY: mentionSlideAnim }],
+          }}
+        >
           {Platform.OS === 'ios' ? (
             <BlurView
-              intensity={isDark ? 80 : 70}
+              intensity={isDark ? 88 : 76}
               tint={isDark ? 'dark' : 'extraLight'}
               style={[mentionStyles.card, { overflow: 'hidden' }]}
             >
-              {ALL_KNOWN_APPS.map((app, i) => (
-                <TouchableOpacity
-                  key={app.id}
-                  style={[
-                    mentionStyles.row,
-                    i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: divC },
-                  ]}
-                  onPress={() => {
-                    const connApp = connectedApps.find(c => c.id === app.id);
-                    if (connApp) {
-                      onSelectApp(connApp);
-                    } else {
-                      onClose();
-                      router.push((app.id === 'spotify' ? '/spotify-connect' : app.id === 'shazam' ? '/shazam-connect' : '/app-connect') as any);
-                    }
-                    onClose();
-                  }}
-                  activeOpacity={0.72}
-                >
-                  <AppIcon app={{ ...app, description: '' }} size={36} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ color: textC, fontSize: 15, fontWeight: '600' }}>{app.name}</Text>
-                    <Text style={{ color: subC, fontSize: 12, marginTop: 1 }} numberOfLines={1}>{app.description}</Text>
-                  </View>
-                  {connectedApps.find(c => c.id === app.id) ? (
-                    <View style={[mentionStyles.badge, { backgroundColor: 'rgba(52,199,89,0.15)' }]}>
-                      <Text style={{ color: '#34C759', fontSize: 10, fontWeight: '700' }}>Connected</Text>
+              {filteredMentionApps.length === 0 ? (
+                <View style={{ paddingHorizontal: 16, paddingVertical: 18, alignItems: 'center' }}>
+                  <Text style={{ color: subC, fontSize: 14 }}>No apps match</Text>
+                </View>
+              ) : filteredMentionApps.map((app, i) => {
+                const isConnected = !!connectedApps.find(c => c.id === app.id);
+                return (
+                  <TouchableOpacity
+                    key={app.id}
+                    style={[
+                      mentionStyles.row,
+                      i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: divC },
+                    ]}
+                    onPress={() => handleMentionAppSelect(app.id)}
+                    activeOpacity={0.72}
+                  >
+                    {/* Gradient icon background */}
+                    <View style={[mentionStyles.iconWrap, { backgroundColor: app.color }]}>
+                      <AppIcon app={{ ...app, description: '' }} size={36} />
                     </View>
-                  ) : null}
-                </TouchableOpacity>
-              ))}
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: textC, fontSize: 15, fontWeight: '600' }}>{app.name}</Text>
+                      <Text style={{ color: subC, fontSize: 12, marginTop: 1 }} numberOfLines={1}>{app.description}</Text>
+                    </View>
+                    {isConnected ? (
+                      <View style={[mentionStyles.badge, { backgroundColor: 'rgba(52,199,89,0.15)' }]}>
+                        <Text style={{ color: '#34C759', fontSize: 10, fontWeight: '700' }}>Connected</Text>
+                      </View>
+                    ) : (
+                      <View style={[mentionStyles.badge, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' }]}>
+                        <Text style={{ color: subC, fontSize: 10, fontWeight: '600' }}>Connect</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
             </BlurView>
           ) : (
             <View style={[mentionStyles.card, { backgroundColor: isDark ? '#2C2C2E' : '#FFF', overflow: 'hidden' }]}>
-              {ALL_KNOWN_APPS.map((app, i) => (
-                <TouchableOpacity
-                  key={app.id}
-                  style={[
-                    mentionStyles.row,
-                    i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: divC },
-                  ]}
-                  onPress={() => {
-                    const connApp = connectedApps.find(c => c.id === app.id);
-                    if (connApp) {
-                      onSelectApp(connApp);
-                    } else {
-                      onClose();
-                      router.push((app.id === 'spotify' ? '/spotify-connect' : app.id === 'shazam' ? '/shazam-connect' : '/app-connect') as any);
-                    }
-                    onClose();
-                  }}
-                  activeOpacity={0.72}
-                >
-                  <AppIcon app={{ ...app, description: '' }} size={36} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ color: textC, fontSize: 15, fontWeight: '600' }}>{app.name}</Text>
-                    <Text style={{ color: subC, fontSize: 12, marginTop: 1 }} numberOfLines={1}>{app.description}</Text>
-                  </View>
-                  {connectedApps.find(c => c.id === app.id) ? (
-                    <View style={[mentionStyles.badge, { backgroundColor: 'rgba(52,199,89,0.15)' }]}>
-                      <Text style={{ color: '#34C759', fontSize: 10, fontWeight: '700' }}>Connected</Text>
+              {filteredMentionApps.length === 0 ? (
+                <View style={{ paddingHorizontal: 16, paddingVertical: 18, alignItems: 'center' }}>
+                  <Text style={{ color: subC, fontSize: 14 }}>No apps match</Text>
+                </View>
+              ) : filteredMentionApps.map((app, i) => {
+                const isConnected = !!connectedApps.find(c => c.id === app.id);
+                return (
+                  <TouchableOpacity
+                    key={app.id}
+                    style={[
+                      mentionStyles.row,
+                      i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: divC },
+                    ]}
+                    onPress={() => handleMentionAppSelect(app.id)}
+                    activeOpacity={0.72}
+                  >
+                    <View style={[mentionStyles.iconWrap, { backgroundColor: app.color }]}>
+                      <AppIcon app={{ ...app, description: '' }} size={36} />
                     </View>
-                  ) : null}
-                </TouchableOpacity>
-              ))}
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: textC, fontSize: 15, fontWeight: '600' }}>{app.name}</Text>
+                      <Text style={{ color: subC, fontSize: 12, marginTop: 1 }} numberOfLines={1}>{app.description}</Text>
+                    </View>
+                    {isConnected ? (
+                      <View style={[mentionStyles.badge, { backgroundColor: 'rgba(52,199,89,0.15)' }]}>
+                        <Text style={{ color: '#34C759', fontSize: 10, fontWeight: '700' }}>Connected</Text>
+                      </View>
+                    ) : (
+                      <View style={[mentionStyles.badge, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' }]}>
+                        <Text style={{ color: subC, fontSize: 10, fontWeight: '600' }}>Connect</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           )}
-        </View>
+        </Animated.View>
       </Modal>
     );
   }
@@ -281,14 +342,21 @@ export function ConnectedAppsModal({ visible, onClose, connectedApps, onSelectAp
 
 const mentionStyles = StyleSheet.create({
   card: {
-    borderRadius: 16,
-    shadowColor: '#000', shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.18, shadowRadius: 12, elevation: 12,
+    borderRadius: 18,
+    shadowColor: '#000', shadowOffset: { width: 0, height: -6 },
+    shadowOpacity: 0.22, shadowRadius: 16, elevation: 16,
     marginBottom: 8,
   },
   row: {
     flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 16, paddingVertical: 13, gap: 12,
+    paddingHorizontal: 14, paddingVertical: 13, gap: 12,
+  },
+  iconWrap: {
+    width: 38, height: 38, borderRadius: 19,
+    alignItems: 'center', justifyContent: 'center',
+    overflow: 'hidden',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.18, shadowRadius: 4, elevation: 3,
   },
   badge: {
     borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3,
