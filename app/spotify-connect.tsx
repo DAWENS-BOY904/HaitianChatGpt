@@ -125,8 +125,8 @@ function PlaybackBars({ playing }: { playing: boolean }) {
 const FALLBACK_TRACKS_WORKOUT = [
   {
     id: 'fallback_workout_1',
-    name: 'Eye of the Tiger',
-    owner: 'Survivor',
+    name: 'All Night',
+    owner: 'Beyonce',
     type: 'Song',
     imageUrl: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=200&q=80',
     previewUrl: 'https://videotourl.com/audio/1778875621467-fb69ff20-a294-4c84-948b-a29928d5a89b.mp3',
