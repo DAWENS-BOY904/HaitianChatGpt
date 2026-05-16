@@ -62,8 +62,8 @@ function getLanguageLabel(lang?: string): string {
   return LANGUAGE_LABELS[lang.toLowerCase()] || lang.toUpperCase();
 }
 
-// Simple syntax-aware token colors (dark theme)
-const TOKEN_COLORS = {
+// Syntax token colors — dark theme
+const DARK_TOKENS = {
   keyword: '#FF7AB2',
   string: '#FC9A59',
   comment: '#6C6C6C',
@@ -73,64 +73,66 @@ const TOKEN_COLORS = {
   default: '#E4E4E4',
 };
 
-function tokenizeLine(line: string, lang: string): Array<{ text: string; color: string }> {
+// Syntax token colors — light theme
+const LIGHT_TOKENS = {
+  keyword: '#D73A49',
+  string: '#032F62',
+  comment: '#6A737D',
+  number: '#005CC5',
+  function: '#6F42C1',
+  type: '#6F42C1',
+  default: '#24292E',
+};
+
+function tokenizeLine(line: string, lang: string): Array<{ text: string; type: keyof typeof DARK_TOKENS }> {
   const l = lang.toLowerCase();
   const isCode = ['javascript','js','typescript','ts','tsx','jsx','python','py',
     'java','c','cpp','csharp','cs','go','rust','ruby','rb','php','swift','kotlin'].includes(l);
 
-  if (!isCode) return [{ text: line, color: TOKEN_COLORS.default }];
+  if (!isCode) return [{ text: line, type: 'default' }];
 
-  const tokens: Array<{ text: string; color: string }> = [];
-
-  // Simple tokenizer: comments → strings → keywords → numbers → rest
+  // Check for full-line comment
   const commentPatterns: Record<string, RegExp> = {
     python: /^(#.*)$/,
     rb: /^(#.*)$/,
   };
   const lineCommentRe = commentPatterns[l] || /^(\/\/.*)$/;
-  const blockCommentRe = /^(\/\*.*?\*\/)(.*)$/s;
+  if (lineCommentRe.test(line) && line.trim().startsWith(l === 'python' || l === 'rb' ? '#' : '//')) {
+    return [{ text: line, type: 'comment' }];
+  }
+
   const stringRe = /("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)/g;
   const keywords = /\b(const|let|var|function|return|if|else|for|while|class|import|export|from|async|await|try|catch|throw|new|this|super|extends|implements|interface|type|enum|switch|case|break|continue|default|static|public|private|protected|void|null|undefined|true|false|in|of|do|yield|def|print|pass|not|and|or|lambda|with|as|assert|del|elif|except|finally|global|nonlocal|raise|None|True|False|package|func|struct|map|range|go|chan|select|defer|goto|fallthrough)\b/g;
   const numberRe = /\b(\d+\.?\d*)\b/g;
-  const functionRe = /\b([a-zA-Z_$][a-zA-Z0-9_$]*)\s*(?=\()/g;
 
-  // Check for full-line comment
-  const commentMatch = line.match(lineCommentRe);
-  if (commentMatch && line.trim().startsWith(l === 'python' || l === 'rb' ? '#' : '//')) {
-    return [{ text: line, color: TOKEN_COLORS.comment }];
-  }
-
-  // Fall back to splitting by strings, then colorizing keywords in remaining text
   let remaining = line;
-  let result: Array<{ text: string; color: string }> = [];
+  const result: Array<{ text: string; type: keyof typeof DARK_TOKENS }> = [];
 
   // Split by string literals
   const parts = remaining.split(stringRe);
   for (const part of parts) {
     if (/^(".*"|'.*'|`.*`)$/s.test(part)) {
-      result.push({ text: part, color: TOKEN_COLORS.string });
+      result.push({ text: part, type: 'string' });
     } else {
       // Within non-string text, highlight keywords + numbers
-      let sub = part;
-      const subParts: Array<{ text: string; color: string }> = [];
-      const combined = new RegExp(`(${keywords.source}|${numberRe.source}|${functionRe.source}|[^\\w]+|\\w+)`, 'g');
+      const subParts: Array<{ text: string; type: keyof typeof DARK_TOKENS }> = [];
+      const combined = new RegExp(`(${keywords.source}|${numberRe.source}|[^\\w]+|\\w+)`, 'g');
       let m: RegExpExecArray | null;
-      combined.lastIndex = 0;
-      while ((m = combined.exec(sub)) !== null) {
+      while ((m = combined.exec(part)) !== null) {
         const tok = m[0];
         if (/^(const|let|var|function|return|if|else|for|while|class|import|export|from|async|await|try|catch|throw|new|this|super|extends|implements|interface|type|enum|switch|case|break|continue|default|static|public|private|protected|void|null|undefined|true|false|in|of|do|yield|def|print|pass|not|and|or|lambda|with|as|assert|del|elif|except|finally|global|nonlocal|raise|None|True|False|package|func|struct|map|range|go|chan|select|defer|goto|fallthrough)$/.test(tok)) {
-          subParts.push({ text: tok, color: TOKEN_COLORS.keyword });
+          subParts.push({ text: tok, type: 'keyword' });
         } else if (/^\d+\.?\d*$/.test(tok)) {
-          subParts.push({ text: tok, color: TOKEN_COLORS.number });
+          subParts.push({ text: tok, type: 'number' });
         } else {
-          subParts.push({ text: tok, color: TOKEN_COLORS.default });
+          subParts.push({ text: tok, type: 'default' });
         }
       }
-      result = result.concat(subParts);
+      result.push(...subParts);
     }
   }
 
-  return result.length > 0 ? result : [{ text: line, color: TOKEN_COLORS.default }];
+  return result.length > 0 ? result : [{ text: line, type: 'default' }];
 }
 
 const COLLAPSE_LINES = 20;
@@ -149,7 +151,9 @@ export const StreamingCodeBlock = memo(function StreamingCodeBlock({
       await Clipboard.setStringAsync(code);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    } catch (_e) {}
+    } catch (_e) {
+      // Silently fail
+    }
   }, [code]);
 
   const langLabel = getLanguageLabel(language);
@@ -161,14 +165,14 @@ export const StreamingCodeBlock = memo(function StreamingCodeBlock({
   const headerBg = isDark ? '#252526' : '#E8E8E8';
   const borderColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
   const lineNumColor = isDark ? '#555' : '#AAA';
-  const textColor = isDark ? TOKEN_COLORS.default : '#1A1A1A';
+  const tokenColors = isDark ? DARK_TOKENS : LIGHT_TOKENS;
 
   return (
     <View style={[styles.container, { backgroundColor: bg, borderColor }]}>
       {/* Header */}
       <View style={[styles.header, { backgroundColor: headerBg, borderBottomColor: borderColor }]}>
         <View style={styles.headerLeft}>
-          <View style={[styles.langDot, { backgroundColor: isDark ? '#10A37F' : '#10A37F' }]} />
+          <View style={styles.langDot} />
           <Text style={[styles.langLabel, { color: isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.55)' }]}>
             {langLabel}
           </Text>
@@ -207,13 +211,13 @@ export const StreamingCodeBlock = memo(function StreamingCodeBlock({
             const tokens = tokenizeLine(line, language);
             const lineNum = i + 1;
             return (
-              <View key={i} style={styles.codeLine}>
+              <View key={`line-${i}`} style={styles.codeLine}>
                 <Text style={[styles.lineNumber, { color: lineNumColor }]}>
                   {String(lineNum).padStart(String(lines.length).length, ' ')}
                 </Text>
                 <Text style={styles.lineContent}>
                   {tokens.map((tok, ti) => (
-                    <Text key={ti} style={{ color: isDark ? tok.color : textColor }}>
+                    <Text key={`tok-${i}-${ti}`} style={{ color: tokenColors[tok.type] }}>
                       {tok.text}
                     </Text>
                   ))}
@@ -222,7 +226,7 @@ export const StreamingCodeBlock = memo(function StreamingCodeBlock({
             );
           })}
           {isTall && !expanded ? (
-            <View style={styles.fadeOverlay} pointerEvents="none" />
+            <View style={[styles.fadeOverlay, { backgroundColor: isDark ? 'rgba(30,30,30,0.9)' : 'rgba(245,245,245,0.9)' }]} pointerEvents="none" />
           ) : null}
         </View>
       </ScrollView>
@@ -266,17 +270,19 @@ const styles = StyleSheet.create({
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
   },
   langDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
+    backgroundColor: '#10A37F',
+    marginRight: 6,
   },
   langLabel: {
     fontSize: 12,
     fontWeight: '600',
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    marginRight: 6,
   },
   streamingBadge: {
     borderRadius: 6,
@@ -289,7 +295,6 @@ const styles = StyleSheet.create({
   copyBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
@@ -297,6 +302,7 @@ const styles = StyleSheet.create({
   copyLabel: {
     fontSize: 12,
     fontWeight: '500',
+    marginLeft: 4,
   },
   codeContent: {
     paddingHorizontal: 12,
@@ -315,7 +321,6 @@ const styles = StyleSheet.create({
     marginRight: 12,
     minWidth: 20,
     textAlign: 'right',
-    userSelect: 'none',
   },
   lineContent: {
     fontSize: 13,
@@ -334,14 +339,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
     paddingVertical: 8,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   expandLabel: {
     fontSize: 12,
     fontWeight: '500',
+    marginLeft: 6,
   },
 });
 
-export default StreamingCodeBlock;
+// Use only named export — remove default export to avoid confusion
+// export default StreamingCodeBlock;
