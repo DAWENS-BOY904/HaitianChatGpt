@@ -124,21 +124,16 @@ function isValidBase64(str: string): boolean {
 }
 
 // ── Content moderation ─────────────────────────────────────────────────────
-// These words are only blocked in TEXT messages. If user uploads an actual
-// explicit image, we let AI describe what it sees (image-only path).
-const TEXT_INAPPROPRIATE_KEYWORDS = [
-  'porn', 'porno', 'pornographic', 'sex girl', 'sex woman',
+const INAPPROPRIATE_KEYWORDS = [
+  'nude', 'naked', 'porn', 'porno', 'pornographic', 'sex girl', 'sex woman',
   'sexual content', 'xxx', 'nsfw', 'explicit nudity', 'erotic', 'hentai',
   'nude girl', 'nude woman', 'nude man', 'nude boy', 'naked girl',
   'naked woman', 'naked man', 'create sex', 'generate sex', 'make sex',
   'sex photo', 'sex image', 'sex picture', 'nude photo', 'nude image',
-  'create nude', 'generate nude', 'make nude', 'draw nude', 'draw sex',
 ];
-// Only blocks pure text messages (not messages that come with an image upload)
-function isInappropriatePrompt(text: string, hasImageAttachment: boolean): boolean {
-  if (hasImageAttachment) return false; // let image path handle it
+function isInappropriatePrompt(text: string): boolean {
   const lower = text.toLowerCase();
-  return TEXT_INAPPROPRIATE_KEYWORDS.some(kw => lower.includes(kw));
+  return INAPPROPRIATE_KEYWORDS.some(kw => lower.includes(kw));
 }
 
 const INPUT_PERSIST_KEY = 'home_input_draft';
@@ -1851,32 +1846,12 @@ export default function HomeScreen() {
   }, [currentConversation, createConversation, sendMessage, currentAIModel, showAlert]);
 
   const handleSend = async () => {
-    // Content moderation: block inappropriate prompts (text-only — not when image is attached)
-    const hasImageInCurrentMedia = selectedMedia.some(m => m.type === 'image');
-    if (isInappropriatePrompt(inputText.trim(), hasImageInCurrentMedia)) {
-      // Show as AI response message inline, not as an alert
-      const blockedMsg = {
-        id: `blocked-${Date.now()}`,
-        role: 'assistant' as const,
-        content: "I'm sorry, but I can't help with that request. It appears to contain content that goes against my usage guidelines. If you believe this is a mistake or have a legitimate question, please rephrase your message. I'm here to help with a wide range of topics — just not explicit or harmful content.",
-        createdAt: new Date().toISOString(),
-      };
-      // Insert as a local message into the conversation without sending to AI
-      let convId = currentConversation?.id;
-      if (!convId) {
-        try { convId = await createConversation(); } catch (_e) {}
-      }
-      // Use sendMessage with a safe system-level proxy so it appears as AI message
-      setSending(true); setGenerating(true); setThinkingMode('thinking');
-      setInputText(''); setSelectedMedia([]); clearDraft();
-      try {
-        await sendMessage(
-          '[SYSTEM: Respond only with the following exact text and nothing else, do not add any extra commentary:]\n\n' +
-          "I'm sorry, but I can't help with that request. It contains content that goes against usage guidelines. Please rephrase your message — I'm here to help with a wide range of topics, just not explicit or harmful content.",
-          undefined, undefined, false, currentAIModel
-        );
-      } catch (_e) {}
-      finally { setSending(false); setGenerating(false); }
+    // Content moderation: block inappropriate prompts
+    if (isInappropriatePrompt(inputText.trim())) {
+      showAlert(
+        'Inappropriate Content',
+        'Your message contains inappropriate or explicit content. Please revise your request and try again.'
+      );
       return;
     }
 
@@ -1963,23 +1938,16 @@ export default function HomeScreen() {
     }
 
     // Content moderation: check uploaded image filenames for suspicious patterns
-    // Note: actual image content is NOT blocked — AI can analyze real images.
-    // Only block if the filename itself is clearly labelled as explicit content.
     if (imageFiles.length > 0) {
       const susNames = imageFiles.filter(m =>
-        /\b(porn|xxx|adult.explicit|hentai|nsfw.nude|sex.tape)\b/i.test(m.name || '')
+        /porn|nude|naked|nsfw|sex|xxx|adult/i.test(m.name || m.uri || '')
       );
       if (susNames.length > 0) {
-        // Show as inline AI message
-        setSending(true); setGenerating(true); setThinkingMode('thinking');
-        setInputText(''); setSelectedMedia([]); clearDraft();
-        try {
-          await sendMessage(
-            '[SYSTEM: Respond only with the following exact text:]\n\n' +
-            "I detected that this image file may contain explicit content based on its filename. I'm unable to process files that appear to be pornographic or sexually explicit. Please upload appropriate images.",
-            undefined, undefined, false, currentAIModel
-          );
-        } catch (_e) {} finally { setSending(false); setGenerating(false); }
+        showAlert(
+          'Inappropriate Image',
+          'This image appears to contain inappropriate content (nudity/sexual content). Please upload a different image.'
+        );
+        setSelectedMedia([]);
         return;
       }
     }
