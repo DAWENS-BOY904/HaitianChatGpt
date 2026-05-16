@@ -1,5 +1,5 @@
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, memo } from 'react';
 import {
   View,
   Text,
@@ -8,97 +8,137 @@ import {
   Platform,
   Vibration,
 } from 'react-native';
-import Animated, {
-  FadeIn,
-  useSharedValue,
-  useAnimatedStyle,
-  withSpring,
-} from 'react-native-reanimated';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
 
-// ── Inline calculator card shown in chat (ChatGPT Instruments style) ──────────
+// ── Types ─────────────────────────────────────────────────────────────────────
 interface CalculatorCardProps {
   expression: string;
   result: string;
   onOpen?: () => void;
 }
 
-export function CalculatorCard({ expression, result }: CalculatorCardProps) {
+// ── Safe math evaluator (replaces Function constructor) ───────────────────────
+function safeEval(expr: string): number {
+  const sanitized = expr
+    .replace(/×/g, '*')
+    .replace(/÷/g, '/')
+    .replace(/−/g, '-')
+    .replace(/\s/g, '');
+
+  // Only allow digits, operators, decimals, and parentheses
+  if (!/^[\d+\-*/.()]+$/.test(sanitized)) {
+    throw new Error('Invalid characters');
+  }
+
+  // Prevent consecutive operators and other malformed patterns
+  if (/[+\-*/]{2,}/.test(sanitized) || /^[*/]/.test(sanitized) || /[+\-*/]$/.test(sanitized)) {
+    throw new Error('Malformed expression');
+  }
+
+  // Use Function as last resort with strict validation above
+  return Function('"use strict"; return (' + sanitized + ')')();
+}
+
+// ── Theme-aware colors ────────────────────────────────────────────────────────
+function useCalculatorColors(isDark: boolean) {
+  return {
+    accentGreen: '#30D158',
+    cardBg: isDark ? '#1A1A1A' : '#FFFFFF',
+    keypadBg: isDark ? '#111' : '#F2F2F7',
+    keyBg: isDark ? '#2C2C2E' : '#FFFFFF',
+    keyOpBg: isDark ? '#3A3A3C' : '#E8E8E8',
+    keySpecialBg: isDark ? '#383838' : '#DEDEDE',
+    keyText: isDark ? '#FFFFFF' : '#1A1A1A',
+    headerText: isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.55)',
+    exprText: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)',
+    borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
+    iconBorder: isDark ? 'rgba(48,209,88,0.3)' : 'rgba(48,209,88,0.2)',
+    iconBg: isDark ? 'rgba(48,209,88,0.12)' : 'rgba(48,209,88,0.08)',
+  };
+}
+
+// ── Inline calculator card (ChatGPT Instruments style) ────────────────────────
+export const CalculatorCard = memo(function CalculatorCard({
+  expression,
+  result,
+  onOpen,
+}: CalculatorCardProps) {
   const { isDark } = useTheme();
+  const colors = useCalculatorColors(isDark);
+
   const [expanded, setExpanded] = useState(false);
   const [calcExpr, setCalcExpr] = useState(expression);
-  const [calcResult, setCalcResultState] = useState(result);
+  const [calcResult, setCalcResult] = useState(result);
   const [justEvaluated, setJustEvaluated] = useState(false);
 
-  const accentGreen = '#30D158';
-  const cardBg = isDark ? '#1A1A1A' : '#1C1C1E';
-  const keypadBg = isDark ? '#111' : '#F2F2F7';
-  const keyBg = isDark ? '#2C2C2E' : '#FFFFFF';
-  const keyOpBg = isDark ? '#3A3A3C' : '#E8E8E8';
-  const keySpecialBg = isDark ? '#383838' : '#DEDEDE';
-  const keyText = isDark ? '#FFFFFF' : '#1A1A1A';
+  const handleCalcPress = useCallback(
+    (key: string) => {
+      if (Platform.OS !== 'web') Vibration.vibrate(8);
 
-  const handleCalcPress = useCallback((key: string) => {
-    if (Platform.OS !== 'web') Vibration.vibrate(8);
+      if (key === 'C') {
+        setCalcExpr('');
+        setCalcResult('');
+        setJustEvaluated(false);
+        return;
+      }
 
-    if (key === 'C') {
-      setCalcExpr('');
-      setCalcResultState('');
-      setJustEvaluated(false);
-      return;
-    }
-    if (key === '=') {
+      if (key === '=') {
+        try {
+          const val = safeEval(calcExpr);
+          const res = Number.isInteger(val)
+            ? String(val)
+            : parseFloat(val.toFixed(10)).toString();
+          setCalcResult(res);
+          setCalcExpr((prev) => prev + ' = ' + res);
+          setJustEvaluated(true);
+        } catch {
+          setCalcResult('Error');
+          setJustEvaluated(true);
+        }
+        return;
+      }
+
+      if (justEvaluated && /[0-9.]/.test(key)) {
+        setCalcExpr(key);
+        setCalcResult('');
+        setJustEvaluated(false);
+        return;
+      }
+
+      if (justEvaluated) {
+        setJustEvaluated(false);
+        setCalcExpr(calcResult + key);
+        setCalcResult('');
+        return;
+      }
+
+      setCalcExpr((prev) => prev + key);
+
+      // Live preview
       try {
-        const sanitized = calcExpr
+        const previewExpr = calcExpr + key;
+        const sanitized = previewExpr
           .replace(/×/g, '*')
           .replace(/÷/g, '/')
           .replace(/−/g, '-');
-        // The original error "Unused eslint-disable directive" means the rule `no-new-func`
-        // was not triggered by the `Function` constructor in this specific context by ESLint,
-        // so the `eslint-disable` comment can be removed without introducing new issues.
-        const val = Function('"use strict"; return (' + sanitized + ')')();
-        const res = Number.isInteger(val) ? String(val) : parseFloat(val.toFixed(10)).toString();
-        setCalcResultState(res);
-        setCalcExpr(calcExpr + ' = ' + res);
-        setJustEvaluated(true);
+        if (/[+\-*/]$/.test(sanitized.trim())) {
+          setCalcResult('');
+          return;
+        }
+        const val = safeEval(previewExpr);
+        if (!Number.isNaN(val) && Number.isFinite(val)) {
+          setCalcResult(String(parseFloat(val.toFixed(10))));
+        }
       } catch {
-        setCalcResultState('Error');
-        setJustEvaluated(true);
+        setCalcResult('');
       }
-      return;
-    }
-    if (justEvaluated && /[0-9.]/.test(key)) {
-      setCalcExpr(key);
-      setCalcResultState('');
-      setJustEvaluated(false);
-      return;
-    }
-    if (justEvaluated) {
-      setJustEvaluated(false);
-      setCalcExpr(calcResult + key);
-      setCalcResultState('');
-      return;
-    }
-    setCalcExpr(prev => prev + key);
-    // Live preview
-    try {
-      const sanitized = (calcExpr + key)
-        .replace(/×/g, '*')
-        .replace(/÷/g, '/')
-        .replace(/−/g, '-');
-      if (/[+\-*/]$/.test(sanitized.trim())) { setCalcResultState(''); return; }
-      // The original error "Unused eslint-disable directive" means the rule `no-new-func`
-      // was not triggered by the `Function` constructor in this specific context by ESLint,
-      // so the `eslint-disable` comment can be removed without introducing new issues.
-      const val = Function('"use strict"; return (' + sanitized + ')')();
-      if (!isNaN(val) && isFinite(val)) setCalcResultState(String(parseFloat(val.toFixed(10))));
-    } catch {
-      setCalcResultState('');
-    }
-  }, [calcExpr, calcResult, justEvaluated]);
+    },
+    [calcExpr, calcResult, justEvaluated]
+  );
 
-  const ROWS = [
+  const ROWS: string[][] = [
     ['f', '(', ')', 'C'],
     ['7', '8', '9', '÷'],
     ['4', '5', '6', '×'],
@@ -114,67 +154,114 @@ export function CalculatorCard({ expression, result }: CalculatorCardProps) {
       {/* Label */}
       <Text style={styles.instantLabel}>Instant answer ›</Text>
 
-      {/* Dark header card */}
+      {/* Header card */}
       <TouchableOpacity
         activeOpacity={0.92}
-        onPress={() => setExpanded(v => !v)}
-        style={[styles.headerCard, { backgroundColor: cardBg }]}
+        onPress={() => {
+          setExpanded((v) => !v);
+          onOpen?.();
+        }}
+        style={[
+          styles.headerCard,
+          {
+            backgroundColor: colors.cardBg,
+            borderColor: colors.borderColor,
+          },
+        ]}
       >
         {/* Top row: icon + title */}
         <View style={styles.headerRow}>
-          <View style={[styles.calcIconBox, { borderColor: accentGreen + '55' }]}>
-            <Ionicons name="calculator" size={18} color={accentGreen} />
+          <View
+            style={[
+              styles.calcIconBox,
+              {
+                backgroundColor: colors.iconBg,
+                borderColor: colors.iconBorder,
+              },
+            ]}
+          >
+            <Ionicons name="calculator" size={18} color={colors.accentGreen} />
           </View>
-          <Text style={styles.headerTitle}>Dawinix Instruments</Text>
+          <Text style={[styles.headerTitle, { color: colors.headerText }]}>
+            Dawinix Instruments
+          </Text>
           <Ionicons
             name={expanded ? 'chevron-up' : 'chevron-down'}
             size={14}
-            color="rgba(255,255,255,0.4)"
-            style={{ marginLeft: 'auto' }}
+            color={isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)'}
+            style={styles.chevron}
           />
         </View>
+
         {/* Expression + Result */}
         <View style={styles.displayArea}>
-          <Text style={styles.exprText} numberOfLines={1} adjustsFontSizeToFit>
+          <Text
+            style={[styles.exprText, { color: colors.exprText }]}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+          >
             {displayExpr || expression}
           </Text>
-          <Text style={[styles.resultText, { color: accentGreen }]}>
+          <Text style={[styles.resultText, { color: colors.accentGreen }]}>
             {displayResult}
           </Text>
         </View>
       </TouchableOpacity>
 
       {/* Expandable keypad */}
-      {expanded ? (
-        <View style={[styles.keypad, { backgroundColor: keypadBg }]}>
+      {expanded && (
+        <View
+          style={[
+            styles.keypad,
+            {
+              backgroundColor: colors.keypadBg,
+              borderColor: colors.borderColor,
+            },
+          ]}
+        >
           {ROWS.map((row, ri) => (
-            <View key={ri} style={styles.row}>
-              {row.map(key => {
+            <View key={`row-${ri}`} style={styles.row}>
+              {row.map((key) => {
                 const isEquals = key === '=';
                 const isOp = ['÷', '×', '−', '+'].includes(key);
                 const isSpecial = ['f', '(', ')', 'C'].includes(key);
+
                 return (
                   <TouchableOpacity
                     key={key}
+                    activeOpacity={0.7}
+                    onPress={() => handleCalcPress(key)}
                     style={[
                       styles.key,
-                      { backgroundColor: isEquals ? accentGreen : isOp ? keyOpBg : isSpecial ? keySpecialBg : keyBg },
-                      // Shadow for light mode keys
-                      Platform.OS === 'ios' && !isEquals && !isDark && {
-                        shadowColor: '#000',
-                        shadowOffset: { width: 0, height: 1 },
-                        shadowOpacity: 0.1,
-                        shadowRadius: 2,
+                      {
+                        backgroundColor: isEquals
+                          ? colors.accentGreen
+                          : isOp
+                            ? colors.keyOpBg
+                            : isSpecial
+                              ? colors.keySpecialBg
+                              : colors.keyBg,
                       },
+                      // iOS shadow for light mode
+                      !isEquals &&
+                        !isDark &&
+                        Platform.OS === 'ios' && {
+                          shadowColor: '#000',
+                          shadowOffset: { width: 0, height: 1 },
+                          shadowOpacity: 0.1,
+                          shadowRadius: 2,
+                        },
                     ]}
-                    onPress={() => handleCalcPress(key)}
-                    activeOpacity={0.7}
                   >
-                    <Text style={[
-                      styles.keyText,
-                      { color: isEquals ? '#FFF' : keyText },
-                      isEquals && { fontWeight: '700' },
-                    ]}>
+                    <Text
+                      style={[
+                        styles.keyText,
+                        {
+                          color: isEquals ? '#FFF' : colors.keyText,
+                          fontWeight: isEquals ? '700' : '500',
+                        },
+                      ]}
+                    >
                       {key}
                     </Text>
                   </TouchableOpacity>
@@ -183,49 +270,48 @@ export function CalculatorCard({ expression, result }: CalculatorCardProps) {
             </View>
           ))}
         </View>
-      ) : null}
+      )}
     </Animated.View>
   );
-}
+});
 
-// ── Legacy CalculatorModal (kept but not used) — replaced by inline card ──────
-export function CalculatorModal({ visible, onClose, initialExpression = '', initialResult = '' }: {
+// ── Legacy CalculatorModal (no-op) ────────────────────────────────────────────
+export function CalculatorModal({
+  visible: _visible,
+  onClose: _onClose,
+  initialExpression: _initialExpression,
+  initialResult: _initialResult,
+}: {
   visible: boolean;
   onClose: () => void;
   initialExpression?: string;
   initialResult?: string;
 }) {
-  // No-op: modal replaced by CalculatorCard inline
   return null;
 }
 
-/**
- * Detects if a message contains math and returns the expression + result.
- */
-export function detectMathExpression(text: string): { expression: string; result: string } | null {
+// ── Math detection helper ─────────────────────────────────────────────────────
+export function detectMathExpression(
+  text: string
+): { expression: string; result: string } | null {
   if (!text) return null;
+
   const trimmed = text.trim();
   const wordCount = trimmed.split(/\s+/).length;
   if (wordCount > 25) return null;
 
-  // Match patterns like "1+1", "32 + 32", "10 * 5" etc.
   const mathPattern = /(\d+[\s]*[+\-*/×÷−][\s]*\d+(?:[\s]*[+\-*/×÷−][\s]*\d+)*)/;
   const match = text.match(mathPattern);
   if (!match) return null;
 
   const expr = match[1].trim();
   try {
-    const sanitized = expr
-      .replace(/×/g, '*')
-      .replace(/÷/g, '/')
-      .replace(/−/g, '-')
-      .replace(/\s/g, '');
-    // The original error "Unused eslint-disable directive" means the rule `no-new-func`
-    // was not triggered by the `Function` constructor in this specific context by ESLint,
-    // so the `eslint-disable` comment can be removed without introducing new issues.
-    const val = Function('"use strict"; return (' + sanitized + ')')();
-    if (!isNaN(val) && isFinite(val)) {
-      return { expression: expr, result: String(parseFloat(val.toFixed(10))) };
+    const val = safeEval(expr);
+    if (!Number.isNaN(val) && Number.isFinite(val)) {
+      return {
+        expression: expr,
+        result: String(parseFloat(val.toFixed(10))),
+      };
     }
   } catch {
     return null;
@@ -233,6 +319,7 @@ export function detectMathExpression(text: string): { expression: string; result
   return null;
 }
 
+// ── Styles ────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   wrapper: {
     marginVertical: 6,
@@ -252,27 +339,28 @@ const styles = StyleSheet.create({
     paddingTop: 14,
     paddingBottom: 18,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.08)',
   },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
     marginBottom: 12,
   },
   calcIconBox: {
     width: 34,
     height: 34,
     borderRadius: 9,
-    backgroundColor: 'rgba(48,209,88,0.12)',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
+    marginRight: 8,
   },
   headerTitle: {
     fontSize: 14,
-    color: 'rgba(255,255,255,0.55)',
     fontWeight: '500',
+    flex: 1,
+  },
+  chevron: {
+    marginLeft: 'auto',
   },
   displayArea: {
     alignItems: 'flex-end',
@@ -280,7 +368,6 @@ const styles = StyleSheet.create({
   },
   exprText: {
     fontSize: 18,
-    color: 'rgba(255,255,255,0.4)',
     fontWeight: '400',
     marginBottom: 2,
   },
@@ -294,15 +381,13 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 18,
     borderBottomRightRadius: 18,
     padding: 10,
-    gap: 8,
     marginTop: -4,
     borderWidth: StyleSheet.hairlineWidth,
     borderTopWidth: 0,
-    borderColor: 'rgba(0,0,0,0.08)',
   },
   row: {
     flexDirection: 'row',
-    gap: 8,
+    marginBottom: 8,
   },
   key: {
     flex: 1,
@@ -310,9 +395,9 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
+    marginHorizontal: 4,
   },
   keyText: {
     fontSize: 20,
-    fontWeight: '500',
   },
 });
