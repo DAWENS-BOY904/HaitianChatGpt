@@ -2332,15 +2332,27 @@ export default function HomeScreen() {
 
   const generateAIQuizQuestions = async (topic: string, difficulty: string = 'Medium'): Promise<QuizQuestion[]> => {
     const topicLabel = (topic || 'General Knowledge').trim();
+    // Always call the real edge function — it already has internal fallback
     try {
       const { data, error } = await supabase.functions.invoke('generate-quiz', {
-        body: { topic: topicLabel, difficulty, count: 10, seed: `${Date.now()}-${Math.random().toString(36).slice(2,8)}` },
+        body: { topic: topicLabel, difficulty, count: 10 },
       });
-      if (error) { console.warn('[Quiz] Edge error:', error); return generateQuizQuestions(topicLabel); }
+      if (error) {
+        console.warn('[Quiz] Edge function error:', error);
+        return generateQuizQuestions(topicLabel);
+      }
       const questions: QuizQuestion[] = data?.questions;
-      if (!Array.isArray(questions) || questions.length === 0) return generateQuizQuestions(topicLabel);
-      return questions;
-    } catch (err) { console.warn('[Quiz] error:', err); return generateQuizQuestions(topicLabel); }
+      if (!Array.isArray(questions) || questions.length === 0) {
+        console.warn('[Quiz] No questions returned, using fallback');
+        return generateQuizQuestions(topicLabel);
+      }
+      // Always return a fresh set — shuffle lightly so repeated calls give variety
+      const shuffled = [...questions].sort(() => Math.random() - 0.5);
+      return shuffled;
+    } catch (err) {
+      console.warn('[Quiz] Unexpected error, using fallback:', err);
+      return generateQuizQuestions(topicLabel);
+    }
   };
 
   const handleLaunchQuiz = async (topic: string) => {
@@ -2393,27 +2405,24 @@ export default function HomeScreen() {
     setTimeout(() => inputRef.current?.focus(), 100);
   };
 
-  const handleTryAnotherQuiz = useCallback(async () => {
-    const topic = customTopicInput.trim() || selectedQuizTopic || 'General Knowledge';
-    setQuizGenerating(true);
-    setInlineQuizVisible(false);
-    setInlineQuizQuestions([]);
-    try {
-      const questions = await generateAIQuizQuestions(topic, selectedDifficulty);
-      setTimeout(() => { setInlineQuizQuestions([...questions]); setInlineQuizVisible(true); setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 200); }, 100);
-    } catch (_e) { setSelectedQuizTopic(''); setCustomTopicInput(''); setQuizTopicVisible(true); }
-    finally { setQuizGenerating(false); }
-  }, [customTopicInput, selectedQuizTopic, selectedDifficulty]);
+  const handleTryAnotherQuiz = () => {
+    setSelectedQuizTopic('');
+    setCustomTopicInput('');
+    setQuizTopicVisible(true);
+  };
 
   const handleNextQuizInline = useCallback(async () => {
     const topic = customTopicInput.trim() || selectedQuizTopic || 'General Knowledge';
     setQuizGenerating(true);
-    setInlineQuizQuestions([]);
     try {
+      // Call real edge function for a fresh new quiz
       const questions = await generateAIQuizQuestions(topic, selectedDifficulty);
-      setTimeout(() => setInlineQuizQuestions([...questions]), 80);
-    } catch (_e) { setTimeout(() => setInlineQuizQuestions([...generateQuizQuestions(topic)]), 80); }
-    finally { setQuizGenerating(false); }
+      // Force re-render with new questions array reference
+      setInlineQuizQuestions([]);
+      setTimeout(() => setInlineQuizQuestions([...questions]), 50);
+    } catch (_e) {
+      setInlineQuizQuestions([...generateQuizQuestions(topic)]);
+    } finally { setQuizGenerating(false); }
   }, [customTopicInput, selectedQuizTopic, selectedDifficulty]);
 
   const handleEditMessage = useCallback((messageId: string, content: string) => { setEditingMessageId(messageId); setInputText(content); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }, []);
