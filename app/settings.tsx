@@ -46,7 +46,7 @@ function AgeVerificationModal({ visible, onClose, onVerified }: {
   const insets2 = useSafeAreaInsets();
   const [step, setStep] = useState<'consent' | 'camera' | 'device' | 'webview'>('consent');
   const [webviewLoading, setWebviewLoading] = useState(true);
-
+  
   useEffect(() => { 
     if (visible) setStep('consent'); 
   }, [visible]);
@@ -75,11 +75,11 @@ function AgeVerificationModal({ visible, onClose, onVerified }: {
       } catch (_e2) {}
     }
   };
-
+  
   const handleSendEmail = () => {
     Linking.openURL(`mailto:?subject=Age Verification&body=Continue your age verification: ${PERSONA_LINK}`);
   };
-
+  
   const handleVerified = async () => {
     await AsyncStorage.setItem(AGE_VERIFIED_KEY, 'true');
     onVerified(); 
@@ -118,13 +118,13 @@ function AgeVerificationModal({ visible, onClose, onVerified }: {
         {step === 'consent' && (
           <ScrollView contentContainerStyle={{ padding: 28, alignItems: 'center', flexGrow: 1 }} showsVerticalScrollIndicator={false}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 32, marginTop: 16 }}>
-              <View style={{ width: 56, height: 56, borderRadius: 0, backgroundColor: '#6366F1', alignItems: 'center', justifyContent: 'center' }}>
+              <View style={{ width: 56, height: 56, borderRadius: 16, backgroundColor: '#6366F1', alignItems: 'center', justifyContent: 'center' }}>
                 <Ionicons name="star" size={28} color="#FFF" />
               </View>
               <View style={{ flexDirection: 'row', gap: 5 }}>
-                {[0,1,2].map(i => <View key={i} style={{ width: 5, height: 5, borderRadius: 0.5, backgroundColor: borderColor }} />)}
+                {[0,1,2].map(i => <View key={i} style={{ width: 5, height: 5, borderRadius: 2.5, backgroundColor: borderColor }} />)}
               </View>
-              <View style={{ width: 56, height: 56, borderRadius: 0, borderWidth: 2, borderColor, alignItems: 'center', justifyContent: 'center' }}>
+              <View style={{ width: 56, height: 56, borderRadius: 28, borderWidth: 2, borderColor, alignItems: 'center', justifyContent: 'center' }}>
                 <Ionicons name="shield-checkmark-outline" size={28} color={secondaryText} />
               </View>
             </View>
@@ -137,7 +137,7 @@ function AgeVerificationModal({ visible, onClose, onVerified }: {
             </Text>
             <View style={{ flex: 1 }} />
             <TouchableOpacity
-              style={{ width: '100%', backgroundColor: btnBg, borderRadius: 0, paddingVertical: 17, alignItems: 'center', marginBottom: 16 }}
+              style={{ width: '100%', backgroundColor: btnBg, borderRadius: 50, paddingVertical: 17, alignItems: 'center', marginBottom: 16 }}
               onPress={() => setStep('camera')}
             >
               <Text style={{ color: btnText, fontSize: 17, fontWeight: '700' }}>Agree and Continue</Text>
@@ -145,7 +145,7 @@ function AgeVerificationModal({ visible, onClose, onVerified }: {
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingBottom: insets2.bottom + 8 }}>
               <Text style={{ color: tertiaryText, fontSize: 12 }}>SECURED WITH</Text>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                <View style={{ width: 14, height: 14, borderRadius: 0, backgroundColor: '#6366F1', alignItems: 'center', justifyContent: 'center' }}>
+                <View style={{ width: 14, height: 14, borderRadius: 4, backgroundColor: '#6366F1', alignItems: 'center', justifyContent: 'center' }}>
                   <Ionicons name="star" size={8} color="#FFF" />
                 </View>
                 <Text style={{ color: personaText, fontSize: 13, fontWeight: '700' }}>persona</Text>
@@ -166,13 +166,13 @@ function AgeVerificationModal({ visible, onClose, onVerified }: {
             <Ionicons name="person-circle-outline" size={140} color={iconColor} style={{ marginBottom: 56 }} />
             <View style={{ flex: 1 }} />
             <TouchableOpacity
-              style={{ width: '100%', backgroundColor: btnBg, borderRadius: 0, paddingVertical: 17, alignItems: 'center', marginBottom: 14 }}
+              style={{ width: '100%', backgroundColor: btnBg, borderRadius: 50, paddingVertical: 17, alignItems: 'center', marginBottom: 14 }}
               onPress={() => setStep('webview')}
             >
               <Text style={{ color: btnText, fontSize: 17, fontWeight: '700' }}>Get started</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={{ width: '100%', borderRadius: 0, paddingVertical: 17, alignItems: 'center', borderWidth: 1.5, borderColor: outlineBtnBorder, marginBottom: insets2.bottom + 8 }}
+              style={{ width: '100%', borderRadius: 50, paddingVertical: 17, alignItems: 'center', borderWidth: 1.5, borderColor: outlineBtnBorder, marginBottom: insets2.bottom + 8 }}
               onPress={() => setStep('device')}
             >
               <Text style={{ color: outlineBtnText, fontSize: 17, fontWeight: '600' }}>Continue on another device</Text>
@@ -188,7 +188,7 @@ function AgeVerificationModal({ visible, onClose, onVerified }: {
               To verify your identity, we will need access to your camera. You can scan the QR code with your phone camera to continue on your mobile device. No app download is required.
             </Text>
             <View style={{ alignItems: 'center', marginBottom: 36 }}>
-              <View style={{ width: 180, height: 180, borderRadius: 0, backgroundColor: inputBg, borderWidth: 1, borderColor, alignItems: 'center', justifyContent: 'center' }}>
+              <View style={{ width: 180, height: 180, borderRadius: 16, backgroundColor: inputBg, borderWidth: 1, borderColor, alignItems: 'center', justifyContent: 'center' }}>
                 <Ionicons name="qr-code" size={140} color={qrIconColor} />
               </View>
               <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 14 }} onPress={handleCopyLink} activeOpacity={0.7}>
@@ -197,7 +197,7 @@ function AgeVerificationModal({ visible, onClose, onVerified }: {
               </TouchableOpacity>
             </View>
             <TouchableOpacity
-              style={{ width: '100%', backgroundColor: btnBg, borderRadius: 0, paddingVertical: 17, alignItems: 'center', marginBottom: 14 }}
+              style={{ width: '100%', backgroundColor: btnBg, borderRadius: 50, paddingVertical: 17, alignItems: 'center', marginBottom: 14 }}
               onPress={handleSendEmail}
             >
               <Text style={{ color: btnText, fontSize: 17, fontWeight: '700' }}>Send Email</Text>
@@ -276,7 +276,7 @@ function VerifiedBadge({ onPress, tier }: { onPress: () => void; tier: 'pro' | '
       }}>
         <ExpoImageBadge
           source={badgeSource}
-          style={{ width: 22, height: 22, borderRadius: 11 }}
+          style={{ width: 22, height: 22 }}
           contentFit="contain"
         />
       </Animated.View>
@@ -343,7 +343,7 @@ function VerifiedBadgeModal({ visible, onClose, isDark, tier }: {
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.55)', paddingHorizontal: 24 }}>
         <TouchableOpacity style={{ ...StyleSheet.absoluteFillObject }} activeOpacity={1} onPress={onClose} />
-        <View style={{ width: '100%', maxWidth: 360, borderRadius: 0, overflow: 'hidden', backgroundColor: bg, shadowColor: '#000', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.4, shadowRadius: 24, elevation: 24 }}>
+        <View style={{ width: '100%', maxWidth: 360, borderRadius: 24, overflow: 'hidden', backgroundColor: bg, shadowColor: '#000', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.4, shadowRadius: 24, elevation: 24 }}>
           <TouchableOpacity
             style={{ position: 'absolute', top: 14, right: 14, width: 32, height: 32, borderRadius: 16, backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}
             onPress={onClose}
@@ -363,7 +363,7 @@ function VerifiedBadgeModal({ visible, onClose, isDark, tier }: {
               {subtitle}
             </Text>
 
-            <View style={{ width: '100%', backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)', borderRadius: 0, padding: 16, marginBottom: 20 }}>
+            <View style={{ width: '100%', backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)', borderRadius: 16, padding: 16, marginBottom: 20 }}>
               <Text style={{ fontSize: 13, fontWeight: '700', color: secondaryText, marginBottom: 12, textTransform: 'uppercase' }}>
                 {isPlus ? 'Plus Benefits' : 'Exclusive Benefits'}
               </Text>
@@ -375,7 +375,7 @@ function VerifiedBadgeModal({ visible, onClose, isDark, tier }: {
               ))}
             </View>
 
-            <View style={{ backgroundColor: 'rgba(220,38,38,0.1)', borderRadius: 0, padding: 12, width: '100%', borderWidth: 1, borderColor: 'rgba(220,38,38,0.2)' }}>
+            <View style={{ backgroundColor: 'rgba(220,38,38,0.1)', borderRadius: 12, padding: 12, width: '100%', borderWidth: 1, borderColor: 'rgba(220,38,38,0.2)' }}>
               <Text style={{ fontSize: 12, color: '#DC2626', textAlign: 'center', fontWeight: '600', lineHeight: 18 }}>
                 All benefits are activated only for verified {isPlus ? 'Plus' : 'Pro'} members. Badge status is controlled by the system only.
               </Text>
@@ -425,17 +425,17 @@ function EditModalContent({
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <View style={{ alignSelf: 'center', width: 36, height: 4, borderRadius: 0, backgroundColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)', marginBottom: 20 }} />
+        <View style={{ alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)', marginBottom: 20 }} />
 
         <Text style={{ fontSize: 20, fontWeight: '700', color: primaryText, textAlign: 'center', marginBottom: 6 }}>Edit Profile</Text>
         <Text style={{ fontSize: 13, color: secondaryText, textAlign: 'center', marginBottom: 16 }}>Your profile helps people recognize you.</Text>
 
         <TouchableOpacity onPress={onPickPhoto} style={{ alignSelf: 'center', marginBottom: 18 }} activeOpacity={0.8}>
-          <View style={{ width: 90, height: 90, borderRadius: 0, overflow: 'hidden', backgroundColor: isDark ? '#3A3A3C' : '#E5E5EA', alignItems: 'center', justifyContent: 'center' }}>
+          <View style={{ width: 90, height: 90, borderRadius: 45, overflow: 'hidden', backgroundColor: isDark ? '#3A3A3C' : '#E5E5EA', alignItems: 'center', justifyContent: 'center' }}>
             {uploadingPhoto ? (
               <ActivityIndicator color={primaryText} />
             ) : editPhoto ? (
-              <Image source={{ uri: editPhoto }} style={{ width: 90, height: 90, borderRadius: 45 }} contentFit="cover" />
+              <Image source={{ uri: editPhoto }} style={{ width: 90, height: 90 }} contentFit="cover" />
             ) : (
               <Text style={{ fontSize: 36, fontWeight: '700', color: primaryText }}>{initials}</Text>
             )}
@@ -454,7 +454,7 @@ function EditModalContent({
         <TextInput
           ref={nameInputRef}
           style={{
-            backgroundColor: inputBg, borderRadius: 0, paddingHorizontal: 16,
+            backgroundColor: inputBg, borderRadius: 12, paddingHorizontal: 16,
             paddingVertical: 12, fontSize: 16, color: primaryText, marginBottom: 12,
             borderWidth: 1, borderColor,
           }}
@@ -473,7 +473,7 @@ function EditModalContent({
           ref={usernameInputRef}
           style={{
             backgroundColor: canChange ? inputBg : (isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)'),
-            borderRadius: 0, paddingHorizontal: 16,
+            borderRadius: 12, paddingHorizontal: 16,
             paddingVertical: 14, fontSize: 16,
             color: canChange ? primaryText : secondaryText, marginBottom: 6,
             borderWidth: 1, borderColor,
@@ -501,7 +501,7 @@ function EditModalContent({
 
         <TouchableOpacity
           style={{
-            backgroundColor: '#10A37F', borderRadius: 0, paddingVertical: 14,
+            backgroundColor: '#10A37F', borderRadius: 50, paddingVertical: 14,
             alignItems: 'center', marginBottom: 10,
             opacity: savingProfile ? 0.7 : 1,
           }}
@@ -557,7 +557,7 @@ function GuestSettings() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}>
         <View style={{ marginTop: 8, paddingHorizontal: 16 }}>
           <Text style={{ fontSize: 13, fontWeight: '600', color: secondaryText, marginBottom: 8, marginLeft: 4, textTransform: 'uppercase' }}>Account</Text>
-          <View style={{ backgroundColor: cardBg, borderRadius: 0, overflow: 'hidden' }}>
+          <View style={{ backgroundColor: cardBg, borderRadius: 16, overflow: 'hidden' }}>
             {[
               { icon: 'megaphone-outline', label: 'Ads controls', route: '/ads-controls' },
               { icon: 'document-lock-outline', label: 'Data controls', route: '/data-controls' },
@@ -584,9 +584,9 @@ function GuestSettings() {
         </View>
 
         <View style={{ marginHorizontal: 16, marginTop: 24 }}>
-          <View style={{ backgroundColor: cardBg, borderRadius: 0, overflow: 'hidden' }}>
+          <View style={{ backgroundColor: cardBg, borderRadius: 16, overflow: 'hidden' }}>
             <View style={{ padding: 24, alignItems: 'center' }}>
-              <View style={{ width: 56, height: 56, borderRadius: 0, backgroundColor: '#10A37F22', alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
+              <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: '#10A37F22', alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
                 <Ionicons name="lock-open-outline" size={28} color="#10A37F" />
               </View>
               <Text style={{ color: primaryText, fontSize: 18, fontWeight: '700', textAlign: 'center', marginBottom: 6 }}>Unlock all settings</Text>
@@ -594,7 +594,7 @@ function GuestSettings() {
                 Create an account to access personalization, notifications, parental controls, and more.
               </Text>
               <TouchableOpacity
-                style={{ backgroundColor: '#10A37F', borderRadius: 0, paddingVertical: 14, paddingHorizontal: 32, width: '100%', alignItems: 'center' }}
+                style={{ backgroundColor: '#10A37F', borderRadius: 50, paddingVertical: 14, paddingHorizontal: 32, width: '100%', alignItems: 'center' }}
                 onPress={() => router.push('/login')}
               >
                 <Text style={{ color: '#FFF', fontSize: 16, fontWeight: '700' }}>Sign up for free</Text>
@@ -948,7 +948,7 @@ export default function SettingsScreen() {
   const displayUsername = username || '';
   const initials = (displayName[0] || 'U').toUpperCase();
 
-  // FIX: Removed borderRadius: 0 from Card
+  // FIX: Removed borderRadius: 16 from Card
   const Card = ({ children }: { children: React.ReactNode }) => (
     <View style={{ backgroundColor: cardBg, overflow: 'hidden', marginHorizontal: 16 }}>
       {children}
@@ -1064,7 +1064,7 @@ export default function SettingsScreen() {
         </TouchableOpacity>
 
         {showDropdown && (
-          <View style={{ backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7', marginHorizontal: 16, marginBottom: 8, borderRadius: 0, overflow: 'hidden' }}>
+          <View style={{ backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7', marginHorizontal: 16, marginBottom: 8, borderRadius: 12, overflow: 'hidden' }}>
             {options.map((opt, i) => {
               const isSelected = current === opt;
               return (
@@ -1092,28 +1092,7 @@ export default function SettingsScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: bg }}>
-      {/* X button at top right */}
-      <View style={{
-        position: 'absolute',
-        top: insets.top + 8,
-        right: 16,
-        zIndex: 100,
-      }}>
-        <TouchableOpacity
-          style={{
-            width: 36,
-            height: 36,
-            borderRadius: 0,
-            backgroundColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.08)',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-          onPress={() => router.back()}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="close" size={20} color={primaryText} />
-        </TouchableOpacity>
-      </View>
+      {/* FIX: Retire header seulman — removed standalone Settings header completely */}
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}>
         {/* PROFILE */}
@@ -1126,7 +1105,7 @@ export default function SettingsScreen() {
             alignItems: 'center', justifyContent: 'center', marginBottom: 12,
           }}>
             {profilePhoto ? (
-              <Image source={{ uri: profilePhoto }} style={{ width: 84, height: 84, borderRadius: 42 }} contentFit="cover" />
+              <Image source={{ uri: profilePhoto }} style={{ width: 84, height: 84 }} contentFit="cover" />
             ) : (
               <Text style={{ fontSize: 34, fontWeight: '700', color: primaryText }}>{initials}</Text>
             )}
@@ -1233,7 +1212,7 @@ export default function SettingsScreen() {
           <Row icon="help-circle-outline" label="Help Center" showChevron={false} onPress={() => openLink('https://yourapp.com/help')} />
           <Row icon="document-text-outline" label="Terms of Use" showChevron={false} onPress={() => openLink('https://yourapp.com/terms')} />
           <Row icon="shield-outline" label="Privacy Policy" showChevron={false} onPress={() => openLink('https://yourapp.com/privacy')} />
-
+          
           {/* CHECK UPDATE */}
           <Row 
             icon="refresh-circle-outline" 
@@ -1363,7 +1342,7 @@ export default function SettingsScreen() {
           <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setAccentPickerVisible(false)} />
           {/* FIX: Removed borderTopLeftRadius and borderTopRightRadius */}
           <View style={{ backgroundColor: cardBg, paddingBottom: insets.bottom + 16 }}>
-            <View style={{ width: 36, height: 4, borderRadius: 0, backgroundColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)', alignSelf: 'center', marginTop: 12, marginBottom: 16 }} />
+            <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)', alignSelf: 'center', marginTop: 12, marginBottom: 16 }} />
             <Text style={{ fontSize: 18, fontWeight: '700', color: primaryText, textAlign: 'center', marginBottom: 4 }}>Accent Color</Text>
             <Text style={{ fontSize: 13, color: secondaryText, textAlign: 'center', marginBottom: 20, paddingHorizontal: 24 }}>Choose a color that reflects your style</Text>
 
@@ -1382,7 +1361,7 @@ export default function SettingsScreen() {
                 </Text>
                 <TouchableOpacity
                   onPress={() => { updateSetting('accentColor', '#10A37F'); }}
-                  style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.07)', borderRadius: 0, paddingHorizontal: 10, paddingVertical: 4 }}
+                  style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.07)', borderRadius: 14, paddingHorizontal: 10, paddingVertical: 4 }}
                 >
                   <Text style={{ color: secondaryText, fontSize: 12, fontWeight: '500' }}>Reset to default</Text>
                 </TouchableOpacity>
@@ -1424,7 +1403,7 @@ export default function SettingsScreen() {
 
             <View style={{ paddingHorizontal: 20, paddingTop: 24 }}>
               <TouchableOpacity
-                style={{ backgroundColor: settings.accentColor || '#10A37F', borderRadius: 0, paddingVertical: 15, alignItems: 'center' }}
+                style={{ backgroundColor: settings.accentColor || '#10A37F', borderRadius: 50, paddingVertical: 15, alignItems: 'center' }}
                 onPress={() => setAccentPickerVisible(false)}
                 activeOpacity={0.85}
               >
@@ -1437,4 +1416,3 @@ export default function SettingsScreen() {
     </View>
   );
 }
-
