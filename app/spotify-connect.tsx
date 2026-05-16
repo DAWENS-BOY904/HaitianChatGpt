@@ -14,7 +14,7 @@ import { Audio } from 'expo-av';
 import { useTheme } from '../hooks/useTheme';
 import { getSupabaseClient } from '@/template';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as WebBrowser from '../utils/web-browser';
+import * as WebBrowser from 'expo-web-browser';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -125,22 +125,22 @@ function PlaybackBars({ playing }: { playing: boolean }) {
 const FALLBACK_TRACKS_WORKOUT = [
   {
     id: 'fallback_workout_1',
-    name: 'All Night',
-    owner: 'Beyonce',
+    name: 'Eye of the Tiger',
+    owner: 'Survivor',
     type: 'Song',
     imageUrl: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=200&q=80',
-    previewUrl: 'https://videotourl.com/audio/1778875621467-fb69ff20-a294-4c84-948b-a29928d5a89b.mp3',
-    spotifyUrl: 'https://rythm.fm/t/154008311430123520',
+    previewUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
+    spotifyUrl: 'https://open.spotify.com/track/2HHtWyy5CgaQbC7XSoOb0e',
     uri: 'spotify:track:2HHtWyy5CgaQbC7XSoOb0e',
   },
   {
     id: 'fallback_workout_2',
-    name: "Car's Outside",
-    owner: 'James Arthur',
+    name: 'Lose Yourself',
+    owner: 'Eminem',
     type: 'Song',
     imageUrl: 'https://images.unsplash.com/photo-1571019614242-c5c5dee9f50b?w=200&q=80',
-    previewUrl: 'https://videotourl.com/audio/1778907472479-9a845047-ffe4-4b78-a905-38208d109c4d.mp3',
-    spotifyUrl: 'https://open.spotify.com/track/0otRX6Z89qKkHkQ9OqJpKt?si=810f45ee20934a4c',
+    previewUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3',
+    spotifyUrl: 'https://open.spotify.com/track/5Z01UMMf7V1o0MzF86s6WJ',
     uri: 'spotify:track:5Z01UMMf7V1o0MzF86s6WJ',
   },
 ];
@@ -148,21 +148,21 @@ const FALLBACK_TRACKS_WORKOUT = [
 const FALLBACK_TRACKS_CHILL = [
   {
     id: 'fallback_chill_1',
-    name: 'WELL DONE',
-    owner: 'feat. Eyo-E & Elge',
+    name: 'Weightless',
+    owner: 'Marconi Union',
     type: 'Song',
     imageUrl: 'https://images.unsplash.com/photo-1519389950473-47ba0277781c?w=200&q=80',
-    previewUrl: 'https://videotourl.com/audio/1778907642372-e0cc7c7a-38d2-42fb-a517-07d52dc6c186.mp3',
+    previewUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3',
     spotifyUrl: 'https://open.spotify.com/track/7M9HGmhjYnzUFLMo8nYBtN',
     uri: 'spotify:track:7M9HGmhjYnzUFLMo8nYBtN',
   },
   {
     id: 'fallback_chill_2',
-    name: 'NLE Choppa - Shotta Flow',
-    owner: 'Blueface',
+    name: 'Lofi Study Beats',
+    owner: 'Chillhop Music',
     type: 'Playlist',
     imageUrl: 'https://images.unsplash.com/photo-1483062288757-dde0b97b12b2?w=200&q=80',
-    previewUrl: 'https://videotourl.com/audio/1778907867418-92ea8aa0-0938-4a16-b691-37a7ed3aa03e.mp3',
+    previewUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3',
     spotifyUrl: 'https://open.spotify.com/playlist/0vvXsWCC9xrXsKd4euo806',
     uri: 'spotify:playlist:0vvXsWCC9xrXsKd4euo806',
   },
@@ -705,12 +705,6 @@ export default function SpotifyConnectScreen() {
                 <Ionicons name="checkmark-circle" size={16} color={SPOTIFY_GREEN} />
                 <Text style={[spStyles.connectedText, { color: SPOTIFY_GREEN }]}>Connected</Text>
               </View>
-              <TouchableOpacity
-                style={[spStyles.connectBtn, { backgroundColor: SPOTIFY_GREEN }]}
-                onPress={() => router.replace('/home')}
-              >
-                <Text style={[spStyles.connectBtnText, { color: '#FFF' }]}>Start chatting</Text>
-              </TouchableOpacity>
               <TouchableOpacity style={[spStyles.connectBtn, { borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)', backgroundColor: 'transparent' }]} onPress={handleDisconnect}>
                 <Text style={[spStyles.connectBtnText, { color: textC }]}>Disconnect</Text>
               </TouchableOpacity>

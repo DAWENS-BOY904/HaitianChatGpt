@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { getSupabaseClient } from '@/template';
 import {
   View,
@@ -14,12 +14,11 @@ import {
   Modal,
   Share,
   Alert,
-  Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { BlurView } from 'expo-blur';
-import ReAnimated, {
+import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withSpring,
@@ -37,7 +36,6 @@ import { useConversation } from '../hooks/useConversation';
 import { BorderRadius } from '../constants/theme';
 import { useRouter } from 'expo-router';
 import { useProfile } from '../contexts/ProfileContext';
-import * as Haptics from 'expo-haptics';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -66,227 +64,116 @@ interface ConvActionMenuProps {
   onAction: (action: 'share' | 'pin' | 'rename' | 'archive' | 'delete') => void;
 }
 
-// ── iOS-style Chat Preview + Action Modal ──────────────────────────────────
-
-interface ChatPreviewModalProps {
-  visible: boolean;
-  conv: { id: string; title: string; isPinned?: boolean } | null;
-  previewMessages: Array<{ role: string; content: string }>;
-  onClose: () => void;
-  onAction: (action: 'pin' | 'rename' | 'archive' | 'delete') => void;
-  isDark: boolean;
-}
-
-function ChatPreviewModal({ visible, conv, previewMessages, onClose, onAction, isDark }: ChatPreviewModalProps) {
-  const opacityAnim = useRef(new Animated.Value(0)).current;
-  const previewScaleAnim = useRef(new Animated.Value(0.94)).current;
-  const actionsOpacityAnim = useRef(new Animated.Value(0)).current;
-  const actionsScaleAnim = useRef(new Animated.Value(0.92)).current;
+// ── Conversation Action Mini-Menu ──
+function ConvActionMenu({ visible, conv, onClose, onAction }: ConvActionMenuProps) {
+  const { isDark } = useTheme();
+  const fadeAnim = useSharedValue(0);
+  const scaleAnim = useSharedValue(0.85);
 
   useEffect(() => {
     if (visible) {
-      Animated.parallel([
-        Animated.timing(opacityAnim, { toValue: 1, duration: 220, useNativeDriver: true }),
-        Animated.spring(previewScaleAnim, { toValue: 1, tension: 260, friction: 22, useNativeDriver: true }),
-      ]).start(() => {
-        Animated.parallel([
-          Animated.timing(actionsOpacityAnim, { toValue: 1, duration: 180, useNativeDriver: true }),
-          Animated.spring(actionsScaleAnim, { toValue: 1, tension: 260, friction: 22, useNativeDriver: true }),
-        ]).start();
-      });
+      fadeAnim.value = withTiming(1, { duration: 160 });
+      scaleAnim.value = withSpring(1, { damping: 20, stiffness: 300 });
     } else {
-      Animated.parallel([
-        Animated.timing(opacityAnim, { toValue: 0, duration: 160, useNativeDriver: true }),
-        Animated.timing(previewScaleAnim, { toValue: 0.94, duration: 130, useNativeDriver: true }),
-        Animated.timing(actionsOpacityAnim, { toValue: 0, duration: 100, useNativeDriver: true }),
-        Animated.timing(actionsScaleAnim, { toValue: 0.92, duration: 100, useNativeDriver: true }),
-      ]).start();
+      fadeAnim.value = withTiming(0, { duration: 100 });
+      scaleAnim.value = withTiming(0.85, { duration: 100 });
     }
   }, [visible]);
 
-  if (!conv) return null;
+  const animStyle = useAnimatedStyle(() => ({
+    opacity: fadeAnim.value,
+    transform: [{ scale: scaleAnim.value }],
+  }));
 
-  const previewBg = isDark ? '#1C1C1E' : '#FFFFFF';
-  const previewTextC = isDark ? '#FFFFFF' : '#000000';
-  const previewSubC = isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.4)';
-  const actionsTextC = isDark ? '#FFFFFF' : '#000000';
-  const actionsDivC = isDark ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.07)';
-  const actionsBg = isDark ? 'rgba(44,44,46,0.97)' : 'rgba(255,255,255,0.97)';
+  if (!visible || !conv) return null;
 
-  const actionItems = [
-    { key: 'pin', label: conv.isPinned ? 'Unpin' : 'Pin', icon: conv.isPinned ? 'pin' : 'pin-outline', destructive: false },
-    { key: 'rename', label: 'Rename', icon: 'pencil-outline', destructive: false },
-    { key: 'archive', label: 'Archive', icon: 'archivebox-outline', destructive: false },
+  const items = [
+    { key: 'share', label: 'Share chat', icon: 'share-outline' },
+    { key: 'pin', label: conv.isPinned ? 'Unpin' : 'Pin', icon: conv.isPinned ? 'pin' : 'pin-outline' },
+    { key: 'rename', label: 'Rename', icon: 'pencil-outline' },
+    { key: 'archive', label: 'Archive', icon: 'archive-outline' },
     { key: 'delete', label: 'Delete', icon: 'trash-outline', destructive: true },
   ] as const;
 
-  const recentMessages = previewMessages.slice(-5);
-
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
-      <Animated.View style={[StyleSheet.absoluteFillObject, { opacity: opacityAnim }]}>
-        {/* Dimmed blur background */}
-        <TouchableOpacity style={StyleSheet.absoluteFillObject} activeOpacity={1} onPress={onClose}>
-          {Platform.OS === 'ios' ? (
-            <BlurView
-              intensity={isDark ? 55 : 38}
-              tint={isDark ? 'dark' : 'light'}
-              style={StyleSheet.absoluteFill}
-            />
-          ) : (
-            <View style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? 'rgba(0,0,0,0.62)' : 'rgba(0,0,0,0.32)' }]} />
-          )}
-        </TouchableOpacity>
-
-        {/* Content container */}
-        <View style={{ flex: 1, paddingHorizontal: 20, paddingTop: 80, paddingBottom: 40 }}>
-          {/* Chat Preview Card */}
-          <Animated.View
-            style={[{
-              backgroundColor: previewBg,
-              borderRadius: 20,
-              overflow: 'hidden',
-              maxHeight: SCREEN_HEIGHT * 0.52,
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 14 },
-              shadowOpacity: isDark ? 0.55 : 0.18,
-              shadowRadius: 28,
-              elevation: 28,
-            }, { transform: [{ scale: previewScaleAnim }] }]}
-          >
-            {/* Chat title header */}
-            <View style={{
-              paddingHorizontal: 16,
-              paddingVertical: 12,
-              borderBottomWidth: StyleSheet.hairlineWidth,
-              borderBottomColor: actionsDivC,
-              alignItems: 'center',
-            }}>
-              <Text style={{ color: previewSubC, fontSize: 13, fontWeight: '500' }}>
-                {conv.title || 'New chat'}
-              </Text>
+      <TouchableOpacity style={cmStyles.backdrop} activeOpacity={1} onPress={onClose}>
+        <Animated.View style={[cmStyles.menuWrap, animStyle]}>
+          <BlurView intensity={85} tint="dark" style={cmStyles.blurBox}>
+            <View style={cmStyles.titleRow}>
+              <Text style={cmStyles.titleText} numberOfLines={1}>{conv.title || 'New chat'}</Text>
             </View>
-
-            {/* Messages preview */}
-            <ScrollView
-              showsVerticalScrollIndicator={false}
-              scrollEnabled={false}
-              contentContainerStyle={{ padding: 14, gap: 10 }}
-            >
-              {recentMessages.length === 0 ? (
-                <Text style={{ color: previewSubC, fontSize: 15, textAlign: 'center', paddingVertical: 24 }}>
-                  No messages yet
+            {items.map((item, i) => (
+              <TouchableOpacity
+                key={item.key}
+                style={[cmStyles.menuItem, i > 0 && cmStyles.menuItemBorder]}
+                activeOpacity={0.6}
+                onPress={() => { onClose(); setTimeout(() => onAction(item.key as any), 60); }}
+              >
+                <Ionicons
+                  name={item.icon as any}
+                  size={20}
+                  color={item.destructive ? '#FF453A' : 'rgba(255,255,255,0.9)'}
+                />
+                <Text style={[cmStyles.menuLabel, item.destructive && cmStyles.destructiveLabel]}>
+                  {item.label}
                 </Text>
-              ) : (
-                recentMessages.map((msg, i) => (
-                  <View
-                    key={i}
-                    style={[
-                      {
-                        maxWidth: '80%',
-                        paddingHorizontal: 14,
-                        paddingVertical: 10,
-                        borderRadius: 18,
-                      },
-                      msg.role === 'user'
-                        ? { alignSelf: 'flex-end', backgroundColor: '#D1F2D3' }
-                        : { alignSelf: 'flex-start', backgroundColor: isDark ? '#2C2C2E' : '#F0F0F5' },
-                    ]}
-                  >
-                    <Text
-                      style={{
-                        color: msg.role === 'user' ? '#1A3A1E' : previewTextC,
-                        fontSize: 14,
-                        lineHeight: 20,
-                      }}
-                      numberOfLines={4}
-                    >
-                      {(msg.content || '').replace(/[#*`\[\]]/g, '').trim()}
-                    </Text>
-                  </View>
-                ))
-              )}
-            </ScrollView>
-          </Animated.View>
-
-          {/* Action Buttons — floating below preview */}
-          <Animated.View
-            style={[{
-              marginTop: 10,
-              width: 264,
-              borderRadius: 17,
-              overflow: 'hidden',
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 8 },
-              shadowOpacity: isDark ? 0.42 : 0.14,
-              shadowRadius: 20,
-              elevation: 20,
-            }, {
-              opacity: actionsOpacityAnim,
-              transform: [{ scale: actionsScaleAnim }],
-            }]}
-          >
-            {Platform.OS === 'ios' ? (
-              <BlurView intensity={isDark ? 90 : 80} tint={isDark ? 'dark' : 'extraLight'} style={{ borderRadius: 17, overflow: 'hidden' }}>
-                {actionItems.map((item, i) => (
-                  <TouchableOpacity
-                    key={item.key}
-                    style={[{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      paddingHorizontal: 18,
-                      paddingVertical: 15,
-                      gap: 16,
-                    }, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: actionsDivC }]}
-                    activeOpacity={0.65}
-                    onPress={() => {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      onClose();
-                      setTimeout(() => onAction(item.key as any), 70);
-                    }}
-                  >
-                    <Ionicons name={item.icon as any} size={21} color={item.destructive ? '#FF3B30' : actionsTextC} />
-                    <Text style={{ fontSize: 17, fontWeight: '400', color: item.destructive ? '#FF3B30' : actionsTextC }}>
-                      {item.label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </BlurView>
-            ) : (
-              <View style={{ backgroundColor: actionsBg, borderRadius: 17 }}>
-                {actionItems.map((item, i) => (
-                  <TouchableOpacity
-                    key={item.key}
-                    style={[{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      paddingHorizontal: 18,
-                      paddingVertical: 15,
-                      gap: 16,
-                    }, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: actionsDivC }]}
-                    activeOpacity={0.65}
-                    onPress={() => {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      onClose();
-                      setTimeout(() => onAction(item.key as any), 70);
-                    }}
-                  >
-                    <Ionicons name={item.icon as any} size={21} color={item.destructive ? '#FF3B30' : actionsTextC} />
-                    <Text style={{ fontSize: 17, fontWeight: '400', color: item.destructive ? '#FF3B30' : actionsTextC }}>
-                      {item.label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-          </Animated.View>
-        </View>
-      </Animated.View>
+              </TouchableOpacity>
+            ))}
+          </BlurView>
+        </Animated.View>
+      </TouchableOpacity>
     </Modal>
   );
 }
 
-// ── Rename Modal ──────────────────────────────────────────────────────────
+const cmStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  menuWrap: {
+    width: 260,
+    borderRadius: 18,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.45,
+    shadowRadius: 24,
+    elevation: 24,
+  },
+  blurBox: { borderRadius: 18, overflow: 'hidden' },
+  titleRow: {
+    paddingHorizontal: 18,
+    paddingTop: 14,
+    paddingBottom: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(255,255,255,0.1)',
+  },
+  titleText: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 13,
+    textAlign: 'center',
+    fontWeight: '500',
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 18,
+    paddingVertical: 15,
+    gap: 14,
+  },
+  menuItemBorder: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(255,255,255,0.08)',
+  },
+  menuLabel: { fontSize: 17, color: 'rgba(255,255,255,0.92)', fontWeight: '400' },
+  destructiveLabel: { color: '#FF453A' },
+});
+
+// ── Rename Modal ──
 function RenameModal({ visible, currentTitle, onConfirm, onCancel }: {
   visible: boolean; currentTitle: string; onConfirm: (t: string) => void; onCancel: () => void;
 }) {
@@ -356,7 +243,7 @@ const rnStyles = StyleSheet.create({
   divider: { width: 1, backgroundColor: 'rgba(255,255,255,0.12)' },
 });
 
-// Quick actions
+// Quick actions — upgrade excluded, handled dynamically below
 const BASE_QUICK_ACTIONS = [
   { id: 'projects', icon: 'folder-outline', label: 'Projects', color: '#8B5CF6', route: '/project-get' },
   { id: 'images', icon: 'images-outline', label: 'Images', color: '#EC4899', route: '/images' },
@@ -397,7 +284,10 @@ export function SideMenu({
   const insets = useSafeAreaInsets();
   const supabase = getSupabaseClient();
 
+  // Determine if user has a paid plan (pro) — hide Upgrade button
   const isPro = isAdmin || isUnlimited;
+
+  // Filter quick actions: remove Upgrade for pro users
   const QUICK_ACTIONS = isPro
     ? BASE_QUICK_ACTIONS.filter(qa => !qa.isUpgrade)
     : BASE_QUICK_ACTIONS;
@@ -413,11 +303,11 @@ export function SideMenu({
   const { profilePhotoUrl: globalPhotoUrl, displayName: globalDisplayName, refreshKey } = useProfile();
 
   const [actionMenuConv, setActionMenuConv] = useState<{ id: string; title: string; isPinned?: boolean } | null>(null);
-  const [chatPreviewVisible, setChatPreviewVisible] = useState(false);
-  const [chatPreviewMessages, setChatPreviewMessages] = useState<Array<{ role: string; content: string }>>([]);
+  const [actionMenuVisible, setActionMenuVisible] = useState(false);
   const [renameVisible, setRenameVisible] = useState(false);
   const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set());
 
+  // Sync from global ProfileContext (instant update after settings save)
   useEffect(() => {
     if (globalPhotoUrl) setProfilePhotoUrl(globalPhotoUrl);
   }, [globalPhotoUrl, refreshKey]);
@@ -451,8 +341,11 @@ export function SideMenu({
     }
   }, [visible]);
 
-  const containerStyle = useAnimatedStyle(() => ({ transform: [{ translateX: translateX.value }] } as any));
-  const overlayStyle = useAnimatedStyle(() => ({ opacity: overlayOpacity.value } as any));
+  const containerStyle = useAnimatedStyle(() => ({ transform: [{ translateX: translateX.value }] }));
+  const overlayStyle = useAnimatedStyle(() => ({
+    opacity: overlayOpacity.value,
+    pointerEvents: overlayOpacity.value > 0 ? 'auto' : 'none',
+  }));
 
   const panGesture = Gesture.Pan()
     .activeOffsetX([-10, 10])
@@ -504,23 +397,9 @@ export function SideMenu({
     return 'DH';
   };
 
-  // Long press → iOS preview modal
-  const handleConvLongPress = async (conv: { id: string; title: string }) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  const handleConvLongPress = (conv: { id: string; title: string }) => {
     setActionMenuConv({ ...conv, isPinned: pinnedIds.has(conv.id) });
-    // Fetch recent messages for preview
-    try {
-      const { data } = await supabase
-        .from('messages')
-        .select('role, content')
-        .eq('conversation_id', conv.id)
-        .order('created_at', { ascending: false })
-        .limit(5);
-      setChatPreviewMessages(data ? [...data].reverse() : []);
-    } catch (_e) {
-      setChatPreviewMessages([]);
-    }
-    setChatPreviewVisible(true);
+    setActionMenuVisible(true);
   };
 
   const handleConvTap = (conv: { id: string; title: string }) => {
@@ -528,34 +407,32 @@ export function SideMenu({
     onClose();
   };
 
-  // Actions from preview modal
-  const handleConvPreviewAction = async (action: 'pin' | 'rename' | 'archive' | 'delete') => {
+  const handleConvAction = async (action: 'share' | 'pin' | 'rename' | 'archive' | 'delete') => {
     if (!actionMenuConv) return;
-    if (action === 'rename') { setRenameVisible(true); return; }
+    const conv = actionMenuConv;
+
+    if (action === 'share') {
+      try { await Share.share({ message: `Check out this conversation: ${conv.title}` }); } catch (e) {}
+      return;
+    }
     if (action === 'pin') {
-      const newPinned = !pinnedIds.has(actionMenuConv.id);
-      await supabase.from('conversations').update({ is_pinned: newPinned }).eq('id', actionMenuConv.id);
+      const newPinned = !pinnedIds.has(conv.id);
+      await supabase.from('conversations').update({ is_pinned: newPinned }).eq('id', conv.id);
       setPinnedIds(prev => {
         const next = new Set(prev);
-        newPinned ? next.add(actionMenuConv.id) : next.delete(actionMenuConv.id);
+        newPinned ? next.add(conv.id) : next.delete(conv.id);
         return next;
       });
       return;
     }
-    if (action === 'archive') { await archiveConversation(actionMenuConv.id); return; }
+    if (action === 'rename') { setRenameVisible(true); return; }
+    if (action === 'archive') { await archiveConversation(conv.id); return; }
     if (action === 'delete') {
       Alert.alert('Delete Chat', 'This will permanently delete this chat.', [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: async () => { await deleteConversation(actionMenuConv.id); } },
+        { text: 'Delete', style: 'destructive', onPress: async () => { await deleteConversation(conv.id); } },
       ]);
     }
-  };
-
-  const handleRenameConfirm = async (title: string) => {
-    setRenameVisible(false);
-    if (!actionMenuConv || !title) return;
-    await updateConversationTitle(actionMenuConv.id, title);
-    setActionMenuConv(prev => prev ? { ...prev, title } : null);
   };
 
   const handleArchiveAll = () => {
@@ -572,19 +449,29 @@ export function SideMenu({
     ]);
   };
 
+  const handleRenameConfirm = async (title: string) => {
+    setRenameVisible(false);
+    if (!actionMenuConv || !title) return;
+    await updateConversationTitle(actionMenuConv.id, title);
+    setActionMenuConv(prev => prev ? { ...prev, title } : null);
+  };
+
+  // ── Accent blur color for FAB ──
+  const accentWithAlpha = accentColor + 'E6'; // ~90% opacity
+
   // ── GUEST MODE ──
   if (isGuest) {
     return (
       <>
-        <ReAnimated.View
+        <Animated.View
           style={[styles.overlay, overlayStyle]}
           pointerEvents={visible ? 'auto' : 'none'}
         >
           <Pressable style={{ flex: 1 }} onPress={onClose} />
-        </ReAnimated.View>
+        </Animated.View>
 
         <GestureDetector gesture={panGesture}>
-          <ReAnimated.View
+          <Animated.View
             style={[
               styles.drawer,
               {
@@ -633,7 +520,7 @@ export function SideMenu({
                 <Text style={{ color: '#000000', fontSize: 17, fontWeight: '700' }}>Sign up or log in</Text>
               </TouchableOpacity>
             </View>
-          </ReAnimated.View>
+          </Animated.View>
         </GestureDetector>
       </>
     );
@@ -641,15 +528,15 @@ export function SideMenu({
 
   return (
     <>
-      <ReAnimated.View
+      <Animated.View
         style={[styles.overlay, overlayStyle]}
         pointerEvents={visible ? 'auto' : 'none'}
       >
         <Pressable style={{ flex: 1 }} onPress={onClose} />
-      </ReAnimated.View>
+      </Animated.View>
 
       <GestureDetector gesture={panGesture}>
-        <ReAnimated.View
+        <Animated.View
           style={[
             styles.drawer,
             {
@@ -665,6 +552,7 @@ export function SideMenu({
               {currentProject?.name || 'Dawinix'}
             </Text>
 
+            {/* Search + Profile icons — shared glassmorphism background */}
             <View style={styles.headerIconGroup}>
               {Platform.OS === 'ios' ? (
                 <BlurView
@@ -674,6 +562,7 @@ export function SideMenu({
                     borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.1)',
                   }]}
                 >
+                  {/* Search icon */}
                   <TouchableOpacity
                     style={styles.iconPillBtn}
                     onPress={() => setSearchActive(!searchActive)}
@@ -681,9 +570,13 @@ export function SideMenu({
                   >
                     <Ionicons name="search" size={19} color={colors.text} />
                   </TouchableOpacity>
+
+                  {/* Divider */}
                   <View style={[styles.iconPillDivider, {
                     backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)',
                   }]} />
+
+                  {/* Profile / avatar → Settings */}
                   <TouchableOpacity
                     style={styles.iconPillBtn}
                     onPress={() => { onClose(); router.push('/settings'); }}
@@ -834,7 +727,7 @@ export function SideMenu({
                     activeOpacity={0.7}
                     onPress={() => handleConvTap(conv)}
                     onLongPress={() => handleConvLongPress(conv)}
-                    delayLongPress={380}
+                    delayLongPress={400}
                   >
                     <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                       {isPinned && <Ionicons name="pin" size={12} color={accentColor} />}
@@ -856,7 +749,7 @@ export function SideMenu({
             <View style={{ height: insets.bottom + 100 }} />
           </ScrollView>
 
-          {/* BULK CHAT ACTIONS */}
+          {/* BULK CHAT ACTIONS — Archive All / Delete All */}
           {conversations.length > 0 && !searchActive && (
             <View style={[styles.bulkActionsRow, { borderTopColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }]}>
               <TouchableOpacity style={styles.bulkActionBtn} onPress={handleArchiveAll} activeOpacity={0.7}>
@@ -871,7 +764,7 @@ export function SideMenu({
             </View>
           )}
 
-          {/* FLOATING NEW CHAT BUTTON */}
+          {/* FLOATING NEW CHAT BUTTON — accent color + blur */}
           {Platform.OS === 'ios' ? (
             <View style={[styles.chatFabWrap, { bottom: insets.bottom + 20 }]}>
               <BlurView
@@ -905,17 +798,15 @@ export function SideMenu({
               <Text style={styles.chatFabText}>New Chat</Text>
             </TouchableOpacity>
           )}
-        </ReAnimated.View>
+        </Animated.View>
       </GestureDetector>
 
-      {/* iOS-style Chat Preview Modal (long press) */}
-      <ChatPreviewModal
-        visible={chatPreviewVisible}
+      {/* Conv Action Menu */}
+      <ConvActionMenu
+        visible={actionMenuVisible}
         conv={actionMenuConv}
-        previewMessages={chatPreviewMessages}
-        onClose={() => setChatPreviewVisible(false)}
-        onAction={handleConvPreviewAction}
-        isDark={isDark}
+        onClose={() => setActionMenuVisible(false)}
+        onAction={handleConvAction}
       />
 
       {/* Rename Modal */}
@@ -953,7 +844,11 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
   },
   appTitle: { fontSize: 22, fontWeight: '700', letterSpacing: -0.3, flex: 1 },
-  headerIconGroup: { flexShrink: 0 },
+
+  // Header icon group (shared blurred pill for search + profile)
+  headerIconGroup: {
+    flexShrink: 0,
+  },
   headerIconGroupBlur: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -967,10 +862,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  iconPillDivider: { width: StyleSheet.hairlineWidth, height: 18 },
-  profilePhotoSmall: { width: 26, height: 26, borderRadius: 13 },
-  avatarMini: { width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
-  avatarMiniText: { color: '#FFFFFF', fontWeight: '700', fontSize: 11 },
+  iconPillDivider: {
+    width: StyleSheet.hairlineWidth,
+    height: 18,
+  },
+  profilePhotoSmall: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+  },
+  avatarMini: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarMiniText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 11,
+  },
+
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1023,6 +936,8 @@ const styles = StyleSheet.create({
   },
   convTitle: { fontSize: 16, fontWeight: '400', flex: 1 },
   emptyText: { textAlign: 'center', marginTop: 32, fontSize: 15 },
+
+  // New Chat FAB
   chatFabWrap: {
     position: 'absolute',
     right: 20,
@@ -1034,7 +949,10 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 10,
   },
-  chatFabBlur: { borderRadius: 30, overflow: 'hidden' },
+  chatFabBlur: {
+    borderRadius: 30,
+    overflow: 'hidden',
+  },
   chatFabInner: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -16,7 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { BlurView } from 'expo-blur';
 import { useTheme } from '../hooks/useTheme';
-import * as WebBrowser from '../utils/web-browser';
+import * as WebBrowser from 'expo-web-browser';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
