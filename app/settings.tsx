@@ -1416,3 +1416,4 @@ export default function SettingsScreen() {
     </View>
   );
 }
+make all tings in dorder radius.
