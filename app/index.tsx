@@ -40,16 +40,6 @@ async function sendLoginConfirmationEmail(userId: string, email: string) {
   }
 }
 
-// ── Proper Google G SVG icon via colored text segments ──
-function GoogleLogo({ size = 20 }: { size?: number }) {
-  const s = size;
-  return (
-    <View style={{ width: s, height: s, borderRadius: s / 2, overflow: 'hidden', backgroundColor: 'white', alignItems: 'center', justifyContent: 'center' }}>
-      <Text style={{ fontSize: s * 0.7, fontWeight: '900', color: '#4285F4', lineHeight: s * 0.75 }}>G</Text>
-    </View>
-  );
-}
-
 // ── Apple Sign-In (dynamic import to avoid web bundle errors) ──
 async function performAppleSignIn(showAlert: (title: string, msg?: string) => void): Promise<{ user: any; error?: string }> {
   if (Platform.OS !== 'ios') return { user: null, error: 'Apple Sign In is only available on iOS.' };
@@ -135,7 +125,7 @@ async function performGoogleSignIn(): Promise<{ error?: string }> {
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: 'haitian-chatgpt://auth/callback',
+        redirectTo: 'dawinix://auth/callback',
         skipBrowserRedirect: true,
       },
     });
@@ -336,12 +326,11 @@ function WelcomeScreen() {
           {loading === 'google' ? (
             <ActivityIndicator size="small" color={colors.text} />
           ) : (
-            <>
-              {/* Colored Google G */}
-              <View style={{ width: 22, height: 22, alignItems: 'center', justifyContent: 'center' }}>
-                <Text style={{ fontSize: 15, fontWeight: '900', color: '#4285F4' }}>G</Text>
-              </View>
-            </>
+            <Image
+              source={{ uri: 'https://www.citypng.com/public/uploads/preview/google-logo-icon-gsuite-hd-701751694791470gzbayltphh.png' }}
+              style={{ width: 22, height: 22 }}
+              resizeMode="contain"
+            />
           )}
           <Text style={{ fontWeight: '600', fontSize: 16, color: colors.text }}>
             {loading === 'google' ? 'Signing in...' : 'Continue with Google'}
