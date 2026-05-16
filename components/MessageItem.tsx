@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, useRef, useEffect, memo } from 'react';
 import {
   View,
@@ -18,7 +19,7 @@ import { useSettings } from '../hooks/useSettings';
 import { getSupabaseClient } from '@/template';
 import { Audio } from 'expo-av';
 import * as Speech from 'expo-speech';
-import * as WebBrowser from 'expo-web-browser';
+import * as WebBrowser from '../utils/web-browser';
 import { BlurView } from 'expo-blur';
 import { CodeBlock } from './CodeBlock';
 import { SourcesListModal as SourcesModal, Source } from './SourcesModal';
@@ -52,7 +53,6 @@ interface MessageItemProps {
   onReply?: (message: Message) => void;
   onDelete?: (messageId: string) => void;
   onChunkRendered?: () => void;
-  // Like/unlike state for inline action row
   isLiked?: boolean;
   isUnliked?: boolean;
   onLike?: (messageId: string) => void;
@@ -72,26 +72,13 @@ function containsSelfHarm(text: string): boolean {
   return SELF_HARM_KEYWORDS.some(kw => lower.includes(kw));
 }
 
-// ── Phone number detection ───────────────────────────────────────────────────
-const PHONE_REGEX = /(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/g;
-
 // ── URL detection ────────────────────────────────────────────────────────────
 const URL_REGEX = /https?:\/\/[^\s"')]+/g;
 
 // ── Image URL detection ──────────────────────────────────────────────────────
 const IMAGE_URL_REGEX = /https?:\/\/[^\s"')]+\.(?:jpg|jpeg|png|webp|gif)(?:\?[^\s"')]*)?/gi;
 
-// ── Unsplash grid detection ──────────────────────────────────────────────────
-interface UnsplashResult {
-  id: string;
-  urls: { small: string; regular: string; full: string };
-  alt_description?: string;
-  description?: string;
-  user?: { name?: string };
-  links?: { html?: string };
-}
-
-// ── Horizontal scrollable image grid (web search / AI image results) ──────────
+// ── Horizontal scrollable image grid ─────────────────────────────────────────
 const ImageGrid = memo(function ImageGrid({ images, onPress, onSendToChat }: {
   images: Array<{ url: string; title?: string; link?: string }>;
   onPress: (url: string, index: number) => void;
@@ -140,21 +127,15 @@ const ImageGrid = memo(function ImageGrid({ images, onPress, onSendToChat }: {
               <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 11, fontWeight: '600' }} numberOfLines={1}>{img.title}</Text>
             </View>
           ) : null}
-          {/* Send to chat button */}
           {onSendToChat ? (
             <TouchableOpacity
               onPress={() => onSendToChat(img.url)}
               activeOpacity={0.75}
               style={{
-                position: 'absolute',
-                top: 6,
-                right: 6,
-                width: 28,
-                height: 28,
-                borderRadius: 14,
+                position: 'absolute', top: 6, right: 6,
+                width: 28, height: 28, borderRadius: 14,
                 backgroundColor: 'rgba(0,0,0,0.55)',
-                alignItems: 'center',
-                justifyContent: 'center',
+                alignItems: 'center', justifyContent: 'center',
               }}
             >
               <Ionicons name="send" size={13} color="#FFF" />
@@ -166,28 +147,20 @@ const ImageGrid = memo(function ImageGrid({ images, onPress, onSendToChat }: {
   );
 });
 
-// ── Safety Response Component ─────────────────────────────────────────────────
+// ── Safety Response ───────────────────────────────────────────────────────────
 function SafetyResponse() {
   const { colors, isDark } = useTheme();
   const handleCall = () => {
-    Alert.alert(
-      'Call Crisis Line',
-      'Do you want to call the 988 Suicide & Crisis Lifeline?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Call', onPress: () => Linking.openURL('tel:988') },
-      ]
-    );
+    Alert.alert('Call Crisis Line', 'Do you want to call the 988 Suicide & Crisis Lifeline?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Call', onPress: () => Linking.openURL('tel:988') },
+    ]);
   };
   const handleChat = () => {
-    Alert.alert(
-      'Open Crisis Chat',
-      'This will open the 988 crisis chat in your browser.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Open', onPress: () => Linking.openURL('https://988lifeline.org/chat/') },
-      ]
-    );
+    Alert.alert('Open Crisis Chat', 'This will open the 988 crisis chat in your browser.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Open', onPress: () => Linking.openURL('https://988lifeline.org/chat/') },
+    ]);
   };
   return (
     <View style={{ padding: 16, marginHorizontal: 16, marginBottom: 12, backgroundColor: isDark ? '#1C1C1E' : '#F2F2F7', borderRadius: 18, borderLeftWidth: 4, borderLeftColor: '#FF453A' }}>
@@ -196,19 +169,11 @@ function SafetyResponse() {
         {"If you're going through something difficult, please reach out. Trained counselors are available 24/7 to help."}
       </Text>
       <View style={{ gap: 10 }}>
-        <TouchableOpacity
-          style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#34C759', borderRadius: 14, padding: 14, gap: 10 }}
-          onPress={handleCall}
-          activeOpacity={0.8}
-        >
+        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#34C759', borderRadius: 14, padding: 14, gap: 10 }} onPress={handleCall} activeOpacity={0.8}>
           <Ionicons name="call" size={20} color="#FFF" />
           <Text style={{ color: '#FFF', fontSize: 16, fontWeight: '700' }}>Call 988 (Crisis Line)</Text>
         </TouchableOpacity>
-        <TouchableOpacity
-          style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA', borderRadius: 14, padding: 14, gap: 10 }}
-          onPress={handleChat}
-          activeOpacity={0.8}
-        >
+        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA', borderRadius: 14, padding: 14, gap: 10 }} onPress={handleChat} activeOpacity={0.8}>
           <Ionicons name="chatbubble-ellipses" size={20} color={colors.text} />
           <Text style={{ color: colors.text, fontSize: 16, fontWeight: '600' }}>Chat Support Online</Text>
         </TouchableOpacity>
@@ -220,10 +185,7 @@ function SafetyResponse() {
 // ── Phone call modal ──────────────────────────────────────────────────────────
 function PhoneCallModal({ visible, number, onClose }: { visible: boolean; number: string; onClose: () => void }) {
   const { colors, isDark } = useTheme();
-  const handleCall = () => {
-    onClose();
-    Linking.openURL(`tel:${number.replace(/\D/g, '')}`);
-  };
+  const handleCall = () => { onClose(); Linking.openURL(`tel:${number.replace(/\D/g, '')}`); };
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)' }}>
@@ -256,36 +218,15 @@ function DownloadLinkCard({ url, label }: { url: string; label?: string }) {
   const { colors, isDark } = useTheme();
   const fileName = label || url.split('/').pop()?.split('?')[0] || 'Download';
   const ext = fileName.split('.').pop()?.toUpperCase() || 'FILE';
-
   const handlePress = useCallback(async () => {
     try {
       const supported = await Linking.canOpenURL(url);
-      if (supported) {
-        await Linking.openURL(url);
-      } else {
-        Alert.alert('Cannot open URL', 'This link cannot be opened on this device.');
-      }
-    } catch (e) {
-      Alert.alert('Error', 'Failed to open the link.');
-    }
+      if (supported) await Linking.openURL(url);
+      else Alert.alert('Cannot open URL', 'This link cannot be opened on this device.');
+    } catch (e) { Alert.alert('Error', 'Failed to open the link.'); }
   }, [url]);
-
   return (
-    <TouchableOpacity
-      onPress={handlePress}
-      activeOpacity={0.75}
-      style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)',
-        borderRadius: 14,
-        padding: 12,
-        marginVertical: 4,
-        gap: 12,
-        borderWidth: 1,
-        borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)',
-      }}
-    >
+    <TouchableOpacity onPress={handlePress} activeOpacity={0.75} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)', borderRadius: 14, padding: 12, marginVertical: 4, gap: 12, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)' }}>
       <View style={{ width: 42, height: 42, borderRadius: 10, backgroundColor: colors.primary + '22', alignItems: 'center', justifyContent: 'center' }}>
         <Ionicons name="document-attach" size={22} color={colors.primary} />
       </View>
@@ -298,67 +239,26 @@ function DownloadLinkCard({ url, label }: { url: string; label?: string }) {
   );
 }
 
-// ── Sources inline pill (appears after the … action row) ────────────────────
+// ── Sources inline pill ───────────────────────────────────────────────────────
 const FAVICON_BASE = 'https://www.google.com/s2/favicons?domain=';
 
 function getDomainFromSource(src: string): string {
-  try {
-    if (src.startsWith('http')) return new URL(src).hostname.replace('www.', '');
-  } catch {}
-  // Plain text like "Platform.Openai" or "woo.zendesk.com" → best-effort
+  try { if (src.startsWith('http')) return new URL(src).hostname.replace('www.', ''); } catch {}
   return src.replace(/^https?:\/\//, '').split('/')[0];
 }
 
 function SourcesBadge({ sources, onPress }: { sources: string[]; onPress: () => void }) {
   const { colors, isDark } = useTheme();
-  // Show up to 3 favicons
   const shown = sources.slice(0, 3);
   return (
-    <TouchableOpacity
-      onPress={onPress}
-      activeOpacity={0.75}
-      style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        alignSelf: 'flex-start',
-        backgroundColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.05)',
-        borderRadius: 20,
-        paddingHorizontal: 10,
-        paddingVertical: 6,
-        gap: 6,
-        marginTop: 8,
-        borderWidth: StyleSheet.hairlineWidth,
-        borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.09)',
-      }}
-    >
-      {/* Stacked favicon circles */}
+    <TouchableOpacity onPress={onPress} activeOpacity={0.75} style={{ flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', backgroundColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.05)', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 6, gap: 6, marginTop: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.09)' }}>
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
         {shown.map((src, i) => {
           const domain = getDomainFromSource(src);
           const faviconUri = `${FAVICON_BASE}${domain}&sz=64`;
           return (
-            <View
-              key={i}
-              style={{
-                width: 20,
-                height: 20,
-                borderRadius: 10,
-                overflow: 'hidden',
-                borderWidth: 1.5,
-                borderColor: isDark ? '#1C1C1E' : '#FFF',
-                backgroundColor: isDark ? '#3A3A3C' : '#E5E5EA',
-                marginLeft: i === 0 ? 0 : -7,
-                zIndex: 3 - i,
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Image
-                source={{ uri: faviconUri }}
-                style={{ width: 14, height: 14 }}
-                contentFit="contain"
-                cachePolicy="memory-disk"
-              />
+            <View key={i} style={{ width: 20, height: 20, borderRadius: 10, overflow: 'hidden', borderWidth: 1.5, borderColor: isDark ? '#1C1C1E' : '#FFF', backgroundColor: isDark ? '#3A3A3C' : '#E5E5EA', marginLeft: i === 0 ? 0 : -7, zIndex: 3 - i, alignItems: 'center', justifyContent: 'center' }}>
+              <Image source={{ uri: faviconUri }} style={{ width: 14, height: 14 }} contentFit="contain" cachePolicy="memory-disk" />
             </View>
           );
         })}
@@ -373,15 +273,15 @@ function SourcesBadge({ sources, onPress }: { sources: string[]; onPress: () => 
 
 // ── Parse markdown into segments ─────────────────────────────────────────────
 interface TextSegment {
-  type: 'text' | 'bold' | 'italic' | 'code_inline' | 'link' | 'phone' | 'image_url';
+  type: 'text' | 'bold' | 'italic' | 'code_inline' | 'link' | 'phone' | 'image_url' | 'strikethrough';
   content: string;
   url?: string;
 }
 
 function parseInlineMarkdown(text: string): TextSegment[] {
   const segments: TextSegment[] = [];
-  // Combined pattern: **bold**, *italic*, `code`, [link](url), phone numbers, plain URLs
-  const pattern = /(\*\*([^*]+)\*\*|\*([^*]+)\*|`([^`]+)`|\[([^\]]+)\]\((https?:\/\/[^\)]+)\)|(https?:\/\/[^\s"')]+\.(?:jpg|jpeg|png|webp|gif)(?:\?[^\s"')]*)?)|(\+?[\d\s\-\(\)]{10,})|( https?:\/\/[^\s"')]+))/g;
+  // ~~strikethrough~~, **bold**, *italic*, `code`, [link](url), image URLs, phone, plain URLs
+  const pattern = /(~~([^~]+)~~|\*\*([^*]+)\*\*|\*([^*]+)\*|`([^`]+)`|\[([^\]]+)\]\((https?:\/\/[^\)]+)\)|(https?:\/\/[^\s"')]+\.(?:jpg|jpeg|png|webp|gif)(?:\?[^\s"')]*)?)|(\+?[\d\s\-\(\)]{10,})|(https?:\/\/[^\s"')]+))/g;
   let lastIndex = 0;
   let match;
 
@@ -390,15 +290,17 @@ function parseInlineMarkdown(text: string): TextSegment[] {
       segments.push({ type: 'text', content: text.slice(lastIndex, match.index) });
     }
     const full = match[0];
-    if (full.startsWith('**')) {
-      segments.push({ type: 'bold', content: match[2] });
+    if (full.startsWith('~~')) {
+      segments.push({ type: 'strikethrough', content: match[2] });
+    } else if (full.startsWith('**')) {
+      segments.push({ type: 'bold', content: match[3] });
     } else if (full.startsWith('*')) {
-      segments.push({ type: 'italic', content: match[3] });
+      segments.push({ type: 'italic', content: match[4] });
     } else if (full.startsWith('`')) {
-      segments.push({ type: 'code_inline', content: match[4] });
+      segments.push({ type: 'code_inline', content: match[5] });
     } else if (full.startsWith('[')) {
-      const url = match[6];
-      const label = match[5];
+      const url = match[7];
+      const label = match[6];
       const isImg = /\.(jpg|jpeg|png|webp|gif)/i.test(url);
       segments.push({ type: isImg ? 'image_url' : 'link', content: label, url });
     } else if (/^\+?[\d\s\-\(\)]{10,}$/.test(full.trim())) {
@@ -414,24 +316,23 @@ function parseInlineMarkdown(text: string): TextSegment[] {
   if (lastIndex < text.length) {
     segments.push({ type: 'text', content: text.slice(lastIndex) });
   }
-
   return segments;
 }
 
 // ── Markdown block parser ─────────────────────────────────────────────────────
 interface Block {
-  type: 'paragraph' | 'heading' | 'code' | 'bullet' | 'numbered' | 'divider' | 'image' | 'blockquote' | 'sources';
+  type: 'paragraph' | 'heading' | 'code' | 'bullet' | 'numbered' | 'divider' | 'image' | 'blockquote' | 'sources' | 'table';
   content: string;
   level?: number;
   language?: string;
   sources?: string[];
+  rows?: string[][];
+  hasHeader?: boolean;
 }
 
 function parseMarkdownBlocks(raw: string): Block[] {
   if (!raw) return [];
-  const lines = raw.split('\n');
   const blocks: Block[] = [];
-  let i = 0;
 
   // Extract sources block first
   let sourcesBlock: Block | null = null;
@@ -444,9 +345,38 @@ function parseMarkdownBlocks(raw: string): Block[] {
   const cleanRaw = raw.replace(/\[SOURCES\][\s\S]*?(?:\[\/SOURCES\]|$)/gi, '').trim();
   const cleanLines = cleanRaw.split('\n');
 
-  i = 0;
+  let i = 0;
   while (i < cleanLines.length) {
     const line = cleanLines[i];
+
+    // Table detection — lines starting with |
+    if (line.trim().startsWith('|') && line.trim().includes('|', 1)) {
+      const tableLines: string[] = [];
+      let ti = i;
+      while (ti < cleanLines.length && cleanLines[ti].trim().startsWith('|')) {
+        tableLines.push(cleanLines[ti]);
+        ti++;
+      }
+      if (tableLines.length >= 2) {
+        const parseRow = (rowLine: string): string[] =>
+          rowLine.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((c: string) => c.trim());
+        const isSep = (rowLine: string) => /^[\|\-\s:]+$/.test(rowLine);
+        const rows: string[][] = [];
+        let hasHeader = false;
+        let firstDataRow = 0;
+        if (tableLines.length >= 2 && isSep(tableLines[1])) {
+          rows.push(parseRow(tableLines[0]));
+          hasHeader = true;
+          firstDataRow = 2;
+        }
+        for (let r = firstDataRow; r < tableLines.length; r++) {
+          if (!isSep(tableLines[r])) rows.push(parseRow(tableLines[r]));
+        }
+        if (rows.length > 0) blocks.push({ type: 'table', content: '', rows, hasHeader });
+        i = ti;
+        continue;
+      }
+    }
 
     // Code block
     if (line.trim().startsWith('```')) {
@@ -531,6 +461,7 @@ function InlineText({ text, textStyle, onPhonePress, onLinkPress }: {
   return (
     <Text style={textStyle}>
       {segments.map((seg, i) => {
+        if (seg.type === 'strikethrough') return <Text key={i} style={{ textDecorationLine: 'line-through', opacity: 0.62 }}>{seg.content}</Text>;
         if (seg.type === 'bold') return <Text key={i} style={{ fontWeight: '700' }}>{seg.content}</Text>;
         if (seg.type === 'italic') return <Text key={i} style={{ fontStyle: 'italic' }}>{seg.content}</Text>;
         if (seg.type === 'code_inline') return (
@@ -552,6 +483,71 @@ function InlineText({ text, textStyle, onPhonePress, onLinkPress }: {
       })}
     </Text>
   );
+}
+
+// ── Markdown Table Renderer ───────────────────────────────────────────────────
+const MarkdownTable = memo(function MarkdownTable({ rows, hasHeader, isDark, colors }: {
+  rows: string[][];
+  hasHeader?: boolean;
+  isDark: boolean;
+  colors: any;
+}) {
+  if (!rows || rows.length === 0) return null;
+  const colCount = Math.max(...rows.map(r => r.length), 1);
+  const headerRow = hasHeader ? rows[0] : null;
+  const bodyRows = hasHeader ? rows.slice(1) : rows;
+  const borderC = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.09)';
+  const headerBg = isDark ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.055)';
+  const evenRowBg = isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)';
+  const textC = isDark ? '#FFFFFF' : '#1A1A1A';
+  const subC = isDark ? 'rgba(255,255,255,0.78)' : 'rgba(0,0,0,0.75)';
+  const cellMinW = Math.max(70, Math.floor(280 / Math.min(colCount, 4)));
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      style={{ marginVertical: 8 }}
+      contentContainerStyle={{ paddingRight: 2 }}
+    >
+      <View style={{ borderRadius: 14, borderWidth: 1, borderColor: borderC, overflow: 'hidden', minWidth: colCount * cellMinW }}>
+        {headerRow ? (
+          <View style={{ flexDirection: 'row', backgroundColor: headerBg, borderBottomWidth: 1, borderBottomColor: borderC }}>
+            {headerRow.map((cell, ci) => (
+              <View key={`h-${ci}`} style={{ flex: 1, minWidth: cellMinW, paddingHorizontal: 12, paddingVertical: 10, borderRightWidth: ci < headerRow.length - 1 ? StyleSheet.hairlineWidth : 0, borderRightColor: borderC }}>
+                <Text style={{ color: textC, fontSize: 13, fontWeight: '700', lineHeight: 18 }} numberOfLines={2}>{cell}</Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+        {bodyRows.map((row, ri) => (
+          <View key={`r-${ri}`} style={{ flexDirection: 'row', backgroundColor: ri % 2 === 1 ? evenRowBg : 'transparent', borderBottomWidth: ri < bodyRows.length - 1 ? StyleSheet.hairlineWidth : 0, borderBottomColor: borderC }}>
+            {Array.from({ length: colCount }).map((_, ci) => (
+              <View key={`c-${ri}-${ci}`} style={{ flex: 1, minWidth: cellMinW, paddingHorizontal: 12, paddingVertical: 9, borderRightWidth: ci < colCount - 1 ? StyleSheet.hairlineWidth : 0, borderRightColor: borderC }}>
+                <Text style={{ color: subC, fontSize: 13, lineHeight: 18 }} selectable>{row[ci] ?? ''}</Text>
+              </View>
+            ))}
+          </View>
+        ))}
+      </View>
+    </ScrollView>
+  );
+});
+
+// ── Inline segment renderer helper (for paragraph blocks) ─────────────────────
+function renderInlineSegments(
+  content: string,
+  handlePhonePress: (n: string) => void,
+  handleLinkPress: (u: string) => void
+) {
+  return parseInlineMarkdown(content).map((seg, si) => {
+    if (seg.type === 'strikethrough') return <Text key={si} style={{ textDecorationLine: 'line-through', opacity: 0.62 }}>{seg.content}</Text>;
+    if (seg.type === 'bold') return <Text key={si} style={{ fontWeight: '700' }}>{seg.content}</Text>;
+    if (seg.type === 'italic') return <Text key={si} style={{ fontStyle: 'italic' }}>{seg.content}</Text>;
+    if (seg.type === 'code_inline') return <Text key={si} style={{ fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', backgroundColor: 'rgba(128,128,128,0.15)', borderRadius: 4 }}>{' '}{seg.content}{' '}</Text>;
+    if (seg.type === 'phone') return <Text key={si} style={{ color: '#34C759', textDecorationLine: 'underline' }} onPress={() => handlePhonePress(seg.content)}>{seg.content}</Text>;
+    if (seg.type === 'link') return <Text key={si} style={{ color: '#007AFF', textDecorationLine: 'underline' }} onPress={() => handleLinkPress(seg.url || seg.content)}>{seg.content}</Text>;
+    return <Text key={si}>{seg.content}</Text>;
+  });
 }
 
 // ── Main MessageItem ──────────────────────────────────────────────────────────
@@ -581,10 +577,7 @@ export const MessageItem = memo(function MessageItem({
   const supabase = getSupabaseClient();
   const ttsSound = useRef<any>(null);
   const [ttsPlaying, setTtsPlaying] = useState(false);
-
-  // For group chat: show sender label above assistant messages
-  const showSenderLabel = !isUser;
-
+  const [ttsLoading, setTtsLoading] = useState(false);
   const [phoneModalVisible, setPhoneModalVisible] = useState(false);
   const [pendingPhone, setPendingPhone] = useState('');
   const [imageViewerVisible, setImageViewerVisible] = useState(false);
@@ -595,12 +588,8 @@ export const MessageItem = memo(function MessageItem({
   const [linkSafetyVisible, setLinkSafetyVisible] = useState(false);
   const [pendingLink, setPendingLink] = useState('');
 
-  const [ttsLoading, setTtsLoading] = useState(false);
-
-  // ── TTS: read message aloud using user-selected voice ─────────────────────
   const handleReadAloud = useCallback(async () => {
     if (ttsPlaying || ttsLoading) {
-      // Stop current playback
       try { ttsSound.current?.stopAsync(); ttsSound.current?.unloadAsync(); } catch {}
       ttsSound.current = null;
       try { Speech.stop(); } catch {}
@@ -619,7 +608,6 @@ export const MessageItem = memo(function MessageItem({
       setTtsLoading(false);
       if (error || !data) throw new Error('TTS failed');
       if (data.fallback === true || data.code === 'USE_DEVICE_TTS') {
-        // Device TTS fallback
         try { Speech.stop(); } catch {}
         setTtsPlaying(true);
         Speech.speak(text, { language: data.lang || 'en-US', rate: 1.0, onDone: () => setTtsPlaying(false), onError: () => setTtsPlaying(false) });
@@ -636,14 +624,12 @@ export const MessageItem = memo(function MessageItem({
       });
     } catch (_e) {
       setTtsLoading(false);
-      // Device TTS as final fallback
       try { Speech.stop(); } catch {}
       setTtsPlaying(true);
       Speech.speak(text, { language: 'en-US', rate: 1.0, onDone: () => setTtsPlaying(false), onError: () => setTtsPlaying(false) });
     }
   }, [message.content, settings, supabase, ttsPlaying, ttsLoading]);
 
-  // Cleanup TTS on unmount
   useEffect(() => {
     return () => {
       try { ttsSound.current?.stopAsync(); ttsSound.current?.unloadAsync(); } catch {}
@@ -654,23 +640,17 @@ export const MessageItem = memo(function MessageItem({
   const content = message.content || '';
   const isSelfHarm = isUser && containsSelfHarm(content);
 
-  // Extract image URLs from assistant messages
   const embeddedImages: Array<{ url: string; title?: string }> = [];
   if (!isUser) {
     const imgMatches = content.match(IMAGE_URL_REGEX);
     if (imgMatches) {
       imgMatches.forEach(url => {
-        if (!embeddedImages.find(i => i.url === url)) {
-          embeddedImages.push({ url });
-        }
+        if (!embeddedImages.find(im => im.url === url)) embeddedImages.push({ url });
       });
     }
   }
 
-  // Send image from grid to parent chat as an attachment
   const handleSendImageToChat = useCallback((url: string) => {
-    // Navigate back and attach; we pass via a global event approach
-    // Just open fullscreen + copy URL for now — caller handles attach
     Clipboard.setStringAsync(url).catch(() => {});
     Alert.alert('Image URL Copied', 'Paste it or the parent will attach it automatically.');
   }, []);
@@ -683,13 +663,7 @@ export const MessageItem = memo(function MessageItem({
   const handleLinkPress = useCallback((url: string) => {
     if (!url) return;
     const isImage = /\.(jpg|jpeg|png|webp|gif)/i.test(url);
-    if (isImage) {
-      setViewerImages([url]);
-      setViewerIndex(0);
-      setImageViewerVisible(true);
-      return;
-    }
-    // Show link safety modal for external links
+    if (isImage) { setViewerImages([url]); setViewerIndex(0); setImageViewerVisible(true); return; }
     setPendingLink(url);
     setLinkSafetyVisible(true);
   }, []);
@@ -704,45 +678,106 @@ export const MessageItem = memo(function MessageItem({
     setLinkSafetyVisible(false);
     const url = pendingLink;
     if (!url) return;
-    try {
-      await WebBrowser.openBrowserAsync(url);
-    } catch (_e) {
-      Linking.openURL(url).catch(() => {});
-    }
+    try { await WebBrowser.openBrowserAsync(url); }
+    catch (_e) { Linking.openURL(url).catch(() => {}); }
   }, [pendingLink]);
 
   // ── User message ──────────────────────────────────────────────────────────
   if (isUser) {
-    // Safety intercept
-    if (isSelfHarm) {
-      return <SafetyResponse />;
-    }
+    if (isSelfHarm) return <SafetyResponse />;
 
-    // Support both camelCase (imageUrl) and snake_case (image_url) field names
+    // Strip system/file context from displayed user content
+    const cleanUserContent = (() => {
+      let c = content;
+      // Remove [FILE ATTACHED: ...] blocks
+      c = c.replace(/\n*\[FILE ATTACHED:[^\n]*\n[\s\S]*?(?=\n\[FILE ATTACHED:|\n\[VIDEO ATTACHED:|$)/gi, '');
+      c = c.replace(/\n*\[FILE ATTACHED:[^\]]*\][^\n]*/gi, '');
+      // Remove [VIDEO ATTACHED: ...] blocks
+      c = c.replace(/\n*\[VIDEO ATTACHED:[^\n]*/gi, '');
+      // Remove [SYSTEM: ...] and [SYSTEM RULES: ...] prefix blocks
+      c = c.replace(/^\[SYSTEM:[\s\S]*?\]\s*/i, '');
+      c = c.replace(/^\[SYSTEM RULES:[\s\S]*?\]\n*/i, '');
+      // Remove [Replying to ...] prefix
+      c = c.replace(/^\[Replying to[^\]]*\]\n*/i, '');
+      return c.trim();
+    })();
+
+    // Extract file attachment metadata for display as cards
+    const fileAttachments: Array<{ name: string; mimeType: string }> = [];
+    const _fm = content.match(/\[FILE ATTACHED: ([^\n(]+)\s*\(([^)]+)\)/g) || [];
+    _fm.forEach((m: string) => {
+      const nm = m.match(/\[FILE ATTACHED: ([^\n(]+)\s*\(([^)]+)\)/);
+      if (nm) fileAttachments.push({ name: nm[1].trim(), mimeType: nm[2].trim() });
+    });
+    const _vm = content.match(/\[VIDEO ATTACHED: ([^\]\n]+)/g) || [];
+    _vm.forEach((m: string) => {
+      const nm = m.match(/\[VIDEO ATTACHED: ([^\]\n]+)/);
+      if (nm) fileAttachments.push({ name: nm[1].trim(), mimeType: 'video' });
+    });
+
     const displayImage = message.imageUrl || (message as any).image_url || null;
-    // Determine if message has media — media messages cannot be edited
-    const hasMedia = !!displayImage || !!(message as any).file_url;
+    const multiImages: string[] = (() => {
+      const raw = (message as any).image_urls;
+      if (Array.isArray(raw) && raw.length > 0) return raw;
+      if (typeof raw === 'string') {
+        try { const p = JSON.parse(raw); if (Array.isArray(p)) return p; } catch {}
+        return raw.split(',').map((s: string) => s.trim()).filter(Boolean);
+      }
+      return displayImage ? [displayImage] : [];
+    })();
+    const hasValidImage = multiImages.length > 0;
 
     return (
       <>
         <View style={userStyles.container}>
-          {displayImage ? (
-            <TouchableOpacity
-              onPress={() => handleImagePress(displayImage, [displayImage], 0)}
-              activeOpacity={0.88}
-              style={{ alignSelf: 'flex-end', marginHorizontal: 16, marginBottom: content ? 6 : 0 }}
-            >
-              <Image
-                source={{ uri: displayImage }}
-                style={{ width: 220, height: 220, borderRadius: 18 }}
-                contentFit="cover"
-                transition={200}
-              />
+          {/* Image attachments */}
+          {hasValidImage && multiImages.length > 1 ? (
+            <View style={{ alignSelf: 'flex-end', marginHorizontal: 16, marginBottom: cleanUserContent ? 6 : 0 }}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }} style={{ maxHeight: 180 }}>
+                {multiImages.map((uri, idx) => (
+                  <TouchableOpacity key={`user-img-${idx}`} onPress={() => handleImagePress(uri, multiImages, idx)} activeOpacity={0.88}>
+                    <Image source={{ uri }} style={{ width: 150, height: 150, borderRadius: 14 }} contentFit="cover" transition={200} />
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          ) : hasValidImage ? (
+            <TouchableOpacity onPress={() => handleImagePress(multiImages[0], multiImages, 0)} activeOpacity={0.88} style={{ alignSelf: 'flex-end', marginHorizontal: 16, marginBottom: cleanUserContent ? 6 : 0 }}>
+              <Image source={{ uri: multiImages[0] }} style={{ width: 220, height: 220, borderRadius: 18 }} contentFit="cover" transition={200} />
             </TouchableOpacity>
           ) : null}
-          {content ? (
+
+          {/* File attachment cards */}
+          {fileAttachments.length > 0 ? (
+            <View style={{ alignSelf: 'flex-end', marginHorizontal: 16, marginBottom: cleanUserContent ? 6 : 0, gap: 5 }}>
+              {fileAttachments.map((fa, fi) => {
+                const isVideo = fa.mimeType.includes('video');
+                const isPdf = fa.mimeType.includes('pdf');
+                const isDoc = fa.mimeType.includes('doc') || fa.mimeType.includes('word');
+                const isSheet = fa.mimeType.includes('sheet') || fa.mimeType.includes('excel') || fa.mimeType.includes('csv');
+                const iconName: any = isVideo ? 'videocam' : isPdf ? 'document-text' : isDoc ? 'document-text' : isSheet ? 'grid' : 'attach';
+                const iconColor = isVideo ? '#FF6B35' : isPdf ? '#FF3B30' : isDoc ? '#007AFF' : isSheet ? '#34C759' : colors.primary;
+                const extRaw = fa.mimeType.split('/').pop() || 'file';
+                const ext = extRaw.replace('vnd.', '').slice(0, 8).toUpperCase();
+                return (
+                  <View key={`fa-${fi}`} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? 'rgba(44,44,46,0.96)' : 'rgba(235,235,240,0.98)', borderRadius: 13, paddingHorizontal: 11, paddingVertical: 9, gap: 9, maxWidth: 256, borderWidth: StyleSheet.hairlineWidth, borderColor: isDark ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.07)' }}>
+                    <View style={{ width: 34, height: 34, borderRadius: 8, backgroundColor: iconColor + '22', alignItems: 'center', justifyContent: 'center' }}>
+                      <Ionicons name={iconName} size={17} color={iconColor} />
+                    </View>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600' }} numberOfLines={1}>{fa.name}</Text>
+                      <Text style={{ color: colors.textSecondary, fontSize: 11, marginTop: 1 }}>{ext}</Text>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          ) : null}
+
+          {/* Text bubble */}
+          {cleanUserContent ? (
             <View style={[userStyles.bubble, { backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA' }]}>
-              <Text style={[userStyles.text, { color: colors.text }]}>{content}</Text>
+              <Text style={[userStyles.text, { color: colors.text }]}>{cleanUserContent}</Text>
               {message.isEdited ? (
                 <Text style={{ color: colors.textSecondary, fontSize: 11, marginTop: 4, textAlign: 'right' }}>Edited</Text>
               ) : null}
@@ -750,7 +785,7 @@ export const MessageItem = memo(function MessageItem({
           ) : null}
         </View>
 
-        {displayImage ? (
+        {hasValidImage ? (
           <Modal visible={imageViewerVisible} transparent animationType="fade" onRequestClose={() => setImageViewerVisible(false)} statusBarTranslucent>
             <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.93)', justifyContent: 'center', alignItems: 'center' }}>
               <TouchableOpacity style={{ position: 'absolute', top: Platform.OS === 'ios' ? 56 : 24, right: 20, zIndex: 10, width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' }} onPress={() => setImageViewerVisible(false)}>
@@ -767,54 +802,40 @@ export const MessageItem = memo(function MessageItem({
 
   // ── Assistant message ─────────────────────────────────────────────────────
   const blocks = parseMarkdownBlocks(content);
-  const allImageUrls = embeddedImages.map(i => i.url);
+  const allImageUrls = embeddedImages.map(im => im.url);
 
   return (
     <>
-      <View style={[assistantStyles.container]}>
+      <View style={assistantStyles.container}>
         <View style={assistantStyles.inner}>
-          {/* AI Thinking indicator */}
           {isGenerating && blocks.length === 0 ? (
             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8, gap: 8 }}>
-              <View style={{
-                width: 24,
-                height: 24,
-                borderRadius: 12,
-                backgroundColor: isDark ? '#FFFFFF' : '#000000',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}>
-                <View style={{
-                  width: 10,
-                  height: 10,
-                  borderRadius: 5,
-                  backgroundColor: isDark ? '#000000' : '#FFFFFF',
-                }} />
+              <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: isDark ? '#FFFFFF' : '#000000', alignItems: 'center', justifyContent: 'center' }}>
+                <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: isDark ? '#000000' : '#FFFFFF' }} />
               </View>
               <Text style={{ color: colors.textSecondary, fontSize: 14, fontWeight: '500' }}>Thinking...</Text>
             </View>
           ) : null}
+
           {blocks.map((block, bi) => {
+            // Code block
             if (block.type === 'code') {
               return (
                 <View key={bi} style={{ marginVertical: 6 }}>
-                  <CodeBlock
-                    code={block.content}
-                    language={block.language || 'plaintext'}
-                    isAdmin={isAdmin}
-                  />
+                  <CodeBlock code={block.content} language={block.language || 'plaintext'} isAdmin={isAdmin} />
                 </View>
               );
             }
 
+            // Heading
             if (block.type === 'heading') {
               const fontSize = block.level === 1 ? 22 : block.level === 2 ? 19 : block.level === 3 ? 17 : 16;
-              const fontWeight = block.level === 1 ? '800' : block.level === 2 ? '700' : '600';
+              const fontWeight: any = block.level === 1 ? '800' : block.level === 2 ? '700' : '600';
               return (
                 <View key={bi} style={{ marginTop: bi > 0 ? 14 : 4, marginBottom: 4 }}>
                   <InlineText
                     text={block.content}
-                    textStyle={{ fontSize, fontWeight, color: colors.text, lineHeight: fontSize * 1.3 } as any}
+                    textStyle={{ fontSize, fontWeight, color: colors.text, lineHeight: fontSize * 1.3 }}
                     onPhonePress={handlePhonePress}
                     onLinkPress={handleLinkPress}
                   />
@@ -822,31 +843,28 @@ export const MessageItem = memo(function MessageItem({
               );
             }
 
+            // Divider — modern gradient-style separator
             if (block.type === 'divider') {
-              return <View key={bi} style={{ height: 1, backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)', marginVertical: 12 }} />;
+              return (
+                <View key={bi} style={{ marginVertical: 14, alignItems: 'center' }}>
+                  <View style={{ width: '100%', height: 1, position: 'relative' }}>
+                    <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)', borderRadius: 1 }} />
+                    <View style={{ position: 'absolute', left: '12%', right: '12%', top: 0, bottom: 0, backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)', borderRadius: 1 }} />
+                    <View style={{ position: 'absolute', left: '36%', right: '36%', top: -0.5, height: 2, backgroundColor: isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.15)', borderRadius: 1 }} />
+                  </View>
+                </View>
+              );
             }
 
+            // Blockquote — ChatGPT/Notion style
             if (block.type === 'blockquote') {
               return (
-                <View key={bi} style={{ borderLeftWidth: 3, borderLeftColor: colors.primary, paddingLeft: 12, marginVertical: 4, opacity: 0.85 }}>
-                  <InlineText
-                    text={block.content}
-                    textStyle={{ fontSize: 15, color: colors.textSecondary, lineHeight: 22, fontStyle: 'italic' } as any}
-                    onPhonePress={handlePhonePress}
-                    onLinkPress={handleLinkPress}
-                  />
-                </View>
-              );
-            }
-
-            if (block.type === 'bullet') {
-              return (
-                <View key={bi} style={{ flexDirection: 'row', marginVertical: 2, paddingLeft: 4 }}>
-                  <Text style={{ color: colors.text, fontSize: 16, marginRight: 8, marginTop: 1, lineHeight: 24 }}>{'\u2022'}</Text>
-                  <View style={{ flex: 1 }}>
+                <View key={bi} style={{ flexDirection: 'row', marginVertical: 6, borderRadius: 10, overflow: 'hidden', backgroundColor: isDark ? 'rgba(99,102,241,0.09)' : 'rgba(99,102,241,0.065)' }}>
+                  <View style={{ width: 3.5, backgroundColor: colors.primary, borderRadius: 2 }} />
+                  <View style={{ flex: 1, paddingHorizontal: 13, paddingVertical: 10 }}>
                     <InlineText
                       text={block.content}
-                      textStyle={{ fontSize: 16, color: colors.text, lineHeight: 24 } as any}
+                      textStyle={{ fontSize: 15, color: isDark ? 'rgba(255,255,255,0.8)' : 'rgba(0,0,0,0.72)', lineHeight: 23, fontStyle: 'italic' }}
                       onPhonePress={handlePhonePress}
                       onLinkPress={handleLinkPress}
                     />
@@ -855,107 +873,68 @@ export const MessageItem = memo(function MessageItem({
               );
             }
 
+            // Table
+            if (block.type === 'table') {
+              return (
+                <View key={bi} style={{ marginVertical: 6 }}>
+                  <MarkdownTable rows={block.rows || []} hasHeader={block.hasHeader} isDark={isDark} colors={colors} />
+                </View>
+              );
+            }
+
+            // Bullet list
+            if (block.type === 'bullet') {
+              return (
+                <View key={bi} style={{ flexDirection: 'row', marginVertical: 2, paddingLeft: 4 }}>
+                  <Text style={{ color: colors.text, fontSize: 16, marginRight: 8, marginTop: 1, lineHeight: 24 }}>{'\u2022'}</Text>
+                  <View style={{ flex: 1 }}>
+                    <InlineText text={block.content} textStyle={{ fontSize: 16, color: colors.text, lineHeight: 24 }} onPhonePress={handlePhonePress} onLinkPress={handleLinkPress} />
+                  </View>
+                </View>
+              );
+            }
+
+            // Numbered list
             if (block.type === 'numbered') {
               const num = blocks.slice(0, bi).filter(b => b.type === 'numbered').length + 1;
               return (
                 <View key={bi} style={{ flexDirection: 'row', marginVertical: 2, paddingLeft: 4 }}>
                   <Text style={{ color: colors.primary, fontSize: 16, marginRight: 8, fontWeight: '700', minWidth: 22, lineHeight: 24 }}>{num}.</Text>
                   <View style={{ flex: 1 }}>
-                    <InlineText
-                      text={block.content}
-                      textStyle={{ fontSize: 16, color: colors.text, lineHeight: 24 } as any}
-                      onPhonePress={handlePhonePress}
-                      onLinkPress={handleLinkPress}
-                    />
+                    <InlineText text={block.content} textStyle={{ fontSize: 16, color: colors.text, lineHeight: 24 }} onPhonePress={handlePhonePress} onLinkPress={handleLinkPress} />
                   </View>
                 </View>
               );
             }
 
+            // Image
             if (block.type === 'image') {
               return (
-                <TouchableOpacity
-                  key={bi}
-                  onPress={() => handleImagePress(block.content, [block.content], 0)}
-                  activeOpacity={0.88}
-                  style={{ marginVertical: 8 }}
-                >
-                  <Image
-                    source={{ uri: block.content }}
-                    style={{ width: '100%', height: 220, borderRadius: 16 }}
-                    contentFit="cover"
-                    transition={200}
-                  />
+                <TouchableOpacity key={bi} onPress={() => handleImagePress(block.content, [block.content], 0)} activeOpacity={0.88} style={{ marginVertical: 8 }}>
+                  <Image source={{ uri: block.content }} style={{ width: '100%', height: 220, borderRadius: 16 }} contentFit="cover" transition={200} />
                 </TouchableOpacity>
               );
             }
 
-            if (block.type === 'sources') {
-              // Collected and rendered after the action row — skip here
-              return null;
-            }
+            // Sources — skip here, rendered after action row
+            if (block.type === 'sources') return null;
 
             // Paragraph
             if (block.type === 'paragraph') {
-              // Detect download links
               const urlsInPara = block.content.match(URL_REGEX) || [];
               const hasDownloadLink = urlsInPara.some(u => /\.(pdf|zip|doc|docx|xls|xlsx|csv|mp3|mp4|mov|apk)(\?|$)/i.test(u));
               if (hasDownloadLink) {
                 return (
                   <View key={bi} style={{ marginVertical: 3 }}>
-                    <InlineText
-                      text={block.content.replace(URL_REGEX, '').trim()}
-                      textStyle={{ fontSize: 16, color: colors.text, lineHeight: 25 } as any}
-                      onPhonePress={handlePhonePress}
-                      onLinkPress={handleLinkPress}
-                    />
-                    {urlsInPara.map((url, ui) => (
-                      <DownloadLinkCard key={ui} url={url} />
-                    ))}
+                    <InlineText text={block.content.replace(URL_REGEX, '').trim()} textStyle={{ fontSize: 16, color: colors.text, lineHeight: 25 }} onPhonePress={handlePhonePress} onLinkPress={handleLinkPress} />
+                    {urlsInPara.map((url, ui) => <DownloadLinkCard key={ui} url={url} />)}
                   </View>
                 );
               }
-
-              // Native text selection via selectable Text — works on both iOS & Android
-              const hasLinks = block.content.match(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)|https?:\/\/\S+/g);
-              if (hasLinks) {
-                // Render with inline links (non-selectable mode for rich content)
-                return (
-                  <View key={bi} style={{ marginVertical: 3 }}>
-                    <Text
-                      selectable
-                      selectionColor={colors.primary + '55'}
-                      style={{ fontSize: 16, color: colors.text, lineHeight: 25 }}
-                    >
-                      {parseInlineMarkdown(block.content).map((seg, si) => {
-                        if (seg.type === 'bold') return <Text key={si} style={{ fontWeight: '700' }}>{seg.content}</Text>;
-                        if (seg.type === 'italic') return <Text key={si} style={{ fontStyle: 'italic' }}>{seg.content}</Text>;
-                        if (seg.type === 'code_inline') return <Text key={si} style={{ fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', backgroundColor: 'rgba(128,128,128,0.15)', borderRadius: 4 }}>{' '}{seg.content}{' '}</Text>;
-                        if (seg.type === 'phone') return <Text key={si} style={{ color: '#34C759', textDecorationLine: 'underline' }} onPress={() => handlePhonePress(seg.content)}>{seg.content}</Text>;
-                        if (seg.type === 'link') return <Text key={si} style={{ color: '#007AFF', textDecorationLine: 'underline' }} onPress={() => handleLinkPress(seg.url || seg.content)}>{seg.content}</Text>;
-                        return <Text key={si}>{seg.content}</Text>;
-                      })}
-                    </Text>
-                  </View>
-                );
-              }
-
-              // Plain text paragraph — use selectable Text for full native selection
               return (
                 <View key={bi} style={{ marginVertical: 3 }}>
-                  <Text
-                    selectable
-                    selectionColor={colors.primary + '55'}
-                    style={{ fontSize: 16, color: colors.text, lineHeight: 25 }}
-                  >
-                    {parseInlineMarkdown(block.content).map((seg, si) => {
-                      if (seg.type === 'bold') return <Text key={si} style={{ fontWeight: '700' }}>{seg.content}</Text>;
-                      if (seg.type === 'italic') return <Text key={si} style={{ fontStyle: 'italic' }}>{seg.content}</Text>;
-                      if (seg.type === 'code_inline') return <Text key={si} style={{ fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', backgroundColor: 'rgba(128,128,128,0.15)', borderRadius: 4 }}>{' '}{seg.content}{' '}</Text>;
-                      if (seg.type === 'phone') return <Text key={si} style={{ color: '#34C759', textDecorationLine: 'underline' }} onPress={() => handlePhonePress(seg.content)}>{seg.content}</Text>;
-                      if (seg.type === 'link') return <Text key={si} style={{ color: '#007AFF', textDecorationLine: 'underline' }} onPress={() => handleLinkPress(seg.url || seg.content)}>{seg.content}</Text>;
-                      return <Text key={si}>{seg.content}</Text>;
-                    })}
+                  <Text selectable selectionColor={colors.primary + '55'} style={{ fontSize: 16, color: colors.text, lineHeight: 25 }}>
+                    {renderInlineSegments(block.content, handlePhonePress, handleLinkPress)}
                   </Text>
                 </View>
               );
@@ -964,82 +943,39 @@ export const MessageItem = memo(function MessageItem({
             return null;
           })}
 
-          {/* Horizontal scrollable image grid for images found in content */}
+          {/* Embedded image grid */}
           {embeddedImages.length > 0 ? (
-            <ImageGrid
-              images={embeddedImages}
-              onPress={(url, idx) => handleImagePress(url, allImageUrls, idx)}
-              onSendToChat={handleSendImageToChat}
-            />
+            <ImageGrid images={embeddedImages} onPress={(url, idx) => handleImagePress(url, allImageUrls, idx)} onSendToChat={handleSendImageToChat} />
           ) : null}
 
-          {/* Message attached image (from message.imageUrl in assistant messages) */}
+          {/* Attached image in assistant message */}
           {message.imageUrl && !isUser ? (
-            <TouchableOpacity
-              onPress={() => handleImagePress(message.imageUrl!, [message.imageUrl!], 0)}
-              activeOpacity={0.88}
-              style={{ marginTop: 10 }}
-            >
-              <Image
-                source={{ uri: message.imageUrl }}
-                style={{ width: '100%', height: 240, borderRadius: 16 }}
-                contentFit="cover"
-                transition={200}
-              />
+            <TouchableOpacity onPress={() => handleImagePress(message.imageUrl!, [message.imageUrl!], 0)} activeOpacity={0.88} style={{ marginTop: 10 }}>
+              <Image source={{ uri: message.imageUrl }} style={{ width: '100%', height: 240, borderRadius: 16 }} contentFit="cover" transition={200} />
             </TouchableOpacity>
           ) : null}
 
-          {/* Action row: copy, like, unlike, ... — then Sources badge inline */}
+          {/* Action row */}
           {!isGenerating && !streaming && content ? (() => {
-            // Find sources block (if any) to render inline after actions
             const sourcesBlock = blocks.find(b => b.type === 'sources' && b.sources && b.sources.length > 0);
             return (
               <>
                 <View style={assistantStyles.actionRow}>
-                  {/* Copy */}
-                  <TouchableOpacity
-                    onPress={onCopy}
-                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                    style={assistantStyles.actionBtn}
-                  >
+                  <TouchableOpacity onPress={onCopy} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} style={assistantStyles.actionBtn}>
                     <Ionicons name="copy-outline" size={18} color={colors.textSecondary} />
                   </TouchableOpacity>
-                  {/* Like */}
-                  <TouchableOpacity
-                    onPress={() => onLike?.(message.id)}
-                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                    style={assistantStyles.actionBtn}
-                  >
-                    <Ionicons
-                      name={isLiked ? 'thumbs-up' : 'thumbs-up-outline'}
-                      size={18}
-                      color={isLiked ? '#10A37F' : colors.textSecondary}
-                    />
+                  <TouchableOpacity onPress={() => onLike?.(message.id)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} style={assistantStyles.actionBtn}>
+                    <Ionicons name={isLiked ? 'thumbs-up' : 'thumbs-up-outline'} size={18} color={isLiked ? '#10A37F' : colors.textSecondary} />
                   </TouchableOpacity>
-                  {/* Unlike — hidden when liked */}
                   {!isLiked ? (
-                    <TouchableOpacity
-                      onPress={() => onUnlike?.(message.id)}
-                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                      style={assistantStyles.actionBtn}
-                    >
-                      <Ionicons
-                        name={isUnliked ? 'thumbs-down' : 'thumbs-down-outline'}
-                        size={18}
-                        color={isUnliked ? '#FF453A' : colors.textSecondary}
-                      />
+                    <TouchableOpacity onPress={() => onUnlike?.(message.id)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} style={assistantStyles.actionBtn}>
+                      <Ionicons name={isUnliked ? 'thumbs-down' : 'thumbs-down-outline'} size={18} color={isUnliked ? '#FF453A' : colors.textSecondary} />
                     </TouchableOpacity>
                   ) : null}
-                  {/* Three dots — opens message action modal */}
-                  <TouchableOpacity
-                    onPress={() => onOpenActions?.(message)}
-                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                    style={assistantStyles.actionBtn}
-                  >
+                  <TouchableOpacity onPress={() => onOpenActions?.(message)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} style={assistantStyles.actionBtn}>
                     <Ionicons name="ellipsis-horizontal" size={18} color={colors.textSecondary} />
                   </TouchableOpacity>
                 </View>
-                {/* Sources badge — inline immediately after the action row */}
                 {sourcesBlock ? (
                   <SourcesBadge
                     sources={sourcesBlock.sources!}
@@ -1061,13 +997,8 @@ export const MessageItem = memo(function MessageItem({
       </View>
 
       {/* Modals */}
-      <PhoneCallModal
-        visible={phoneModalVisible}
-        number={pendingPhone}
-        onClose={() => setPhoneModalVisible(false)}
-      />
+      <PhoneCallModal visible={phoneModalVisible} number={pendingPhone} onClose={() => setPhoneModalVisible(false)} />
 
-      {/* Inline full-screen image viewer */}
       <Modal visible={imageViewerVisible} transparent animationType="fade" onRequestClose={() => setImageViewerVisible(false)} statusBarTranslucent>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.93)', justifyContent: 'center', alignItems: 'center' }}>
           <TouchableOpacity style={{ position: 'absolute', top: Platform.OS === 'ios' ? 56 : 24, right: 20, zIndex: 10, width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' }} onPress={() => setImageViewerVisible(false)}>
@@ -1076,11 +1007,11 @@ export const MessageItem = memo(function MessageItem({
           <Image source={{ uri: viewerImages[viewerIndex] || '' }} style={{ width: Dimensions.get('window').width, height: Dimensions.get('window').height * 0.75 }} contentFit="contain" />
           {viewerImages.length > 1 ? (
             <View style={{ flexDirection: 'row', gap: 16, marginTop: 16 }}>
-              <TouchableOpacity onPress={() => setViewerIndex(i => Math.max(0, i - 1))} disabled={viewerIndex === 0}>
+              <TouchableOpacity onPress={() => setViewerIndex(im => Math.max(0, im - 1))} disabled={viewerIndex === 0}>
                 <Ionicons name="chevron-back" size={28} color={viewerIndex === 0 ? 'rgba(255,255,255,0.3)' : '#FFF'} />
               </TouchableOpacity>
               <Text style={{ color: '#FFF', fontSize: 14 }}>{viewerIndex + 1} / {viewerImages.length}</Text>
-              <TouchableOpacity onPress={() => setViewerIndex(i => Math.min(viewerImages.length - 1, i + 1))} disabled={viewerIndex === viewerImages.length - 1}>
+              <TouchableOpacity onPress={() => setViewerIndex(im => Math.min(viewerImages.length - 1, im + 1))} disabled={viewerIndex === viewerImages.length - 1}>
                 <Ionicons name="chevron-forward" size={28} color={viewerIndex === viewerImages.length - 1 ? 'rgba(255,255,255,0.3)' : '#FFF'} />
               </TouchableOpacity>
             </View>
@@ -1088,18 +1019,8 @@ export const MessageItem = memo(function MessageItem({
         </View>
       </Modal>
 
-      <SourcesModal
-        visible={sourcesModalVisible}
-        sources={sourcesData}
-        onClose={() => setSourcesModalVisible(false)}
-      />
-
-      <LinkSafetyModal
-        visible={linkSafetyVisible}
-        url={pendingLink}
-        onClose={() => setLinkSafetyVisible(false)}
-        onConfirm={handleLinkConfirm}
-      />
+      <SourcesModal visible={sourcesModalVisible} sources={sourcesData} onClose={() => setSourcesModalVisible(false)} />
+      <LinkSafetyModal visible={linkSafetyVisible} url={pendingLink} onClose={() => setLinkSafetyVisible(false)} onConfirm={handleLinkConfirm} />
     </>
   );
 });

@@ -63,6 +63,7 @@ import { AIMode } from '../components/AIModeSelectorModal';
 import { CalculatorModal, CalculatorCard, detectMathExpression } from '../components/CalculatorModal';
 import { SpotifyMusicCard, SpotifyLoadingOverlay, SpotifyTrack } from '../components/SpotifyMusicCard';
 import { ConnectedAppsModal, ConnectedApp } from '../components/ConnectedAppsModal';
+import { WebView } from 'react-native-webview';
 // Gesture handler — loaded conditionally to avoid native crash when reanimated/gesture-handler is not linked 
 const noopGesture = {
   activeOffsetX: () => noopGesture,
@@ -86,7 +87,7 @@ import * as Haptics from 'expo-haptics';
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// ── Deep Researchs Progress Card ──────────────────────────────────────────────
+// ── Deep Researchs Progress Card  ──────────────────────────────────────────────
 const DeepResearchCard = memo(function DeepResearchCard({ step, label, done, colors }: { step: number; label: string; done: boolean; colors: any }) {
   const pulse = useRef(new Animated.Value(0.5)).current;
   useEffect(() => {
@@ -120,6 +121,24 @@ function isValidBase64(str: string): boolean {
     }
     return true;
   } catch (_e) { return false; }
+}
+
+// ── Content moderation ─────────────────────────────────────────────────────
+// These words are only blocked in TEXT messages. If user uploads an actual
+// explicit image, we let AI describe what it sees (image-only path).
+const TEXT_INAPPROPRIATE_KEYWORDS = [
+  'porn', 'porno', 'pornographic', 'sex girl', 'sex woman',
+  'sexual content', 'xxx', 'nsfw', 'explicit nudity', 'erotic', 'hentai',
+  'nude girl', 'nude woman', 'nude man', 'nude boy', 'naked girl',
+  'naked woman', 'naked man', 'create sex', 'generate sex', 'make sex',
+  'sex photo', 'sex image', 'sex picture', 'nude photo', 'nude image',
+  'create nude', 'generate nude', 'make nude', 'draw nude', 'draw sex',
+];
+// Only blocks pure text messages (not messages that come with an image upload)
+function isInappropriatePrompt(text: string, hasImageAttachment: boolean): boolean {
+  if (hasImageAttachment) return false; // let image path handle it
+  const lower = text.toLowerCase();
+  return TEXT_INAPPROPRIATE_KEYWORDS.some(kw => lower.includes(kw));
 }
 
 const INPUT_PERSIST_KEY = 'home_input_draft';
@@ -947,6 +966,43 @@ const imgOverlayStyles = StyleSheet.create({
   label: { color: 'rgba(255,255,255,0.82)', fontSize: 16, fontWeight: '500', letterSpacing: 0.2 },
 });
 
+// ── Shazam Card Styles ──────────────────────────────────────────────────────────────────────────
+const shazamCardStyles = StyleSheet.create({
+  tapCard: {
+    borderRadius: 20, padding: 28, alignItems: 'center', justifyContent: 'center',
+    minHeight: 200,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12, shadowRadius: 12, elevation: 6,
+  },
+  shazamCircle: {
+    width: 100, height: 100, borderRadius: 50,
+    backgroundColor: '#0D72EA', alignItems: 'center', justifyContent: 'center',
+  },
+  resultCard: {
+    borderRadius: 20, overflow: 'hidden',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12, shadowRadius: 12, elevation: 6,
+  },
+  albumArt: {
+    width: '100%', height: 220,
+  },
+  songInfo: {
+    padding: 16,
+  },
+  saveBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 8, backgroundColor: '#0D72EA',
+    borderRadius: 50, paddingVertical: 13, marginTop: 12,
+  },
+  playBtn: {
+    position: 'absolute', bottom: 16, right: 16,
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: '#FFF', alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15, shadowRadius: 6, elevation: 4,
+  },
+});
+
 function GroupMemberProfileContent({ member, isOwner, isAdmin, isDark, isSilenced, onClose, onRemove, onSilence, onReport, colors }: {
   member: GroupMember | null;
   isOwner: boolean;
@@ -1153,6 +1209,18 @@ export default function HomeScreen() {
   const [spotifyOverlayVisible, setSpotifyOverlayVisible] = useState(false);
   const [connectedAppsModalVisible, setConnectedAppsModalVisible] = useState(false);
 
+  // ── Shazam state ───────────────────────────────────────────────────────────────────────────
+  const [shazamConnected, setShazamConnected] = useState(false);
+  const [shazamActive, setShazamActive] = useState(false);
+  const [shazamCardVisible, setShazamCardVisible] = useState(false);
+  const [shazamResult, setShazamResult] = useState<any>(null);
+  const [shazamWebViewVisible, setShazamWebViewVisible] = useState(false);
+  const [shazamWebViewUrl, setShazamWebViewUrl] = useState('https://www.shazam.com');
+  const [shazamListening, setShazamListening] = useState(false);
+  const [shazamCarouselIndex, setShazamCarouselIndex] = useState(0);
+  const [atMentionModalVisible, setAtMentionModalVisible] = useState(false);
+  const [atMentionQuery, setAtMentionQuery] = useState('');
+
   const handleOpenMessageActions = useCallback((msg: any) => {
     setMsgActionsMsg(msg);
     setMsgActionsVisible(true);
@@ -1277,6 +1345,15 @@ export default function HomeScreen() {
     if (draftSaveTimer.current) clearTimeout(draftSaveTimer.current);
     draftSaveTimer.current = setTimeout(() => saveDraft(safeTxt), 300);
     try { setCodeLangChips(/```\w*$/.test(safeTxt)); } catch (_e) { setCodeLangChips(false); }
+    // @ mention — show app list popup with live filtering
+    const atMentionMatch = safeTxt.match(/@(\w*)$/);
+    if (atMentionMatch !== null) {
+      setAtMentionModalVisible(true);
+      setAtMentionQuery(atMentionMatch[1] || '');
+    } else {
+      setAtMentionModalVisible(false);
+      setAtMentionQuery('');
+    }
     if (groupChatMode) {
       const atMatch = safeTxt.match(/@(\w*)$/);
       if (atMatch !== null) { setMentionQuery(atMatch[1] || ''); setShowMentionPopup(true); }
@@ -1471,6 +1548,9 @@ export default function HomeScreen() {
         setSpotifyHasAccount(results[1][1] === 'true');
         // spotifyActive is intentionally NOT set here — chip only shows after explicit user action
       }).catch(() => {});
+      AsyncStorage.getItem('shazam_connected').then(val => {
+        setShazamConnected(val === 'true');
+      }).catch(() => {});
       return () => { slideAnim.setValue(100); };
     }, [])
   );
@@ -1632,6 +1712,15 @@ export default function HomeScreen() {
     }
   };
 
+  const cancelVoiceRecording = useCallback(async () => {
+    if (stopTimeoutRef.current) { clearTimeout(stopTimeoutRef.current); stopTimeoutRef.current = null; }
+    if (processingTimeoutRef.current) { clearTimeout(processingTimeoutRef.current); processingTimeoutRef.current = null; }
+    await cleanupRecording();
+    setRecordingState('idle');
+    setRecordingDuration(0);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  }, [cleanupRecording]);
+
   const stopVoiceRecording = async () => {
     if (!recordingRef.current || !isRecordingRef.current) return;
     if (stopTimeoutRef.current) { clearTimeout(stopTimeoutRef.current); stopTimeoutRef.current = null; }
@@ -1667,10 +1756,9 @@ export default function HomeScreen() {
   };
 
   const toggleRecording = useCallback(() => {
-    if (processingTimeoutRef.current) { clearTimeout(processingTimeoutRef.current); processingTimeoutRef.current = null; }
     if (recordingState === 'idle') startVoiceRecording();
     else if (recordingState === 'recording') stopVoiceRecording();
-    else if (recordingState === 'processing') { setRecordingState('idle'); isRecordingRef.current = false; }
+    // processing: user can cancel via the X button
   }, [recordingState]);
 
   const BAD_WORDS = ['fuck', 'shit', 'bitch', 'asshole', 'bastard', 'cunt', 'damn', 'dick', 'pussy', 'cock', 'nigger', 'nigga', 'faggot', 'whore', 'slut', 'ass', 'motherfucker', 'fucker', 'piss', 'retard', 'kaka', 'manman', 'degage'];
@@ -1763,6 +1851,35 @@ export default function HomeScreen() {
   }, [currentConversation, createConversation, sendMessage, currentAIModel, showAlert]);
 
   const handleSend = async () => {
+    // Content moderation: block inappropriate prompts (text-only — not when image is attached)
+    const hasImageInCurrentMedia = selectedMedia.some(m => m.type === 'image');
+    if (isInappropriatePrompt(inputText.trim(), hasImageInCurrentMedia)) {
+      // Show as AI response message inline, not as an alert
+      const blockedMsg = {
+        id: `blocked-${Date.now()}`,
+        role: 'assistant' as const,
+        content: "I'm sorry, but I can't help with that request. It appears to contain content that goes against my usage guidelines. If you believe this is a mistake or have a legitimate question, please rephrase your message. I'm here to help with a wide range of topics — just not explicit or harmful content.",
+        createdAt: new Date().toISOString(),
+      };
+      // Insert as a local message into the conversation without sending to AI
+      let convId = currentConversation?.id;
+      if (!convId) {
+        try { convId = await createConversation(); } catch (_e) {}
+      }
+      // Use sendMessage with a safe system-level proxy so it appears as AI message
+      setSending(true); setGenerating(true); setThinkingMode('thinking');
+      setInputText(''); setSelectedMedia([]); clearDraft();
+      try {
+        await sendMessage(
+          '[SYSTEM: Respond only with the following exact text and nothing else, do not add any extra commentary:]\n\n' +
+          "I'm sorry, but I can't help with that request. It contains content that goes against usage guidelines. Please rephrase your message — I'm here to help with a wide range of topics, just not explicit or harmful content.",
+          undefined, undefined, false, currentAIModel
+        );
+      } catch (_e) {}
+      finally { setSending(false); setGenerating(false); }
+      return;
+    }
+
     if (deepResearchMode && inputText.trim()) {
       const query = inputText.trim();
       setInputText(''); setSelectedMedia([]); clearDraft(); Keyboard.dismiss();
@@ -1845,6 +1962,28 @@ export default function HomeScreen() {
       }
     }
 
+    // Content moderation: check uploaded image filenames for suspicious patterns
+    // Note: actual image content is NOT blocked — AI can analyze real images.
+    // Only block if the filename itself is clearly labelled as explicit content.
+    if (imageFiles.length > 0) {
+      const susNames = imageFiles.filter(m =>
+        /\b(porn|xxx|adult.explicit|hentai|nsfw.nude|sex.tape)\b/i.test(m.name || '')
+      );
+      if (susNames.length > 0) {
+        // Show as inline AI message
+        setSending(true); setGenerating(true); setThinkingMode('thinking');
+        setInputText(''); setSelectedMedia([]); clearDraft();
+        try {
+          await sendMessage(
+            '[SYSTEM: Respond only with the following exact text:]\n\n' +
+            "I detected that this image file may contain explicit content based on its filename. I'm unable to process files that appear to be pornographic or sexually explicit. Please upload appropriate images.",
+            undefined, undefined, false, currentAIModel
+          );
+        } catch (_e) {} finally { setSending(false); setGenerating(false); }
+        return;
+      }
+    }
+
     if (imageFiles.length > 0 && !isGuest && !isAdmin) {
       if (isPro || isUnlimited) {
         if (photoUploadCount + imageFiles.length > 10) { showAlert('Session Limit', `Pro/Plus plan allows 10 photo uploads per session.`); return; }
@@ -1905,9 +2044,32 @@ export default function HomeScreen() {
     }
 
     setInputText(''); setSelectedMedia([]); setEditingMessageId(null); clearDraft();
-    // Clear previous Spotify results on new message
     setSpotifyResults([]);
     setSpotifySearchQuery('');
+
+    // ── Shazam dominant mode: when chip active, show inline card (stays in app) ──
+    if (shazamActive) {
+      setShazamCardVisible(true);
+      setShazamResult(null);
+      setShazamCarouselIndex(0);
+      Keyboard.dismiss();
+      // Send the message text to AI as context
+      const shazamText = currentText || 'What song is this?';
+      setInputText(''); setSelectedMedia([]); clearDraft();
+      setSending(true); setGenerating(true); setThinkingMode('thinking');
+      let shazamConvId = currentConversation?.id;
+      if (!shazamConvId) { try { shazamConvId = await createConversation(); } catch (_e) {} }
+      if (shazamConvId) {
+        try { await sendMessage(shazamText, undefined, undefined, false, currentAIModel); } catch (_e) {}
+      }
+      setSending(false); setGenerating(false);
+      return;
+    }
+
+    if (!shazamActive) {
+      setShazamCardVisible(false);
+      setShazamResult(null);
+    }
 
     // ── Spotify dominant mode: when chip is active, ALL messages go to Spotify ──
     if (spotifyActive) {
@@ -1945,25 +2107,43 @@ export default function HomeScreen() {
       }
 
       let base64Image: string | undefined;
+      let firstImageUri: string | undefined; // for local preview
       let fileContextStr = '';
       let filePayloadArr: Array<{name: string; type: string; content: string}> = [];
       for (const media of currentMedia) {
         if (media.type === 'image') {
           if (!base64Image) {
-            if (media.base64) { base64Image = media.base64; }
-            else if (media.uri) { try { base64Image = await FileSystem.readAsStringAsync(media.uri, { encoding: FileSystem.EncodingType.Base64 }); } catch (e) {} }
+            if (!firstImageUri) firstImageUri = media.uri;
+            try {
+              let raw: string;
+              if (media.base64) {
+                raw = media.base64;
+              } else {
+                raw = await FileSystem.readAsStringAsync(media.uri, { encoding: FileSystem.EncodingType.Base64 });
+              }
+              base64Image = raw.replace(/^data:image\/[a-z+]+;base64,/i, '');
+              if (!base64Image || base64Image.length < 100) base64Image = undefined;
+            } catch (e) {
+              console.log('[Home] base64 read error:', e);
+            }
           }
         } else if (media.type === 'document') {
           try {
             const rawContent = await FileSystem.readAsStringAsync(media.uri, { encoding: FileSystem.EncodingType.UTF8 });
-            const preview = rawContent.slice(0, 12000);
-            filePayloadArr.push({ name: media.name || 'document', type: media.mimeType || 'text/plain', content: preview + (rawContent.length > 12000 ? '\n...(truncated)' : '') });
-            fileContextStr += `\n\n[File: ${media.name || 'document'}]\n${preview}`;
+            const preview = rawContent.slice(0, 14000);
+            const truncated = rawContent.length > 14000;
+            filePayloadArr.push({
+              name: media.name || 'document',
+              type: media.mimeType || 'text/plain',
+              content: preview + (truncated ? '\n...(content truncated for length)' : '')
+            });
+            // Only add a minimal reference tag — NOT the full content (to avoid bloating user bubble)
+            fileContextStr += `\n\n[FILE ATTACHED: ${media.name || 'document'} (${media.mimeType || 'text'})]`;
           } catch (e) {
-            fileContextStr += `\n\n[Attached file: ${media.name || 'document'} (${media.mimeType || 'binary'})]`;
+            fileContextStr += `\n\n[FILE ATTACHED: ${media.name || 'document'} (binary/unreadable)]`;
           }
         } else if (media.type === 'video') {
-          fileContextStr += `\n\n[Video attached: ${media.name || 'video.mp4'} — please describe/analyze this video content]`;
+          fileContextStr += `\n\n[VIDEO ATTACHED: ${media.name || 'video.mp4'}]`;
         }
       }
 
@@ -1992,9 +2172,18 @@ export default function HomeScreen() {
         }
       } catch (_e) {}
 
-      await sendMessage(prefixedText, filePayloadArr.length > 0 ? filePayloadArr : undefined, base64Image, false, currentAIModel);
+      // Pass firstImageUri as local preview for the user message bubble
+      const imagePayload = base64Image ? base64Image : undefined;
+      await sendMessage(prefixedText, filePayloadArr.length > 0 ? filePayloadArr : undefined, imagePayload, false, currentAIModel);
       setShowCompletionStatus(true);
       setTimeout(() => setShowCompletionStatus(false), 2000);
+      // Shazam: show card when connected and query detected
+      if (!shazamActive && shazamConnected && isShazamQuery(currentText)) {
+        setShazamActive(true);
+        setShazamCardVisible(true);
+        setShazamResult(null);
+        setShazamCarouselIndex(0);
+      }
       // Spotify EDG Function: trigger when connected and music intent detected (non-dominant mode)
       if (!spotifyActive && spotifyConnected && isMusicQuery(currentText)) {
         const mq = currentText.replace(/(?:search|play|find|show me|get me|look for|listen to)/gi, '').trim() || currentText;
@@ -2048,6 +2237,25 @@ export default function HomeScreen() {
     return MUSIC_KEYWORDS_SPOTIFY.some(k => lower.includes(k));
   }, []);
 
+  // ── Shazam keyword detection
+  const isShazamQuery = useCallback((text: string): boolean => {
+    const lower = text.toLowerCase();
+    const shazamKws = [
+      '@shazam', 'ki music sa', 'what music is this', 'what song is this',
+      'what is this song', 'identify this song', 'find this song', 'find this music',
+      'what song is playing', 'recognize this song', 'name this song',
+      'shazam this', 'ki chanson sa', 'ki ti music sa', 'how can i find this music',
+      'what music is that', 'identify song', 'song recognition',
+      'what is that song', 'how can i find this music',
+      'name that tune', 'what is this music',
+      'kisa ki musik sa', 'kisa ki chanson sa', 'ki ti son sa',
+      'identify this music', 'what is playing', 'what is the song',
+      'music identification', 'find the song', 'detect song',
+      'shazam song', 'recognize music', 'find music playing',
+    ];
+    return shazamKws.some(k => lower.includes(k));
+  }, []);
+
   const searchSpotify = useCallback(async (query: string) => {
     setSpotifySearching(true);
     setSpotifyOverlayVisible(true);
@@ -2090,9 +2298,10 @@ export default function HomeScreen() {
     }
   }, [supabase]);
 
-  const connectedAppsList: ConnectedApp[] = spotifyConnected
-    ? [{ id: 'spotify', name: 'Spotify', description: 'Music and podcasts for you', color: '#1DB954' }]
-    : [];
+  const connectedAppsList: ConnectedApp[] = [
+    ...(spotifyConnected ? [{ id: 'spotify', name: 'Spotify', description: 'Music and podcasts for you', color: '#1DB954' }] : []),
+    ...(shazamConnected ? [{ id: 'shazam', name: 'Shazam', description: 'Identify any song playing around you', color: '#0D72EA' }] : []),
+  ];
 
   const handleCancelGeneration = useCallback(() => { setGenerating(false); }, []);
 
@@ -2494,11 +2703,13 @@ export default function HomeScreen() {
 
     if (selectedMedia.length === 1 && selectedMedia[0].type === 'image') {
       const media = selectedMedia[0];
+      // Use file URI for preview — never try to render raw base64 as Image source
+      const previewUri = media.uri;
       return (
         <View style={{ marginBottom: 8, flexDirection: 'row', alignItems: 'flex-start' }}>
           <View style={{ position: 'relative' }}>
             <View style={{ width: 72, height: 72, borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.1)' }}>
-              <ExpoImage source={{ uri: media.uri }} style={{ width: 72, height: 72 }} contentFit="cover" />
+              <ExpoImage source={{ uri: previewUri }} style={{ width: 72, height: 72 }} contentFit="cover" />
             </View>
             <TouchableOpacity style={{ position: 'absolute', top: -7, right: -7, width: 22, height: 22, borderRadius: 11, backgroundColor: isDark ? '#555' : '#888', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: isDark ? '#1C1C1E' : '#F0F0F5', zIndex: 10 }} onPress={() => removeMedia(0)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
               <Ionicons name="close" size={11} color="#FFF" />
@@ -2559,6 +2770,9 @@ export default function HomeScreen() {
     );
   }, [selectedMedia, removeMedia, colors, isDark]);
 
+  // Pre-render ToolsModal for instant open (mount once, toggle visibility)
+  // No changes needed — toolsVisible state already handles this
+
   const styles = useMemo(() => StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background, paddingTop: Platform.select({ ios: insets.top, android: StatusBar.currentHeight || 0, default: 0 }) },
     headerEmpty: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 10, backgroundColor: colors.background },
@@ -2596,8 +2810,8 @@ export default function HomeScreen() {
     suggestionSub: { color: colors.textSecondary, fontSize: 11, lineHeight: 15 },
     groupActionBtn: { borderRadius: 20, paddingHorizontal: 18, paddingVertical: 10, borderWidth: 1, borderColor: 'rgba(0,122,255,0.4)' },
     groupActionBtnText: { color: '#007AFF', fontSize: 15, fontWeight: '600' },
-    searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, margin: Spacing.md, paddingHorizontal: Spacing.md, borderRadius: BorderRadius.lg, height: 40 },
-    searchInput: { flex: 1, fontSize: 16, color: colors.text, marginLeft: Spacing.sm },
+    searchContainer: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: Spacing.md, marginVertical: 6, paddingHorizontal: 12, borderRadius: 22, height: 44 },
+    searchInput: { flex: 1, fontSize: 15, color: colors.text, paddingVertical: 0 },
   }), [colors, insets, isDark]);
 
   const showSendButton = inputText.trim().length > 0 || selectedMedia.length > 0;
@@ -2820,13 +3034,29 @@ export default function HomeScreen() {
               )}
 
               {isSearchMode ? (
-                <View style={styles.searchContainer}>
-                  <Ionicons name="search" size={20} color={colors.textSecondary} />
-                  <TextInput style={styles.searchInput} placeholder="Search messages..." placeholderTextColor={colors.textSecondary} value={searchQuery} onChangeText={setSearchQuery} autoFocus />
-                  <TouchableOpacity onPress={() => { setIsSearchMode(false); setSearchQuery(''); }}>
-                    <Ionicons name="close" size={20} color={colors.textSecondary} />
-                  </TouchableOpacity>
-                </View>
+                Platform.OS === 'ios' ? (
+                  <BlurView intensity={isDark ? 70 : 55} tint={isDark ? 'dark' : 'light'} style={[styles.searchContainer, { overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.1)' }]}>
+                    <Ionicons name="search" size={17} color={colors.textSecondary} />
+                    <TextInput style={styles.searchInput} placeholder="Search messages..." placeholderTextColor={colors.textSecondary} value={searchQuery} onChangeText={setSearchQuery} autoFocus clearButtonMode="while-editing" returnKeyType="search" />
+                    <TouchableOpacity onPress={() => { setIsSearchMode(false); setSearchQuery(''); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                      <Text style={{ color: colors.primary, fontSize: 15, fontWeight: '600' }}>Cancel</Text>
+                    </TouchableOpacity>
+                  </BlurView>
+                ) : (
+                  <View style={[styles.searchContainer, { backgroundColor: isDark ? 'rgba(44,44,50,0.95)' : 'rgba(235,235,242,0.95)', borderWidth: StyleSheet.hairlineWidth, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)' }]}>
+                    <Ionicons name="search" size={17} color={colors.textSecondary} />
+                    <TextInput style={styles.searchInput} placeholder="Search messages..." placeholderTextColor={colors.textSecondary} value={searchQuery} onChangeText={setSearchQuery} autoFocus returnKeyType="search" />
+                    {searchQuery.length > 0 ? (
+                      <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                        <Ionicons name="close-circle" size={17} color={colors.textSecondary} />
+                      </TouchableOpacity>
+                    ) : (
+                      <TouchableOpacity onPress={() => { setIsSearchMode(false); setSearchQuery(''); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                        <Text style={{ color: colors.primary, fontSize: 15, fontWeight: '600' }}>Cancel</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                )
               ) : null}
 
               <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
@@ -2932,6 +3162,145 @@ export default function HomeScreen() {
                               onConnectSpotify={() => router.push('/spotify-connect' as any)}
                             />
                           ) : null}
+                          {/* ── Shazam Card (in-chat, photo 5/7 style) ── */}
+                          {shazamCardVisible ? (
+                            <View style={{ marginHorizontal: 16, marginBottom: 12 }}>
+                              {/* Shazam label row */}
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                                <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: '#0D72EA', alignItems: 'center', justifyContent: 'center' }}>
+                                  <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+                                    <View style={{ width: 13, height: 13, borderRadius: 6.5, borderWidth: 2, borderColor: 'rgba(255,255,255,0.9)', borderBottomColor: 'transparent', borderLeftColor: 'transparent', transform: [{ rotate: '-45deg' }], marginBottom: -3 }} />
+                                    <View style={{ width: 13, height: 13, borderRadius: 6.5, borderWidth: 2, borderColor: 'rgba(255,255,255,0.9)', borderTopColor: 'transparent', borderRightColor: 'transparent', transform: [{ rotate: '-45deg' }], marginTop: -3 }} />
+                                  </View>
+                                </View>
+                                <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 15, fontWeight: '700' }}>Shazam</Text>
+                              </View>
+
+                              {/* Carousel: Card 1 = Tap to Shazam, Card 2 = Result */}
+                              <ScrollView
+                                horizontal
+                                pagingEnabled
+                                showsHorizontalScrollIndicator={false}
+                                scrollEnabled={!!shazamResult}
+                                style={{ width: Dimensions.get('window').width - 32 }}
+                                onMomentumScrollEnd={(e) => {
+                                  const idx = Math.round(e.nativeEvent.contentOffset.x / (Dimensions.get('window').width - 32));
+                                  setShazamCarouselIndex(idx);
+                                }}
+                              >
+                                {/* Card 1: Tap to listen */}
+                                <View style={{ width: Dimensions.get('window').width - 32 }}>
+                                  <TouchableOpacity
+                                    style={[shazamCardStyles.tapCard, { backgroundColor: isDark ? '#1C1C1E' : '#F8F8FA' }]}
+                                    onPress={() => { setShazamWebViewUrl('https://www.shazam.com'); setShazamWebViewVisible(true); setShazamListening(true); }}
+                                    activeOpacity={0.88}
+                                  >
+                                    <View style={shazamCardStyles.shazamCircle}>
+                                      <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+                                        <View style={{ width: 44, height: 44, borderRadius: 22, borderWidth: 6, borderColor: 'rgba(255,255,255,0.9)', borderBottomColor: 'transparent', borderLeftColor: 'transparent', transform: [{ rotate: '-45deg' }], marginBottom: -8 }} />
+                                        <View style={{ width: 44, height: 44, borderRadius: 22, borderWidth: 6, borderColor: 'rgba(255,255,255,0.9)', borderTopColor: 'transparent', borderRightColor: 'transparent', transform: [{ rotate: '-45deg' }], marginTop: -8 }} />
+                                      </View>
+                                    </View>
+                                    <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 18, fontWeight: '700', marginTop: 18, marginBottom: 6, textAlign: 'center' }}>
+                                      {shazamListening ? 'Listening...' : "Let's find and name your song"}
+                                    </Text>
+                                    <Text style={{ color: isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.5)', fontSize: 14 }}>Tap to get started</Text>
+                                  </TouchableOpacity>
+                                </View>
+
+                                {/* Card 2: Song result — only when Shazam identified */}
+                                {shazamResult ? (
+                                  <View style={{ width: Dimensions.get('window').width - 32 }}>
+                                    <TouchableOpacity
+                                      style={[shazamCardStyles.resultCard, { backgroundColor: isDark ? '#1C1C1E' : '#FFF' }]}
+                                      onPress={() => {
+                                        const url = shazamResult.shazamUrl || `https://www.shazam.com/search?term=${encodeURIComponent((shazamResult.title || '') + ' ' + (shazamResult.subtitle || ''))}`;
+                                        setShazamWebViewUrl(url);
+                                        setShazamWebViewVisible(true);
+                                      }}
+                                      activeOpacity={0.88}
+                                    >
+                                      {shazamResult.imageUrl ? (
+                                        <ExpoImage
+                                          source={{ uri: shazamResult.imageUrl }}
+                                          style={shazamCardStyles.albumArt}
+                                          contentFit="cover"
+                                          transition={200}
+                                        />
+                                      ) : (
+                                        <View style={[shazamCardStyles.albumArt, { backgroundColor: '#0D72EA', alignItems: 'center', justifyContent: 'center' }]}>
+                                          <Ionicons name="musical-notes" size={52} color="rgba(255,255,255,0.7)" />
+                                        </View>
+                                      )}
+                                      <View style={shazamCardStyles.songInfo}>
+                                        <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 19, fontWeight: '800', marginBottom: 4 }} numberOfLines={2}>{shazamResult.title || 'Song Found'}</Text>
+                                        <Text style={{ color: isDark ? 'rgba(255,255,255,0.65)' : 'rgba(0,0,0,0.6)', fontSize: 14, marginBottom: 4 }} numberOfLines={1}>{shazamResult.subtitle}</Text>
+                                        {shazamResult.count ? (
+                                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 12 }}>
+                                            <View style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: '#0D72EA', alignItems: 'center', justifyContent: 'center' }}>
+                                              <View style={{ width: 7, height: 7, borderRadius: 3.5, borderWidth: 1, borderColor: '#FFF', borderBottomColor: 'transparent', borderLeftColor: 'transparent', transform: [{ rotate: '-45deg' }], marginBottom: -1.5 }} />
+                                              <View style={{ width: 7, height: 7, borderRadius: 3.5, borderWidth: 1, borderColor: '#FFF', borderTopColor: 'transparent', borderRightColor: 'transparent', transform: [{ rotate: '-45deg' }], marginTop: -1.5 }} />
+                                            </View>
+                                            <Text style={{ color: isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.5)', fontSize: 12 }}>{shazamResult.count}</Text>
+                                          </View>
+                                        ) : null}
+                                        <TouchableOpacity
+                                          style={shazamCardStyles.saveBtn}
+                                          onPress={() => {
+                                            const storeUrl = Platform.OS === 'ios'
+                                              ? 'https://apps.apple.com/app/shazam-find-music-concerts/id284993459'
+                                              : 'https://play.google.com/store/apps/details?id=com.shazam.android';
+                                            Linking.openURL(storeUrl).catch(() => {});
+                                          }}
+                                          activeOpacity={0.8}
+                                        >
+                                          <Ionicons name="add" size={16} color="#FFF" />
+                                          <Text style={{ color: '#FFF', fontSize: 14, fontWeight: '700' }}>Save to Shazam</Text>
+                                        </TouchableOpacity>
+                                      </View>
+                                      <TouchableOpacity
+                                        style={shazamCardStyles.playBtn}
+                                        onPress={() => {
+                                          if (shazamResult.previewUrl) {
+                                            Linking.openURL(shazamResult.previewUrl).catch(() => {});
+                                          } else {
+                                            setShazamWebViewUrl(shazamResult.shazamUrl || 'https://www.shazam.com');
+                                            setShazamWebViewVisible(true);
+                                          }
+                                        }}
+                                        activeOpacity={0.8}
+                                      >
+                                        <Ionicons name="play" size={18} color="#000" style={{ marginLeft: 2 }} />
+                                      </TouchableOpacity>
+                                    </TouchableOpacity>
+                                  </View>
+                                ) : null}
+                              </ScrollView>
+
+                              {/* Carousel dots — only show when result is available */}
+                              {shazamResult ? (
+                                <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 6, marginTop: 10 }}>
+                                  {[0, 1].map(dotI => (
+                                    <View
+                                      key={dotI}
+                                      style={{
+                                        width: dotI === shazamCarouselIndex ? 18 : 6,
+                                        height: 6, borderRadius: 3,
+                                        backgroundColor: dotI === shazamCarouselIndex
+                                          ? '#0D72EA'
+                                          : (isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.18)'),
+                                      }}
+                                    />
+                                  ))}
+                                </View>
+                              ) : null}
+
+                              {/* Powered by Shazam */}
+                              <Text style={{ color: isDark ? 'rgba(255,255,255,0.38)' : 'rgba(0,0,0,0.38)', fontSize: 11, marginTop: 8 }}>
+                                Powered by Shazam
+                              </Text>
+                            </View>
+                          ) : null}
                           {(sending || generating) && !streamingMessageId ? (
                             <ThinkingIndicator
                               userMessage={(messages || []).length > 0 ? (messages || [])[(messages || []).length - 1].content : inputText}
@@ -3003,49 +3372,64 @@ export default function HomeScreen() {
 
               {/* Input Area */}
               <View style={[styles.inputContainer, Platform.OS === 'ios' && { backgroundColor: 'transparent' }]}>
-                {/* + button OUTSIDE (circular) when keyboard is visible */}
+                {/* + button OUTSIDE (circular, glassmorphism) when keyboard is visible */}
                 {keyboardVisible && !editingMessageId && !isRecording && !isProcessing ? (
                   <TouchableOpacity style={styles.addBtn} onPress={() => setToolsVisible(true)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-                    <View style={[styles.addBtnCircle, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)', borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)' }]}>
-                      <Ionicons name="add" size={22} color={colors.text} />
-                    </View>
+                    {Platform.OS === 'ios' ? (
+                      <BlurView intensity={isDark ? 72 : 56} tint={isDark ? 'dark' : 'light'} style={[styles.addBtnCircle, { overflow: 'hidden', borderColor: isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.11)' }]}>
+                        <Ionicons name="add" size={22} color={colors.text} />
+                      </BlurView>
+                    ) : (
+                      <View style={[styles.addBtnCircle, { backgroundColor: isDark ? 'rgba(60,60,68,0.92)' : 'rgba(240,240,248,0.92)', borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.09)' }]}>
+                        <Ionicons name="add" size={22} color={colors.text} />
+                      </View>
+                    )}
                   </TouchableOpacity>
                 ) : null}
 
                 <Pressable
-                  style={[styles.inputWrapper, { backgroundColor: Platform.OS === 'ios' ? 'transparent' : (isDark ? 'rgba(44,44,46,0.95)' : 'rgba(235,235,235,0.95)'), borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)' }]}
+                  style={[styles.inputWrapper, { backgroundColor: Platform.OS === 'ios' ? 'transparent' : (isDark ? 'rgba(44,44,46,0.95)' : 'rgba(235,235,235,0.95)'), borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.11)' }]}
                   onPress={() => inputRef.current?.focus()}
                 >
                   {Platform.OS === 'ios' ? (
                     <BlurView
-                      intensity={isDark ? 75 : 62}
-                      tint={isDark ? 'dark' : 'light'}
+                      intensity={isDark ? 95 : 82}
+                      tint={isDark ? 'dark' : 'extraLight'}
                       style={StyleSheet.absoluteFill}
                       pointerEvents="none"
                     />
                   ) : null}
                   {/* Spotify chip — shows when Spotify is connected */}
                   {spotifyActive ? (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
-                      <View style={{
-                        flexDirection: 'row', alignItems: 'center', gap: 7,
-                        backgroundColor: isDark ? '#1A1A1D' : '#111',
-                        borderRadius: 50, paddingHorizontal: 10, paddingVertical: 6,
-                      }}>
-                        {/* Spotify icon */}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8, gap: 8, flexWrap: 'wrap' }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: isDark ? '#1A1A1D' : '#111', borderRadius: 50, paddingHorizontal: 10, paddingVertical: 6 }}>
                         <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: '#1DB954', alignItems: 'center', justifyContent: 'center' }}>
-                          <View style={{ gap: 2, alignItems: 'center' }}>
-                            {[1, 0.78, 0.56].map((w, i) => (
-                              <View key={i} style={{ width: 11 * w, height: 1.5, borderRadius: 1, backgroundColor: '#000' }} />
-                            ))}
-                          </View>
+                          <View style={{ gap: 2, alignItems: 'center' }}>{[1, 0.78, 0.56].map((w, i) => <View key={i} style={{ width: 11 * w, height: 1.5, borderRadius: 1, backgroundColor: '#000' }} />)}</View>
                         </View>
                         <Text style={{ color: '#1DB954', fontSize: 14, fontWeight: '700' }}>Spotify</Text>
+                        <TouchableOpacity onPress={() => { setSpotifyActive(false); setSpotifyResults([]); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                          <Ionicons name="close" size={14} color="rgba(255,255,255,0.55)" />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ) : null}
+                  {/* Shazam chip — shows when Shazam is active */}
+                  {shazamActive ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: isDark ? '#0D1A30' : '#E8F0FF', borderRadius: 50, paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1, borderColor: 'rgba(13,114,234,0.3)' }}>
+                        {/* Shazam mini icon */}
+                        <View style={{ width: 18, height: 18, borderRadius: 9, backgroundColor: '#0D72EA', alignItems: 'center', justifyContent: 'center' }}>
+                          <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+                            <View style={{ width: 9, height: 9, borderRadius: 4.5, borderWidth: 1.5, borderColor: '#FFF', borderBottomColor: 'transparent', borderLeftColor: 'transparent', transform: [{ rotate: '-45deg' }], marginBottom: -2 }} />
+                            <View style={{ width: 9, height: 9, borderRadius: 4.5, borderWidth: 1.5, borderColor: '#FFF', borderTopColor: 'transparent', borderRightColor: 'transparent', transform: [{ rotate: '-45deg' }], marginTop: -2 }} />
+                          </View>
+                        </View>
+                        <Text style={{ color: '#0D72EA', fontSize: 14, fontWeight: '700' }}>Shazam</Text>
                         <TouchableOpacity
-                          onPress={() => { setSpotifyActive(false); setSpotifyResults([]); }}
+                          onPress={() => { setShazamActive(false); setShazamCardVisible(false); setShazamResult(null); }}
                           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                         >
-                          <Ionicons name="close" size={14} color="rgba(255,255,255,0.55)" />
+                          <Ionicons name="close" size={14} color={isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.45)'} />
                         </TouchableOpacity>
                       </View>
                     </View>
@@ -3068,17 +3452,28 @@ export default function HomeScreen() {
                     <View style={styles.recordingRow}>
                       <WaveformAnimation isRecording={isRecording} />
                       <Text style={styles.recordingDuration}>{isProcessing ? 'Processing...' : formatDuration(recordingDuration)}</Text>
+                      <TouchableOpacity
+                        onPress={cancelVoiceRecording}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        style={{ marginLeft: 4, width: 30, height: 30, borderRadius: 15, backgroundColor: isDark ? 'rgba(255,69,58,0.18)' : 'rgba(255,69,58,0.12)', alignItems: 'center', justifyContent: 'center' }}
+                      >
+                        <Ionicons name="close" size={16} color="#FF453A" />
+                      </TouchableOpacity>
                     </View>
                   ) : (
                     <View style={styles.inputRow}>
-                      {/* + button INSIDE input when keyboard is hidden */}
+                      {/* + button INSIDE input (glassmorphism) when keyboard is hidden */}
                       {!keyboardVisible && !editingMessageId ? (
-                        <TouchableOpacity
-                          onPress={() => setToolsVisible(true)}
-                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                          style={{ marginRight: 4 }}
-                        >
-                          <Ionicons name="add" size={22} color={colors.textSecondary} />
+                        <TouchableOpacity onPress={() => setToolsVisible(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ marginRight: 4 }}>
+                          {Platform.OS === 'ios' ? (
+                            <BlurView intensity={isDark ? 65 : 50} tint={isDark ? 'dark' : 'light'} style={{ width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: isDark ? 'rgba(255,255,255,0.16)' : 'rgba(0,0,0,0.1)' }}>
+                              <Ionicons name="add" size={20} color={colors.text} />
+                            </BlurView>
+                          ) : (
+                            <View style={{ width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: isDark ? 'rgba(60,60,68,0.88)' : 'rgba(240,240,248,0.88)', borderWidth: StyleSheet.hairlineWidth, borderColor: isDark ? 'rgba(255,255,255,0.13)' : 'rgba(0,0,0,0.09)' }}>
+                              <Ionicons name="add" size={20} color={colors.text} />
+                            </View>
+                          )}
                         </TouchableOpacity>
                       ) : null}
                       <TextInput
@@ -3602,6 +3997,75 @@ export default function HomeScreen() {
             ) : null}
 
             <SpotifyLoadingOverlay visible={spotifyOverlayVisible && spotifyResults.length === 0} query={spotifySearchQuery} />
+
+            {/* ── Shazam WebView Modal ── */}
+            <Modal visible={shazamWebViewVisible} animationType="slide" transparent={false} onRequestClose={() => { setShazamWebViewVisible(false); setShazamListening(false); }}>
+              <View style={{ flex: 1, backgroundColor: isDark ? '#000' : '#F2F2F7', paddingTop: insets.top }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 10, backgroundColor: isDark ? '#111' : '#FFF', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: isDark ? 'rgba(255,255,255,0.1)' : '#E0E0E0' }}>
+                  <TouchableOpacity onPress={() => { setShazamWebViewVisible(false); setShazamListening(false); }} style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.07)', alignItems: 'center', justifyContent: 'center' }}>
+                    <Ionicons name="close" size={18} color={isDark ? '#FFF' : '#000'} />
+                  </TouchableOpacity>
+                  <Text style={{ fontSize: 15, fontWeight: '600', color: isDark ? '#FFF' : '#000' }}>shazam.com</Text>
+                  <View style={{ width: 36 }} />
+                </View>
+                <WebView
+                  source={{ uri: shazamWebViewUrl }}
+                  style={{ flex: 1 }}
+                  javaScriptEnabled domStorageEnabled allowsInlineMediaPlayback
+                  mediaPlaybackRequiresUserAction={false}
+                  onNavigationStateChange={(state) => {
+                    if (state.url && (state.url.includes('shazam.com/track') || state.url.includes('/t/'))) {
+                      const parts = (state.title || '').split(' - ');
+                      const songTitle = parts[0]?.trim() || 'Song Identified';
+                      const artist = parts[1]?.trim() || '';
+                      setShazamResult({ title: songTitle, subtitle: artist, imageUrl: null, shazamUrl: state.url, previewUrl: null, count: null });
+                      setShazamListening(false);
+                      setShazamCarouselIndex(1);
+                      setShazamWebViewVisible(false);
+                      // Enrich with real Shazam API data
+                      supabase.functions.invoke('shazam-identify', { body: { action: 'search', query: songTitle + ' ' + artist } })
+                        .then(({ data: sd }) => {
+                          if (sd?.results?.[0]) {
+                            const r = sd.results[0];
+                            setShazamResult((prev: any) => ({ ...prev, imageUrl: r.images?.coverart || r.images?.background || prev.imageUrl, count: r.shazam_count ? `${(r.shazam_count / 1e6).toFixed(1)}M` : null, shazamUrl: r.share?.href || prev.shazamUrl, previewUrl: r.hub?.actions?.find((a: any) => a.type === 'uri')?.uri || null }));
+                          }
+                        }).catch(() => {});
+                    }
+                  }}
+                />
+                <TouchableOpacity
+                  style={{ backgroundColor: isDark ? '#111' : '#FFF', paddingVertical: 16, alignItems: 'center', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: isDark ? 'rgba(255,255,255,0.1)' : '#E0E0E0', paddingBottom: insets.bottom + 8 }}
+                  onPress={() => { setShazamWebViewVisible(false); setShazamListening(false); }}
+                >
+                  <Text style={{ color: '#0D72EA', fontSize: 15, fontWeight: '600' }}>Close window to continue on Dawinix</Text>
+                </TouchableOpacity>
+              </View>
+            </Modal>
+
+            {/* ── @ Mention App List (photo 4) ── */}
+            <ConnectedAppsModal
+              visible={atMentionModalVisible}
+              onClose={() => { setAtMentionModalVisible(false); setAtMentionQuery(''); }}
+              connectedApps={connectedAppsList}
+              mentionMode
+              mentionQuery={atMentionQuery}
+              onSelectApp={(app) => {
+                setAtMentionModalVisible(false);
+                setAtMentionQuery('');
+                if (app.id === 'spotify') {
+                  setSpotifyActive(true);
+                  const newText = inputText.replace(/@\w*$/, '@Spotify ');
+                  setInputText(newText);
+                } else if (app.id === 'shazam') {
+                  setShazamActive(true);
+                  setShazamCardVisible(true);
+                  setShazamResult(null);
+                  const newText = inputText.replace(/@\w*$/, '@Shazam ');
+                  setInputText(newText);
+                }
+                setTimeout(() => inputRef.current?.focus(), 100);
+              }}
+            />
 
             {imageAnalyzingOverlay ? (
               <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.78)', zIndex: 9998, alignItems: 'center', justifyContent: 'center' }}>
