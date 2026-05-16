@@ -135,7 +135,7 @@ const FALLBACK_TRACKS_WORKOUT = [
   },
   {
     id: 'fallback_workout_2',
-    name: 'Car's Outside',
+    name: "Car's Outside",
     owner: 'James Arthur',
     type: 'Song',
     imageUrl: 'https://images.unsplash.com/photo-1571019614242-c5c5dee9f50b?w=200&q=80',
