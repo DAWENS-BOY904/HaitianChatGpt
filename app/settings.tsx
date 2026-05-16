@@ -1416,4 +1416,4 @@ export default function SettingsScreen() {
     </View>
   );
 }
-fix togle button yo delay loadin state and yo dwe depan de internet ou also make header more border radius.
+
