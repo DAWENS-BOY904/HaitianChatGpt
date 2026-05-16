@@ -1,2 +1,2 @@
-// CodeBlock.tsx — re-exports from StreamingCodeBlock
-export { CodeBlock, StreamingCodeBlock } from './StreamingCodeBlock';
+// CodeBlock — powered by StreamingCodeBlock with Run support
+export { StreamingCodeBlock as CodeBlock, StreamingCodeBlock } from './StreamingCodeBlock';
