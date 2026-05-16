@@ -15,6 +15,17 @@ const { width: SCREEN_W } = Dimensions.get('window');
 const SPOTIFY_GREEN = '#1DB954';
 
 // ── Spotify SVG-styles logo ──────────────────────────────────────────────────
+function ShazamLogo({ size = 52 }: { size?: number }) {
+  return (
+    <View style={{
+      width: size, height: size, borderRadius: size / 2,
+      backgroundColor: '#0F61E8', alignItems: 'center', justifyContent: 'center',
+    }}>
+      <Text style={{ fontSize: size * 0.5, color: '#FFF', fontWeight: '900', fontStyle: 'italic', lineHeight: size * 0.6 }}>S</Text>
+    </View>
+  );
+}
+
 function SpotifyLogo({ size = 52 }: { size?: number }) {
   return (
     <View style={{
@@ -60,6 +71,14 @@ const ALL_APPS = [
     comingSoon: false,
   },
   {
+    id: 'shazam',
+    name: 'Shazam',
+    description: 'Identify any song playing around you',
+    category: ['Featured', 'Music'],
+    route: '/shazam-connect',
+    comingSoon: false,
+  },
+  {
     id: 'apple-music',
     name: 'Apple Music',
     description: 'Build playlists and find music',
@@ -101,7 +120,7 @@ function FeaturedCard({
         {/* Content */}
         <View style={featStyles.heroContent}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-            {app.id === 'spotify' ? <SpotifyLogo size={52} /> : <AppleMusicLogo size={52} />}
+            {app.id === 'spotify' ? <SpotifyLogo size={52} /> : app.id === 'shazam' ? <ShazamLogo size={52} /> : <AppleMusicLogo size={52} />}
             <View style={{ flex: 1 }}>
               <Text style={featStyles.heroName}>{app.name}</Text>
               <Text style={featStyles.heroDesc}>{app.description}</Text>
@@ -203,6 +222,8 @@ function AppListRow({
     >
       {app.id === 'spotify' ? (
         <SpotifyLogo size={52} />
+      ) : app.id === 'shazam' ? (
+        <ShazamLogo size={52} />
       ) : (
         <AppleMusicLogo size={52} />
       )}

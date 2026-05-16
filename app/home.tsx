@@ -53,6 +53,7 @@ import { getSupabaseClient } from '@/template';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Accelerometer } from 'expo-sensors';
 import { Audio } from 'expo-av';
+import { WebView } from 'react-native-webview';
 import { useFocusEffect } from '@react-navigation/native';
 import { BlurView } from 'expo-blur';
 import * as FileSystem from 'expo-file-system';
@@ -1014,6 +1015,140 @@ function GroupMemberProfileContent({ member, isOwner, isAdmin, isDark, isSilence
   );
 }
 
+// ── Shazam Result Card ──────────────────────────────────────────────────────
+const SHAZAM_BLUE_COLOR = '#0F61E8';
+
+function ShazamResultCard({ result, isLoading, isDark, query, onTapToShazam, onPlay }: {
+  result: any; isLoading: boolean; isDark: boolean; query: string;
+  onTapToShazam: () => void; onPlay: (url: string) => void;
+}) {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const soundRef = useRef<Audio.Sound | null>(null);
+
+  const handlePlay = async () => {
+    if (!result?.previewUrl) return;
+    if (isPlaying) {
+      try { await soundRef.current?.stopAsync(); await soundRef.current?.unloadAsync(); } catch (_e) {}
+      soundRef.current = null; setIsPlaying(false); return;
+    }
+    try {
+      await Audio.setAudioModeAsync({ playsInSilentModeIOS: true, staysActiveInBackground: false });
+      const { sound } = await Audio.Sound.createAsync({ uri: result.previewUrl }, { shouldPlay: true });
+      soundRef.current = sound; setIsPlaying(true);
+      sound.setOnPlaybackStatusUpdate((s: any) => { if (s.isLoaded && s.didJustFinish) { setIsPlaying(false); sound.unloadAsync(); soundRef.current = null; } });
+    } catch (_e) { setIsPlaying(false); }
+  };
+
+  const handleSaveToShazam = () => {
+    const storeUrl = Platform.OS === 'ios'
+      ? 'https://apps.apple.com/app/shazam-music-discovery/id284993459'
+      : 'https://play.google.com/store/apps/details?id=com.shazam.android';
+    Linking.openURL(storeUrl).catch(() => {});
+  };
+
+  if (isLoading) {
+    return (
+      <View style={{ marginHorizontal: 16, marginVertical: 8 }}>
+        <View style={{ borderRadius: 20, overflow: 'hidden', backgroundColor: isDark ? '#1A1A1D' : '#F0F0F5', padding: 24, alignItems: 'center', gap: 12 }}>
+          <View style={{ width: 60, height: 60, borderRadius: 30, backgroundColor: SHAZAM_BLUE_COLOR, alignItems: 'center', justifyContent: 'center' }}>
+            <Text style={{ color: '#FFF', fontSize: 28, fontWeight: '900', fontStyle: 'italic' }}>S</Text>
+          </View>
+          <ActivityIndicator color={SHAZAM_BLUE_COLOR} />
+          <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 15, fontWeight: '600' }}>Searching Shazam...</Text>
+        </View>
+        <Text style={{ color: isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.4)', fontSize: 12, marginTop: 6, marginLeft: 4 }}>Powered by Shazam</Text>
+      </View>
+    );
+  }
+
+  if (!result) return null;
+
+  if (result.tapToShazam) {
+    return (
+      <View style={{ marginHorizontal: 16, marginVertical: 8 }}>
+        <TouchableOpacity
+          style={{ borderRadius: 20, overflow: 'hidden', backgroundColor: isDark ? '#1A1A1D' : '#F8F8FC', borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)', padding: 28, alignItems: 'center', gap: 14 }}
+          onPress={onTapToShazam} activeOpacity={0.85}
+        >
+          <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: SHAZAM_BLUE_COLOR, alignItems: 'center', justifyContent: 'center', shadowColor: SHAZAM_BLUE_COLOR, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.4, shadowRadius: 14, elevation: 8 }}>
+            <Text style={{ color: '#FFF', fontSize: 42, fontWeight: '900', fontStyle: 'italic', lineHeight: 50 }}>S</Text>
+          </View>
+          <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 20, fontWeight: '700', textAlign: 'center' }}>{"Let's find and name your song"}</Text>
+          <Text style={{ color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.45)', fontSize: 14 }}>Tap to get started</Text>
+        </TouchableOpacity>
+        <Text style={{ color: isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.4)', fontSize: 12, marginTop: 6, marginLeft: 4 }}>Powered by Shazam</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={{ marginHorizontal: 16, marginVertical: 8 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        <View style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: SHAZAM_BLUE_COLOR, alignItems: 'center', justifyContent: 'center' }}>
+          <Text style={{ color: '#FFF', fontSize: 11, fontWeight: '900', fontStyle: 'italic' }}>S</Text>
+        </View>
+        <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 14, fontWeight: '600' }}>Shazam</Text>
+      </View>
+      <View style={{ backgroundColor: '#FFF', borderRadius: 20, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 12, elevation: 6 }}>
+        {result.imageUrl ? (
+          <ExpoImage source={{ uri: result.imageUrl }} style={{ width: '100%', height: 200 }} contentFit="cover" transition={200} />
+        ) : null}
+        <View style={{ padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: '#000', fontSize: 18, fontWeight: '700', marginBottom: 2 }} numberOfLines={2}>{result.name || 'Unknown Song'}</Text>
+            <Text style={{ color: '#555', fontSize: 14, marginBottom: 4 }} numberOfLines={1}>{result.artist || ''}</Text>
+            {result.shazamCount ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <View style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: SHAZAM_BLUE_COLOR, alignItems: 'center', justifyContent: 'center' }}>
+                  <Text style={{ color: '#FFF', fontSize: 7, fontWeight: '900', fontStyle: 'italic' }}>S</Text>
+                </View>
+                <Text style={{ color: '#777', fontSize: 12 }}>{result.shazamCount}</Text>
+              </View>
+            ) : null}
+          </View>
+          {result.previewUrl ? (
+            <TouchableOpacity
+              style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center', marginLeft: 12 }}
+              onPress={handlePlay} activeOpacity={0.8}
+            >
+              <Ionicons name={isPlaying ? 'pause' : 'play'} size={18} color="#FFF" style={!isPlaying ? { marginLeft: 2 } : undefined} />
+            </TouchableOpacity>
+          ) : null}
+        </View>
+        <TouchableOpacity
+          style={{ marginHorizontal: 16, marginBottom: 16, backgroundColor: SHAZAM_BLUE_COLOR, borderRadius: 50, paddingVertical: 13, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 }}
+          onPress={handleSaveToShazam} activeOpacity={0.85}
+        >
+          <Ionicons name="add" size={18} color="#FFF" />
+          <Text style={{ color: '#FFF', fontSize: 16, fontWeight: '700' }}>Save to Shazam</Text>
+        </TouchableOpacity>
+      </View>
+      <Text style={{ color: isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.4)', fontSize: 12, marginTop: 6, marginLeft: 4 }}>Powered by Shazam</Text>
+    </View>
+  );
+}
+
+function WebViewForShazam({ onResult }: { onResult: (result: any) => void }) {
+  const resultSentRef = useRef(false);
+  const injectedJS = `(function() { var interval = setInterval(function() { var trackName = document.querySelector('.track-name, .track-title, h1.title'); var artistName = document.querySelector('.artist-name, .artist, h2.artist'); var albumArt = document.querySelector('.cover-art img, .album-art img'); if (trackName && trackName.innerText && trackName.innerText.trim().length > 1) { clearInterval(interval); window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'shazam_result', data: { name: trackName.innerText.trim(), artist: artistName ? artistName.innerText.trim() : '', imageUrl: albumArt ? albumArt.src : '' } })); } }, 1200); setTimeout(function() { clearInterval(interval); }, 90000); true; })();`;
+  return (
+    <WebView
+      source={{ uri: 'https://www.shazam.com' }}
+      style={{ flex: 1 }}
+      injectedJavaScript={injectedJS}
+      onMessage={(event) => {
+        if (resultSentRef.current) return;
+        try {
+          const msg = JSON.parse(event.nativeEvent.data);
+          if (msg.type === 'shazam_result' && msg.data?.name) { resultSentRef.current = true; onResult(msg.data); }
+        } catch (_e) {}
+      }}
+      javaScriptEnabled domStorageEnabled mediaPlaybackRequiresUserAction={false} allowsInlineMediaPlayback
+      userAgent="Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15"
+    />
+  );
+}
+
 export default function HomeScreen() {
   const { colors, isDark } = useTheme();
   const { settings, updateSetting } = useSettings();
@@ -1166,6 +1301,16 @@ export default function HomeScreen() {
   const [spotifyOverlayVisible, setSpotifyOverlayVisible] = useState(false);
   const [connectedAppsModalVisible, setConnectedAppsModalVisible] = useState(false);
 
+  // ── Shazam state ─────────────────────────────────────────────────────────
+  const [shazamConnected, setShazamConnected] = useState(false);
+  const [shazamActive, setShazamActive] = useState(false);
+  const [shazamResult, setShazamResult] = useState<any>(null);
+  const [shazamSearching, setShazamSearching] = useState(false);
+  const [shazamWebViewVisible, setShazamWebViewVisible] = useState(false);
+  const [shazamQuery, setShazamQuery] = useState('');
+  const [atMentionVisible, setAtMentionVisible] = useState(false);
+  const [connectedAppsForMention, setConnectedAppsForMention] = useState<Array<{id: string; name: string; color: string}>>([]);
+
   const handleOpenMessageActions = useCallback((msg: any) => {
     setMsgActionsMsg(msg);
     setMsgActionsVisible(true);
@@ -1295,7 +1440,13 @@ export default function HomeScreen() {
       if (atMatch !== null) { setMentionQuery(atMatch[1] || ''); setShowMentionPopup(true); }
       else { setShowMentionPopup(false); setMentionQuery(''); }
     }
-  }, [groupChatMode]);
+    // @ mention for apps
+    if (safeTxt.endsWith('@')) {
+      loadConnectedAppsForMention().then(apps => { if (apps.length > 0) setAtMentionVisible(true); });
+    } else {
+      setAtMentionVisible(false);
+    }
+  }, [groupChatMode, loadConnectedAppsForMention]);
 
   useEffect(() => {
     if (user?.id) {
@@ -1477,12 +1628,18 @@ export default function HomeScreen() {
         Animated.timing(fadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
         Animated.timing(slideAnim, { toValue: 0, duration: 300, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
       ]).start();
-      // Load Spotify connection state — do NOT auto-activate chip; user must tap it or just connected
-      AsyncStorage.multiGet(['spotify_connected', 'spotify_has_account']).then(results => {
-        const isConn = results[0][1] === 'true';
-        setSpotifyConnected(isConn);
+      // Load Spotify + Shazam connection state
+      AsyncStorage.multiGet(['spotify_connected', 'spotify_has_account', 'shazam_connected']).then(results => {
+        setSpotifyConnected(results[0][1] === 'true');
         setSpotifyHasAccount(results[1][1] === 'true');
-        // spotifyActive is intentionally NOT set here — chip only shows after explicit user action
+        const isShazamConn = results[2][1] === 'true';
+        setShazamConnected(isShazamConn);
+        // Check for pending shazam result from shazam-connect screen
+        AsyncStorage.getItem('shazam_last_result').then(raw => {
+          if (raw) {
+            try { setShazamResult(JSON.parse(raw)); AsyncStorage.removeItem('shazam_last_result').catch(() => {}); } catch (_e) {}
+          }
+        }).catch(() => {});
       }).catch(() => {});
       return () => { slideAnim.setValue(100); };
     }, [])
@@ -1953,6 +2110,24 @@ export default function HomeScreen() {
     // Keep firstImageUri for inline preview in the sent message
     setSpotifyResults([]);
     setSpotifySearchQuery('');
+    setShazamResult(null);
+    setShazamQuery('');
+
+    // ── Shazam mode ─────────────────────────────────────────────────────────
+    if (shazamActive || isShazamQuery(currentText)) {
+      const q = currentText.replace(/@Shazam\s*/gi, '').trim() || 'identify song';
+      setShazamResult(null);
+      setSending(true); setGenerating(true); setThinkingMode('thinking');
+      let shazamConvId = currentConversation?.id;
+      if (!shazamConvId) { try { shazamConvId = await createConversation(); } catch (_e) {} }
+      if (shazamConvId) {
+        const shazamPrompt = `The user asked: "${currentText}". You are Dawinix with Shazam connected. Respond briefly saying you're using Shazam to help identify/find the music.`;
+        try { await sendMessage(shazamPrompt, undefined, undefined, false, currentAIModel); } catch (_e) {}
+      }
+      setSending(false); setGenerating(false);
+      searchShazam(q);
+      return;
+    }
 
     // ── Spotify dominant mode: when chip is active, ALL messages go to Spotify ──
     if (spotifyActive) {
@@ -2060,6 +2235,10 @@ export default function HomeScreen() {
       await sendMessage(prefixedText, filePayloadArr.length > 0 ? filePayloadArr : undefined, imagePayload, false, currentAIModel);
       setShowCompletionStatus(true);
       setTimeout(() => setShowCompletionStatus(false), 2000);
+      // Shazam: trigger on non-dominant mode
+      if (!shazamActive && shazamConnected && isShazamQuery(currentText)) {
+        searchShazam(currentText);
+      }
       // Spotify EDG Function: trigger when connected and music intent detected (non-dominant mode)
       if (!spotifyActive && spotifyConnected && isMusicQuery(currentText)) {
         const mq = currentText.replace(/(?:search|play|find|show me|get me|look for|listen to)/gi, '').trim() || currentText;
@@ -2155,11 +2334,64 @@ export default function HomeScreen() {
     }
   }, [supabase]);
 
-  const connectedAppsList: ConnectedApp[] = spotifyConnected
-    ? [{ id: 'spotify', name: 'Spotify', description: 'Music and podcasts for you', color: '#1DB954' }]
-    : [];
+  const connectedAppsList: ConnectedApp[] = [
+    ...(spotifyConnected ? [{ id: 'spotify', name: 'Spotify', description: 'Music and podcasts for you', color: '#1DB954' }] : []),
+    ...(shazamConnected ? [{ id: 'shazam', name: 'Shazam', description: 'Identify songs instantly', color: '#0F61E8' }] : []),
+  ];
 
   const handleCancelGeneration = useCallback(() => { setGenerating(false); }, []);
+
+  // ── @ mention helpers ────────────────────────────────────────────────────
+  const loadConnectedAppsForMention = useCallback(async () => {
+    const apps: Array<{id: string; name: string; color: string}> = [];
+    const raw = await AsyncStorage.getItem('connected_apps').catch(() => null);
+    const ids: string[] = raw ? (JSON.parse(raw) as string[]) : [];
+    if (ids.includes('spotify')) apps.push({ id: 'spotify', name: 'Spotify', color: '#1DB954' });
+    if (ids.includes('shazam')) apps.push({ id: 'shazam', name: 'Shazam', color: '#0F61E8' });
+    setConnectedAppsForMention(apps);
+    return apps;
+  }, []);
+
+  const handleAtMentionSelect = useCallback((app: {id: string; name: string}) => {
+    setAtMentionVisible(false);
+    const newText = inputText.replace(/@$/, `@${app.name} `);
+    setInputText(newText);
+    if (app.id === 'spotify') setSpotifyActive(true);
+    else if (app.id === 'shazam') setShazamActive(true);
+    setTimeout(() => inputRef.current?.focus(), 50);
+  }, [inputText]);
+
+  // ── Shazam detection & search ─────────────────────────────────────────────
+  const SHAZAM_KEYWORDS = [
+    'ki music sa', 'what music is this', 'what song is this', 'identify this song',
+    'what is this song', 'find this music', 'how can i find this music', 'name this song',
+    'ki chanson sa', 'ki mizik sa', 'identify song', 'song playing', 'which song',
+    'tell me this song', 'shazam this', 'what song', '@shazam',
+  ];
+
+  const isShazamQuery = useCallback((text: string): boolean => {
+    const lower = text.toLowerCase();
+    return SHAZAM_KEYWORDS.some(k => lower.includes(k));
+  }, []);
+
+  const searchShazam = useCallback(async (query: string) => {
+    setShazamSearching(true);
+    setShazamQuery(query);
+    try {
+      const { data, error } = await supabase.functions.invoke('shazam-identify', {
+        body: { action: 'search', query },
+      });
+      if (!error && data?.tracks?.length > 0) {
+        setShazamResult(data.tracks[0]);
+      } else {
+        setShazamResult({ tapToShazam: true, query });
+      }
+    } catch (_e) {
+      setShazamResult({ tapToShazam: true, query });
+    } finally {
+      setShazamSearching(false);
+    }
+  }, [supabase]);
 
   const generateQuizQuestions = (_topic: string): QuizQuestion[] => [
     { question: 'What is the capital of France?', options: ['Berlin', 'Madrid', 'Rome', 'Paris'], answer: 3, explanation: 'Paris is the capital and largest city of France.' },
@@ -3007,6 +3239,19 @@ export default function HomeScreen() {
                               <Text style={{ color: isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.5)', fontSize: 14 }}>Searching Spotify...</Text>
                             </View>
                           ) : null}
+                          {/* Shazam result card */}
+                          {(shazamSearching || shazamResult) ? (
+                            <ShazamResultCard
+                              result={shazamResult}
+                              isLoading={shazamSearching}
+                              isDark={isDark}
+                              query={shazamQuery}
+                              onTapToShazam={() => setShazamWebViewVisible(true)}
+                              onPlay={(previewUrl: string) => {
+                                // Play preview audio
+                              }}
+                            />
+                          ) : null}
                           {(spotifySearching || spotifyResults.length > 0) ? (
                             <SpotifyMusicCard
                               tracks={spotifyResults}
@@ -3117,29 +3362,31 @@ export default function HomeScreen() {
                     />
                   ) : null}
                   {/* Spotify chip — shows when Spotify is connected */}
-                  {spotifyActive ? (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
-                      <View style={{
-                        flexDirection: 'row', alignItems: 'center', gap: 7,
-                        backgroundColor: isDark ? '#1A1A1D' : '#111',
-                        borderRadius: 50, paddingHorizontal: 10, paddingVertical: 6,
-                      }}>
-                        {/* Spotify icon */}
-                        <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: '#1DB954', alignItems: 'center', justifyContent: 'center' }}>
-                          <View style={{ gap: 2, alignItems: 'center' }}>
-                            {[1, 0.78, 0.56].map((w, i) => (
-                              <View key={i} style={{ width: 11 * w, height: 1.5, borderRadius: 1, backgroundColor: '#000' }} />
-                            ))}
+                  {/* App chips (Spotify / Shazam) */}
+                  {(spotifyActive || shazamActive) ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8, gap: 8, flexWrap: 'wrap' }}>
+                      {spotifyActive ? (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: isDark ? '#1A1A1D' : '#111', borderRadius: 50, paddingHorizontal: 10, paddingVertical: 6 }}>
+                          <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: '#1DB954', alignItems: 'center', justifyContent: 'center' }}>
+                            <View style={{ gap: 2, alignItems: 'center' }}>
+                              {[1, 0.78, 0.56].map((w, i) => (<View key={i} style={{ width: 11 * w, height: 1.5, borderRadius: 1, backgroundColor: '#000' }} />))}
+                            </View>
                           </View>
+                          <Text style={{ color: '#1DB954', fontSize: 14, fontWeight: '700' }}>Spotify</Text>
+                          <TouchableOpacity onPress={() => { setSpotifyActive(false); setSpotifyResults([]); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                            <Ionicons name="close" size={14} color="rgba(255,255,255,0.55)" />
+                          </TouchableOpacity>
                         </View>
-                        <Text style={{ color: '#1DB954', fontSize: 14, fontWeight: '700' }}>Spotify</Text>
-                        <TouchableOpacity
-                          onPress={() => { setSpotifyActive(false); setSpotifyResults([]); }}
-                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                        >
-                          <Ionicons name="close" size={14} color="rgba(255,255,255,0.55)" />
-                        </TouchableOpacity>
-                      </View>
+                      ) : null}
+                      {shazamActive ? (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: isDark ? '#0F61E8' : '#0F61E8', borderRadius: 50, paddingHorizontal: 10, paddingVertical: 6 }}>
+                          <Text style={{ color: '#FFF', fontSize: 13, fontWeight: '900', fontStyle: 'italic' }}>S</Text>
+                          <Text style={{ color: '#FFF', fontSize: 14, fontWeight: '700' }}>Shazam</Text>
+                          <TouchableOpacity onPress={() => { setShazamActive(false); setShazamResult(null); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                            <Ionicons name="close" size={14} color="rgba(255,255,255,0.8)" />
+                          </TouchableOpacity>
+                        </View>
+                      ) : null}
                     </View>
                   ) : null}
                   <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: quizMode ? 8 : 0 }}>
@@ -3665,16 +3912,80 @@ export default function HomeScreen() {
               </View>
             </Modal>
 
+            {/* @ Mention Apps Popup */}
+            {atMentionVisible && connectedAppsForMention.length > 0 ? (
+              <View style={{
+                position: 'absolute', bottom: 80, left: 52, right: 12, zIndex: 200,
+                backgroundColor: isDark ? '#2C2C2E' : '#FFF',
+                borderRadius: 16, overflow: 'hidden',
+                shadowColor: '#000', shadowOffset: { width: 0, height: -4 },
+                shadowOpacity: 0.18, shadowRadius: 12, elevation: 12,
+                borderWidth: 1, borderColor: isDark ? '#3A3A3C' : '#E0E0E5',
+              }}>
+                {connectedAppsForMention.map((app, i) => (
+                  <TouchableOpacity
+                    key={app.id}
+                    style={{
+                      flexDirection: 'row', alignItems: 'center', gap: 12,
+                      paddingHorizontal: 16, paddingVertical: 13,
+                      borderTopWidth: i > 0 ? StyleSheet.hairlineWidth : 0,
+                      borderTopColor: isDark ? '#3A3A3C' : '#E5E5EA',
+                    }}
+                    onPress={() => handleAtMentionSelect(app)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: app.color, alignItems: 'center', justifyContent: 'center' }}>
+                      {app.id === 'spotify' ? (
+                        <View style={{ gap: 2 }}>
+                          {[1,0.78,0.56].map((w,i2) => <View key={i2} style={{ width: 16*w, height: 2, borderRadius: 1, backgroundColor: '#000' }} />)}
+                        </View>
+                      ) : (
+                        <Text style={{ color: '#FFF', fontSize: 16, fontWeight: '900', fontStyle: 'italic' }}>S</Text>
+                      )}
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 15, fontWeight: '600' }}>{app.name}</Text>
+                      <Text style={{ color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.45)', fontSize: 12, marginTop: 1 }}>
+                        {app.id === 'spotify' ? 'Music and podcasts' : 'Identify songs instantly'}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            ) : null}
+
+            {/* Shazam WebView Modal */}
+            {shazamWebViewVisible ? (
+              <Modal visible={shazamWebViewVisible} animationType="slide" onRequestClose={() => setShazamWebViewVisible(false)}>
+                <View style={{ flex: 1, backgroundColor: '#0F61E8', paddingTop: insets.top }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#FFF' }}>
+                    <TouchableOpacity style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#F0F0F5', alignItems: 'center', justifyContent: 'center' }} onPress={() => setShazamWebViewVisible(false)}>
+                      <Ionicons name="close" size={18} color="#000" />
+                    </TouchableOpacity>
+                    <Text style={{ fontSize: 15, fontWeight: '600', color: '#333' }}>shazam.com</Text>
+                    <View style={{ width: 36 }} />
+                  </View>
+                  <WebViewForShazam onResult={(result: any) => { setShazamWebViewVisible(false); if (result?.name) setShazamResult(result); }} />
+                  <View style={{ backgroundColor: '#FFF', paddingVertical: 14, paddingHorizontal: 20, paddingBottom: insets.bottom + 14, alignItems: 'center' }}>
+                    <TouchableOpacity onPress={() => setShazamWebViewVisible(false)} style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                      <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: '#F0F0F5', alignItems: 'center', justifyContent: 'center' }}>
+                        <Ionicons name="logo-apple" size={18} color="#000" />
+                      </View>
+                      <Text style={{ color: '#555', fontSize: 14 }}>Close window to continue on Dawinix</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </Modal>
+            ) : null}
+
             {/* Connected Apps Modal */}
             <ConnectedAppsModal
               visible={connectedAppsModalVisible}
               onClose={() => setConnectedAppsModalVisible(false)}
               connectedApps={connectedAppsList}
               onSelectApp={(app) => {
-                if (app.id === 'spotify') {
-                  setSpotifyActive(true);
-                  inputRef.current?.focus();
-                }
+                if (app.id === 'spotify') { setSpotifyActive(true); inputRef.current?.focus(); }
+                else if (app.id === 'shazam') { setShazamActive(true); inputRef.current?.focus(); }
               }}
             />
 
