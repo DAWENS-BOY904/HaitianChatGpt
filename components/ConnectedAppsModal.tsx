@@ -22,8 +22,6 @@ interface Props {
   onClose: () => void;
   connectedApps: ConnectedApp[];
   onSelectApp: (app: ConnectedApp) => void;
-  // for @ mention popup mode (photo 4)
-  mentionMode?: boolean;
 }
 
 function SpotifyIcon({ size = 44 }: { size?: number }) {
@@ -46,56 +44,7 @@ function SpotifyIcon({ size = 44 }: { size?: number }) {
   );
 }
 
-function ShazamIcon({ size = 44 }: { size?: number }) {
-  return (
-    <View style={{
-      width: size, height: size, borderRadius: size / 2,
-      backgroundColor: '#0D72EA', alignItems: 'center', justifyContent: 'center',
-    }}>
-      <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-        <View style={{
-          width: size * 0.5, height: size * 0.5,
-          borderRadius: size * 0.25,
-          borderWidth: size * 0.07,
-          borderColor: 'rgba(255,255,255,0.9)',
-          borderBottomColor: 'transparent',
-          borderLeftColor: 'transparent',
-          transform: [{ rotate: '-45deg' }],
-          marginBottom: -size * 0.08,
-        }} />
-        <View style={{
-          width: size * 0.5, height: size * 0.5,
-          borderRadius: size * 0.25,
-          borderWidth: size * 0.07,
-          borderColor: 'rgba(255,255,255,0.9)',
-          borderTopColor: 'transparent',
-          borderRightColor: 'transparent',
-          transform: [{ rotate: '-45deg' }],
-          marginTop: -size * 0.08,
-        }} />
-      </View>
-    </View>
-  );
-}
-
-function AppIcon({ app, size = 44 }: { app: ConnectedApp; size?: number }) {
-  if (app.id === 'spotify') return <SpotifyIcon size={size} />;
-  if (app.id === 'shazam') return <ShazamIcon size={size} />;
-  return (
-    <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: app.color, alignItems: 'center', justifyContent: 'center' }}>
-      <Ionicons name="musical-notes" size={size * 0.45} color="#FFF" />
-    </View>
-  );
-}
-
-// All known apps for the @ list (even if not connected)
-const ALL_KNOWN_APPS = [
-  { id: 'apple-music', name: 'Apple Music', description: 'With this app, Dawinix can connect to Apple Music so all user...', color: '#FC3C44' },
-  { id: 'shazam', name: 'Shazam', description: 'Identify any song playing around you, right within Dawinix. Us...', color: '#0D72EA' },
-  { id: 'spotify', name: 'Spotify', description: 'Explore a new way to discover music and podcasts, with reco...', color: '#1DB954' },
-];
-
-export function ConnectedAppsModal({ visible, onClose, connectedApps, onSelectApp, mentionMode }: Props) {
+export function ConnectedAppsModal({ visible, onClose, connectedApps, onSelectApp }: Props) {
   const { isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -104,91 +53,6 @@ export function ConnectedAppsModal({ visible, onClose, connectedApps, onSelectAp
   const subC = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.45)';
   const cardBg = isDark ? '#2C2C2E' : '#FFF';
   const sheetBg = isDark ? '#1C1C1E' : '#F2F2F7';
-  const divC = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)';
-
-  // ── @ Mention popup (photo 4) — floating card above input ─────────────────
-  if (mentionMode) {
-    return (
-      <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
-        <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onClose} />
-        <View style={{ paddingHorizontal: 12, paddingBottom: 80 }}>
-          {Platform.OS === 'ios' ? (
-            <BlurView
-              intensity={isDark ? 80 : 70}
-              tint={isDark ? 'dark' : 'extraLight'}
-              style={[mentionStyles.card, { overflow: 'hidden' }]}
-            >
-              {ALL_KNOWN_APPS.map((app, i) => (
-                <TouchableOpacity
-                  key={app.id}
-                  style={[
-                    mentionStyles.row,
-                    i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: divC },
-                  ]}
-                  onPress={() => {
-                    const connApp = connectedApps.find(c => c.id === app.id);
-                    if (connApp) {
-                      onSelectApp(connApp);
-                    } else {
-                      onClose();
-                      router.push((app.id === 'spotify' ? '/spotify-connect' : app.id === 'shazam' ? '/shazam-connect' : '/app-connect') as any);
-                    }
-                    onClose();
-                  }}
-                  activeOpacity={0.72}
-                >
-                  <AppIcon app={{ ...app, description: '' }} size={36} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ color: textC, fontSize: 15, fontWeight: '600' }}>{app.name}</Text>
-                    <Text style={{ color: subC, fontSize: 12, marginTop: 1 }} numberOfLines={1}>{app.description}</Text>
-                  </View>
-                  {connectedApps.find(c => c.id === app.id) ? (
-                    <View style={[mentionStyles.badge, { backgroundColor: 'rgba(52,199,89,0.15)' }]}>
-                      <Text style={{ color: '#34C759', fontSize: 10, fontWeight: '700' }}>Connected</Text>
-                    </View>
-                  ) : null}
-                </TouchableOpacity>
-              ))}
-            </BlurView>
-          ) : (
-            <View style={[mentionStyles.card, { backgroundColor: isDark ? '#2C2C2E' : '#FFF', overflow: 'hidden' }]}>
-              {ALL_KNOWN_APPS.map((app, i) => (
-                <TouchableOpacity
-                  key={app.id}
-                  style={[
-                    mentionStyles.row,
-                    i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: divC },
-                  ]}
-                  onPress={() => {
-                    const connApp = connectedApps.find(c => c.id === app.id);
-                    if (connApp) {
-                      onSelectApp(connApp);
-                    } else {
-                      onClose();
-                      router.push((app.id === 'spotify' ? '/spotify-connect' : app.id === 'shazam' ? '/shazam-connect' : '/app-connect') as any);
-                    }
-                    onClose();
-                  }}
-                  activeOpacity={0.72}
-                >
-                  <AppIcon app={{ ...app, description: '' }} size={36} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ color: textC, fontSize: 15, fontWeight: '600' }}>{app.name}</Text>
-                    <Text style={{ color: subC, fontSize: 12, marginTop: 1 }} numberOfLines={1}>{app.description}</Text>
-                  </View>
-                  {connectedApps.find(c => c.id === app.id) ? (
-                    <View style={[mentionStyles.badge, { backgroundColor: 'rgba(52,199,89,0.15)' }]}>
-                      <Text style={{ color: '#34C759', fontSize: 10, fontWeight: '700' }}>Connected</Text>
-                    </View>
-                  ) : null}
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
-        </View>
-      </Modal>
-    );
-  }
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -224,7 +88,7 @@ export function ConnectedAppsModal({ visible, onClose, connectedApps, onSelectAp
                 </View>
                 <Text style={[styles.emptyTitle, { color: textC }]}>No apps connected</Text>
                 <Text style={[styles.emptySub, { color: subC }]}>
-                  Connect apps like Spotify and Shazam to enhance your AI experience
+                  Connect apps like Spotify to enhance your AI experience
                 </Text>
                 <TouchableOpacity
                   style={[styles.browseBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.07)' }]}
@@ -243,7 +107,13 @@ export function ConnectedAppsModal({ visible, onClose, connectedApps, onSelectAp
                     onPress={() => { onSelectApp(app); onClose(); }}
                     activeOpacity={0.72}
                   >
-                    <AppIcon app={app} size={44} />
+                    {app.id === 'spotify' ? (
+                      <SpotifyIcon size={44} />
+                    ) : (
+                      <View style={[styles.appIconFallback, { backgroundColor: app.color }]}>
+                        <Ionicons name="musical-notes" size={22} color="#FFF" />
+                      </View>
+                    )}
                     <View style={{ flex: 1 }}>
                       <Text style={{ color: textC, fontSize: 16, fontWeight: '600' }}>{app.name}</Text>
                       <Text style={{ color: subC, fontSize: 13, marginTop: 2 }}>{app.description}</Text>
@@ -278,22 +148,6 @@ export function ConnectedAppsModal({ visible, onClose, connectedApps, onSelectAp
     </Modal>
   );
 }
-
-const mentionStyles = StyleSheet.create({
-  card: {
-    borderRadius: 16,
-    shadowColor: '#000', shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.18, shadowRadius: 12, elevation: 12,
-    marginBottom: 8,
-  },
-  row: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 16, paddingVertical: 13, gap: 12,
-  },
-  badge: {
-    borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3,
-  },
-});
 
 const styles = StyleSheet.create({
   sheet: {

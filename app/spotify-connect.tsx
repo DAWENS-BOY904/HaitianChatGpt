@@ -705,12 +705,6 @@ export default function SpotifyConnectScreen() {
                 <Ionicons name="checkmark-circle" size={16} color={SPOTIFY_GREEN} />
                 <Text style={[spStyles.connectedText, { color: SPOTIFY_GREEN }]}>Connected</Text>
               </View>
-              <TouchableOpacity
-                style={[spStyles.connectBtn, { backgroundColor: SPOTIFY_GREEN }]}
-                onPress={() => router.replace('/home')}
-              >
-                <Text style={[spStyles.connectBtnText, { color: '#FFF' }]}>Start chatting</Text>
-              </TouchableOpacity>
               <TouchableOpacity style={[spStyles.connectBtn, { borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)', backgroundColor: 'transparent' }]} onPress={handleDisconnect}>
                 <Text style={[spStyles.connectBtnText, { color: textC }]}>Disconnect</Text>
               </TouchableOpacity>
