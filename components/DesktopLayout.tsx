@@ -1,3 +1,4 @@
+
 /**
  * DesktopLayout.tsx
  * ChatGPT-style desktop layout for web (≥1024px)
