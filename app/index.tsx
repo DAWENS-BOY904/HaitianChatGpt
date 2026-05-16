@@ -135,7 +135,7 @@ async function performGoogleSignIn(): Promise<{ error?: string }> {
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: 'haitian-chatgpt://auth/callback',
+        redirectTo: 'dawinix://auth/callback',
         skipBrowserRedirect: true,
       },
     });
