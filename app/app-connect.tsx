@@ -13,19 +13,42 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 const SPOTIFY_GREEN = '#1DB954';
+const SHAZAM_BLUE = '#0D72EA';
 
-// ── Spotify SVG-styles logo ──────────────────────────────────────────────────
+// ── Shazam Logo ────────────────────────────────────────────────────────────
 function ShazamLogo({ size = 52 }: { size?: number }) {
   return (
     <View style={{
       width: size, height: size, borderRadius: size / 2,
-      backgroundColor: '#0F61E8', alignItems: 'center', justifyContent: 'center',
+      backgroundColor: SHAZAM_BLUE, alignItems: 'center', justifyContent: 'center',
     }}>
-      <Text style={{ fontSize: size * 0.5, color: '#FFF', fontWeight: '900', fontStyle: 'italic', lineHeight: size * 0.6 }}>S</Text>
+      <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+        <View style={{
+          width: size * 0.54, height: size * 0.54,
+          borderRadius: size * 0.27,
+          borderWidth: size * 0.075,
+          borderColor: 'rgba(255,255,255,0.9)',
+          borderBottomColor: 'transparent',
+          borderLeftColor: 'transparent',
+          transform: [{ rotate: '-45deg' }],
+          marginBottom: -size * 0.1,
+        }} />
+        <View style={{
+          width: size * 0.54, height: size * 0.54,
+          borderRadius: size * 0.27,
+          borderWidth: size * 0.075,
+          borderColor: 'rgba(255,255,255,0.9)',
+          borderTopColor: 'transparent',
+          borderRightColor: 'transparent',
+          transform: [{ rotate: '-45deg' }],
+          marginTop: -size * 0.1,
+        }} />
+      </View>
     </View>
   );
 }
 
+// ── Spotify SVG-styles logo ──────────────────────────────────────────────────
 function SpotifyLogo({ size = 52 }: { size?: number }) {
   return (
     <View style={{
