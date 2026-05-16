@@ -327,7 +327,7 @@ function WelcomeScreen() {
             <ActivityIndicator size="small" color={colors.text} />
           ) : (
             <Image
-              source={{ uri: 'https://www.citypng.com/public/uploads/preview/google-logo-icon-png-701751694791470gcslg6i2v6.png' }}
+              source={{ uri: 'https://www.citypng.com/public/uploads/preview/google-logo-icon-gsuite-hd-701751694791470gzbayltphh.png' }}
               style={{ width: 22, height: 22 }}
               resizeMode="contain"
             />
