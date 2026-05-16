@@ -2089,7 +2089,6 @@ export default function HomeScreen() {
               } else {
                 raw = await FileSystem.readAsStringAsync(media.uri, { encoding: FileSystem.EncodingType.Base64 });
               }
-              // Strip data URL prefix if present
               base64Image = raw.replace(/^data:image\/[a-z+]+;base64,/i, '');
               if (!base64Image || base64Image.length < 100) base64Image = undefined;
             } catch (e) {
@@ -2106,12 +2105,13 @@ export default function HomeScreen() {
               type: media.mimeType || 'text/plain',
               content: preview + (truncated ? '\n...(content truncated for length)' : '')
             });
-            fileContextStr += `\n\n[FILE ATTACHED: ${media.name || 'document'} (${media.mimeType || 'text'})\nContent:\n${preview}${truncated ? '\n...(truncated)' : ''}]`;
+            // Only add a minimal reference tag — NOT the full content (to avoid bloating user bubble)
+            fileContextStr += `\n\n[FILE ATTACHED: ${media.name || 'document'} (${media.mimeType || 'text'})]`;
           } catch (e) {
-            fileContextStr += `\n\n[File attached: ${media.name || 'document'} — could not read as text, binary file]`;
+            fileContextStr += `\n\n[FILE ATTACHED: ${media.name || 'document'} (binary/unreadable)]`;
           }
         } else if (media.type === 'video') {
-          fileContextStr += `\n\n[VIDEO ATTACHED: ${media.name || 'video.mp4'} — The user has shared a video file. Acknowledge you received it and ask what they would like help with regarding this video.]`;
+          fileContextStr += `\n\n[VIDEO ATTACHED: ${media.name || 'video.mp4'}]`;
         }
       }
 
@@ -3356,12 +3356,12 @@ export default function HomeScreen() {
                 ) : null}
 
                 <Pressable
-                  style={[styles.inputWrapper, { backgroundColor: Platform.OS === 'ios' ? 'transparent' : (isDark ? 'rgba(44,44,46,0.95)' : 'rgba(235,235,235,0.95)'), borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)' }]}
+                  style={[styles.inputWrapper, { backgroundColor: Platform.OS === 'ios' ? 'transparent' : (isDark ? 'rgba(44,44,46,0.95)' : 'rgba(235,235,235,0.95)'), borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.11)' }]}
                   onPress={() => inputRef.current?.focus()}
                 >
                   {Platform.OS === 'ios' ? (
                     <BlurView
-                      intensity={isDark ? 90 : 78}
+                      intensity={isDark ? 95 : 82}
                       tint={isDark ? 'dark' : 'extraLight'}
                       style={StyleSheet.absoluteFill}
                       pointerEvents="none"
