@@ -13,6 +13,40 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 const SPOTIFY_GREEN = '#1DB954';
+const SHAZAM_BLUE = '#0D72EA';
+
+// ── Shazam Logo ────────────────────────────────────────────────────────────
+function ShazamLogo({ size = 52 }: { size?: number }) {
+  return (
+    <View style={{
+      width: size, height: size, borderRadius: size / 2,
+      backgroundColor: SHAZAM_BLUE, alignItems: 'center', justifyContent: 'center',
+    }}>
+      <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+        <View style={{
+          width: size * 0.54, height: size * 0.54,
+          borderRadius: size * 0.27,
+          borderWidth: size * 0.075,
+          borderColor: 'rgba(255,255,255,0.9)',
+          borderBottomColor: 'transparent',
+          borderLeftColor: 'transparent',
+          transform: [{ rotate: '-45deg' }],
+          marginBottom: -size * 0.1,
+        }} />
+        <View style={{
+          width: size * 0.54, height: size * 0.54,
+          borderRadius: size * 0.27,
+          borderWidth: size * 0.075,
+          borderColor: 'rgba(255,255,255,0.9)',
+          borderTopColor: 'transparent',
+          borderRightColor: 'transparent',
+          transform: [{ rotate: '-45deg' }],
+          marginTop: -size * 0.1,
+        }} />
+      </View>
+    </View>
+  );
+}
 
 // ── Spotify SVG-styles logo ──────────────────────────────────────────────────
 function SpotifyLogo({ size = 52 }: { size?: number }) {
@@ -60,6 +94,14 @@ const ALL_APPS = [
     comingSoon: false,
   },
   {
+    id: 'shazam',
+    name: 'Shazam',
+    description: 'Identify any song playing around you',
+    category: ['Featured', 'Music'],
+    route: '/shazam-connect',
+    comingSoon: false,
+  },
+  {
     id: 'apple-music',
     name: 'Apple Music',
     description: 'Build playlists and find music',
@@ -101,7 +143,7 @@ function FeaturedCard({
         {/* Content */}
         <View style={featStyles.heroContent}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-            {app.id === 'spotify' ? <SpotifyLogo size={52} /> : <AppleMusicLogo size={52} />}
+            {app.id === 'spotify' ? <SpotifyLogo size={52} /> : app.id === 'shazam' ? <ShazamLogo size={52} /> : <AppleMusicLogo size={52} />}
             <View style={{ flex: 1 }}>
               <Text style={featStyles.heroName}>{app.name}</Text>
               <Text style={featStyles.heroDesc}>{app.description}</Text>
@@ -203,6 +245,8 @@ function AppListRow({
     >
       {app.id === 'spotify' ? (
         <SpotifyLogo size={52} />
+      ) : app.id === 'shazam' ? (
+        <ShazamLogo size={52} />
       ) : (
         <AppleMusicLogo size={52} />
       )}
