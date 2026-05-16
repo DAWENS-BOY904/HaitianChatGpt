@@ -688,3 +688,4 @@ const s = StyleSheet.create({
   historyScore: { minWidth: 44, alignItems: 'flex-end' },
   historyScoreText: { fontSize: 16, fontWeight: '700' },
 });
+make this more fast Auto-detect when user scores 80%+ on a quiz and prompt 'Try a harder quiz?' with one tap to immediately generate a new quiz at the next difficulty level (Easy→Medium→Hard→Expert), without going back to the topic picker.
