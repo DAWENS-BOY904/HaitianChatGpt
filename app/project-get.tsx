@@ -1389,4 +1389,4 @@ export default function ProjectGetScreen() {
     </View>
   );
 }
-add this api in edg project code for code creating and file  https://platform.kimi.ai/docs/guide/start-using-kimi-api i already put api in env implemented all for the first and onspace falllback openai 3em.
+
