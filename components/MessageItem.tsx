@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback, useRef, useEffect, memo } from 'react';
 import {
   View,
@@ -11,6 +10,8 @@ import {
   Platform,
   ScrollView,
   Dimensions,
+  ActivityIndicator,
+  Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
@@ -23,7 +24,6 @@ import * as WebBrowser from '../utils/web-browser';
 import { BlurView } from 'expo-blur';
 import { CodeBlock } from './CodeBlock';
 import { SourcesListModal as SourcesModal, Source } from './SourcesModal';
-import { LinkSafetyModal } from './LinkSafetyModal';
 import * as Clipboard from 'expo-clipboard';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -78,6 +78,100 @@ const URL_REGEX = /https?:\/\/[^\s"')]+/g;
 // ── Image URL detection ──────────────────────────────────────────────────────
 const IMAGE_URL_REGEX = /https?:\/\/[^\s"')]+\.(?:jpg|jpeg|png|webp|gif)(?:\?[^\s"')]*)?/gi;
 
+// ── Open any URL fully in-app (never external browser) ───────────────────────
+async function openInApp(url: string): Promise<void> {
+  if (!url) return;
+  try {
+    await WebBrowser.openBrowserAsync(url);
+  } catch (_e) {
+    // fallback: do nothing, never go outside app
+  }
+}
+
+// ── Streaming dots indicator ──────────────────────────────────────────────────
+function StreamingDots() {
+  const dots = [
+    useRef(new Animated.Value(0.4)).current,
+    useRef(new Animated.Value(0.4)).current,
+    useRef(new Animated.Value(0.4)).current,
+  ];
+  useEffect(() => {
+    const anims = dots.map((d, i) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(i * 140),
+          Animated.timing(d, { toValue: 1, duration: 280, useNativeDriver: true }),
+          Animated.timing(d, { toValue: 0.4, duration: 280, useNativeDriver: true }),
+          Animated.delay(400),
+        ])
+      )
+    );
+    anims.forEach(a => a.start());
+    return () => anims.forEach(a => a.stop());
+  }, []);
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 6, paddingHorizontal: 2 }}>
+      {dots.map((d, i) => (
+        <Animated.View key={i} style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: '#999', opacity: d }} />
+      ))}
+    </View>
+  );
+}
+
+// ── Streaming code block placeholder (shown while fence is open) ──────────────
+function StreamingCodePlaceholder({ language, code, isDark }: { language: string; code: string; isDark: boolean }) {
+  const pulse = useRef(new Animated.Value(0.6)).current;
+  useEffect(() => {
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1, duration: 700, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0.6, duration: 700, useNativeDriver: true }),
+      ])
+    );
+    anim.start();
+    return () => anim.stop();
+  }, []);
+
+  const bg = isDark ? '#1A1B1E' : '#F8F8F8';
+  const headerBg = isDark ? '#212225' : '#ECECEC';
+  const borderColor = isDark ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.09)';
+  const codeColor = isDark ? '#E4E4E4' : '#24292E';
+  const lineCount = (code || '').split('\n').length;
+
+  return (
+    <View style={{ borderRadius: 14, borderWidth: StyleSheet.hairlineWidth, borderColor, overflow: 'hidden', marginVertical: 6 }}>
+      {/* Header */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: headerBg, paddingHorizontal: 12, paddingVertical: 9, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: borderColor }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Animated.View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#10A37F', opacity: pulse }} />
+          <Text style={{ color: isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.5)', fontSize: 12, fontWeight: '600', fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' }}>
+            {(language || 'code').toUpperCase()}
+          </Text>
+          <View style={{ backgroundColor: isDark ? 'rgba(16,163,127,0.15)' : 'rgba(16,163,127,0.1)', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2, marginLeft: 4 }}>
+            <Text style={{ color: '#10A37F', fontSize: 10, fontWeight: '700' }}>● STREAMING</Text>
+          </View>
+        </View>
+        <ActivityIndicator size="small" color="#10A37F" />
+      </View>
+      {/* Code preview — show what's been streamed so far */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={{ backgroundColor: bg, maxHeight: 200 }}
+        contentContainerStyle={{ padding: 12 }}
+      >
+        <Text style={{ fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', fontSize: 13, lineHeight: 20, color: codeColor }}>
+          {code || ''}
+        </Text>
+      </ScrollView>
+      {/* Footer pulse bar */}
+      <View style={{ height: 2, backgroundColor: headerBg }}>
+        <Animated.View style={{ height: 2, backgroundColor: '#10A37F', opacity: pulse, width: '60%' }} />
+      </View>
+    </View>
+  );
+}
+
 // ── Horizontal scrollable image grid ─────────────────────────────────────────
 const ImageGrid = memo(function ImageGrid({ images, onPress, onSendToChat }: {
   images: Array<{ url: string; title?: string; link?: string }>;
@@ -86,41 +180,14 @@ const ImageGrid = memo(function ImageGrid({ images, onPress, onSendToChat }: {
 }) {
   const { isDark } = useTheme();
   if (!images || images.length === 0) return null;
-
   const CARD_W = images.length === 1 ? Math.min(Dimensions.get('window').width - 64, 280) : 150;
   const CARD_H = images.length === 1 ? CARD_W * 0.65 : 110;
-
   return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={{ paddingVertical: 8, gap: 10, paddingRight: 4 }}
-      style={{ marginTop: 8, marginBottom: 4 }}
-    >
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingVertical: 8, gap: 10, paddingRight: 4 }} style={{ marginTop: 8, marginBottom: 4 }}>
       {images.slice(0, 8).map((img, i) => (
-        <View
-          key={`img-${i}-${img.url}`}
-          style={{
-            width: CARD_W,
-            borderRadius: 16,
-            overflow: 'hidden',
-            backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA',
-            borderWidth: 1,
-            borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: 0.15,
-            shadowRadius: 6,
-            elevation: 3,
-          }}
-        >
+        <View key={`img-${i}-${img.url}`} style={{ width: CARD_W, borderRadius: 16, overflow: 'hidden', backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA', borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)', elevation: 3 }}>
           <TouchableOpacity onPress={() => onPress(img.url, i)} activeOpacity={0.88}>
-            <Image
-              source={{ uri: img.url }}
-              style={{ width: CARD_W, height: CARD_H }}
-              contentFit="cover"
-              transition={200}
-            />
+            <Image source={{ uri: img.url }} style={{ width: CARD_W, height: CARD_H }} contentFit="cover" transition={200} />
           </TouchableOpacity>
           {img.title ? (
             <View style={{ paddingHorizontal: 8, paddingVertical: 6 }}>
@@ -128,16 +195,7 @@ const ImageGrid = memo(function ImageGrid({ images, onPress, onSendToChat }: {
             </View>
           ) : null}
           {onSendToChat ? (
-            <TouchableOpacity
-              onPress={() => onSendToChat(img.url)}
-              activeOpacity={0.75}
-              style={{
-                position: 'absolute', top: 6, right: 6,
-                width: 28, height: 28, borderRadius: 14,
-                backgroundColor: 'rgba(0,0,0,0.55)',
-                alignItems: 'center', justifyContent: 'center',
-              }}
-            >
+            <TouchableOpacity onPress={() => onSendToChat(img.url)} activeOpacity={0.75} style={{ position: 'absolute', top: 6, right: 6, width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' }}>
               <Ionicons name="send" size={13} color="#FFF" />
             </TouchableOpacity>
           ) : null}
@@ -150,15 +208,6 @@ const ImageGrid = memo(function ImageGrid({ images, onPress, onSendToChat }: {
 // ── Safety Response ───────────────────────────────────────────────────────────
 function SafetyResponse() {
   const { colors, isDark } = useTheme();
-  const handleCall = () => {
-    Alert.alert('Call Crisis Line', 'Do you want to call the 988 Suicide & Crisis Lifeline?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Call', onPress: () => Linking.openURL('tel:988') },
-    ]);
-  };
-  const handleChat = () => {
-    WebBrowser.openBrowserAsync('https://988lifeline.org/chat/').catch(() => {});
-  };
   return (
     <View style={{ padding: 16, marginHorizontal: 16, marginBottom: 12, backgroundColor: isDark ? '#1C1C1E' : '#F2F2F7', borderRadius: 18, borderLeftWidth: 4, borderLeftColor: '#FF453A' }}>
       <Text style={{ color: colors.text, fontSize: 17, fontWeight: '700', marginBottom: 8 }}>Help is available. You are not alone.</Text>
@@ -166,11 +215,11 @@ function SafetyResponse() {
         {"If you're going through something difficult, please reach out. Trained counselors are available 24/7 to help."}
       </Text>
       <View style={{ gap: 10 }}>
-        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#34C759', borderRadius: 14, padding: 14, gap: 10 }} onPress={handleCall} activeOpacity={0.8}>
+        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#34C759', borderRadius: 14, padding: 14, gap: 10 }} onPress={() => Linking.openURL('tel:988')} activeOpacity={0.8}>
           <Ionicons name="call" size={20} color="#FFF" />
           <Text style={{ color: '#FFF', fontSize: 16, fontWeight: '700' }}>Call 988 (Crisis Line)</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA', borderRadius: 14, padding: 14, gap: 10 }} onPress={handleChat} activeOpacity={0.8}>
+        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA', borderRadius: 14, padding: 14, gap: 10 }} onPress={() => openInApp('https://988lifeline.org/chat/')} activeOpacity={0.8}>
           <Ionicons name="chatbubble-ellipses" size={20} color={colors.text} />
           <Text style={{ color: colors.text, fontSize: 16, fontWeight: '600' }}>Chat Support Online</Text>
         </TouchableOpacity>
@@ -182,12 +231,11 @@ function SafetyResponse() {
 // ── Phone call modal ──────────────────────────────────────────────────────────
 function PhoneCallModal({ visible, number, onClose }: { visible: boolean; number: string; onClose: () => void }) {
   const { colors, isDark } = useTheme();
-  const handleCall = () => { onClose(); Linking.openURL(`tel:${number.replace(/\D/g, '')}`); };
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)' }}>
         {Platform.OS === 'ios' ? <BlurView intensity={50} tint="dark" style={StyleSheet.absoluteFill} /> : null}
-        <View style={{ width: 280, backgroundColor: isDark ? '#2C2C2E' : '#FFF', borderRadius: 20, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.35, shadowRadius: 20, elevation: 20 }}>
+        <View style={{ width: 280, backgroundColor: isDark ? '#2C2C2E' : '#FFF', borderRadius: 20, overflow: 'hidden', elevation: 20 }}>
           <View style={{ padding: 20, alignItems: 'center' }}>
             <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: '#34C759', alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
               <Ionicons name="call" size={26} color="#FFF" />
@@ -200,7 +248,7 @@ function PhoneCallModal({ visible, number, onClose }: { visible: boolean; number
               <Text style={{ color: colors.textSecondary, fontSize: 17 }}>Cancel</Text>
             </TouchableOpacity>
             <View style={{ width: StyleSheet.hairlineWidth, backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)' }} />
-            <TouchableOpacity style={{ flex: 1, paddingVertical: 16, alignItems: 'center' }} onPress={handleCall}>
+            <TouchableOpacity style={{ flex: 1, paddingVertical: 16, alignItems: 'center' }} onPress={() => { onClose(); Linking.openURL(`tel:${number.replace(/\D/g, '')}`); }}>
               <Text style={{ color: '#34C759', fontSize: 17, fontWeight: '700' }}>Call</Text>
             </TouchableOpacity>
           </View>
@@ -215,14 +263,8 @@ function DownloadLinkCard({ url, label }: { url: string; label?: string }) {
   const { colors, isDark } = useTheme();
   const fileName = label || (url || '').split('/').pop()?.split('?')[0] || 'Download';
   const ext = fileName.split('.').pop()?.toUpperCase() || 'FILE';
-  const handlePress = useCallback(async () => {
-    if (!url) return;
-    // Open in-app browser
-    try { await WebBrowser.openBrowserAsync(url); }
-    catch (_e) {}
-  }, [url]);
   return (
-    <TouchableOpacity onPress={handlePress} activeOpacity={0.75} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)', borderRadius: 14, padding: 12, marginVertical: 4, gap: 12, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)' }}>
+    <TouchableOpacity onPress={() => openInApp(url)} activeOpacity={0.75} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)', borderRadius: 14, padding: 12, marginVertical: 4, gap: 12, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)' }}>
       <View style={{ width: 42, height: 42, borderRadius: 10, backgroundColor: colors.primary + '22', alignItems: 'center', justifyContent: 'center' }}>
         <Ionicons name="document-attach" size={22} color={colors.primary} />
       </View>
@@ -280,22 +322,15 @@ function parseInlineMarkdown(text: string): TextSegment[] {
   const segments: TextSegment[] = [];
   const pattern = /(~~([^~]+)~~|\*\*([^*]+)\*\*|\*([^*]+)\*|`([^`]+)`|\[([^\]]+)\]\((https?:\/\/[^\)]+)\)|(https?:\/\/[^\s"')]+\.(?:jpg|jpeg|png|webp|gif)(?:\?[^\s"')]*)?)|(\+?[\d\s\-\(\)]{10,})|(https?:\/\/[^\s"')]+))/g;
   let lastIndex = 0;
-  let match;
-
+  let match: RegExpExecArray | null;
   while ((match = pattern.exec(text)) !== null) {
-    if (match.index > lastIndex) {
-      segments.push({ type: 'text', content: text.slice(lastIndex, match.index) });
-    }
+    if (match.index > lastIndex) segments.push({ type: 'text', content: text.slice(lastIndex, match.index) });
     const full = match[0];
-    if (full.startsWith('~~')) {
-      segments.push({ type: 'strikethrough', content: match[2] || '' });
-    } else if (full.startsWith('**')) {
-      segments.push({ type: 'bold', content: match[3] || '' });
-    } else if (full.startsWith('*')) {
-      segments.push({ type: 'italic', content: match[4] || '' });
-    } else if (full.startsWith('`')) {
-      segments.push({ type: 'code_inline', content: match[5] || '' });
-    } else if (full.startsWith('[')) {
+    if (full.startsWith('~~')) segments.push({ type: 'strikethrough', content: match[2] || '' });
+    else if (full.startsWith('**')) segments.push({ type: 'bold', content: match[3] || '' });
+    else if (full.startsWith('*')) segments.push({ type: 'italic', content: match[4] || '' });
+    else if (full.startsWith('`')) segments.push({ type: 'code_inline', content: match[5] || '' });
+    else if (full.startsWith('[')) {
       const url = match[7] || '';
       const label = match[6] || '';
       const isImg = /\.(jpg|jpeg|png|webp|gif)/i.test(url);
@@ -309,10 +344,7 @@ function parseInlineMarkdown(text: string): TextSegment[] {
     }
     lastIndex = pattern.lastIndex;
   }
-
-  if (lastIndex < text.length) {
-    segments.push({ type: 'text', content: text.slice(lastIndex) });
-  }
+  if (lastIndex < text.length) segments.push({ type: 'text', content: text.slice(lastIndex) });
   return segments;
 }
 
@@ -332,7 +364,7 @@ function parseMarkdownBlocks(raw: string, isStreaming = false): Block[] {
   if (!raw) return [];
   const blocks: Block[] = [];
 
-  // Extract sources block first
+  // Safe sources extraction
   let sourcesBlock: Block | null = null;
   try {
     const sourcesMatch = raw.match(/\[SOURCES\]([\s\S]*?)(?:\[\/SOURCES\]|$)/i);
@@ -348,14 +380,14 @@ function parseMarkdownBlocks(raw: string, isStreaming = false): Block[] {
 
   let i = 0;
   while (i < cleanLines.length) {
-    const line = cleanLines[i] || '';
+    const line = cleanLines[i] ?? '';
 
-    // Table detection — lines starting with |
+    // Table detection
     if (line.trim().startsWith('|') && line.trim().includes('|', 1)) {
       const tableLines: string[] = [];
       let ti = i;
-      while (ti < cleanLines.length && (cleanLines[ti] || '').trim().startsWith('|')) {
-        tableLines.push(cleanLines[ti]);
+      while (ti < cleanLines.length && (cleanLines[ti] ?? '').trim().startsWith('|')) {
+        tableLines.push(cleanLines[ti] ?? '');
         ti++;
       }
       if (tableLines.length >= 2) {
@@ -365,13 +397,13 @@ function parseMarkdownBlocks(raw: string, isStreaming = false): Block[] {
         const rows: string[][] = [];
         let hasHeader = false;
         let firstDataRow = 0;
-        if (tableLines.length >= 2 && isSep(tableLines[1])) {
-          rows.push(parseRow(tableLines[0]));
+        if (tableLines.length >= 2 && isSep(tableLines[1] ?? '')) {
+          rows.push(parseRow(tableLines[0] ?? ''));
           hasHeader = true;
           firstDataRow = 2;
         }
         for (let r = firstDataRow; r < tableLines.length; r++) {
-          if (!isSep(tableLines[r])) rows.push(parseRow(tableLines[r]));
+          if (!isSep(tableLines[r] ?? '')) rows.push(parseRow(tableLines[r] ?? ''));
         }
         if (rows.length > 0) blocks.push({ type: 'table', content: '', rows, hasHeader });
         i = ti;
@@ -379,26 +411,27 @@ function parseMarkdownBlocks(raw: string, isStreaming = false): Block[] {
       }
     }
 
-    // Code block — track whether fence is properly closed
+    // Code block with proper streaming detection
     if (line.trim().startsWith('```')) {
       const lang = line.trim().slice(3).trim() || 'plaintext';
       const codeLines: string[] = [];
       i++;
       let closedFence = false;
       while (i < cleanLines.length) {
-        if ((cleanLines[i] || '').trim().startsWith('```')) {
+        const cl = cleanLines[i] ?? '';
+        if (cl.trim() === '```' || (cl.trim().startsWith('```') && cl.trim().length === 3)) {
           closedFence = true;
           i++;
           break;
         }
-        codeLines.push(cleanLines[i] || '');
+        codeLines.push(cl);
         i++;
       }
       const code = codeLines.join('\n');
       if (!closedFence && isStreaming) {
-        // Partial/streaming code block — show with streaming indicator
+        // Partial streaming code block — show live streaming indicator
         blocks.push({ type: 'code', content: code, language: lang, streaming: true });
-      } else if (code.trim() || closedFence) {
+      } else {
         blocks.push({ type: 'code', content: code.trim(), language: lang, streaming: false });
       }
       continue;
@@ -408,52 +441,44 @@ function parseMarkdownBlocks(raw: string, isStreaming = false): Block[] {
     const headingMatch = line.match(/^(#{1,6})\s+(.+)/);
     if (headingMatch) {
       blocks.push({ type: 'heading', content: headingMatch[2] || '', level: headingMatch[1].length });
-      i++;
-      continue;
+      i++; continue;
     }
 
     // Divider
     if (/^[-*_]{3,}$/.test(line.trim())) {
       blocks.push({ type: 'divider', content: '' });
-      i++;
-      continue;
+      i++; continue;
     }
 
     // Blockquote
     if (line.startsWith('> ')) {
       blocks.push({ type: 'blockquote', content: line.slice(2) });
-      i++;
-      continue;
+      i++; continue;
     }
 
     // Bullet list
     const bulletMatch = line.match(/^(\s*)[-*+•]\s+(.+)/);
     if (bulletMatch) {
       blocks.push({ type: 'bullet', content: bulletMatch[2] || '' });
-      i++;
-      continue;
+      i++; continue;
     }
 
     // Numbered list
     const numberedMatch = line.match(/^(\s*)\d+[.)]\s+(.+)/);
     if (numberedMatch) {
       blocks.push({ type: 'numbered', content: numberedMatch[2] || '' });
-      i++;
-      continue;
+      i++; continue;
     }
 
     // Image markdown
     const imgMatch = line.match(/!\[([^\]]*)\]\((https?:\/\/[^\)]+)\)/);
     if (imgMatch) {
       blocks.push({ type: 'image', content: imgMatch[2] || '' });
-      i++;
-      continue;
+      i++; continue;
     }
 
-    // Paragraph (skip empty lines)
-    if (line.trim()) {
-      blocks.push({ type: 'paragraph', content: line });
-    }
+    // Paragraph
+    if (line.trim()) blocks.push({ type: 'paragraph', content: line });
     i++;
   }
 
@@ -463,10 +488,8 @@ function parseMarkdownBlocks(raw: string, isStreaming = false): Block[] {
 
 // ── Inline text renderer ─────────────────────────────────────────────────────
 function InlineText({ text, textStyle, onPhonePress, onLinkPress }: {
-  text: string;
-  textStyle: any;
-  onPhonePress?: (num: string) => void;
-  onLinkPress?: (url: string) => void;
+  text: string; textStyle: any;
+  onPhonePress?: (num: string) => void; onLinkPress?: (url: string) => void;
 }) {
   const segments = parseInlineMarkdown(text || '');
   return (
@@ -481,14 +504,10 @@ function InlineText({ text, textStyle, onPhonePress, onLinkPress }: {
           </Text>
         );
         if (seg.type === 'phone') return (
-          <Text key={i} style={{ color: '#34C759', textDecorationLine: 'underline' }} onPress={() => onPhonePress?.(seg.content)}>
-            {seg.content}
-          </Text>
+          <Text key={i} style={{ color: '#34C759', textDecorationLine: 'underline' }} onPress={() => onPhonePress?.(seg.content)}>{seg.content}</Text>
         );
         if (seg.type === 'link') return (
-          <Text key={i} style={{ color: '#007AFF', textDecorationLine: 'underline' }} onPress={() => onLinkPress?.(seg.url || seg.content)}>
-            {seg.content}
-          </Text>
+          <Text key={i} style={{ color: '#007AFF', textDecorationLine: 'underline' }} onPress={() => onLinkPress?.(seg.url || seg.content)}>{seg.content}</Text>
         );
         return <Text key={i}>{seg.content}</Text>;
       })}
@@ -498,10 +517,7 @@ function InlineText({ text, textStyle, onPhonePress, onLinkPress }: {
 
 // ── Markdown Table Renderer ───────────────────────────────────────────────────
 const MarkdownTable = memo(function MarkdownTable({ rows, hasHeader, isDark, colors }: {
-  rows: string[][];
-  hasHeader?: boolean;
-  isDark: boolean;
-  colors: any;
+  rows: string[][]; hasHeader?: boolean; isDark: boolean; colors: any;
 }) {
   if (!rows || rows.length === 0) return null;
   const colCount = Math.max(...rows.map(r => r.length), 1);
@@ -514,12 +530,7 @@ const MarkdownTable = memo(function MarkdownTable({ rows, hasHeader, isDark, col
   const subC = isDark ? 'rgba(255,255,255,0.78)' : 'rgba(0,0,0,0.75)';
   const cellMinW = Math.max(70, Math.floor(280 / Math.min(colCount, 4)));
   return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      style={{ marginVertical: 8 }}
-      contentContainerStyle={{ paddingRight: 2 }}
-    >
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginVertical: 8 }} contentContainerStyle={{ paddingRight: 2 }}>
       <View style={{ borderRadius: 14, borderWidth: 1, borderColor: borderC, overflow: 'hidden', minWidth: colCount * cellMinW }}>
         {headerRow ? (
           <View style={{ flexDirection: 'row', backgroundColor: headerBg, borderBottomWidth: 1, borderBottomColor: borderC }}>
@@ -534,7 +545,7 @@ const MarkdownTable = memo(function MarkdownTable({ rows, hasHeader, isDark, col
           <View key={`r-${ri}`} style={{ flexDirection: 'row', backgroundColor: ri % 2 === 1 ? evenRowBg : 'transparent', borderBottomWidth: ri < bodyRows.length - 1 ? StyleSheet.hairlineWidth : 0, borderBottomColor: borderC }}>
             {Array.from({ length: colCount }).map((_, ci) => (
               <View key={`c-${ri}-${ci}`} style={{ flex: 1, minWidth: cellMinW, paddingHorizontal: 12, paddingVertical: 9, borderRightWidth: ci < colCount - 1 ? StyleSheet.hairlineWidth : 0, borderRightColor: borderC }}>
-                <Text style={{ color: subC, fontSize: 13, lineHeight: 18 }} selectable>{(row || [])[ci] ?? ''}</Text>
+                <Text style={{ color: subC, fontSize: 13, lineHeight: 18 }} selectable>{(row ?? [])[ci] ?? ''}</Text>
               </View>
             ))}
           </View>
@@ -544,12 +555,8 @@ const MarkdownTable = memo(function MarkdownTable({ rows, hasHeader, isDark, col
   );
 });
 
-// ── Inline segment renderer helper (for paragraph blocks) ─────────────────────
-function renderInlineSegments(
-  content: string,
-  handlePhonePress: (n: string) => void,
-  handleLinkPress: (u: string) => void
-) {
+// ── Inline segment renderer ─────────────────────────────────────────────────
+function renderInlineSegments(content: string, handlePhonePress: (n: string) => void, handleLinkPress: (u: string) => void) {
   if (!content) return null;
   return parseInlineMarkdown(content).map((seg, si) => {
     if (seg.type === 'strikethrough') return <Text key={si} style={{ textDecorationLine: 'line-through', opacity: 0.62 }}>{seg.content}</Text>;
@@ -570,11 +577,7 @@ export const MessageItem = memo(function MessageItem({
   onCopy,
   isGenerating,
   streaming,
-  streamingSpeed,
-  isOffline,
-  isImageTask,
   isAdmin,
-  onReply,
   onDelete,
   onChunkRendered,
   isLiked = false,
@@ -598,22 +601,30 @@ export const MessageItem = memo(function MessageItem({
   const [sourcesModalVisible, setSourcesModalVisible] = useState(false);
   const [sourcesData, setSourcesData] = useState<Source[]>([]);
 
-  // Safe content — never undefined/null, prevents crashes during streaming
-  const safeContent = typeof message.content === 'string' ? message.content : '';
+  // CRITICAL: Safe content — never undefined/null, prevents crash during streaming
+  const safeContent: string = (() => {
+    try {
+      if (message == null) return '';
+      if (typeof message.content === 'string') return message.content;
+      if (message.content == null) return '';
+      return String(message.content);
+    } catch {
+      return '';
+    }
+  })();
 
   const handleReadAloud = useCallback(async () => {
     if (ttsPlaying || ttsLoading) {
       try { ttsSound.current?.stopAsync(); ttsSound.current?.unloadAsync(); } catch {}
       ttsSound.current = null;
       try { Speech.stop(); } catch {}
-      setTtsPlaying(false);
-      setTtsLoading(false);
+      setTtsPlaying(false); setTtsLoading(false);
       return;
     }
     const text = safeContent.replace(/[#*`>]/g, '').slice(0, 2000);
     if (!text.trim()) return;
     setTtsLoading(true);
-    const selectedVoice = (settings as any).voiceSelection || (settings as any).voice_selection || 'pNInz6obpgDQGcFmaJgB';
+    const selectedVoice = (settings as any)?.voiceSelection || 'pNInz6obpgDQGcFmaJgB';
     try {
       const { data, error } = await supabase.functions.invoke('generate-tts', {
         body: { text, voice: selectedVoice, speed: 1.0 },
@@ -650,8 +661,7 @@ export const MessageItem = memo(function MessageItem({
     };
   }, []);
 
-  const isSelfHarm = isUser && containsSelfHarm(safeContent);
-
+  // Embedded image URLs in AI response
   const embeddedImages: Array<{ url: string; title?: string }> = [];
   if (!isUser && safeContent) {
     try {
@@ -674,7 +684,7 @@ export const MessageItem = memo(function MessageItem({
     setPhoneModalVisible(true);
   }, []);
 
-  // All links open in-app — never go to Safari/Chrome/external browser
+  // All links open in-app — NEVER go to Safari/Chrome/external browser
   const handleLinkPress = useCallback((url: string) => {
     if (!url) return;
     const isImage = /\.(jpg|jpeg|png|webp|gif)/i.test(url);
@@ -684,8 +694,7 @@ export const MessageItem = memo(function MessageItem({
       setImageViewerVisible(true);
       return;
     }
-    // Open in-app overlay — never external browser
-    WebBrowser.openBrowserAsync(url).catch(() => {});
+    openInApp(url);
   }, []);
 
   const handleImagePress = useCallback((url: string, allUrls: string[], idx: number) => {
@@ -697,9 +706,8 @@ export const MessageItem = memo(function MessageItem({
 
   // ── User message ──────────────────────────────────────────────────────────
   if (isUser) {
-    if (isSelfHarm) return <SafetyResponse />;
+    if (containsSelfHarm(safeContent)) return <SafetyResponse />;
 
-    // Strip system/file context from displayed user content
     const cleanUserContent = (() => {
       let c = safeContent;
       c = c.replace(/\n*\[FILE ATTACHED:[^\n]*\n[\s\S]*?(?=\n\[FILE ATTACHED:|\n\[VIDEO ATTACHED:|$)/gi, '');
@@ -711,15 +719,12 @@ export const MessageItem = memo(function MessageItem({
       return c.trim();
     })();
 
-    // Extract file attachment metadata for display as cards
     const fileAttachments: Array<{ name: string; mimeType: string }> = [];
-    const _fm = safeContent.match(/\[FILE ATTACHED: ([^\n(]+)\s*\(([^)]+)\)/g) || [];
-    _fm.forEach((m: string) => {
+    (safeContent.match(/\[FILE ATTACHED: ([^\n(]+)\s*\(([^)]+)\)/g) || []).forEach((m: string) => {
       const nm = m.match(/\[FILE ATTACHED: ([^\n(]+)\s*\(([^)]+)\)/);
       if (nm) fileAttachments.push({ name: nm[1].trim(), mimeType: nm[2].trim() });
     });
-    const _vm = safeContent.match(/\[VIDEO ATTACHED: ([^\]\n]+)/g) || [];
-    _vm.forEach((m: string) => {
+    (safeContent.match(/\[VIDEO ATTACHED: ([^\]\n]+)/g) || []).forEach((m: string) => {
       const nm = m.match(/\[VIDEO ATTACHED: ([^\]\n]+)/);
       if (nm) fileAttachments.push({ name: nm[1].trim(), mimeType: 'video' });
     });
@@ -739,7 +744,6 @@ export const MessageItem = memo(function MessageItem({
     return (
       <>
         <View style={userStyles.container}>
-          {/* Image attachments */}
           {hasValidImage && multiImages.length > 1 ? (
             <View style={{ alignSelf: 'flex-end', marginHorizontal: 16, marginBottom: cleanUserContent ? 6 : 0 }}>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }} style={{ maxHeight: 180 }}>
@@ -756,7 +760,6 @@ export const MessageItem = memo(function MessageItem({
             </TouchableOpacity>
           ) : null}
 
-          {/* File attachment cards */}
           {fileAttachments.length > 0 ? (
             <View style={{ alignSelf: 'flex-end', marginHorizontal: 16, marginBottom: cleanUserContent ? 6 : 0, gap: 5 }}>
               {fileAttachments.map((fa, fi) => {
@@ -783,13 +786,10 @@ export const MessageItem = memo(function MessageItem({
             </View>
           ) : null}
 
-          {/* Text bubble */}
           {cleanUserContent ? (
             <View style={[userStyles.bubble, { backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA' }]}>
               <Text style={[userStyles.text, { color: colors.text }]}>{cleanUserContent}</Text>
-              {message.isEdited ? (
-                <Text style={{ color: colors.textSecondary, fontSize: 11, marginTop: 4, textAlign: 'right' }}>Edited</Text>
-              ) : null}
+              {message.isEdited ? <Text style={{ color: colors.textSecondary, fontSize: 11, marginTop: 4, textAlign: 'right' }}>Edited</Text> : null}
             </View>
           ) : null}
         </View>
@@ -810,86 +810,90 @@ export const MessageItem = memo(function MessageItem({
   }
 
   // ── Assistant message ─────────────────────────────────────────────────────
-  // Parse with streaming flag so partial code fences render with loading indicator
   const isCurrentlyStreaming = !!(isGenerating || streaming);
-  const blocks = parseMarkdownBlocks(safeContent, isCurrentlyStreaming);
+
+  // SAFE parse — wrap entire parseMarkdownBlocks in try/catch to prevent crashes
+  let blocks: Block[] = [];
+  try {
+    blocks = parseMarkdownBlocks(safeContent, isCurrentlyStreaming);
+  } catch (_e) {
+    // If parsing throws during streaming, show raw text as paragraph
+    blocks = safeContent ? [{ type: 'paragraph', content: safeContent }] : [];
+  }
+
   const allImageUrls = embeddedImages.map(im => im.url);
 
   return (
     <>
       <View style={assistantStyles.container}>
         <View style={assistantStyles.inner}>
-          {isGenerating && blocks.length === 0 ? (
+          {/* Show thinking dots only when generating with no content yet */}
+          {isGenerating && !safeContent ? (
             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8, gap: 8 }}>
               <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: isDark ? '#FFFFFF' : '#000000', alignItems: 'center', justifyContent: 'center' }}>
                 <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: isDark ? '#000000' : '#FFFFFF' }} />
               </View>
-              <Text style={{ color: colors.textSecondary, fontSize: 14, fontWeight: '500' }}>Thinking...</Text>
+              <StreamingDots />
             </View>
           ) : null}
 
           {blocks.map((block, bi) => {
-            // Code block — streaming flag passed so partial fences show loading indicator
+            // Code block — streaming flag handled by StreamingCodePlaceholder
             if (block.type === 'code') {
+              if (block.streaming) {
+                // Show live streaming code placeholder with animation
+                return (
+                  <View key={`b-${bi}`} style={{ marginVertical: 6 }}>
+                    <StreamingCodePlaceholder
+                      language={block.language || 'code'}
+                      code={block.content || ''}
+                      isDark={isDark}
+                    />
+                  </View>
+                );
+              }
+              // Completed code block
               return (
                 <View key={`b-${bi}`} style={{ marginVertical: 6 }}>
                   <CodeBlock
                     code={block.content || ''}
                     language={block.language || 'plaintext'}
-                    isStreaming={!!(block as any).streaming}
+                    isStreaming={false}
                     isAdmin={isAdmin}
                   />
                 </View>
               );
             }
 
-            // Heading
             if (block.type === 'heading') {
               const fontSize = block.level === 1 ? 22 : block.level === 2 ? 19 : block.level === 3 ? 17 : 16;
               const fontWeight: any = block.level === 1 ? '800' : block.level === 2 ? '700' : '600';
               return (
                 <View key={`b-${bi}`} style={{ marginTop: bi > 0 ? 14 : 4, marginBottom: 4 }}>
-                  <InlineText
-                    text={block.content}
-                    textStyle={{ fontSize, fontWeight, color: colors.text, lineHeight: fontSize * 1.3 }}
-                    onPhonePress={handlePhonePress}
-                    onLinkPress={handleLinkPress}
-                  />
+                  <InlineText text={block.content} textStyle={{ fontSize, fontWeight, color: colors.text, lineHeight: fontSize * 1.3 }} onPhonePress={handlePhonePress} onLinkPress={handleLinkPress} />
                 </View>
               );
             }
 
-            // Divider
             if (block.type === 'divider') {
               return (
-                <View key={`b-${bi}`} style={{ marginVertical: 14, alignItems: 'center' }}>
-                  <View style={{ width: '100%', height: 1, position: 'relative' }}>
-                    <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)', borderRadius: 1 }} />
-                    <View style={{ position: 'absolute', left: '12%', right: '12%', top: 0, bottom: 0, backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)', borderRadius: 1 }} />
-                    <View style={{ position: 'absolute', left: '36%', right: '36%', top: -0.5, height: 2, backgroundColor: isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.15)', borderRadius: 1 }} />
-                  </View>
+                <View key={`b-${bi}`} style={{ marginVertical: 14 }}>
+                  <View style={{ height: 1, backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.09)', borderRadius: 1 }} />
                 </View>
               );
             }
 
-            // Blockquote
             if (block.type === 'blockquote') {
               return (
                 <View key={`b-${bi}`} style={{ flexDirection: 'row', marginVertical: 6, borderRadius: 10, overflow: 'hidden', backgroundColor: isDark ? 'rgba(99,102,241,0.09)' : 'rgba(99,102,241,0.065)' }}>
                   <View style={{ width: 3.5, backgroundColor: colors.primary, borderRadius: 2 }} />
                   <View style={{ flex: 1, paddingHorizontal: 13, paddingVertical: 10 }}>
-                    <InlineText
-                      text={block.content}
-                      textStyle={{ fontSize: 15, color: isDark ? 'rgba(255,255,255,0.8)' : 'rgba(0,0,0,0.72)', lineHeight: 23, fontStyle: 'italic' }}
-                      onPhonePress={handlePhonePress}
-                      onLinkPress={handleLinkPress}
-                    />
+                    <InlineText text={block.content} textStyle={{ fontSize: 15, color: isDark ? 'rgba(255,255,255,0.8)' : 'rgba(0,0,0,0.72)', lineHeight: 23, fontStyle: 'italic' }} onPhonePress={handlePhonePress} onLinkPress={handleLinkPress} />
                   </View>
                 </View>
               );
             }
 
-            // Table
             if (block.type === 'table') {
               return (
                 <View key={`b-${bi}`} style={{ marginVertical: 6 }}>
@@ -898,7 +902,6 @@ export const MessageItem = memo(function MessageItem({
               );
             }
 
-            // Bullet list
             if (block.type === 'bullet') {
               return (
                 <View key={`b-${bi}`} style={{ flexDirection: 'row', marginVertical: 2, paddingLeft: 4 }}>
@@ -910,7 +913,6 @@ export const MessageItem = memo(function MessageItem({
               );
             }
 
-            // Numbered list
             if (block.type === 'numbered') {
               const num = blocks.slice(0, bi).filter(b => b.type === 'numbered').length + 1;
               return (
@@ -923,7 +925,6 @@ export const MessageItem = memo(function MessageItem({
               );
             }
 
-            // Image
             if (block.type === 'image' && block.content) {
               return (
                 <TouchableOpacity key={`b-${bi}`} onPress={() => handleImagePress(block.content, [block.content], 0)} activeOpacity={0.88} style={{ marginVertical: 8 }}>
@@ -932,10 +933,8 @@ export const MessageItem = memo(function MessageItem({
               );
             }
 
-            // Sources — skip here, rendered after action row
             if (block.type === 'sources') return null;
 
-            // Paragraph
             if (block.type === 'paragraph') {
               const urlsInPara = (block.content || '').match(URL_REGEX) || [];
               const hasDownloadLink = urlsInPara.some(u => /\.(pdf|zip|doc|docx|xls|xlsx|csv|mp3|mp4|mov|apk)(\?|$)/i.test(u));
@@ -959,19 +958,17 @@ export const MessageItem = memo(function MessageItem({
             return null;
           })}
 
-          {/* Embedded image grid */}
           {embeddedImages.length > 0 ? (
             <ImageGrid images={embeddedImages} onPress={(url, idx) => handleImagePress(url, allImageUrls, idx)} onSendToChat={handleSendImageToChat} />
           ) : null}
 
-          {/* Attached image in assistant message */}
           {message.imageUrl && !isUser ? (
             <TouchableOpacity onPress={() => handleImagePress(message.imageUrl!, [message.imageUrl!], 0)} activeOpacity={0.88} style={{ marginTop: 10 }}>
               <Image source={{ uri: message.imageUrl }} style={{ width: '100%', height: 240, borderRadius: 16 }} contentFit="cover" transition={200} />
             </TouchableOpacity>
           ) : null}
 
-          {/* Action row — only after streaming completes */}
+          {/* Action row — only shown after streaming completes */}
           {!isGenerating && !streaming && safeContent ? (() => {
             const sourcesBlock = blocks.find(b => b.type === 'sources' && b.sources && b.sources.length > 0);
             return (
@@ -979,6 +976,17 @@ export const MessageItem = memo(function MessageItem({
                 <View style={assistantStyles.actionRow}>
                   <TouchableOpacity onPress={onCopy} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} style={assistantStyles.actionBtn}>
                     <Ionicons name="copy-outline" size={18} color={colors.textSecondary} />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={handleReadAloud}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    style={assistantStyles.actionBtn}
+                  >
+                    {ttsLoading ? (
+                      <ActivityIndicator size="small" color={colors.textSecondary} />
+                    ) : (
+                      <Ionicons name={ttsPlaying ? 'stop-circle-outline' : 'volume-medium-outline'} size={18} color={ttsPlaying ? '#10A37F' : colors.textSecondary} />
+                    )}
                   </TouchableOpacity>
                   <TouchableOpacity onPress={() => onLike?.(message.id)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} style={assistantStyles.actionBtn}>
                     <Ionicons name={isLiked ? 'thumbs-up' : 'thumbs-up-outline'} size={18} color={isLiked ? '#10A37F' : colors.textSecondary} />
@@ -992,17 +1000,20 @@ export const MessageItem = memo(function MessageItem({
                     <Ionicons name="ellipsis-horizontal" size={18} color={colors.textSecondary} />
                   </TouchableOpacity>
                 </View>
+                {/* Sources badge — opens in-app */}
                 {sourcesBlock ? (
                   <SourcesBadge
                     sources={sourcesBlock.sources!}
                     onPress={() => {
-                      const converted: Source[] = (sourcesBlock.sources || []).map(s => ({
-                        title: s.startsWith('http') ? getDomainFromSource(s) : s,
-                        url: s.startsWith('http') ? s : `https://www.google.com/search?q=${encodeURIComponent(s)}`,
-                        domain: getDomainFromSource(s),
-                      }));
-                      setSourcesData(converted);
-                      setSourcesModalVisible(true);
+                      try {
+                        const converted: Source[] = (sourcesBlock.sources || []).map(s => ({
+                          title: s.startsWith('http') ? getDomainFromSource(s) : s,
+                          url: s.startsWith('http') ? s : `https://www.google.com/search?q=${encodeURIComponent(s)}`,
+                          domain: getDomainFromSource(s),
+                        }));
+                        setSourcesData(converted);
+                        setSourcesModalVisible(true);
+                      } catch {}
                     }}
                   />
                 ) : null}
@@ -1012,7 +1023,6 @@ export const MessageItem = memo(function MessageItem({
         </View>
       </View>
 
-      {/* Modals */}
       <PhoneCallModal visible={phoneModalVisible} number={pendingPhone} onClose={() => setPhoneModalVisible(false)} />
 
       <Modal visible={imageViewerVisible} transparent animationType="fade" onRequestClose={() => setImageViewerVisible(false)} statusBarTranslucent>
@@ -1035,6 +1045,7 @@ export const MessageItem = memo(function MessageItem({
         </View>
       </Modal>
 
+      {/* Sources modal — all domain links open in-app */}
       <SourcesModal visible={sourcesModalVisible} sources={sourcesData} onClose={() => setSourcesModalVisible(false)} />
     </>
   );
@@ -1042,40 +1053,14 @@ export const MessageItem = memo(function MessageItem({
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 const userStyles = StyleSheet.create({
-  container: {
-    alignItems: 'flex-end',
-    paddingHorizontal: 16,
-    marginBottom: 14,
-  },
-  bubble: {
-    maxWidth: '82%',
-    borderRadius: 20,
-    borderBottomRightRadius: 6,
-    paddingHorizontal: 15,
-    paddingVertical: 11,
-  },
-  text: {
-    fontSize: 16,
-    lineHeight: 24,
-  },
+  container: { alignItems: 'flex-end', paddingHorizontal: 16, marginBottom: 14 },
+  bubble: { maxWidth: '82%', borderRadius: 20, borderBottomRightRadius: 6, paddingHorizontal: 15, paddingVertical: 11 },
+  text: { fontSize: 16, lineHeight: 24 },
 });
 
 const assistantStyles = StyleSheet.create({
-  container: {
-    paddingHorizontal: 16,
-    marginBottom: 16,
-  },
-  inner: {
-    maxWidth: '100%',
-  },
-  actionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 10,
-    gap: 4,
-  },
-  actionBtn: {
-    padding: 7,
-    borderRadius: 10,
-  },
+  container: { paddingHorizontal: 16, marginBottom: 16 },
+  inner: { maxWidth: '100%' },
+  actionRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10, gap: 4 },
+  actionBtn: { padding: 7, borderRadius: 10 },
 });

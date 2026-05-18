@@ -296,13 +296,15 @@ export const SourcesListModal = memo(function SourcesListModal({
     }
   }, [visible, translateY, opacity]);
 
-  // Open URL in-app browser — never open external Safari/Chrome
+  // Open URL in-app browser — NEVER open external Safari/Chrome/system browser
   const handleOpenUrl = useCallback(async (url: string) => {
-    if (!url) return;
+    if (!url || typeof url !== 'string') return;
+    // Ensure full URL
+    const fullUrl = url.startsWith('http') ? url : `https://${url}`;
     try {
-      await WebBrowser.openBrowserAsync(url);
+      await WebBrowser.openBrowserAsync(fullUrl);
     } catch (_e) {
-      // silently ignore — stays in app, never goes external
+      // silently ignore — never goes outside app
     }
   }, []);
 
