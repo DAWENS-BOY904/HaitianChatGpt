@@ -157,10 +157,7 @@ function SafetyResponse() {
     ]);
   };
   const handleChat = () => {
-    Alert.alert('Open Crisis Chat', 'This will open the 988 crisis chat in your browser.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Open', onPress: () => Linking.openURL('https://988lifeline.org/chat/') },
-    ]);
+    WebBrowser.openBrowserAsync('https://988lifeline.org/chat/').catch(() => {});
   };
   return (
     <View style={{ padding: 16, marginHorizontal: 16, marginBottom: 12, backgroundColor: isDark ? '#1C1C1E' : '#F2F2F7', borderRadius: 18, borderLeftWidth: 4, borderLeftColor: '#FF453A' }}>
@@ -216,14 +213,13 @@ function PhoneCallModal({ visible, number, onClose }: { visible: boolean; number
 // ── Download link card ────────────────────────────────────────────────────────
 function DownloadLinkCard({ url, label }: { url: string; label?: string }) {
   const { colors, isDark } = useTheme();
-  const fileName = label || url.split('/').pop()?.split('?')[0] || 'Download';
+  const fileName = label || (url || '').split('/').pop()?.split('?')[0] || 'Download';
   const ext = fileName.split('.').pop()?.toUpperCase() || 'FILE';
   const handlePress = useCallback(async () => {
-    try {
-      const supported = await Linking.canOpenURL(url);
-      if (supported) await Linking.openURL(url);
-      else Alert.alert('Cannot open URL', 'This link cannot be opened on this device.');
-    } catch (e) { Alert.alert('Error', 'Failed to open the link.'); }
+    if (!url) return;
+    // Open in-app browser
+    try { await WebBrowser.openBrowserAsync(url); }
+    catch (_e) {}
   }, [url]);
   return (
     <TouchableOpacity onPress={handlePress} activeOpacity={0.75} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)', borderRadius: 14, padding: 12, marginVertical: 4, gap: 12, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)' }}>
@@ -243,13 +239,14 @@ function DownloadLinkCard({ url, label }: { url: string; label?: string }) {
 const FAVICON_BASE = 'https://www.google.com/s2/favicons?domain=';
 
 function getDomainFromSource(src: string): string {
+  if (!src) return '';
   try { if (src.startsWith('http')) return new URL(src).hostname.replace('www.', ''); } catch {}
   return src.replace(/^https?:\/\//, '').split('/')[0];
 }
 
 function SourcesBadge({ sources, onPress }: { sources: string[]; onPress: () => void }) {
   const { colors, isDark } = useTheme();
-  const shown = sources.slice(0, 3);
+  const shown = (sources || []).slice(0, 3);
   return (
     <TouchableOpacity onPress={onPress} activeOpacity={0.75} style={{ flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', backgroundColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.05)', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 6, gap: 6, marginTop: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.09)' }}>
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -279,8 +276,8 @@ interface TextSegment {
 }
 
 function parseInlineMarkdown(text: string): TextSegment[] {
+  if (!text) return [];
   const segments: TextSegment[] = [];
-  // ~~strikethrough~~, **bold**, *italic*, `code`, [link](url), image URLs, phone, plain URLs
   const pattern = /(~~([^~]+)~~|\*\*([^*]+)\*\*|\*([^*]+)\*|`([^`]+)`|\[([^\]]+)\]\((https?:\/\/[^\)]+)\)|(https?:\/\/[^\s"')]+\.(?:jpg|jpeg|png|webp|gif)(?:\?[^\s"')]*)?)|(\+?[\d\s\-\(\)]{10,})|(https?:\/\/[^\s"')]+))/g;
   let lastIndex = 0;
   let match;
@@ -291,16 +288,16 @@ function parseInlineMarkdown(text: string): TextSegment[] {
     }
     const full = match[0];
     if (full.startsWith('~~')) {
-      segments.push({ type: 'strikethrough', content: match[2] });
+      segments.push({ type: 'strikethrough', content: match[2] || '' });
     } else if (full.startsWith('**')) {
-      segments.push({ type: 'bold', content: match[3] });
+      segments.push({ type: 'bold', content: match[3] || '' });
     } else if (full.startsWith('*')) {
-      segments.push({ type: 'italic', content: match[4] });
+      segments.push({ type: 'italic', content: match[4] || '' });
     } else if (full.startsWith('`')) {
-      segments.push({ type: 'code_inline', content: match[5] });
+      segments.push({ type: 'code_inline', content: match[5] || '' });
     } else if (full.startsWith('[')) {
-      const url = match[7];
-      const label = match[6];
+      const url = match[7] || '';
+      const label = match[6] || '';
       const isImg = /\.(jpg|jpeg|png|webp|gif)/i.test(url);
       segments.push({ type: isImg ? 'image_url' : 'link', content: label, url });
     } else if (/^\+?[\d\s\-\(\)]{10,}$/.test(full.trim())) {
@@ -325,35 +322,39 @@ interface Block {
   content: string;
   level?: number;
   language?: string;
+  streaming?: boolean;
   sources?: string[];
   rows?: string[][];
   hasHeader?: boolean;
 }
 
-function parseMarkdownBlocks(raw: string): Block[] {
+function parseMarkdownBlocks(raw: string, isStreaming = false): Block[] {
   if (!raw) return [];
   const blocks: Block[] = [];
 
   // Extract sources block first
   let sourcesBlock: Block | null = null;
-  const sourcesMatch = raw.match(/\[SOURCES\]([\s\S]*?)(?:\[\/SOURCES\]|$)/i);
-  if (sourcesMatch) {
-    const srcLines = sourcesMatch[1].trim().split('\n').map(s => s.replace(/^[-*•]\s*/, '').trim()).filter(Boolean);
-    if (srcLines.length > 0) sourcesBlock = { type: 'sources', content: '', sources: srcLines };
-  }
+  try {
+    const sourcesMatch = raw.match(/\[SOURCES\]([\s\S]*?)(?:\[\/SOURCES\]|$)/i);
+    if (sourcesMatch) {
+      const srcLines = (sourcesMatch[1] || '').trim().split('\n')
+        .map((s: string) => s.replace(/^[-*•]\s*/, '').trim()).filter(Boolean);
+      if (srcLines.length > 0) sourcesBlock = { type: 'sources', content: '', sources: srcLines };
+    }
+  } catch (_e) {}
 
   const cleanRaw = raw.replace(/\[SOURCES\][\s\S]*?(?:\[\/SOURCES\]|$)/gi, '').trim();
   const cleanLines = cleanRaw.split('\n');
 
   let i = 0;
   while (i < cleanLines.length) {
-    const line = cleanLines[i];
+    const line = cleanLines[i] || '';
 
     // Table detection — lines starting with |
     if (line.trim().startsWith('|') && line.trim().includes('|', 1)) {
       const tableLines: string[] = [];
       let ti = i;
-      while (ti < cleanLines.length && cleanLines[ti].trim().startsWith('|')) {
+      while (ti < cleanLines.length && (cleanLines[ti] || '').trim().startsWith('|')) {
         tableLines.push(cleanLines[ti]);
         ti++;
       }
@@ -378,25 +379,35 @@ function parseMarkdownBlocks(raw: string): Block[] {
       }
     }
 
-    // Code block
+    // Code block — track whether fence is properly closed
     if (line.trim().startsWith('```')) {
       const lang = line.trim().slice(3).trim() || 'plaintext';
       const codeLines: string[] = [];
       i++;
-      while (i < cleanLines.length && !cleanLines[i].trim().startsWith('```')) {
-        codeLines.push(cleanLines[i]);
+      let closedFence = false;
+      while (i < cleanLines.length) {
+        if ((cleanLines[i] || '').trim().startsWith('```')) {
+          closedFence = true;
+          i++;
+          break;
+        }
+        codeLines.push(cleanLines[i] || '');
         i++;
       }
-      i++;
-      const code = codeLines.join('\n').trim();
-      if (code) blocks.push({ type: 'code', content: code, language: lang });
+      const code = codeLines.join('\n');
+      if (!closedFence && isStreaming) {
+        // Partial/streaming code block — show with streaming indicator
+        blocks.push({ type: 'code', content: code, language: lang, streaming: true });
+      } else if (code.trim() || closedFence) {
+        blocks.push({ type: 'code', content: code.trim(), language: lang, streaming: false });
+      }
       continue;
     }
 
     // Heading
     const headingMatch = line.match(/^(#{1,6})\s+(.+)/);
     if (headingMatch) {
-      blocks.push({ type: 'heading', content: headingMatch[2], level: headingMatch[1].length });
+      blocks.push({ type: 'heading', content: headingMatch[2] || '', level: headingMatch[1].length });
       i++;
       continue;
     }
@@ -418,7 +429,7 @@ function parseMarkdownBlocks(raw: string): Block[] {
     // Bullet list
     const bulletMatch = line.match(/^(\s*)[-*+•]\s+(.+)/);
     if (bulletMatch) {
-      blocks.push({ type: 'bullet', content: bulletMatch[2] });
+      blocks.push({ type: 'bullet', content: bulletMatch[2] || '' });
       i++;
       continue;
     }
@@ -426,7 +437,7 @@ function parseMarkdownBlocks(raw: string): Block[] {
     // Numbered list
     const numberedMatch = line.match(/^(\s*)\d+[.)]\s+(.+)/);
     if (numberedMatch) {
-      blocks.push({ type: 'numbered', content: numberedMatch[2] });
+      blocks.push({ type: 'numbered', content: numberedMatch[2] || '' });
       i++;
       continue;
     }
@@ -434,7 +445,7 @@ function parseMarkdownBlocks(raw: string): Block[] {
     // Image markdown
     const imgMatch = line.match(/!\[([^\]]*)\]\((https?:\/\/[^\)]+)\)/);
     if (imgMatch) {
-      blocks.push({ type: 'image', content: imgMatch[2] });
+      blocks.push({ type: 'image', content: imgMatch[2] || '' });
       i++;
       continue;
     }
@@ -457,7 +468,7 @@ function InlineText({ text, textStyle, onPhonePress, onLinkPress }: {
   onPhonePress?: (num: string) => void;
   onLinkPress?: (url: string) => void;
 }) {
-  const segments = parseInlineMarkdown(text);
+  const segments = parseInlineMarkdown(text || '');
   return (
     <Text style={textStyle}>
       {segments.map((seg, i) => {
@@ -523,7 +534,7 @@ const MarkdownTable = memo(function MarkdownTable({ rows, hasHeader, isDark, col
           <View key={`r-${ri}`} style={{ flexDirection: 'row', backgroundColor: ri % 2 === 1 ? evenRowBg : 'transparent', borderBottomWidth: ri < bodyRows.length - 1 ? StyleSheet.hairlineWidth : 0, borderBottomColor: borderC }}>
             {Array.from({ length: colCount }).map((_, ci) => (
               <View key={`c-${ri}-${ci}`} style={{ flex: 1, minWidth: cellMinW, paddingHorizontal: 12, paddingVertical: 9, borderRightWidth: ci < colCount - 1 ? StyleSheet.hairlineWidth : 0, borderRightColor: borderC }}>
-                <Text style={{ color: subC, fontSize: 13, lineHeight: 18 }} selectable>{row[ci] ?? ''}</Text>
+                <Text style={{ color: subC, fontSize: 13, lineHeight: 18 }} selectable>{(row || [])[ci] ?? ''}</Text>
               </View>
             ))}
           </View>
@@ -539,6 +550,7 @@ function renderInlineSegments(
   handlePhonePress: (n: string) => void,
   handleLinkPress: (u: string) => void
 ) {
+  if (!content) return null;
   return parseInlineMarkdown(content).map((seg, si) => {
     if (seg.type === 'strikethrough') return <Text key={si} style={{ textDecorationLine: 'line-through', opacity: 0.62 }}>{seg.content}</Text>;
     if (seg.type === 'bold') return <Text key={si} style={{ fontWeight: '700' }}>{seg.content}</Text>;
@@ -585,19 +597,20 @@ export const MessageItem = memo(function MessageItem({
   const [viewerIndex, setViewerIndex] = useState(0);
   const [sourcesModalVisible, setSourcesModalVisible] = useState(false);
   const [sourcesData, setSourcesData] = useState<Source[]>([]);
-  const [linkSafetyVisible, setLinkSafetyVisible] = useState(false);
-  const [pendingLink, setPendingLink] = useState('');
+
+  // Safe content — never undefined/null, prevents crashes during streaming
+  const safeContent = typeof message.content === 'string' ? message.content : '';
 
   const handleReadAloud = useCallback(async () => {
     if (ttsPlaying || ttsLoading) {
-      try { ttsSound.current?.stopAsync(); ttsSound.current?.unloadAsync(); } catch (e) { console.error("Error stopping TTS sound:", e); } // Added error handling
+      try { ttsSound.current?.stopAsync(); ttsSound.current?.unloadAsync(); } catch {}
       ttsSound.current = null;
-      try { Speech.stop(); } catch (e) { console.error("Error stopping Speech:", e); } // Added error handling
+      try { Speech.stop(); } catch {}
       setTtsPlaying(false);
       setTtsLoading(false);
       return;
     }
-    const text = (message.content || '').replace(/[#*`>]/g, '').slice(0, 2000);
+    const text = safeContent.replace(/[#*`>]/g, '').slice(0, 2000);
     if (!text.trim()) return;
     setTtsLoading(true);
     const selectedVoice = (settings as any).voiceSelection || (settings as any).voice_selection || 'pNInz6obpgDQGcFmaJgB';
@@ -608,7 +621,7 @@ export const MessageItem = memo(function MessageItem({
       setTtsLoading(false);
       if (error || !data) throw new Error('TTS failed');
       if (data.fallback === true || data.code === 'USE_DEVICE_TTS') {
-        try { Speech.stop(); } catch (e) { console.error("Error stopping Speech (fallback):", e); } // Added error handling
+        try { Speech.stop(); } catch {}
         setTtsPlaying(true);
         Speech.speak(text, { language: data.lang || 'en-US', rate: 1.0, onDone: () => setTtsPlaying(false), onError: () => setTtsPlaying(false) });
         return;
@@ -624,35 +637,36 @@ export const MessageItem = memo(function MessageItem({
       });
     } catch (_e) {
       setTtsLoading(false);
-      try { Speech.stop(); } catch (e) { console.error("Error stopping Speech (catch):", e); } // Added error handling
+      try { Speech.stop(); } catch {}
       setTtsPlaying(true);
       Speech.speak(text, { language: 'en-US', rate: 1.0, onDone: () => setTtsPlaying(false), onError: () => setTtsPlaying(false) });
     }
-  }, [message.content, settings, supabase, ttsPlaying, ttsLoading]);
+  }, [safeContent, settings, supabase, ttsPlaying, ttsLoading]);
 
   useEffect(() => {
     return () => {
-      try { ttsSound.current?.stopAsync(); ttsSound.current?.unloadAsync(); } catch (e) { console.error("Error unloading TTS sound on cleanup:", e); } // Added error handling
-      try { Speech.stop(); } catch (e) { console.error("Error stopping Speech on cleanup:", e); } // Added error handling
+      try { ttsSound.current?.stopAsync(); ttsSound.current?.unloadAsync(); } catch {}
+      try { Speech.stop(); } catch {}
     };
   }, []);
 
-  const content = message.content || '';
-  const isSelfHarm = isUser && containsSelfHarm(content);
+  const isSelfHarm = isUser && containsSelfHarm(safeContent);
 
   const embeddedImages: Array<{ url: string; title?: string }> = [];
-  if (!isUser) {
-    const imgMatches = content.match(IMAGE_URL_REGEX);
-    if (imgMatches) {
-      imgMatches.forEach(url => {
-        if (!embeddedImages.find(im => im.url === url)) embeddedImages.push({ url });
-      });
-    }
+  if (!isUser && safeContent) {
+    try {
+      const imgMatches = safeContent.match(IMAGE_URL_REGEX);
+      if (imgMatches) {
+        imgMatches.forEach((url: string) => {
+          if (url && !embeddedImages.find(im => im.url === url)) embeddedImages.push({ url });
+        });
+      }
+    } catch {}
   }
 
   const handleSendImageToChat = useCallback((url: string) => {
     Clipboard.setStringAsync(url).catch(() => {});
-    Alert.alert('Image URL Copied', 'Paste it or the parent will attach it automatically.');
+    Alert.alert('Image URL Copied', 'The image URL has been copied to clipboard.');
   }, []);
 
   const handlePhonePress = useCallback((num: string) => {
@@ -660,27 +674,26 @@ export const MessageItem = memo(function MessageItem({
     setPhoneModalVisible(true);
   }, []);
 
+  // All links open in-app — never go to Safari/Chrome/external browser
   const handleLinkPress = useCallback((url: string) => {
     if (!url) return;
     const isImage = /\.(jpg|jpeg|png|webp|gif)/i.test(url);
-    if (isImage) { setViewerImages([url]); setViewerIndex(0); setImageViewerVisible(true); return; }
-    setPendingLink(url);
-    setLinkSafetyVisible(true);
+    if (isImage) {
+      setViewerImages([url]);
+      setViewerIndex(0);
+      setImageViewerVisible(true);
+      return;
+    }
+    // Open in-app overlay — never external browser
+    WebBrowser.openBrowserAsync(url).catch(() => {});
   }, []);
 
   const handleImagePress = useCallback((url: string, allUrls: string[], idx: number) => {
-    setViewerImages(allUrls);
-    setViewerIndex(idx);
+    if (!url) return;
+    setViewerImages(allUrls && allUrls.length > 0 ? allUrls : [url]);
+    setViewerIndex(Math.max(0, idx || 0));
     setImageViewerVisible(true);
   }, []);
-
-  const handleLinkConfirm = useCallback(async () => {
-    setLinkSafetyVisible(false);
-    const url = pendingLink;
-    if (!url) return;
-    try { await WebBrowser.openBrowserAsync(url); }
-    catch (_e) { Linking.openURL(url).catch(() => {}); }
-  }, [pendingLink]);
 
   // ── User message ──────────────────────────────────────────────────────────
   if (isUser) {
@@ -688,28 +701,24 @@ export const MessageItem = memo(function MessageItem({
 
     // Strip system/file context from displayed user content
     const cleanUserContent = (() => {
-      let c = content;
-      // Remove [FILE ATTACHED: ...] blocks
+      let c = safeContent;
       c = c.replace(/\n*\[FILE ATTACHED:[^\n]*\n[\s\S]*?(?=\n\[FILE ATTACHED:|\n\[VIDEO ATTACHED:|$)/gi, '');
       c = c.replace(/\n*\[FILE ATTACHED:[^\]]*\][^\n]*/gi, '');
-      // Remove [VIDEO ATTACHED: ...] blocks
       c = c.replace(/\n*\[VIDEO ATTACHED:[^\n]*/gi, '');
-      // Remove [SYSTEM: ...] and [SYSTEM RULES: ...] prefix blocks
       c = c.replace(/^\[SYSTEM:[\s\S]*?\]\s*/i, '');
       c = c.replace(/^\[SYSTEM RULES:[\s\S]*?\]\n*/i, '');
-      // Remove [Replying to ...] prefix
       c = c.replace(/^\[Replying to[^\]]*\]\n*/i, '');
       return c.trim();
     })();
 
     // Extract file attachment metadata for display as cards
     const fileAttachments: Array<{ name: string; mimeType: string }> = [];
-    const _fm = content.match(/\[FILE ATTACHED: ([^\n(]+)\s*\(([^)]+)\)/g) || [];
+    const _fm = safeContent.match(/\[FILE ATTACHED: ([^\n(]+)\s*\(([^)]+)\)/g) || [];
     _fm.forEach((m: string) => {
       const nm = m.match(/\[FILE ATTACHED: ([^\n(]+)\s*\(([^)]+)\)/);
       if (nm) fileAttachments.push({ name: nm[1].trim(), mimeType: nm[2].trim() });
     });
-    const _vm = content.match(/\[VIDEO ATTACHED: ([^\]\n]+)/g) || [];
+    const _vm = safeContent.match(/\[VIDEO ATTACHED: ([^\]\n]+)/g) || [];
     _vm.forEach((m: string) => {
       const nm = m.match(/\[VIDEO ATTACHED: ([^\]\n]+)/);
       if (nm) fileAttachments.push({ name: nm[1].trim(), mimeType: 'video' });
@@ -801,7 +810,9 @@ export const MessageItem = memo(function MessageItem({
   }
 
   // ── Assistant message ─────────────────────────────────────────────────────
-  const blocks = parseMarkdownBlocks(content);
+  // Parse with streaming flag so partial code fences render with loading indicator
+  const isCurrentlyStreaming = !!(isGenerating || streaming);
+  const blocks = parseMarkdownBlocks(safeContent, isCurrentlyStreaming);
   const allImageUrls = embeddedImages.map(im => im.url);
 
   return (
@@ -818,11 +829,16 @@ export const MessageItem = memo(function MessageItem({
           ) : null}
 
           {blocks.map((block, bi) => {
-            // Code block
+            // Code block — streaming flag passed so partial fences show loading indicator
             if (block.type === 'code') {
               return (
-                <View key={bi} style={{ marginVertical: 6 }}>
-                  <CodeBlock code={block.content} language={block.language || 'plaintext'} isAdmin={isAdmin} />
+                <View key={`b-${bi}`} style={{ marginVertical: 6 }}>
+                  <CodeBlock
+                    code={block.content || ''}
+                    language={block.language || 'plaintext'}
+                    isStreaming={!!(block as any).streaming}
+                    isAdmin={isAdmin}
+                  />
                 </View>
               );
             }
@@ -832,7 +848,7 @@ export const MessageItem = memo(function MessageItem({
               const fontSize = block.level === 1 ? 22 : block.level === 2 ? 19 : block.level === 3 ? 17 : 16;
               const fontWeight: any = block.level === 1 ? '800' : block.level === 2 ? '700' : '600';
               return (
-                <View key={bi} style={{ marginTop: bi > 0 ? 14 : 4, marginBottom: 4 }}>
+                <View key={`b-${bi}`} style={{ marginTop: bi > 0 ? 14 : 4, marginBottom: 4 }}>
                   <InlineText
                     text={block.content}
                     textStyle={{ fontSize, fontWeight, color: colors.text, lineHeight: fontSize * 1.3 }}
@@ -843,10 +859,10 @@ export const MessageItem = memo(function MessageItem({
               );
             }
 
-            // Divider — modern gradient-style separator
+            // Divider
             if (block.type === 'divider') {
               return (
-                <View key={bi} style={{ marginVertical: 14, alignItems: 'center' }}>
+                <View key={`b-${bi}`} style={{ marginVertical: 14, alignItems: 'center' }}>
                   <View style={{ width: '100%', height: 1, position: 'relative' }}>
                     <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)', borderRadius: 1 }} />
                     <View style={{ position: 'absolute', left: '12%', right: '12%', top: 0, bottom: 0, backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)', borderRadius: 1 }} />
@@ -856,10 +872,10 @@ export const MessageItem = memo(function MessageItem({
               );
             }
 
-            // Blockquote — ChatGPT/Notion style
+            // Blockquote
             if (block.type === 'blockquote') {
               return (
-                <View key={bi} style={{ flexDirection: 'row', marginVertical: 6, borderRadius: 10, overflow: 'hidden', backgroundColor: isDark ? 'rgba(99,102,241,0.09)' : 'rgba(99,102,241,0.065)' }}>
+                <View key={`b-${bi}`} style={{ flexDirection: 'row', marginVertical: 6, borderRadius: 10, overflow: 'hidden', backgroundColor: isDark ? 'rgba(99,102,241,0.09)' : 'rgba(99,102,241,0.065)' }}>
                   <View style={{ width: 3.5, backgroundColor: colors.primary, borderRadius: 2 }} />
                   <View style={{ flex: 1, paddingHorizontal: 13, paddingVertical: 10 }}>
                     <InlineText
@@ -876,7 +892,7 @@ export const MessageItem = memo(function MessageItem({
             // Table
             if (block.type === 'table') {
               return (
-                <View key={bi} style={{ marginVertical: 6 }}>
+                <View key={`b-${bi}`} style={{ marginVertical: 6 }}>
                   <MarkdownTable rows={block.rows || []} hasHeader={block.hasHeader} isDark={isDark} colors={colors} />
                 </View>
               );
@@ -885,7 +901,7 @@ export const MessageItem = memo(function MessageItem({
             // Bullet list
             if (block.type === 'bullet') {
               return (
-                <View key={bi} style={{ flexDirection: 'row', marginVertical: 2, paddingLeft: 4 }}>
+                <View key={`b-${bi}`} style={{ flexDirection: 'row', marginVertical: 2, paddingLeft: 4 }}>
                   <Text style={{ color: colors.text, fontSize: 16, marginRight: 8, marginTop: 1, lineHeight: 24 }}>{'\u2022'}</Text>
                   <View style={{ flex: 1 }}>
                     <InlineText text={block.content} textStyle={{ fontSize: 16, color: colors.text, lineHeight: 24 }} onPhonePress={handlePhonePress} onLinkPress={handleLinkPress} />
@@ -898,7 +914,7 @@ export const MessageItem = memo(function MessageItem({
             if (block.type === 'numbered') {
               const num = blocks.slice(0, bi).filter(b => b.type === 'numbered').length + 1;
               return (
-                <View key={bi} style={{ flexDirection: 'row', marginVertical: 2, paddingLeft: 4 }}>
+                <View key={`b-${bi}`} style={{ flexDirection: 'row', marginVertical: 2, paddingLeft: 4 }}>
                   <Text style={{ color: colors.primary, fontSize: 16, marginRight: 8, fontWeight: '700', minWidth: 22, lineHeight: 24 }}>{num}.</Text>
                   <View style={{ flex: 1 }}>
                     <InlineText text={block.content} textStyle={{ fontSize: 16, color: colors.text, lineHeight: 24 }} onPhonePress={handlePhonePress} onLinkPress={handleLinkPress} />
@@ -908,9 +924,9 @@ export const MessageItem = memo(function MessageItem({
             }
 
             // Image
-            if (block.type === 'image') {
+            if (block.type === 'image' && block.content) {
               return (
-                <TouchableOpacity key={bi} onPress={() => handleImagePress(block.content, [block.content], 0)} activeOpacity={0.88} style={{ marginVertical: 8 }}>
+                <TouchableOpacity key={`b-${bi}`} onPress={() => handleImagePress(block.content, [block.content], 0)} activeOpacity={0.88} style={{ marginVertical: 8 }}>
                   <Image source={{ uri: block.content }} style={{ width: '100%', height: 220, borderRadius: 16 }} contentFit="cover" transition={200} />
                 </TouchableOpacity>
               );
@@ -921,20 +937,20 @@ export const MessageItem = memo(function MessageItem({
 
             // Paragraph
             if (block.type === 'paragraph') {
-              const urlsInPara = block.content.match(URL_REGEX) || [];
+              const urlsInPara = (block.content || '').match(URL_REGEX) || [];
               const hasDownloadLink = urlsInPara.some(u => /\.(pdf|zip|doc|docx|xls|xlsx|csv|mp3|mp4|mov|apk)(\?|$)/i.test(u));
               if (hasDownloadLink) {
                 return (
-                  <View key={bi} style={{ marginVertical: 3 }}>
-                    <InlineText text={block.content.replace(URL_REGEX, '').trim()} textStyle={{ fontSize: 16, color: colors.text, lineHeight: 25 }} onPhonePress={handlePhonePress} onLinkPress={handleLinkPress} />
+                  <View key={`b-${bi}`} style={{ marginVertical: 3 }}>
+                    <InlineText text={(block.content || '').replace(URL_REGEX, '').trim()} textStyle={{ fontSize: 16, color: colors.text, lineHeight: 25 }} onPhonePress={handlePhonePress} onLinkPress={handleLinkPress} />
                     {urlsInPara.map((url, ui) => <DownloadLinkCard key={ui} url={url} />)}
                   </View>
                 );
               }
               return (
-                <View key={bi} style={{ marginVertical: 3 }}>
+                <View key={`b-${bi}`} style={{ marginVertical: 3 }}>
                   <Text selectable selectionColor={colors.primary + '55'} style={{ fontSize: 16, color: colors.text, lineHeight: 25 }}>
-                    {renderInlineSegments(block.content, handlePhonePress, handleLinkPress)}
+                    {renderInlineSegments(block.content || '', handlePhonePress, handleLinkPress)}
                   </Text>
                 </View>
               );
@@ -955,8 +971,8 @@ export const MessageItem = memo(function MessageItem({
             </TouchableOpacity>
           ) : null}
 
-          {/* Action row */}
-          {!isGenerating && !streaming && content ? (() => {
+          {/* Action row — only after streaming completes */}
+          {!isGenerating && !streaming && safeContent ? (() => {
             const sourcesBlock = blocks.find(b => b.type === 'sources' && b.sources && b.sources.length > 0);
             return (
               <>
@@ -981,9 +997,9 @@ export const MessageItem = memo(function MessageItem({
                     sources={sourcesBlock.sources!}
                     onPress={() => {
                       const converted: Source[] = (sourcesBlock.sources || []).map(s => ({
-                        title: s,
+                        title: s.startsWith('http') ? getDomainFromSource(s) : s,
                         url: s.startsWith('http') ? s : `https://www.google.com/search?q=${encodeURIComponent(s)}`,
-                        domain: s.startsWith('http') ? undefined : s,
+                        domain: getDomainFromSource(s),
                       }));
                       setSourcesData(converted);
                       setSourcesModalVisible(true);
@@ -1020,7 +1036,6 @@ export const MessageItem = memo(function MessageItem({
       </Modal>
 
       <SourcesModal visible={sourcesModalVisible} sources={sourcesData} onClose={() => setSourcesModalVisible(false)} />
-      <LinkSafetyModal visible={linkSafetyVisible} url={pendingLink} onClose={() => setLinkSafetyVisible(false)} onConfirm={handleLinkConfirm} />
     </>
   );
 });
@@ -1064,5 +1079,3 @@ const assistantStyles = StyleSheet.create({
     borderRadius: 10,
   },
 });
-
-
