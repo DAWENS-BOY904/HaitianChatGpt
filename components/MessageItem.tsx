@@ -1,4 +1,4 @@
-fix ai display message li pa dwe fason li ye make another display ai message also ai can create table format.
+
 import React, { useState, useCallback, useRef, useEffect, memo } from 'react';
 import {
   View,
@@ -590,9 +590,9 @@ export const MessageItem = memo(function MessageItem({
 
   const handleReadAloud = useCallback(async () => {
     if (ttsPlaying || ttsLoading) {
-      try { ttsSound.current?.stopAsync(); ttsSound.current?.unloadAsync(); } catch {}
+      try { ttsSound.current?.stopAsync(); ttsSound.current?.unloadAsync(); } catch (e) { console.error("Error stopping TTS sound:", e); } // Added error handling
       ttsSound.current = null;
-      try { Speech.stop(); } catch {}
+      try { Speech.stop(); } catch (e) { console.error("Error stopping Speech:", e); } // Added error handling
       setTtsPlaying(false);
       setTtsLoading(false);
       return;
@@ -608,7 +608,7 @@ export const MessageItem = memo(function MessageItem({
       setTtsLoading(false);
       if (error || !data) throw new Error('TTS failed');
       if (data.fallback === true || data.code === 'USE_DEVICE_TTS') {
-        try { Speech.stop(); } catch {}
+        try { Speech.stop(); } catch (e) { console.error("Error stopping Speech (fallback):", e); } // Added error handling
         setTtsPlaying(true);
         Speech.speak(text, { language: data.lang || 'en-US', rate: 1.0, onDone: () => setTtsPlaying(false), onError: () => setTtsPlaying(false) });
         return;
@@ -624,7 +624,7 @@ export const MessageItem = memo(function MessageItem({
       });
     } catch (_e) {
       setTtsLoading(false);
-      try { Speech.stop(); } catch {}
+      try { Speech.stop(); } catch (e) { console.error("Error stopping Speech (catch):", e); } // Added error handling
       setTtsPlaying(true);
       Speech.speak(text, { language: 'en-US', rate: 1.0, onDone: () => setTtsPlaying(false), onError: () => setTtsPlaying(false) });
     }
@@ -632,8 +632,8 @@ export const MessageItem = memo(function MessageItem({
 
   useEffect(() => {
     return () => {
-      try { ttsSound.current?.stopAsync(); ttsSound.current?.unloadAsync(); } catch {}
-      try { Speech.stop(); } catch {}
+      try { ttsSound.current?.stopAsync(); ttsSound.current?.unloadAsync(); } catch (e) { console.error("Error unloading TTS sound on cleanup:", e); } // Added error handling
+      try { Speech.stop(); } catch (e) { console.error("Error stopping Speech on cleanup:", e); } // Added error handling
     };
   }, []);
 
