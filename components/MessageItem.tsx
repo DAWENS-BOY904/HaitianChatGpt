@@ -1064,3 +1064,5 @@ const assistantStyles = StyleSheet.create({
     borderRadius: 10,
   },
 });
+
+fux code always give in steaming code block.
