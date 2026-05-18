@@ -296,15 +296,21 @@ export const SourcesListModal = memo(function SourcesListModal({
     }
   }, [visible, translateY, opacity]);
 
-  // Open URL in-app browser — never open external Safari/Chrome
+  // FIX: Open URL in expo-web-browser instead of WebViewModal
   const handleOpenUrl = useCallback(async (url: string) => {
-    if (!url) return;
     try {
-      await WebBrowser.openBrowserAsync(url);
-    } catch (_e) {
-      // silently ignore — stays in app, never goes external
+      await WebBrowser.openBrowserAsync(url, {
+        toolbarColor: isDark ? '#000000' : '#FFFFFF',
+        controlsColor: colors.primary || '#10A37F',
+        showTitle: true,
+        enableBarCollapsing: true,
+      });
+    } catch (e) {
+      // Fallback to system browser if WebBrowser fails
+      const { Linking } = require('react-native');
+      Linking.openURL(url);
     }
-  }, []);
+  }, [isDark, colors.primary]);
 
   const renderItem = useCallback(
     ({ item }: { item: Source }) => (
