@@ -1,4 +1,4 @@
-
+fix ai display message li pa dwe fason li ye make another display ai message also ai can create table format.
 import React, { useState, useCallback, useRef, useEffect, memo } from 'react';
 import {
   View,
