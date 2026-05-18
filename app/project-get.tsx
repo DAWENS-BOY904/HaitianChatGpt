@@ -1,7 +1,7 @@
 /**
  * Dawinix Code — AI coding assistant
- * Redesigned: Kimi-style home, hold-to-talk, message actions, side menu with thumbnails,
- * executing-code card, real generate-code-project edge function call.
+ * Full Supabase persistence: conversations saved & loaded from DB
+ * Smooth streaming, ChatGPT-style message rendering
  */
 
 import React, {
@@ -11,7 +11,7 @@ import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, FlatList,
   Modal, ScrollView, Platform, Dimensions, Animated,
   Pressable, ActivityIndicator, Keyboard,
-  KeyboardAvoidingView, PanResponder,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
@@ -84,8 +84,7 @@ interface MediaAttachment {
 
 interface CodeBlock { type: 'code'; language: string; code: string; streaming?: boolean }
 interface TextBlock { type: 'text'; content: string }
-interface ExecutingBlock { type: 'executing'; language: string; filename?: string }
-type MessageBlock = TextBlock | CodeBlock | ExecutingBlock;
+type MessageBlock = TextBlock | CodeBlock;
 
 interface Message {
   id: string;
@@ -104,6 +103,7 @@ interface ConversationItem {
   updatedAt: string;
   preview?: string;
   thumbnails?: string[];
+  language?: string;
 }
 
 type ModelKey = 'instant' | 'thinking' | 'agent' | 'swarm';
@@ -146,6 +146,24 @@ function parseMessageBlocks(raw: string, streaming = false): MessageBlock[] {
   return blocks;
 }
 
+// ─── Smooth streaming text cursor ─────────────────────────────────────────────
+function StreamingCursor() {
+  const opacity = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, { toValue: 0, duration: 500, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 1, duration: 500, useNativeDriver: true }),
+      ])
+    );
+    anim.start();
+    return () => anim.stop();
+  }, []);
+  return (
+    <Animated.View style={{ opacity, width: 2, height: 18, backgroundColor: ACCENT, borderRadius: 1, marginLeft: 2, marginBottom: -2, display: 'flex' }} />
+  );
+}
+
 // ─── Typing Dots ──────────────────────────────────────────────────────────────
 function TypingDots() {
   const dots = [useRef(new Animated.Value(0)).current, useRef(new Animated.Value(0)).current, useRef(new Animated.Value(0)).current];
@@ -170,7 +188,7 @@ function TypingDots() {
 
 // ─── Waveform Animation ───────────────────────────────────────────────────────
 function WaveformBars() {
-  const bars = Array.from({ length: 30 }, (_, i) => useRef(new Animated.Value(0.3)).current);
+  const bars = Array.from({ length: 30 }, () => useRef(new Animated.Value(0.3)).current);
   useEffect(() => {
     const anims = bars.map((b, i) => Animated.loop(Animated.sequence([
       Animated.delay(i * 50),
@@ -209,9 +227,7 @@ function ExecutingCard({ language, filename, isDark, onPress }: {
     anims.forEach(a => a.start());
     return () => anims.forEach(a => a.stop());
   }, []);
-
   const langLabel = (language || 'code').charAt(0).toUpperCase() + (language || 'code').slice(1);
-
   return (
     <TouchableOpacity onPress={onPress} activeOpacity={0.75}
       style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: bgC, borderRadius: 14, borderWidth: 1, borderColor: borderC, paddingHorizontal: 16, paddingVertical: 14, marginVertical: 4 }}>
@@ -219,9 +235,7 @@ function ExecutingCard({ language, filename, isDark, onPress }: {
         <Ionicons name="code-slash-outline" size={16} color={ACCENT} />
       </View>
       <View style={{ flex: 1 }}>
-        <Text style={{ color: textC, fontSize: 14, fontWeight: '500' }}>
-          {`Executing ${langLabel} code`}
-        </Text>
+        <Text style={{ color: textC, fontSize: 14, fontWeight: '500' }}>{`Executing ${langLabel} code`}</Text>
         {filename ? <Text style={{ color: textC, fontSize: 12, opacity: 0.7 }}>{filename}</Text> : null}
       </View>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, marginRight: 8 }}>
@@ -231,6 +245,228 @@ function ExecutingCard({ language, filename, isDark, onPress }: {
       </View>
       <Ionicons name="chevron-forward" size={14} color={textC} />
     </TouchableOpacity>
+  );
+}
+
+// ─── Inline Markdown Text renderer ────────────────────────────────────────────
+interface InlineSeg { type: string; content: string; url?: string }
+
+function parseInline(text: string): InlineSeg[] {
+  const segs: InlineSeg[] = [];
+  const pattern = /(~~([^~]+)~~|\*\*([^*]+)\*\*|\*([^*]+)\*|`([^`]+)`|\[([^\]]+)\]\((https?:\/\/[^\)]+)\)|(https?:\/\/[^\s"')]+))/g;
+  let lastIdx = 0;
+  let m: RegExpExecArray | null;
+  while ((m = pattern.exec(text)) !== null) {
+    if (m.index > lastIdx) segs.push({ type: 'text', content: text.slice(lastIdx, m.index) });
+    const full = m[0];
+    if (full.startsWith('~~')) segs.push({ type: 'strike', content: m[2] });
+    else if (full.startsWith('**')) segs.push({ type: 'bold', content: m[3] });
+    else if (full.startsWith('*')) segs.push({ type: 'italic', content: m[4] });
+    else if (full.startsWith('`')) segs.push({ type: 'code', content: m[5] });
+    else if (full.startsWith('[')) segs.push({ type: 'link', content: m[6], url: m[7] });
+    else segs.push({ type: 'link', content: full, url: full });
+    lastIdx = pattern.lastIndex;
+  }
+  if (lastIdx < text.length) segs.push({ type: 'text', content: text.slice(lastIdx) });
+  return segs;
+}
+
+function InlineMarkdown({ text, style }: { text: string; style?: any }) {
+  const segs = parseInline(text);
+  return (
+    <Text style={style}>
+      {segs.map((s, i) => {
+        if (s.type === 'strike') return <Text key={i} style={{ textDecorationLine: 'line-through', opacity: 0.65 }}>{s.content}</Text>;
+        if (s.type === 'bold') return <Text key={i} style={{ fontWeight: '700' }}>{s.content}</Text>;
+        if (s.type === 'italic') return <Text key={i} style={{ fontStyle: 'italic' }}>{s.content}</Text>;
+        if (s.type === 'code') return <Text key={i} style={{ fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }), backgroundColor: 'rgba(128,128,128,0.15)', borderRadius: 4, fontSize: (style?.fontSize || 16) - 1 }}>{` ${s.content} `}</Text>;
+        if (s.type === 'link') return <Text key={i} style={{ color: '#007AFF', textDecorationLine: 'underline' }}>{s.content}</Text>;
+        return <Text key={i}>{s.content}</Text>;
+      })}
+    </Text>
+  );
+}
+
+// ─── Markdown Table ────────────────────────────────────────────────────────────
+function MarkdownTable({ rows, hasHeader, isDark }: { rows: string[][]; hasHeader?: boolean; isDark: boolean }) {
+  if (!rows || rows.length === 0) return null;
+  const colCount = Math.max(...rows.map(r => r.length), 1);
+  const headerRow = hasHeader ? rows[0] : null;
+  const bodyRows = hasHeader ? rows.slice(1) : rows;
+  const borderC = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.09)';
+  const headerBg = isDark ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.055)';
+  const evenBg = isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)';
+  const textC = isDark ? '#FFF' : '#1A1A1A';
+  const subC = isDark ? 'rgba(255,255,255,0.78)' : 'rgba(0,0,0,0.75)';
+  const cellMin = Math.max(70, Math.floor(280 / Math.min(colCount, 4)));
+  return (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginVertical: 8 }}>
+      <View style={{ borderRadius: 14, borderWidth: 1, borderColor: borderC, overflow: 'hidden', minWidth: colCount * cellMin }}>
+        {headerRow ? (
+          <View style={{ flexDirection: 'row', backgroundColor: headerBg, borderBottomWidth: 1, borderBottomColor: borderC }}>
+            {headerRow.map((cell, ci) => (
+              <View key={`h-${ci}`} style={{ flex: 1, minWidth: cellMin, paddingHorizontal: 12, paddingVertical: 10, borderRightWidth: ci < headerRow.length - 1 ? StyleSheet.hairlineWidth : 0, borderRightColor: borderC }}>
+                <Text style={{ color: textC, fontSize: 13, fontWeight: '700', lineHeight: 18 }}>{cell}</Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+        {bodyRows.map((row, ri) => (
+          <View key={`r-${ri}`} style={{ flexDirection: 'row', backgroundColor: ri % 2 === 1 ? evenBg : 'transparent', borderBottomWidth: ri < bodyRows.length - 1 ? StyleSheet.hairlineWidth : 0, borderBottomColor: borderC }}>
+            {Array.from({ length: colCount }).map((_, ci) => (
+              <View key={`c-${ri}-${ci}`} style={{ flex: 1, minWidth: cellMin, paddingHorizontal: 12, paddingVertical: 9, borderRightWidth: ci < colCount - 1 ? StyleSheet.hairlineWidth : 0, borderRightColor: borderC }}>
+                <Text style={{ color: subC, fontSize: 13, lineHeight: 18 }} selectable>{row[ci] ?? ''}</Text>
+              </View>
+            ))}
+          </View>
+        ))}
+      </View>
+    </ScrollView>
+  );
+}
+
+// ─── Rich AI text renderer ─────────────────────────────────────────────────────
+function RichTextRenderer({ content, isDark, isStreaming }: { content: string; isDark: boolean; isStreaming?: boolean }) {
+  const textC = isDark ? '#E8E8E8' : '#1A1A1A';
+  const subC = isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.5)';
+  const borderC = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)';
+
+  if (!content && isStreaming) return <TypingDots />;
+
+  const lines = content.split('\n');
+  const elements: React.ReactNode[] = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    // Table
+    if (line.trim().startsWith('|') && line.includes('|', 1)) {
+      const tableLines: string[] = [];
+      while (i < lines.length && lines[i].trim().startsWith('|')) {
+        tableLines.push(lines[i]);
+        i++;
+      }
+      const isSep = (l: string) => /^[\|\-\s:]+$/.test(l);
+      const parseRow = (l: string) => l.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => c.trim());
+      const rows: string[][] = [];
+      let hasHeader = false;
+      if (tableLines.length >= 2 && isSep(tableLines[1])) {
+        rows.push(parseRow(tableLines[0]));
+        hasHeader = true;
+        for (let r = 2; r < tableLines.length; r++) {
+          if (!isSep(tableLines[r])) rows.push(parseRow(tableLines[r]));
+        }
+      } else {
+        tableLines.forEach(l => { if (!isSep(l)) rows.push(parseRow(l)); });
+      }
+      elements.push(<MarkdownTable key={`tbl-${i}`} rows={rows} hasHeader={hasHeader} isDark={isDark} />);
+      continue;
+    }
+
+    // Code fence
+    if (line.trim().startsWith('```')) {
+      const lang = line.trim().slice(3).trim() || 'text';
+      const codeLines: string[] = [];
+      i++;
+      while (i < lines.length && !lines[i].trim().startsWith('```')) {
+        codeLines.push(lines[i]);
+        i++;
+      }
+      i++;
+      const code = codeLines.join('\n').trim();
+      if (code) {
+        const block: CodeBlock = { type: 'code', language: lang.toLowerCase(), code };
+        elements.push(<InlineCodeBlock key={`code-${i}`} block={block} isDark={isDark} onOpen={() => {}} />);
+      }
+      continue;
+    }
+
+    // Heading
+    const hm = line.match(/^(#{1,6})\s+(.+)/);
+    if (hm) {
+      const level = hm[1].length;
+      const sz = level === 1 ? 22 : level === 2 ? 19 : level === 3 ? 17 : 16;
+      const fw: any = level <= 2 ? '700' : '600';
+      elements.push(
+        <InlineMarkdown key={`h-${i}`} text={hm[2]} style={{ fontSize: sz, fontWeight: fw, color: textC, lineHeight: sz * 1.35, marginTop: 14, marginBottom: 4 }} />
+      );
+      i++; continue;
+    }
+
+    // Divider
+    if (/^[-*_]{3,}$/.test(line.trim())) {
+      elements.push(
+        <View key={`hr-${i}`} style={{ marginVertical: 14, height: 1, backgroundColor: borderC, borderRadius: 1 }} />
+      );
+      i++; continue;
+    }
+
+    // Blockquote
+    if (line.startsWith('> ')) {
+      elements.push(
+        <View key={`bq-${i}`} style={{ flexDirection: 'row', marginVertical: 6, borderRadius: 10, overflow: 'hidden', backgroundColor: isDark ? 'rgba(59,126,246,0.09)' : 'rgba(59,126,246,0.065)' }}>
+          <View style={{ width: 3.5, backgroundColor: ACCENT, borderRadius: 2 }} />
+          <View style={{ flex: 1, paddingHorizontal: 13, paddingVertical: 10 }}>
+            <InlineMarkdown text={line.slice(2)} style={{ fontSize: 15, color: isDark ? 'rgba(255,255,255,0.8)' : 'rgba(0,0,0,0.72)', lineHeight: 23, fontStyle: 'italic' }} />
+          </View>
+        </View>
+      );
+      i++; continue;
+    }
+
+    // Bullet
+    const bm = line.match(/^(\s*)[-*+•]\s+(.+)/);
+    if (bm) {
+      elements.push(
+        <View key={`ul-${i}`} style={{ flexDirection: 'row', marginVertical: 2, paddingLeft: 4 }}>
+          <Text style={{ color: textC, fontSize: 16, marginRight: 8, lineHeight: 26 }}>{'\u2022'}</Text>
+          <View style={{ flex: 1 }}>
+            <InlineMarkdown text={bm[2]} style={{ fontSize: 16, color: textC, lineHeight: 26 }} />
+          </View>
+        </View>
+      );
+      i++; continue;
+    }
+
+    // Numbered list
+    const nm = line.match(/^(\s*)\d+[.)]\s+(.+)/);
+    if (nm) {
+      const num = elements.filter((_, ei) => {
+        const key = String((elements[ei] as any)?.key || '');
+        return key.startsWith('ol-');
+      }).length + 1;
+      elements.push(
+        <View key={`ol-${i}`} style={{ flexDirection: 'row', marginVertical: 2, paddingLeft: 4 }}>
+          <Text style={{ color: ACCENT, fontSize: 16, marginRight: 8, fontWeight: '700', minWidth: 22, lineHeight: 26 }}>{num}.</Text>
+          <View style={{ flex: 1 }}>
+            <InlineMarkdown text={nm[2]} style={{ fontSize: 16, color: textC, lineHeight: 26 }} />
+          </View>
+        </View>
+      );
+      i++; continue;
+    }
+
+    // Empty line
+    if (!line.trim()) {
+      if (elements.length > 0) {
+        elements.push(<View key={`sp-${i}`} style={{ height: 8 }} />);
+      }
+      i++; continue;
+    }
+
+    // Paragraph
+    elements.push(
+      <InlineMarkdown key={`p-${i}`} text={line} style={{ fontSize: 16, color: textC, lineHeight: 26, marginVertical: 2 }} />
+    );
+    i++;
+  }
+
+  return (
+    <View style={{ gap: 0 }}>
+      {elements}
+      {isStreaming && content ? <View style={{ flexDirection: 'row', alignItems: 'flex-end', marginTop: 2 }}><StreamingCursor /></View> : null}
+    </View>
   );
 }
 
@@ -338,7 +574,7 @@ function FullCodeModal({ visible, block, onClose, isDark }: { visible: boolean; 
             ) : (
               <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 }}>
                 <Ionicons name="code-slash-outline" size={48} color={subC} />
-                <Text style={{ color: subC, fontSize: 15, marginTop: 16, textAlign: 'center' }}>Preview available for HTML only.{'\n'}Run in your terminal.</Text>
+                <Text style={{ color: subC, fontSize: 15, marginTop: 16, textAlign: 'center' }}>{'Preview available for HTML only.\nRun in your terminal.'}</Text>
               </View>
             )}
           </View>
@@ -427,7 +663,6 @@ const MessageRenderer = memo(({ msg, isDark, isStreaming, onOpenCode, onLongPres
   onOpenCode: (block: CodeBlock) => void; onLongPress: (msg: Message) => void;
 }) => {
   const subC = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.45)';
-  const textC = isDark ? '#FFF' : '#000';
 
   if (msg.role === 'user') {
     return (
@@ -448,13 +683,10 @@ const MessageRenderer = memo(({ msg, isDark, isStreaming, onOpenCode, onLongPres
             ))}
           </ScrollView>
         )}
-        <Pressable
-          onLongPress={() => onLongPress(msg)}
-          delayLongPress={400}
-          style={{ maxWidth: SW * 0.75 }}>
-          <View style={{ backgroundColor: ACCENT, borderRadius: 20, borderBottomRightRadius: 4, paddingHorizontal: 16, paddingVertical: 11 }}>
-            <Text style={{ color: '#FFF', fontSize: 16, lineHeight: 23 }}>{msg.content}</Text>
-            {msg.edited ? <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11, marginTop: 2 }}>Edited</Text> : null}
+        <Pressable onLongPress={() => onLongPress(msg)} delayLongPress={400} style={{ maxWidth: SW * 0.75 }}>
+          <View style={{ backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA', borderRadius: 20, borderBottomRightRadius: 4, paddingHorizontal: 16, paddingVertical: 11 }}>
+            <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 16, lineHeight: 23 }}>{msg.content}</Text>
+            {msg.edited ? <Text style={{ color: subC, fontSize: 11, marginTop: 2 }}>Edited</Text> : null}
           </View>
         </Pressable>
       </View>
@@ -466,7 +698,6 @@ const MessageRenderer = memo(({ msg, isDark, isStreaming, onOpenCode, onLongPres
 
   return (
     <View style={{ marginBottom: 20, paddingHorizontal: 16 }}>
-      {/* Executing card if AI is generating code */}
       {msg.executing && (
         <ExecutingCard
           language={msg.codeFiles?.[0]?.language || 'code'}
@@ -476,24 +707,15 @@ const MessageRenderer = memo(({ msg, isDark, isStreaming, onOpenCode, onLongPres
         />
       )}
 
-      {blocks.map((block, bi) => {
-        if (block.type === 'text') {
-          return block.content.trim() ? (
-            <Text key={bi} style={{ color: textC, fontSize: 16, lineHeight: 26, marginBottom: blocks.length > 1 ? 6 : 0 }}>{block.content}</Text>
-          ) : null;
-        }
-        if (block.type === 'code') {
-          return (
-            <InlineCodeBlock key={bi} block={block} isDark={isDark} onOpen={() => onOpenCode(block)} />
-          );
-        }
-        return null;
-      })}
-
-      {isStreaming && blocks.length === 0 && <TypingDots />}
+      {/* Use RichTextRenderer for clean ChatGPT-style rendering */}
+      {msg.content ? (
+        <RichTextRenderer content={msg.content} isDark={isDark} isStreaming={isStreaming} />
+      ) : isStreaming ? (
+        <TypingDots />
+      ) : null}
 
       {!isStreaming && msg.content ? (
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 18, marginTop: 10 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 18, marginTop: 12 }}>
           <TouchableOpacity hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}>
             <Ionicons name="volume-low-outline" size={19} color={subC} />
           </TouchableOpacity>
@@ -517,12 +739,13 @@ const MessageRenderer = memo(({ msg, isDark, isStreaming, onOpenCode, onLongPres
 });
 
 // ─── Side Menu ────────────────────────────────────────────────────────────────
-function SideMenuDrawer({ visible, onClose, user, isDark, conversations, onSelectConv, currentConvId, onNewChat }: {
+function SideMenuDrawer({ visible, onClose, user, isDark, conversations, onSelectConv, currentConvId, onNewChat, loadingHistory }: {
   visible: boolean; onClose: () => void; user: any; isDark: boolean;
   conversations: ConversationItem[];
   onSelectConv: (id: string) => void;
   currentConvId?: string;
   onNewChat: () => void;
+  loadingHistory?: boolean;
 }) {
   const translateX = useRef(new Animated.Value(-SW)).current;
   const opacity = useRef(new Animated.Value(0)).current;
@@ -566,7 +789,7 @@ function SideMenuDrawer({ visible, onClose, user, isDark, conversations, onSelec
         {items.map(c => (
           <TouchableOpacity key={c.id} onPress={() => { onSelectConv(c.id); onClose(); }}
             style={{ paddingHorizontal: 16, paddingVertical: 10, backgroundColor: c.id === currentConvId ? hoverBg : 'transparent', borderRadius: 12, marginHorizontal: 8 }}>
-            <Text style={{ color: textC, fontSize: 14, fontWeight: c.id === currentConvId ? '600' : '400', marginBottom: c.thumbnails?.length ? 6 : 0 }} numberOfLines={1}>{c.title || 'New chat'}</Text>
+            <Text style={{ color: textC, fontSize: 14, fontWeight: c.id === currentConvId ? '600' : '400', marginBottom: c.thumbnails?.length ? 6 : 0 }} numberOfLines={1}>{c.title || 'New coding session'}</Text>
             {c.thumbnails && c.thumbnails.length > 0 && (
               <View style={{ flexDirection: 'row', gap: 4 }}>
                 {c.thumbnails.slice(0, 3).map((uri, i) => (
@@ -591,7 +814,6 @@ function SideMenuDrawer({ visible, onClose, user, isDark, conversations, onSelec
           shadowColor: '#000', shadowOffset: { width: 4, height: 0 }, shadowOpacity: 0.18, shadowRadius: 20, elevation: 20,
         }}>
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
-            {/* User profile */}
             <View style={{ paddingTop: insets.top + 16, paddingHorizontal: 16, marginBottom: 8 }}>
               <TouchableOpacity onPress={() => { onClose(); router.push('/settings'); }}
                 style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)', borderRadius: 16, padding: 14, borderWidth: 1, borderColor: borderC }}>
@@ -603,7 +825,6 @@ function SideMenuDrawer({ visible, onClose, user, isDark, conversations, onSelec
               </TouchableOpacity>
             </View>
 
-            {/* Upgrade Plan */}
             <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
               <TouchableOpacity onPress={() => { onClose(); router.push('/subscription'); }}
                 style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)', borderRadius: 14, padding: 14, borderWidth: 1, borderColor: borderC }}>
@@ -617,7 +838,6 @@ function SideMenuDrawer({ visible, onClose, user, isDark, conversations, onSelec
 
             <View style={{ marginHorizontal: 16, height: 1, backgroundColor: borderC, marginVertical: 4 }} />
 
-            {/* Chat History header */}
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, marginTop: 12, marginBottom: 4 }}>
               <Text style={{ color: textC, fontSize: 16, fontWeight: '700' }}>Chat history</Text>
               <TouchableOpacity onPress={onNewChat} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)', borderRadius: 16, paddingHorizontal: 10, paddingVertical: 5 }}>
@@ -626,9 +846,18 @@ function SideMenuDrawer({ visible, onClose, user, isDark, conversations, onSelec
               </TouchableOpacity>
             </View>
 
-            <SectionGroup title="Today" items={todayConvs} />
-            <SectionGroup title="Last 7 days" items={week7} />
-            <SectionGroup title="3 months" items={older} />
+            {loadingHistory ? (
+              <ActivityIndicator color={ACCENT} style={{ marginTop: 24 }} />
+            ) : (
+              <>
+                <SectionGroup title="Today" items={todayConvs} />
+                <SectionGroup title="Last 7 days" items={week7} />
+                <SectionGroup title="Older" items={older} />
+                {conversations.length === 0 && (
+                  <Text style={{ color: subC, fontSize: 14, textAlign: 'center', marginTop: 32 }}>No coding sessions yet</Text>
+                )}
+              </>
+            )}
           </ScrollView>
         </Animated.View>
       </View>
@@ -735,7 +964,7 @@ export default function ProjectGetScreen() {
 
   const [inputText, setInputText] = useState('');
   const [inputFocused, setInputFocused] = useState(false);
-  const [voiceMode, setVoiceMode] = useState(true); // true = show voice, false = show keyboard
+  const [voiceMode, setVoiceMode] = useState(true);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingInstance, setRecordingInstance] = useState<Audio.Recording | null>(null);
 
@@ -751,12 +980,10 @@ export default function ProjectGetScreen() {
   const [msgActionsVisible, setMsgActionsVisible] = useState(false);
   const [selectedMsg, setSelectedMsg] = useState<Message | null>(null);
 
-  const [conversations, setConversations] = useState<ConversationItem[]>([
-    { id: '1', title: 'Casual Friendly Greeting Chat', updatedAt: new Date().toISOString(), thumbnails: [] },
-    { id: '2', title: 'Better Email Confirmation', updatedAt: new Date(Date.now() - 86400000 * 3).toISOString(), thumbnails: [] },
-    { id: '3', title: 'Mobile Banner No Zoom', updatedAt: new Date(Date.now() - 86400000 * 90).toISOString(), thumbnails: [] },
-  ]);
-  const [currentConvId, setCurrentConvId] = useState('1');
+  // Supabase-backed conversations
+  const [conversations, setConversations] = useState<ConversationItem[]>([]);
+  const [currentConvId, setCurrentConvId] = useState<string | null>(null);
+  const [loadingHistory, setLoadingHistory] = useState(false);
 
   const flatListRef = useRef<FlatList>(null);
   const inputRef = useRef<TextInput>(null);
@@ -769,7 +996,92 @@ export default function ProjectGetScreen() {
   const hasMessages = messages.length > 0;
   const showSend = inputText.trim().length > 0 || selectedMedia.length > 0;
 
-  // ── Voice recording ────────────────────────────────────────────────────────
+  // ── Load conversation history ────────────────────────────────────────────
+  useEffect(() => {
+    if (user?.id) {
+      loadConversations();
+    }
+  }, [user?.id]);
+
+  const loadConversations = async () => {
+    if (!user?.id) return;
+    setLoadingHistory(true);
+    try {
+      const { data, error } = await supabase
+        .from('code_conversations')
+        .select('id, title, language, updated_at')
+        .eq('user_id', user.id)
+        .order('updated_at', { ascending: false })
+        .limit(50);
+      if (!error && data) {
+        setConversations(data.map((c: any) => ({
+          id: c.id,
+          title: c.title,
+          language: c.language,
+          updatedAt: c.updated_at,
+          thumbnails: [],
+        })));
+      }
+    } catch {}
+    setLoadingHistory(false);
+  };
+
+  // ── Load messages for a conversation ────────────────────────────────────
+  const loadConversationMessages = async (convId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('code_messages')
+        .select('id, role, content, media_urls, created_at')
+        .eq('conversation_id', convId)
+        .order('created_at', { ascending: true });
+      if (!error && data) {
+        const msgs: Message[] = data.map((m: any) => ({
+          id: m.id,
+          role: m.role as MessageRole,
+          content: m.content,
+          timestamp: new Date(m.created_at).getTime(),
+          media: m.media_urls ? JSON.parse(typeof m.media_urls === 'string' ? m.media_urls : JSON.stringify(m.media_urls)) : undefined,
+        }));
+        setMessages(msgs);
+        setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 100);
+      }
+    } catch {}
+  };
+
+  // ── Create new conversation in DB ────────────────────────────────────────
+  const createConversation = async (firstMessage: string, language: string): Promise<string | null> => {
+    if (!user?.id) return null;
+    try {
+      const title = firstMessage.slice(0, 60) || 'New coding session';
+      const { data, error } = await supabase
+        .from('code_conversations')
+        .insert({ user_id: user.id, title, language })
+        .select('id')
+        .single();
+      if (!error && data) {
+        const newConv: ConversationItem = { id: data.id, title, language, updatedAt: new Date().toISOString(), thumbnails: [] };
+        setConversations(prev => [newConv, ...prev]);
+        return data.id;
+      }
+    } catch {}
+    return null;
+  };
+
+  // ── Persist a message ────────────────────────────────────────────────────
+  const persistMessage = async (convId: string, role: MessageRole, content: string, media?: MediaAttachment[]) => {
+    try {
+      await supabase.from('code_messages').insert({
+        conversation_id: convId,
+        role,
+        content,
+        media_urls: media && media.length > 0 ? JSON.stringify(media) : null,
+      });
+      // Update conversation timestamp
+      await supabase.from('code_conversations').update({ updated_at: new Date().toISOString() }).eq('id', convId);
+    } catch {}
+  };
+
+  // ── Voice recording ────────────────────────────────────────────────────
   const startRecording = useCallback(async () => {
     try {
       const { status } = await Audio.requestPermissionsAsync();
@@ -789,8 +1101,6 @@ export default function ProjectGetScreen() {
       const uri = recordingInstance.getURI();
       setRecordingInstance(null);
       if (!uri) return;
-
-      // Transcribe via edge function
       const base64Audio = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
       const { data, error } = await supabase.functions.invoke('transcribe-audio', {
         body: { audio: base64Audio, mimeType: 'audio/m4a', language: 'en' },
@@ -798,11 +1108,7 @@ export default function ProjectGetScreen() {
       if (!error && data?.text?.trim()) {
         setInputText(data.text.trim());
         setVoiceMode(false);
-        setTimeout(() => inputRef.current?.focus(), 100);
-        // Auto-send after transcription
-        setTimeout(() => {
-          handleSendWithText(data.text.trim());
-        }, 300);
+        setTimeout(() => { handleSendWithText(data.text.trim()); }, 300);
       } else {
         showAlert('Transcription failed', 'Could not understand the audio. Please try again.');
       }
@@ -824,9 +1130,7 @@ export default function ProjectGetScreen() {
       if (status !== 'granted') { showAlert('Permission needed', 'Allow photo library access.'); return; }
       const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsMultipleSelection: true, quality: 0.85 });
       if (!result.canceled) {
-        const newMedia = result.assets.map(a => ({
-          type: 'image' as const, uri: a.uri, name: a.fileName || `photo_${Date.now()}.jpg`, mimeType: a.mimeType || 'image/jpeg',
-        }));
+        const newMedia = result.assets.map(a => ({ type: 'image' as const, uri: a.uri, name: a.fileName || `photo_${Date.now()}.jpg`, mimeType: a.mimeType || 'image/jpeg' }));
         setSelectedMedia(prev => [...prev, ...newMedia]);
         setVoiceMode(false);
         setTimeout(() => inputRef.current?.focus(), 100);
@@ -839,9 +1143,7 @@ export default function ProjectGetScreen() {
     try {
       const result = await DocumentPicker.getDocumentAsync({ multiple: true, copyToCacheDirectory: true });
       if (result.assets) {
-        const newMedia = result.assets.map(a => ({
-          type: 'file' as const, uri: a.uri, name: a.name, size: a.size, mimeType: a.mimeType || 'application/octet-stream',
-        }));
+        const newMedia = result.assets.map(a => ({ type: 'file' as const, uri: a.uri, name: a.name, size: a.size, mimeType: a.mimeType || 'application/octet-stream' }));
         setSelectedMedia(prev => [...prev, ...newMedia]);
         setVoiceMode(false);
         setTimeout(() => inputRef.current?.focus(), 100);
@@ -849,7 +1151,6 @@ export default function ProjectGetScreen() {
     } catch {}
   }, []);
 
-  // ── Detect if message needs code generation ────────────────────────────────
   const needsCodeGeneration = (text: string): { needs: boolean; language: string } => {
     const t = text.toLowerCase();
     const codeKeywords = ['create', 'build', 'make', 'write', 'generate', 'code', 'script', 'app', 'website', 'html', 'python', 'javascript', 'typescript', 'fix', 'debug', 'refactor', 'implement'];
@@ -886,55 +1187,52 @@ export default function ProjectGetScreen() {
     setVoiceMode(true);
     setIsGenerating(true);
 
-    // Update conversation thumbnails
-    const imgThumbs = mediaToSend.filter(m => m.type === 'image').map(m => m.uri);
-    if (imgThumbs.length > 0) {
-      setConversations(prev => prev.map(c => c.id === currentConvId ? { ...c, thumbnails: [...(c.thumbnails || []), ...imgThumbs].slice(0, 5) } : c));
-    }
-
     setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
 
-    const aiId = `a_${Date.now()}`;
+    // Ensure conversation exists
     const { needs: needsCode, language } = needsCodeGeneration(text);
+    let convId = currentConvId;
+    if (!convId) {
+      convId = await createConversation(text, language);
+      if (convId) setCurrentConvId(convId);
+    }
 
-    // Add placeholder AI message
+    // Persist user message
+    if (convId) {
+      await persistMessage(convId, 'user', userMsg.content, mediaToSend.length > 0 ? mediaToSend : undefined);
+    }
+
+    const aiId = `a_${Date.now()}`;
     const aiMsg: Message = {
       id: aiId, role: 'assistant', content: '', timestamp: Date.now(),
-      executing: needsCode, codeFiles: needsCode ? [{ language, code: '', filename: `main.${language}` }] : undefined,
+      executing: needsCode,
+      codeFiles: needsCode ? [{ language, code: '', filename: `main.${language}` }] : undefined,
     };
     setMessages(prev => [...prev, aiMsg]);
     setStreamingId(aiId);
-
     setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 150);
 
+    let finalAiContent = '';
+
     try {
-      // Read file content if file attached
       let fileContent = '';
-      const fileMedia = mediaToSend.filter(m => m.type === 'file');
-      for (const f of fileMedia) {
+      for (const f of mediaToSend.filter(m => m.type === 'file')) {
         try {
-          const content = await FileSystem.readAsStringAsync(f.uri, { encoding: FileSystem.EncodingType.UTF8 });
-          fileContent += `\n\n--- File: ${f.name} ---\n${content.slice(0, 8000)}\n`;
+          const fc = await FileSystem.readAsStringAsync(f.uri, { encoding: FileSystem.EncodingType.UTF8 });
+          fileContent += `\n\n--- File: ${f.name} ---\n${fc.slice(0, 8000)}\n`;
         } catch {}
       }
 
-      // Image as base64
       let base64Image: string | undefined;
       const imageMedia = mediaToSend.find(m => m.type === 'image');
       if (imageMedia) {
-        try {
-          base64Image = await FileSystem.readAsStringAsync(imageMedia.uri, { encoding: FileSystem.EncodingType.Base64 });
-        } catch {}
+        try { base64Image = await FileSystem.readAsStringAsync(imageMedia.uri, { encoding: FileSystem.EncodingType.Base64 }); } catch {}
       }
 
       if (needsCode) {
-        // ── Call generate-code-project ────────────────────────────────────
         const response = await fetch(`${SUPABASE_URL}/functions/v1/generate-code-project`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-          },
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
           body: JSON.stringify({
             description: text + fileContent,
             language,
@@ -945,9 +1243,7 @@ export default function ProjectGetScreen() {
           }),
         });
 
-        let fullCode = '';
         let aiResponse = '';
-
         const reader = response.body?.getReader();
         if (reader) {
           const decoder = new TextDecoder();
@@ -955,77 +1251,63 @@ export default function ProjectGetScreen() {
             const { done, value } = await reader.read();
             if (done) break;
             const chunk = decoder.decode(value);
-            const lines = chunk.split('\n').filter(l => l.trim());
-            for (const line of lines) {
-              try {
-                const parsed = JSON.parse(line);
-                if (parsed.type === 'log') {
-                  // Update executing message
-                  setMessages(prev => prev.map(m => m.id === aiId ? { ...m, content: `${m.content}` } : m));
-                } else if (parsed.type === 'file_created') {
-                  const f = parsed.data;
-                  fullCode = f.content;
-                  const langFence = f.language || language;
-                  aiResponse += `Here's your **${f.path}**:\n\n\`\`\`${langFence}\n${f.content}\n\`\`\`\n\n`;
-                } else if (parsed.type === 'instruction') {
-                  aiResponse += parsed.data + '\n';
-                } else if (parsed.type === 'completed') {
-                  // Done
-                }
-              } catch {}
-            }
-            // Stream the response incrementally
-            const snap = aiResponse;
-            setMessages(prev => prev.map(m => m.id === aiId ? { ...m, content: snap, executing: false } : m));
-          }
-        } else {
-          // Fallback
-          const text2 = await response.text();
-          try {
-            const lines2 = text2.split('\n').filter(l => l.trim());
-            for (const line of lines2) {
+            for (const line of chunk.split('\n').filter(l => l.trim())) {
               try {
                 const parsed = JSON.parse(line);
                 if (parsed.type === 'file_created') {
                   const f = parsed.data;
-                  aiResponse += `Here's your **${f.path}**:\n\n\`\`\`${f.language || language}\n${f.content}\n\`\`\`\n\n`;
+                  aiResponse += `Here is your **${f.path}**:\n\n\`\`\`${f.language || language}\n${f.content}\n\`\`\`\n\n`;
                 } else if (parsed.type === 'instruction') {
                   aiResponse += parsed.data + '\n';
                 }
               } catch {}
             }
-          } catch {}
+            const snap = aiResponse;
+            setMessages(prev => prev.map(m => m.id === aiId ? { ...m, content: snap, executing: false } : m));
+            flatListRef.current?.scrollToEnd({ animated: false });
+          }
+        } else {
+          const text2 = await response.text();
+          for (const line of text2.split('\n').filter(l => l.trim())) {
+            try {
+              const parsed = JSON.parse(line);
+              if (parsed.type === 'file_created') {
+                const f = parsed.data;
+                aiResponse += `Here is your **${f.path}**:\n\n\`\`\`${f.language || language}\n${f.content}\n\`\`\`\n\n`;
+              } else if (parsed.type === 'instruction') {
+                aiResponse += parsed.data + '\n';
+              }
+            } catch {}
+          }
           if (!aiResponse) aiResponse = text2.slice(0, 2000);
         }
 
-        if (!aiResponse) {
-          // fallback with chat edge function
-          await callChatFallback(aiId, text, fileContent, base64Image, language);
-          return;
-        }
-
-        // Final update
-        setMessages(prev => prev.map(m => m.id === aiId ? { ...m, content: aiResponse, executing: false } : m));
-
+        finalAiContent = aiResponse || generateFallbackResponse(text);
+        setMessages(prev => prev.map(m => m.id === aiId ? { ...m, content: finalAiContent, executing: false } : m));
       } else {
-        // ── Regular chat edge function ────────────────────────────────────
-        await callChatFallback(aiId, text, fileContent, base64Image, language);
-        return;
+        // Regular chat
+        finalAiContent = await callChatFallback(aiId, text, fileContent, base64Image, language);
       }
 
-    } catch (err: any) {
-      setMessages(prev => prev.map(m => m.id === aiId ? { ...m, content: 'Something went wrong. Please try again.', executing: false } : m));
+    } catch {
+      finalAiContent = 'Something went wrong. Please try again.';
+      setMessages(prev => prev.map(m => m.id === aiId ? { ...m, content: finalAiContent, executing: false } : m));
     } finally {
       setIsGenerating(false);
       setStreamingId(null);
+      // Persist assistant message
+      if (convId && finalAiContent) {
+        await persistMessage(convId, 'assistant', finalAiContent);
+        // Update conversation list
+        setConversations(prev => prev.map(c => c.id === convId ? { ...c, updatedAt: new Date().toISOString() } : c));
+      }
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 200);
     }
   }, [inputText, selectedMedia, isGenerating, selectedModel, user?.id, supabase, currentConvId]);
 
-  const callChatFallback = async (aiId: string, text: string, fileContent: string, base64Image: string | undefined, language: string) => {
+  const callChatFallback = async (aiId: string, text: string, fileContent: string, base64Image: string | undefined, language: string): Promise<string> => {
+    const systemHint = `You are Dawinix, an expert AI coding assistant. When writing code, always use markdown code fences. You can write long, complete code — never truncate. If the user pastes code with errors, fix all of them and return the complete fixed code.`;
     try {
-      const systemHint = `You are Dawinix, an expert AI coding assistant. When writing code, always use markdown code fences with the language label. You can write long, complete code — never truncate. If the user pastes code with errors, fix all of them and return the complete fixed code.`;
-
       const { data, error } = await supabase.functions.invoke('chat', {
         body: {
           message: systemHint + '\n\nUser: ' + text + fileContent,
@@ -1036,28 +1318,24 @@ export default function ProjectGetScreen() {
         },
       });
 
-      let aiContent = '';
-      if (!error && data?.message) {
-        aiContent = data.message;
-      } else {
-        aiContent = generateFallbackResponse(text);
-      }
+      const aiContent = (!error && data?.message) ? data.message : generateFallbackResponse(text);
 
-      // Stream character by character
+      // Smooth character-by-character streaming
       let displayed = '';
-      const chunkSize = 6;
-      for (let i = 0; i < aiContent.length; i += chunkSize) {
-        displayed += aiContent.slice(i, i + chunkSize);
+      const speed = 4; // chars per tick
+      for (let i = 0; i < aiContent.length; i += speed) {
+        displayed += aiContent.slice(i, i + speed);
         const snap = displayed;
-        setMessages(prev => prev.map(m => m.id === aiId ? { ...m, content: snap, executing: false } : m));
-        await new Promise(r => setTimeout(r, 8));
+        setMessages(prev => prev.map(m => m.id === aiId ? { ...m, content: snap } : m));
+        if (i % 60 === 0) flatListRef.current?.scrollToEnd({ animated: false });
+        await new Promise(r => setTimeout(r, 6));
       }
+      setMessages(prev => prev.map(m => m.id === aiId ? { ...m, content: aiContent } : m));
+      return aiContent;
     } catch {
-      setMessages(prev => prev.map(m => m.id === aiId ? { ...m, content: 'Could not get a response. Please try again.', executing: false } : m));
-    } finally {
-      setIsGenerating(false);
-      setStreamingId(null);
-      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 200);
+      const fb = generateFallbackResponse(text);
+      setMessages(prev => prev.map(m => m.id === aiId ? { ...m, content: fb } : m));
+      return fb;
     }
   };
 
@@ -1066,10 +1344,9 @@ export default function ProjectGetScreen() {
     if (t.includes('chatbot') || t.includes('html')) {
       return `Here is a complete HTML chatbot:\n\n\`\`\`html\n<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8">\n  <title>Chatbot</title>\n  <style>\n    *{margin:0;padding:0;box-sizing:border-box}\n    body{font-family:sans-serif;background:#f4f4f4;display:flex;justify-content:center;align-items:center;height:100vh}\n    .chat{width:380px;height:580px;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,.15);display:flex;flex-direction:column}\n    .header{background:#4a90e2;color:#fff;padding:16px;text-align:center;font-size:18px;font-weight:700}\n    .messages{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:10px}\n    .msg{max-width:75%;padding:10px 14px;border-radius:18px;font-size:14px}\n    .bot{background:#f0f0f0;align-self:flex-start}\n    .user{background:#4a90e2;color:#fff;align-self:flex-end}\n    .input-area{display:flex;padding:12px;gap:8px;border-top:1px solid #eee}\n    input{flex:1;padding:10px 14px;border:1px solid #ddd;border-radius:24px;font-size:14px;outline:none}\n    button{background:#4a90e2;color:#fff;border:none;border-radius:24px;padding:10px 20px;cursor:pointer}\n  </style>\n</head>\n<body>\n  <div class="chat">\n    <div class="header">Chatbot</div>\n    <div class="messages" id="msgs"><div class="msg bot">Hello! How can I help?</div></div>\n    <div class="input-area">\n      <input id="inp" placeholder="Type a message..." />\n      <button onclick="send()">Send</button>\n    </div>\n  </div>\n  <script>\n    function send(){\n      const inp=document.getElementById('inp');\n      const msgs=document.getElementById('msgs');\n      const text=inp.value.trim();\n      if(!text)return;\n      msgs.innerHTML+=\`<div class="msg user">\${text}</div>\`;\n      inp.value='';\n      setTimeout(()=>{\n        msgs.innerHTML+=\`<div class="msg bot">You said: \${text}</div>\`;\n        msgs.scrollTop=msgs.scrollHeight;\n      },500);\n      msgs.scrollTop=msgs.scrollHeight;\n    }\n    document.getElementById('inp').onkeydown=e=>e.key==='Enter'&&send();\n  </script>\n</body>\n</html>\n\`\`\`\n\nClick ▶ to preview the chatbot live!`;
     }
-    return `I can help you with that! Here is a solution:\n\n\`\`\`javascript\n// Solution for: ${text.slice(0, 50)}\nfunction solution(input) {\n  // Process input\n  const result = input.trim().split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');\n  console.log('Result:', result);\n  return result;\n}\n\nsolution('${text.slice(0, 20).replace(/'/g, '')}');\n\`\`\`\n\nFeel free to ask for a different approach or language!`;
+    return `I can help you with that! Here is a solution:\n\n\`\`\`javascript\n// Solution for: ${text.slice(0, 50)}\nfunction solution(input) {\n  const result = input.trim().split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');\n  console.log('Result:', result);\n  return result;\n}\n\nsolution('example');\n\`\`\`\n\nFeel free to ask for a different approach or language!`;
   };
 
-  // Long press message handler
   const handleLongPressMsg = useCallback((msg: Message) => {
     setSelectedMsg(msg);
     setMsgActionsVisible(true);
@@ -1090,6 +1367,21 @@ export default function ProjectGetScreen() {
     setMsgActionsVisible(false);
   }, [selectedMsg]);
 
+  const handleSelectConversation = useCallback(async (id: string) => {
+    setCurrentConvId(id);
+    setMessages([]);
+    await loadConversationMessages(id);
+  }, []);
+
+  const handleNewChat = useCallback(() => {
+    setMessages([]);
+    setInputText('');
+    setSelectedMedia([]);
+    setVoiceMode(true);
+    setCurrentConvId(null);
+    setSideMenuVisible(false);
+  }, []);
+
   const renderMessage = useCallback(({ item }: { item: Message }) => (
     <MessageRenderer
       msg={item}
@@ -1102,82 +1394,56 @@ export default function ProjectGetScreen() {
 
   const keyExtractor = useCallback((item: Message) => item.id, []);
 
-  // Voice hold pan responder
   const voiceHoldTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isCancelled = useRef(false);
 
   const handleVoicePressIn = () => {
-    if (!voiceMode) return;
-    voiceHoldTimer.current = setTimeout(() => {
-      startRecording();
-    }, 400);
+    voiceHoldTimer.current = setTimeout(() => { startRecording(); }, 400);
   };
 
   const handleVoicePressOut = () => {
-    if (voiceHoldTimer.current) {
-      clearTimeout(voiceHoldTimer.current);
-      voiceHoldTimer.current = null;
-    }
-    if (isRecording) {
-      stopRecordingAndSend();
-    }
+    if (voiceHoldTimer.current) { clearTimeout(voiceHoldTimer.current); voiceHoldTimer.current = null; }
+    if (isRecording) stopRecordingAndSend();
   };
 
   return (
     <View style={{ flex: 1, backgroundColor: bg }}>
-      {/* Recording Overlay */}
-      <RecordingOverlay
-        visible={isRecording}
-        isDark={isDark}
-        onRelease={stopRecordingAndSend}
-        onCancel={cancelRecording}
-      />
+      <RecordingOverlay visible={isRecording} isDark={isDark} onRelease={stopRecordingAndSend} onCancel={cancelRecording} />
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={0}>
 
-        {/* ── Header ─────────────────────────────────────────────────────── */}
+        {/* ── Header ──────────────────────────────────────────────────────── */}
         <View style={{ flexDirection: 'row', alignItems: 'center', paddingTop: insets.top + 10, paddingBottom: 12, paddingHorizontal: 16, gap: 10 }}>
           <TouchableOpacity onPress={() => setSideMenuVisible(true)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
             <Ionicons name="menu-outline" size={26} color={textC} />
           </TouchableOpacity>
-
           <TouchableOpacity onPress={() => setModelSelectorVisible(true)} style={{ flexDirection: 'row', alignItems: 'center', gap: 5, flex: 1 }}>
             <Text style={{ color: textC, fontSize: 17, fontWeight: '700' }}>D</Text>
             <Text style={{ color: subC, fontSize: 15 }}>{MODELS[selectedModel].label.replace('D2.6 ', '')} {'>'}</Text>
           </TouchableOpacity>
-
           <TouchableOpacity hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}>
             <Ionicons name="volume-mute-outline" size={22} color={subC} />
           </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => { setMessages([]); setInputText(''); setSelectedMedia([]); setVoiceMode(true); }}
-            hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}>
+          <TouchableOpacity onPress={handleNewChat} hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}>
             <Ionicons name="add-circle-outline" size={24} color={subC} />
           </TouchableOpacity>
         </View>
 
-        {/* ── Messages / Home ────────────────────────────────────────────── */}
+        {/* ── Messages / Home ──────────────────────────────────────────────── */}
         {!hasMessages ? (
           <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12 }} showsVerticalScrollIndicator={false} keyboardDismissMode="on-drag">
-            {/* Avatar + greeting */}
             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}>
-              <View style={{ marginRight: 4 }}>
-                {/* Robot emoji avatar */}
-                <View style={{ width: 52, height: 52, borderRadius: 26, backgroundColor: isDark ? '#1C1C1E' : '#F0F0F0', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: borderC }}>
-                  <Text style={{ fontSize: 28 }}>🤖</Text>
-                </View>
+              <View style={{ width: 52, height: 52, borderRadius: 26, backgroundColor: isDark ? '#1C1C1E' : '#F0F0F0', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: borderC }}>
+                <Text style={{ fontSize: 28 }}>🤖</Text>
               </View>
             </View>
-
             <Text style={{ color: textC, fontSize: 17, lineHeight: 28, marginBottom: 24 }}>
               {'Hey, '}<Text style={{ fontWeight: '700' }}>{user?.email?.split('@')[0] || 'there'}</Text>{'! I can write, execute, and debug code for you. '}
               <Text style={{ color: ACCENT }}>Try creating an app.</Text>
             </Text>
-
             {SUGGESTIONS.map((s, i) => (
               <TouchableOpacity key={i} onPress={() => { setInputText(s); setVoiceMode(false); setTimeout(() => inputRef.current?.focus(), 100); }}
                 activeOpacity={0.75}
-                style={{ borderRadius: 14, paddingHorizontal: 16, paddingVertical: 14, marginBottom: 10, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)', backgroundColor: 'transparent' }}>
+                style={{ borderRadius: 14, paddingHorizontal: 16, paddingVertical: 14, marginBottom: 10, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)' }}>
                 <Text style={{ color: textC, fontSize: 15 }}>{s}</Text>
               </TouchableOpacity>
             ))}
@@ -1198,9 +1464,8 @@ export default function ProjectGetScreen() {
           />
         )}
 
-        {/* ── Input Area ─────────────────────────────────────────────────── */}
+        {/* ── Input Area ───────────────────────────────────────────────────── */}
         <View style={{ paddingHorizontal: 12, paddingTop: 6, paddingBottom: Math.max(insets.bottom, 12), borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: borderC }}>
-          {/* Media previews */}
           {selectedMedia.length > 0 && (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ flexDirection: 'row', gap: 8, paddingBottom: 8 }}>
               {selectedMedia.map((m, i) => (
@@ -1224,7 +1489,6 @@ export default function ProjectGetScreen() {
             </ScrollView>
           )}
 
-          {/* Edit banner */}
           {editingId ? (
             <View style={{ flexDirection: 'row', alignItems: 'center', paddingBottom: 6, gap: 6 }}>
               <Ionicons name="pencil" size={13} color={ACCENT} />
@@ -1235,22 +1499,14 @@ export default function ProjectGetScreen() {
             </View>
           ) : null}
 
-          {/* Input box */}
           {voiceMode && !inputFocused && !inputText ? (
-            /* Voice mode: "Hold to talk" bar */
             <View style={{ backgroundColor: inputBg, borderRadius: 26, paddingHorizontal: 16, paddingVertical: 14, borderWidth: StyleSheet.hairlineWidth, borderColor: borderC, flexDirection: 'row', alignItems: 'center' }}>
-              <TouchableOpacity
-                onPress={() => { setVoiceMode(false); setTimeout(() => inputRef.current?.focus(), 100); }}
+              <TouchableOpacity onPress={() => { setVoiceMode(false); setTimeout(() => inputRef.current?.focus(), 100); }}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 style={{ width: 36, height: 36, borderRadius: 18, borderWidth: 2, borderColor: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.35)', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
                 <Ionicons name="grid-outline" size={16} color={textC} />
               </TouchableOpacity>
-              <TouchableOpacity
-                style={{ flex: 1, alignItems: 'center' }}
-                onPressIn={handleVoicePressIn}
-                onPressOut={handleVoicePressOut}
-                activeOpacity={0.7}
-              >
+              <TouchableOpacity style={{ flex: 1, alignItems: 'center' }} onPressIn={handleVoicePressIn} onPressOut={handleVoicePressOut} activeOpacity={0.7}>
                 <Text style={{ color: textC, fontSize: 16, fontWeight: '600' }}>Hold to talk</Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={() => setToolsVisible(true)}
@@ -1259,7 +1515,6 @@ export default function ProjectGetScreen() {
               </TouchableOpacity>
             </View>
           ) : (
-            /* Text mode */
             <View style={{ backgroundColor: inputBg, borderRadius: 26, paddingHorizontal: 14, paddingVertical: 10, borderWidth: StyleSheet.hairlineWidth, borderColor: borderC }}>
               <TextInput
                 ref={inputRef}
@@ -1275,25 +1530,18 @@ export default function ProjectGetScreen() {
                 blurOnSubmit={false}
               />
               <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6 }}>
-                {/* Left: voice icon circular */}
-                <TouchableOpacity
-                  onPress={() => { setVoiceMode(true); setInputText(''); Keyboard.dismiss(); }}
+                <TouchableOpacity onPress={() => { setVoiceMode(true); setInputText(''); Keyboard.dismiss(); }}
                   style={{ width: 32, height: 32, borderRadius: 16, borderWidth: 2, borderColor: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.25)', alignItems: 'center', justifyContent: 'center' }}>
                   <Ionicons name="radio-button-on-outline" size={16} color={subC} />
                 </TouchableOpacity>
-
                 <View style={{ flex: 1 }} />
-
-                {/* Right buttons */}
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                   <TouchableOpacity onPress={() => setToolsVisible(true)}
                     style={{ width: 32, height: 32, borderRadius: 16, borderWidth: 2, borderColor: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.25)', alignItems: 'center', justifyContent: 'center' }}>
                     <Ionicons name="add" size={20} color={subC} />
                   </TouchableOpacity>
-
                   {isGenerating ? (
-                    <TouchableOpacity
-                      style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: isDark ? '#3A3A3C' : '#DCDCDC', alignItems: 'center', justifyContent: 'center' }}>
+                    <TouchableOpacity style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: isDark ? '#3A3A3C' : '#DCDCDC', alignItems: 'center', justifyContent: 'center' }}>
                       <View style={{ width: 10, height: 10, backgroundColor: textC, borderRadius: 2 }} />
                     </TouchableOpacity>
                   ) : showSend ? (
@@ -1309,7 +1557,7 @@ export default function ProjectGetScreen() {
         </View>
       </KeyboardAvoidingView>
 
-      {/* ── Model Selector Modal ────────────────────────────────────────────── */}
+      {/* ── Model Selector ──────────────────────────────────────────────────── */}
       <Modal visible={modelSelectorVisible} transparent animationType="none" onRequestClose={() => setModelSelectorVisible(false)}>
         <Pressable style={{ flex: 1 }} onPress={() => setModelSelectorVisible(false)}>
           {Platform.OS === 'ios' ? (
@@ -1349,44 +1597,27 @@ export default function ProjectGetScreen() {
         </View>
       </Modal>
 
-      {/* ── Side Menu ──────────────────────────────────────────────────────── */}
+      {/* ── Side Menu ───────────────────────────────────────────────────────── */}
       <SideMenuDrawer
         visible={sideMenuVisible}
         onClose={() => setSideMenuVisible(false)}
         user={user}
         isDark={isDark}
         conversations={conversations}
-        onSelectConv={id => setCurrentConvId(id)}
-        currentConvId={currentConvId}
-        onNewChat={() => { setMessages([]); setInputText(''); setSelectedMedia([]); setVoiceMode(true); setSideMenuVisible(false); }}
+        onSelectConv={handleSelectConversation}
+        currentConvId={currentConvId || undefined}
+        onNewChat={handleNewChat}
+        loadingHistory={loadingHistory}
       />
 
-      {/* ── Tools Modal ─────────────────────────────────────────────────────── */}
-      <ToolsModal
-        visible={toolsVisible}
-        onClose={() => setToolsVisible(false)}
-        isDark={isDark}
-        onPickImage={handlePickImage}
-        onPickFile={handlePickFile}
-      />
+      {/* ── Tools Modal ──────────────────────────────────────────────────────── */}
+      <ToolsModal visible={toolsVisible} onClose={() => setToolsVisible(false)} isDark={isDark} onPickImage={handlePickImage} onPickFile={handlePickFile} />
 
-      {/* ── Full Code Modal ──────────────────────────────────────────────────── */}
-      <FullCodeModal
-        visible={!!openCodeBlock}
-        block={openCodeBlock}
-        onClose={() => setOpenCodeBlock(null)}
-        isDark={isDark}
-      />
+      {/* ── Full Code Modal ───────────────────────────────────────────────────── */}
+      <FullCodeModal visible={!!openCodeBlock} block={openCodeBlock} onClose={() => setOpenCodeBlock(null)} isDark={isDark} />
 
-      {/* ── Message Actions Modal ────────────────────────────────────────────── */}
-      <MessageActionsModal
-        visible={msgActionsVisible}
-        onClose={() => setMsgActionsVisible(false)}
-        onCopy={handleCopyMsg}
-        onEdit={handleEditMsg}
-        isDark={isDark}
-      />
+      {/* ── Message Actions ───────────────────────────────────────────────────── */}
+      <MessageActionsModal visible={msgActionsVisible} onClose={() => setMsgActionsVisible(false)} onCopy={handleCopyMsg} onEdit={handleEditMsg} isDark={isDark} />
     </View>
   );
 }
-
