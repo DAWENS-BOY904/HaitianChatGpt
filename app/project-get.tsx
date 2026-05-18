@@ -22,6 +22,32 @@ import { useAuth, useAlert, getSupabaseClient } from '@/template';
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
 const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
+
+// DB helpers
+async function dbCreateConv(sb: any, userId: string, title: string): Promise<string | null> {
+  try {
+    const { data, error } = await sb.from('conversations').insert({ user_id: userId, title, is_temporary: false }).select('id').single();
+    if (error) return null;
+    return data?.id ?? null;
+  } catch { return null; }
+}
+async function dbSaveMsg(sb: any, convId: string, role: string, content: string, imageUrl?: string) {
+  try { await sb.from('messages').insert({ conversation_id: convId, role, content, image_url: imageUrl ?? null }); } catch {}
+}
+async function dbLoadMsgs(sb: any, convId: string): Promise<any[]> {
+  try {
+    const { data, error } = await sb.from('messages').select('id, role, content, created_at, image_url').eq('conversation_id', convId).order('created_at', { ascending: true });
+    if (error || !data) return [];
+    return data.map((m: any) => ({ id: m.id, role: m.role, content: m.content, timestamp: new Date(m.created_at).getTime(), media: m.image_url ? [{ type: 'image' as const, uri: m.image_url, name: 'img.jpg' }] : undefined }));
+  } catch { return []; }
+}
+async function dbLoadConvs(sb: any, userId: string): Promise<ConversationItem[]> {
+  try {
+    const { data, error } = await sb.from('conversations').select('id, title, updated_at').eq('user_id', userId).eq('is_archived', false).order('updated_at', { ascending: false }).limit(50);
+    if (error || !data) return [];
+    return data.map((c: any) => ({ id: c.id, title: c.title || 'New chat', updatedAt: c.updated_at, thumbnails: [] }));
+  } catch { return []; }
+}
 import { useRouter } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
@@ -751,15 +777,26 @@ export default function ProjectGetScreen() {
   const [msgActionsVisible, setMsgActionsVisible] = useState(false);
   const [selectedMsg, setSelectedMsg] = useState<Message | null>(null);
 
-  const [conversations, setConversations] = useState<ConversationItem[]>([
-    { id: '1', title: 'Casual Friendly Greeting Chat', updatedAt: new Date().toISOString(), thumbnails: [] },
-    { id: '2', title: 'Better Email Confirmation', updatedAt: new Date(Date.now() - 86400000 * 3).toISOString(), thumbnails: [] },
-    { id: '3', title: 'Mobile Banner No Zoom', updatedAt: new Date(Date.now() - 86400000 * 90).toISOString(), thumbnails: [] },
-  ]);
-  const [currentConvId, setCurrentConvId] = useState('1');
+  const [conversations, setConversations] = useState<ConversationItem[]>([]);
+  const [currentConvId, setCurrentConvId] = useState<string | null>(null);
 
   const flatListRef = useRef<FlatList>(null);
   const inputRef = useRef<TextInput>(null);
+
+  // Load conversations + messages from DB
+  useEffect(() => {
+    if (!user?.id) return;
+    dbLoadConvs(supabase, user.id).then(convs => { if (convs.length > 0) setConversations(convs); });
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!currentConvId || !user?.id) return;
+    setMessages([]);
+    dbLoadMsgs(supabase, currentConvId).then(msgs => {
+      if (msgs.length > 0) setMessages(msgs);
+      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 100);
+    });
+  }, [currentConvId]);
 
   const bg = isDark ? '#0D0D10' : '#FFFFFF';
   const inputBg = isDark ? '#1C1C1E' : '#F2F2F7';
@@ -886,10 +923,25 @@ export default function ProjectGetScreen() {
     setVoiceMode(true);
     setIsGenerating(true);
 
-    // Update conversation thumbnails
+    // Create or use existing DB conversation
+    let activeConvId = currentConvId;
+    if (!activeConvId && user?.id) {
+      const title = text.slice(0, 60) || 'New coding chat';
+      const newId = await dbCreateConv(supabase, user.id, title);
+      if (newId) {
+        activeConvId = newId;
+        setCurrentConvId(newId);
+        setConversations(prev => [{ id: newId, title, updatedAt: new Date().toISOString(), thumbnails: [] }, ...prev]);
+      }
+    }
+    // Save user message
+    if (activeConvId) {
+      const imgM = mediaToSend.find(m => m.type === 'image');
+      dbSaveMsg(supabase, activeConvId, 'user', userMsg.content, imgM?.uri);
+    }
     const imgThumbs = mediaToSend.filter(m => m.type === 'image').map(m => m.uri);
     if (imgThumbs.length > 0) {
-      setConversations(prev => prev.map(c => c.id === currentConvId ? { ...c, thumbnails: [...(c.thumbnails || []), ...imgThumbs].slice(0, 5) } : c));
+      setConversations(prev => prev.map(c => c.id === activeConvId ? { ...c, thumbnails: [...(c.thumbnails || []), ...imgThumbs].slice(0, 5) } : c));
     }
 
     setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
@@ -1000,16 +1052,21 @@ export default function ProjectGetScreen() {
 
         if (!aiResponse) {
           // fallback with chat edge function
-          await callChatFallback(aiId, text, fileContent, base64Image, language);
+          await callChatFallback(aiId, text, fileContent, base64Image, language, activeConvId);
           return;
         }
 
-        // Final update
+        // Final update + save
         setMessages(prev => prev.map(m => m.id === aiId ? { ...m, content: aiResponse, executing: false } : m));
+        if (activeConvId && aiResponse) {
+          dbSaveMsg(supabase, activeConvId, 'assistant', aiResponse);
+          supabase.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id', activeConvId).catch(() => {});
+          setConversations(prev => prev.map(c => c.id === activeConvId ? { ...c, updatedAt: new Date().toISOString() } : c));
+        }
 
       } else {
-        // ── Regular chat edge function ────────────────────────────────────
-        await callChatFallback(aiId, text, fileContent, base64Image, language);
+        // Regular chat edge function
+        await callChatFallback(aiId, text, fileContent, base64Image, language, activeConvId);
         return;
       }
 
@@ -1022,7 +1079,7 @@ export default function ProjectGetScreen() {
     }
   }, [inputText, selectedMedia, isGenerating, selectedModel, user?.id, supabase, currentConvId]);
 
-  const callChatFallback = async (aiId: string, text: string, fileContent: string, base64Image: string | undefined, language: string) => {
+  const callChatFallback = async (aiId: string, text: string, fileContent: string, base64Image: string | undefined, language: string, activeConvId?: string | null) => {
     try {
       const systemHint = `You are Dawinix, an expert AI coding assistant. When writing code, always use markdown code fences with the language label. You can write long, complete code — never truncate. If the user pastes code with errors, fix all of them and return the complete fixed code.`;
 
@@ -1043,14 +1100,20 @@ export default function ProjectGetScreen() {
         aiContent = generateFallbackResponse(text);
       }
 
-      // Stream character by character
+      // Smooth token streaming
       let displayed = '';
-      const chunkSize = 6;
+      const chunkSize = 5;
       for (let i = 0; i < aiContent.length; i += chunkSize) {
         displayed += aiContent.slice(i, i + chunkSize);
         const snap = displayed;
         setMessages(prev => prev.map(m => m.id === aiId ? { ...m, content: snap, executing: false } : m));
-        await new Promise(r => setTimeout(r, 8));
+        await new Promise(r => setTimeout(r, 7));
+      }
+      // Save to DB
+      if (activeConvId && aiContent) {
+        dbSaveMsg(supabase, activeConvId, 'assistant', aiContent);
+        supabase.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id', activeConvId).catch(() => {});
+        setConversations(prev => prev.map(c => c.id === activeConvId ? { ...c, updatedAt: new Date().toISOString() } : c));
       }
     } catch {
       setMessages(prev => prev.map(m => m.id === aiId ? { ...m, content: 'Could not get a response. Please try again.', executing: false } : m));
@@ -1356,9 +1419,9 @@ export default function ProjectGetScreen() {
         user={user}
         isDark={isDark}
         conversations={conversations}
-        onSelectConv={id => setCurrentConvId(id)}
-        currentConvId={currentConvId}
-        onNewChat={() => { setMessages([]); setInputText(''); setSelectedMedia([]); setVoiceMode(true); setSideMenuVisible(false); }}
+        onSelectConv={id => { setCurrentConvId(id); setSideMenuVisible(false); }}
+        currentConvId={currentConvId ?? undefined}
+        onNewChat={() => { setMessages([]); setInputText(''); setSelectedMedia([]); setVoiceMode(true); setCurrentConvId(null); setSideMenuVisible(false); }}
       />
 
       {/* ── Tools Modal ─────────────────────────────────────────────────────── */}

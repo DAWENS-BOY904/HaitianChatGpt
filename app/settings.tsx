@@ -29,7 +29,7 @@ import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useProfile } from '../contexts/ProfileContext';
 import { Image as ExpoImageBadge } from 'expo-image';
-import * as WebBrowser from 'expo-web-browser';
+import * as WebBrowser from '../utils/web-browser';
 import { WebView } from 'react-native-webview';
 
 const PERSONA_LINK = 'https://perso.na/s/rKzyfH-XZ9663D';
