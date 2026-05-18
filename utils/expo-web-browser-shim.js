@@ -74,3 +74,4 @@ const SafeWebBrowser = {
 };
 
 module.exports = SafeWebBrowser;
+fix this never go outside app only open web in app via expo and The MessageItem was edited via GitHub to add table format support Please read the current file and ensure the table rendering, strikethrough, blockquote, and horizontal rule markdown features are all working correctly without any compilation errors.
