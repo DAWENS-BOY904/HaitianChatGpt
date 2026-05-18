@@ -1065,4 +1065,4 @@ const assistantStyles = StyleSheet.create({
   },
 });
 
-fux code always give in steaming code block.
+
