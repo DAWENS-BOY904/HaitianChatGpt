@@ -1052,7 +1052,7 @@ export const MessageItem = memo(function MessageItem({
 });
 
 // ── Styles ────────────────────────────────────────────────────────────────────
-const userStyles = StyleSheet.create({
+cons userStyles = StyleSheet.create({
   container: { alignItems: 'flex-end', paddingHorizontal: 16, marginBottom: 14 },
   bubble: { maxWidth: '82%', borderRadius: 20, borderBottomRightRadius: 6, paddingHorizontal: 15, paddingVertical: 11 },
   text: { fontSize: 16, lineHeight: 24 },
