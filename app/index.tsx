@@ -434,4 +434,3 @@ export default function RootScreen() {
   if (showOnboarding) return <SplashScreen />; // show splash while effect fires navigation
   return <WelcomeScreen />;
 }
-fix all login never left the app stay in the app google expo login.
