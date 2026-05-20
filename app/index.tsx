@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { ONBOARDING_DONE_KEY } from './onboarding';
 import {
   View,
   Text,
@@ -406,16 +408,37 @@ export default function RootScreen() {
   const { user, loading } = useAuth();
   const { isDark } = useTheme();
   const router = useRouter();
+  const [onboardingChecked, setOnboardingChecked] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+
+  // Check if onboarding has been completed before
+  useEffect(() => {
+    AsyncStorage.getItem(ONBOARDING_DONE_KEY)
+      .then((val) => {
+        setShowOnboarding(val !== 'true');
+        setOnboardingChecked(true);
+      })
+      .catch(() => {
+        setOnboardingChecked(true);
+      });
+  }, []);
 
   // After login completes, redirect to home — using useEffect prevents
   // the white-screen race between auth state update and Stack navigation.
   useEffect(() => {
-    if (!loading && user) {
+    if (!loading && user && onboardingChecked) {
       router.replace('/home');
     }
-  }, [user, loading]);
+  }, [user, loading, onboardingChecked]);
 
-  if (loading) return <SplashScreen />;
+  if (loading || !onboardingChecked) return <SplashScreen />;
   if (user) return <SplashScreen />; // show splash while effect fires
+
+  // First launch: show onboarding
+  if (showOnboarding) {
+    router.replace('/onboarding');
+    return <SplashScreen />;
+  }
+
   return <WelcomeScreen />;
 }
