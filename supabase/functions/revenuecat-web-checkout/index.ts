@@ -13,7 +13,7 @@ const log = (step: string, details?: any) => {
 
 // ── Product ID map  plan + billing cycle → RC product identifier ──────────
 const RC_PRODUCT_MAP: Record<string, string> = {
-  'go_monthly':    'app.dawinix.go.monthly',
+  'go_monthly':    'app.dawinix.go.monthly2026',
   'go_annual':     'app.dawinix.go.annual',
   'plus_monthly':  'app.dawinix.plus.monthly',
   'plus_annual':   'app.dawinix.plus.annual',
