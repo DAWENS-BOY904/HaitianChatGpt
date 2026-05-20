@@ -316,7 +316,7 @@ export default function VoiceSettingsScreen() {
             <View style={{ flex: 1, paddingRight: 12 }}>
               <Text style={[styles.rowTitle, { color: text }]}>Voice Interrupt (Barge-In)</Text>
               <Text style={[styles.rowDesc, { color: secondary }]}>
-                Stop AI speaking the moment you start talking. Uses amplitude detection.
+                Stop AI speaking the moment you&apos;re start talking. Uses amplitude detection.
               </Text>
             </View>
             <Switch

@@ -23,8 +23,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as LocalAuthentication from 'expo-local-authentication';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
-import * as Linking from 'expo-linking';
-
 // ── AI Logo ──
 const AI_LOGO_URL = 'https://uzxmmddivzqjhcnnrkns.supabase.co/storage/v1/object/public/logo/logo.png';
 
