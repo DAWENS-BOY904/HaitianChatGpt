@@ -1184,3 +1184,4 @@ const styles = StyleSheet.create({
   },
   refreshText: { fontSize: 11 },
 });
+fix error please add to appjson revenue key android and ios.
