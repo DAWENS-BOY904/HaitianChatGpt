@@ -17,11 +17,13 @@ export interface StreamChunk {
  * Smart content analysis for adaptive streaming
  */
 function analyzeContent(text: string) {
-  const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
+  const sentences = text.split(/([.!?]+)/).filter(s => s.trim().length > 0);
   const words = text.split(/\s+/).filter(w => w.length > 0);
   const hasCode = text.includes('```');
   const hasLists = /^[\s]*[-*•]\s/m.test(text) || /^\d+\.\s/m.test(text);
-  const avgWordLength = words.reduce((sum, word) => sum + word.length, 0) / words.length;
+  const avgWordLength = words.length > 0 
+    ? words.reduce((sum, word) => sum + word.length, 0) / words.length 
+    : 0;
 
   return {
     sentences,
@@ -66,10 +68,24 @@ function createSmartChunks(text: string): string[] {
         chunks.push(part);
       } else {
         // Regular text - chunk by sentences
-        const sentences = part.split(/[.!?]+\s/).filter(s => s.trim());
+        const sentences = part.split(/([.!?]+\s*)/).filter(s => s.trim());
+        let currentSentence = '';
         for (const sentence of sentences) {
-          const words = sentence.trim().split(/\s+/);
-          // Send 3-5 words at a time for natural flow
+          currentSentence += sentence;
+          // When we have a complete sentence (ends with punctuation), process it
+          if (/[.!?]$/.test(sentence.trim())) {
+            const words = currentSentence.trim().split(/\s+/);
+            // Send 3-5 words at a time for natural flow
+            for (let i = 0; i < words.length; i += 4) {
+              const chunk = words.slice(i, i + 4).join(' ') + ' ';
+              if (chunk.trim()) chunks.push(chunk);
+            }
+            currentSentence = '';
+          }
+        }
+        // Handle any remaining text
+        if (currentSentence.trim()) {
+          const words = currentSentence.trim().split(/\s+/);
           for (let i = 0; i < words.length; i += 4) {
             const chunk = words.slice(i, i + 4).join(' ') + ' ';
             if (chunk.trim()) chunks.push(chunk);
@@ -98,16 +114,30 @@ function createSmartChunks(text: string): string[] {
   } else {
     // Regular text - chunk by natural language units
     const sentences = text.split(/([.!?]+\s*)/).filter(s => s.trim());
+    let currentSentence = '';
 
-    for (let i = 0; i < sentences.length; i += 2) {
-      const chunk = sentences.slice(i, i + 2).join('').trim();
-      if (chunk) {
-        const words = chunk.split(/\s+/);
-        // Send 2-3 words at a time for smooth flow
-        for (let j = 0; j < words.length; j += 3) {
-          const wordChunk = words.slice(j, j + 3).join(' ') + ' ';
-          if (wordChunk.trim()) chunks.push(wordChunk);
+    for (let i = 0; i < sentences.length; i++) {
+      currentSentence += sentences[i];
+      // When we have a complete sentence, process it
+      if (/[.!?]$/.test(sentences[i].trim())) {
+        const chunk = currentSentence.trim();
+        if (chunk) {
+          const words = chunk.split(/\s+/);
+          // Send 2-3 words at a time for smooth flow
+          for (let j = 0; j < words.length; j += 3) {
+            const wordChunk = words.slice(j, j + 3).join(' ') + ' ';
+            if (wordChunk.trim()) chunks.push(wordChunk);
+          }
         }
+        currentSentence = '';
+      }
+    }
+    // Handle any remaining text
+    if (currentSentence.trim()) {
+      const words = currentSentence.trim().split(/\s+/);
+      for (let j = 0; j < words.length; j += 3) {
+        const wordChunk = words.slice(j, j + 3).join(' ') + ' ';
+        if (wordChunk.trim()) chunks.push(wordChunk);
       }
     }
   }
@@ -121,12 +151,28 @@ function createSmartChunks(text: string): string[] {
  */
 export function createStreamingResponse(text: string, model: string, delayMs: number = 15): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
-  const chunks = createSmartChunks(text);
-  const adaptiveDelay = getAdaptiveDelay(text, delayMs);
 
   return new ReadableStream({
     async start(controller) {
+      let isClosed = false;
+
+      const safeClose = () => {
+        if (!isClosed) {
+          isClosed = true;
+          controller.close();
+        }
+      };
+
+      const safeEnqueue = (data: Uint8Array) => {
+        if (!isClosed) {
+          controller.enqueue(data);
+        }
+      };
+
       try {
+        // Use a generator-like approach for memory efficiency with large texts
+        const chunks = createSmartChunks(text);
+        const adaptiveDelay = getAdaptiveDelay(text, delayMs);
         let totalSent = 0;
 
         for (let i = 0; i < chunks.length; i++) {
@@ -144,7 +190,7 @@ export function createStreamingResponse(text: string, model: string, delayMs: nu
             delay: adaptiveDelay
           };
 
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify(streamChunk)}\n\n`));
+          safeEnqueue(encoder.encode(`data: ${JSON.stringify(streamChunk)}\n\n`));
 
           // Adaptive delay based on content type and position
           let currentDelay = adaptiveDelay;
@@ -170,8 +216,8 @@ export function createStreamingResponse(text: string, model: string, delayMs: nu
           done: true,
           model
         };
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify(finalChunk)}\n\n`));
-        controller.close();
+        safeEnqueue(encoder.encode(`data: ${JSON.stringify(finalChunk)}\n\n`));
+        safeClose();
 
       } catch (error) {
         console.error('Streaming error:', error);
@@ -180,8 +226,8 @@ export function createStreamingResponse(text: string, model: string, delayMs: nu
           done: true,
           error: error instanceof Error ? error.message : 'Streaming failed'
         };
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify(errorChunk)}\n\n`));
-        controller.close();
+        safeEnqueue(encoder.encode(`data: ${JSON.stringify(errorChunk)}\n\n`));
+        safeClose();
       }
     }
   });
@@ -195,13 +241,26 @@ export function createErrorStream(error: string): ReadableStream<Uint8Array> {
 
   return new ReadableStream({
     start(controller) {
-      const errorChunk: StreamChunk = {
-        content: '',
-        done: true,
-        error
+      let isClosed = false;
+
+      const safeClose = () => {
+        if (!isClosed) {
+          isClosed = true;
+          controller.close();
+        }
       };
-      controller.enqueue(encoder.encode(`data: ${JSON.stringify(errorChunk)}\n\n`));
-      controller.close();
+
+      try {
+        const errorChunk: StreamChunk = {
+          content: '',
+          done: true,
+          error
+        };
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(errorChunk)}\n\n`));
+        safeClose();
+      } catch (e) {
+        safeClose();
+      }
     }
   });
 }
@@ -228,6 +287,21 @@ export function createCustomStreamingResponse(
 
   return new ReadableStream({
     async start(controller) {
+      let isClosed = false;
+
+      const safeClose = () => {
+        if (!isClosed) {
+          isClosed = true;
+          controller.close();
+        }
+      };
+
+      const safeEnqueue = (data: Uint8Array) => {
+        if (!isClosed) {
+          controller.enqueue(data);
+        }
+      };
+
       try {
         let position = 0;
 
@@ -236,21 +310,22 @@ export function createCustomStreamingResponse(
           const chunk = text.slice(position, endPos);
           position = endPos;
 
+          const isDone = position >= text.length;
           const streamChunk: StreamChunk = {
             content: chunk,
-            done: position >= text.length,
+            done: isDone,
             model,
             delay: delayMs
           };
 
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify(streamChunk)}\n\n`));
+          safeEnqueue(encoder.encode(`data: ${JSON.stringify(streamChunk)}\n\n`));
 
-          if (!streamChunk.done) {
+          if (!isDone) {
             await new Promise(resolve => setTimeout(resolve, delayMs));
           }
         }
 
-        controller.close();
+        safeClose();
 
       } catch (error) {
         console.error('Custom streaming error:', error);
@@ -259,8 +334,100 @@ export function createCustomStreamingResponse(
           done: true,
           error: error instanceof Error ? error.message : 'Streaming failed'
         };
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify(errorChunk)}\n\n`));
-        controller.close();
+        safeEnqueue(encoder.encode(`data: ${JSON.stringify(errorChunk)}\n\n`));
+        safeClose();
+      }
+    }
+  });
+}
+
+/**
+ * Memory-efficient streaming for very large texts
+ * Uses lazy chunking instead of creating all chunks upfront
+ */
+export function createLazyStreamingResponse(
+  text: string,
+  model: string,
+  delayMs: number = 15
+): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+
+  return new ReadableStream({
+    async start(controller) {
+      let isClosed = false;
+      let position = 0;
+
+      const safeClose = () => {
+        if (!isClosed) {
+          isClosed = true;
+          controller.close();
+        }
+      };
+
+      const safeEnqueue = (data: Uint8Array) => {
+        if (!isClosed) {
+          controller.enqueue(data);
+        }
+      };
+
+      try {
+        const adaptiveDelay = getAdaptiveDelay(text, delayMs);
+
+        // Simple word-based lazy chunking for memory efficiency
+        const words = text.split(/(\s+)/); // Keep whitespace as separate tokens
+        let currentChunk = '';
+        let wordCount = 0;
+        const wordsPerChunk = 3;
+
+        for (let i = 0; i < words.length; i++) {
+          const word = words[i];
+          currentChunk += word;
+
+          // Count non-whitespace words
+          if (word.trim()) {
+            wordCount++;
+          }
+
+          // Send chunk when we have enough words or at the end
+          if (wordCount >= wordsPerChunk || i === words.length - 1) {
+            if (currentChunk) {
+              const isDone = i === words.length - 1;
+
+              const streamChunk: StreamChunk = {
+                content: currentChunk,
+                done: isDone,
+                model,
+                delay: adaptiveDelay
+              };
+
+              safeEnqueue(encoder.encode(`data: ${JSON.stringify(streamChunk)}\n\n`));
+
+              if (!isDone) {
+                // Add punctuation pauses
+                let currentDelay = adaptiveDelay;
+                if (/[.!?]$/.test(currentChunk.trim())) {
+                  currentDelay *= 1.5;
+                }
+                await new Promise(resolve => setTimeout(resolve, Math.max(5, currentDelay)));
+              }
+
+              currentChunk = '';
+              wordCount = 0;
+            }
+          }
+        }
+
+        safeClose();
+
+      } catch (error) {
+        console.error('Lazy streaming error:', error);
+        const errorChunk: StreamChunk = {
+          content: '',
+          done: true,
+          error: error instanceof Error ? error.message : 'Streaming failed'
+        };
+        safeEnqueue(encoder.encode(`data: ${JSON.stringify(errorChunk)}\n\n`));
+        safeClose();
       }
     }
   });
