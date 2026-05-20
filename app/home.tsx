@@ -47,6 +47,7 @@ import { MessageActionsModal } from '../components/MessageActionsModal';
 import { StreamingText } from '../components/StreamingText';
 import { ConversationMenuModal } from '../components/ConversationMenuModal';
 import { MessageItem } from '../components/MessageItem';
+import { ThinkingIndicator } from '../components/ThinkingIndicator';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getSupabaseClient } from '@/template';
 import { useRouter, useLocalSearchParams } from 'expo-router';
