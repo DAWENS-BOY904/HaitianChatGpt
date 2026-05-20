@@ -57,3 +57,4 @@
     "owner": "expo-production"
   }
 }
+fix the bug in supabase/functions/check-subscription/index where `user.id` is referenced before the user variable is defined (the RC block uses `user.id` before the auth token is parsed and user is authenticated) Review the app for Apple App Store readiness: check bundle identifier, version, privacy descriptions, required permissions in infoPlist, and ensure all screens handle safe areas correctly for iPhone submission.
