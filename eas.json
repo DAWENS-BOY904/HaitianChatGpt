@@ -13,6 +13,7 @@
       },
       "env": {
         "EXPO_NO_CAPABILITY_SYNC": "1",
+        "EAS_BUILD_NO_EXPO_GO_WARNING": "true",
         "EXPO_PUBLIC_RC_IOS_KEY": "appl_LCOBkSEKCqNFllINWlYWexOVaHf",
         "EXPO_PUBLIC_RC_ANDROID_KEY": "goog_htwkRFMSklkJWsTytqppHVTxkkP"
       }
@@ -24,6 +25,7 @@
       },
       "env": {
         "EXPO_NO_CAPABILITY_SYNC": "1",
+        "EAS_BUILD_NO_EXPO_GO_WARNING": "true",
         "npm_config_legacy_peer_deps": "true"
       }
     },
@@ -38,6 +40,7 @@
       },
       "env": {
         "EXPO_NO_CAPABILITY_SYNC": "1",
+        "EAS_BUILD_NO_EXPO_GO_WARNING": "true",
         "EAS_NO_FROZEN_LOCKFILE": "1",
         "npm_config_legacy_peer_deps": "true"
       }
