@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   useColorScheme,
   StatusBar,
+  Alert,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,9 +20,36 @@ import { useSubscription } from '../hooks/useSubscription';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAlert, useAuth, getSupabaseClient } from '@/template';
-// expo-web-browser replaced with Linking for web compatibility
 import { useFocusEffect } from '@react-navigation/native';
 import { FunctionsHttpError } from '@supabase/supabase-js';
+import Constants from 'expo-constants';
+
+// ── RevenueCat SDK (lazy loaded) ──────────────────────────────────────────
+let PurchasesModule: any = null;
+
+async function getPurchases() {
+  if (PurchasesModule) return PurchasesModule;
+  try {
+    const rc = await import('react-native-purchases');
+    PurchasesModule = rc.default || rc.Purchases || rc;
+    return PurchasesModule;
+  } catch {
+    return null;
+  }
+}
+
+// ── Environment config ───────────────────────────────────────────────────
+const ENV = {
+  RC_IOS_KEY: Constants.expoConfig?.extra?.revenueCatIosKey || process.env.EXPO_PUBLIC_RC_IOS_KEY || '',
+  RC_ANDROID_KEY: Constants.expoConfig?.extra?.revenueCatAndroidKey || process.env.EXPO_PUBLIC_RC_ANDROID_KEY || '',
+  IS_EXPO_GO: Constants.appOwnership === 'expo',
+};
+
+function getRCApiKey(): string {
+  if (Platform.OS === 'ios') return ENV.RC_IOS_KEY;
+  if (Platform.OS === 'android') return ENV.RC_ANDROID_KEY;
+  return '';
+}
 
 // ── Feature comparison rows ──
 const GO_FEATURES = [
@@ -42,7 +70,7 @@ const PLUS_FEATURES = [
   { label: 'Early access to new features', free: false, plan: true },
   { label: 'Agents & deep research', free: false, plan: true },
   { label: 'Extended conversation memory', free: false, plan: true },
-  { label: 'Priority support', false: false, plan: true },
+  { label: 'Priority support', free: false, plan: true },
 ];
 
 // ── Stripe price IDs ──
@@ -53,14 +81,8 @@ const STRIPE_PRICES = {
 // ── Apple IAP product IDs ──
 const APPLE_PRODUCT_ID = Platform.select({
   ios: 'app.dawinix.go.monthly',
+  android: 'app.dawinix.go.monthly',
   default: 'app.dawinix.go.monthly',
-});
-
-// ── RevenueCat API key ──
-const RC_API_KEY = Platform.select({
-  ios: process.env.EXPO_PUBLIC_RC_IOS_KEY || '',
-  android: process.env.EXPO_PUBLIC_RC_ANDROID_KEY || '',
-  default: '',
 });
 
 // ── Plan assets ──
@@ -96,6 +118,61 @@ function useThemeTokens() {
     webBtnBorder: dark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.12)',
     webBtnText: dark ? 'rgba(255,255,255,0.8)' : 'rgba(0,0,0,0.7)',
   };
+}
+
+// ── RevenueCat Helper ─────────────────────────────────────────────────────
+class RevenueCatHelper {
+  private static isConfigured = false;
+  private static Purchases: any = null;
+
+  static async init(): Promise<boolean> {
+    if (this.isConfigured) return true;
+
+    const Purchases = await getPurchases();
+    if (!Purchases) {
+      console.log('[RevenueCat] SDK not available');
+      return false;
+    }
+
+    this.Purchases = Purchases;
+    const apiKey = getRCApiKey();
+
+    if (!apiKey) {
+      console.log('[RevenueCat] No API key configured');
+      return false;
+    }
+
+    try {
+      await Purchases.configure({ apiKey });
+      this.isConfigured = true;
+      console.log('[RevenueCat] Configured successfully');
+      return true;
+    } catch (err: any) {
+      console.log('[RevenueCat] Configure failed:', err.message);
+      return false;
+    }
+  }
+
+  static async getOfferings() {
+    if (!this.isConfigured) await this.init();
+    if (!this.Purchases) throw new Error('RevenueCat not initialized');
+    return this.Purchases.getOfferings();
+  }
+
+  static async purchasePackage(pkg: any) {
+    if (!this.Purchases) throw new Error('RevenueCat not initialized');
+    return this.Purchases.purchasePackage(pkg);
+  }
+
+  static async restorePurchases() {
+    if (!this.Purchases) throw new Error('RevenueCat not initialized');
+    return this.Purchases.restorePurchases();
+  }
+
+  static async getCustomerInfo() {
+    if (!this.Purchases) throw new Error('RevenueCat not initialized');
+    return this.Purchases.getCustomerInfo();
+  }
 }
 
 export default function SubscriptionScreen() {
@@ -145,7 +222,7 @@ export default function SubscriptionScreen() {
         });
       }
     } catch (e) {
-      console.log('[subscription] check failed:', e);
+      console.log('[subscription] check failed');
     } finally {
       safeSetState(setCheckingStatus, false);
     }
@@ -164,51 +241,71 @@ export default function SubscriptionScreen() {
     }, [checkSubscriptionStatus]),
   );
 
+  // ── Check RevenueCat availability ──
+  const checkRevenueCatAvailable = async (): Promise<boolean> => {
+    // Expo Go doesn't support native IAP
+    if (ENV.IS_EXPO_GO) {
+      showAlert(
+        'Development Build Required',
+        'In-App Purchases require a development build.\n\nPlease build with EAS:\n\neas build --profile development'
+      );
+      return false;
+    }
+
+    // Web doesn't support IAP
+    if (Platform.OS === 'web') {
+      showAlert('Not Available', 'Apple In-App Purchase is only available on mobile devices.');
+      return false;
+    }
+
+    // Check if SDK is available
+    const Purchases = await getPurchases();
+    if (!Purchases) {
+      showAlert(
+        'Not Available',
+        'In-App Purchase SDK is not installed. Please run:\n\nnpx expo install react-native-purchases'
+      );
+      return false;
+    }
+
+    // Check API key
+    const apiKey = getRCApiKey();
+    if (!apiKey) {
+      showAlert(
+        'Configuration Error',
+        'RevenueCat API key is missing.\n\nPlease add to app.json:\n"extra": {\n  "revenueCatIosKey": "your_key",\n  "revenueCatAndroidKey": "your_key"\n}'
+      );
+      return false;
+    }
+
+    return true;
+  };
+
   // ──────────────────────────────────────────
   // GO PLAN → Apple IAP via RevenueCat
   // ──────────────────────────────────────────
   const purchaseGoWithAppleIAP = async () => {
-    if (Platform.OS === 'web') {
-      showAlert('Not available', 'Apple IAP is only available on iPhone.');
-      return;
-    }
+    // Check availability first
+    const isAvailable = await checkRevenueCatAvailable();
+    if (!isAvailable) return;
 
-    let Purchases: any;
+    safeSetState(setLoading, true);
     try {
-      const rcModule = await import('react-native-purchases');
-      Purchases = rcModule.default || rcModule.Purchases || rcModule;
-      if (!Purchases || typeof Purchases.configure !== 'function') {
-        throw new Error('RevenueCat SDK not properly initialized');
-      }
-    } catch (importErr: any) {
-      console.log('[RevenueCat] SDK not available:', importErr?.message);
-      showAlert(
-        'Not Available',
-        'In-App Purchase requires a development build. Use Expo Go for preview only, or build with EAS.'
-      );
-      return;
-    }
-
-    try {
-      const apiKey = RC_API_KEY ||
-        (Platform.OS === 'ios'
-          ? (process.env.EXPO_PUBLIC_RC_IOS_KEY || '')
-          : (process.env.EXPO_PUBLIC_RC_ANDROID_KEY || ''));
-
-      if (!apiKey) {
-        showAlert('Configuration Error', 'Apple In-App Purchase is not configured. Please contact support.');
-        return;
+      // Initialize RevenueCat
+      const configured = await RevenueCatHelper.init();
+      if (!configured) {
+        throw new Error('Failed to configure RevenueCat');
       }
 
-      try { await Purchases.configure({ apiKey }); } catch (_e) {}
-
-      const offerings = await Purchases.getOfferings();
+      // Get offerings
+      const offerings = await RevenueCatHelper.getOfferings();
       const offering = offerings.current;
 
       if (!offering) {
         throw new Error('No App Store offerings available. Please check App Store Connect configuration.');
       }
 
+      // Find the package
       const pkg = offering.availablePackages.find(
         (p: any) =>
           p.product?.productIdentifier === APPLE_PRODUCT_ID ||
@@ -220,7 +317,10 @@ export default function SubscriptionScreen() {
         throw new Error(`Go plan (${APPLE_PRODUCT_ID}) not found in App Store. Please contact support.`);
       }
 
-      const { customerInfo } = await Purchases.purchasePackage(pkg);
+      // Purchase
+      const { customerInfo } = await RevenueCatHelper.purchasePackage(pkg);
+
+      // Verify purchase with backend
       const receiptData = JSON.stringify(customerInfo);
       const transactionId = customerInfo?.originalAppUserId || `rc_${Date.now()}`;
 
@@ -229,11 +329,11 @@ export default function SubscriptionScreen() {
 
       const { data, error } = await supabase.functions.invoke('verify-purchase', {
         body: {
-          platform: 'ios',
+          platform: Platform.OS,
           receipt: receiptData,
           transactionId,
           productId: APPLE_PRODUCT_ID,
-          isSandbox: __DEV__,
+          isSandbox: !ENV.IS_EXPO_GO && __DEV__,
         },
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
@@ -241,7 +341,7 @@ export default function SubscriptionScreen() {
       if (error) {
         let errMsg = error.message;
         if (error instanceof FunctionsHttpError) {
-          try { errMsg = await error.context?.text() || errMsg; } catch (_e) {}
+          try { errMsg = await error.context?.text() || errMsg; } catch { /* ignore */ }
         }
         throw new Error(errMsg);
       }
@@ -250,6 +350,7 @@ export default function SubscriptionScreen() {
         throw new Error(data?.error || 'Purchase verification failed');
       }
 
+      // Update user profile
       if (user?.id) {
         await supabase.from('user_profiles').update({
           subscription_tier: 'go',
@@ -261,55 +362,73 @@ export default function SubscriptionScreen() {
       await checkSubscriptionStatus();
       router.push('/subscription-success');
     } catch (err: any) {
+      // Handle cancellation
       if (
         err?.userCancelled ||
         err?.code === '1' ||
-        err?.message?.includes('cancel') ||
-        err?.message?.includes('PurchaseCancelledError')
+        err?.code === 'PURCHASE_CANCELLED' ||
+        err?.message?.toLowerCase().includes('cancel')
       ) {
         return;
       }
 
-      if (
-        err?.message?.includes('Cannot find module') ||
-        err?.message?.includes('NativeModule') ||
-        err?.message?.includes('not available') ||
-        err?.message?.includes('RevenueCat SDK not properly initialized')
-      ) {
-        showAlert('Not Available', 'Apple In-App Purchase is only available on a real iPhone device with a development build.');
+      // Handle configuration errors
+      if (err?.message?.includes('configure') || err?.message?.includes('not initialized')) {
+        showAlert(
+          'Configuration Error',
+          'RevenueCat is not properly configured. Please check your API keys and try again.'
+        );
+        return;
+      }
+
+      // Handle store errors
+      if (err?.message?.includes('STORE_PROBLEM') || err?.message?.includes('store')) {
+        showAlert(
+          'App Store Error',
+          'There was a problem connecting to the App Store. Please try again later.'
+        );
         return;
       }
 
       showAlert('Purchase Failed', err?.message || 'Something went wrong with the purchase.');
+    } finally {
+      safeSetState(setLoading, false);
     }
   };
 
   // ──────────────────────────────────────────
-  // PLUS PLAN → Stripe hosted checkout (Buy on Web)
+  // PLUS PLAN → Stripe hosted checkout
   // ──────────────────────────────────────────
   const purchasePlusWithStripe = async (plan: 'go' | 'plus' = 'plus') => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.access_token) throw new Error('Not authenticated');
+    safeSetState(setLoading, true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error('Not authenticated');
 
-    const priceId = STRIPE_PRICES.plus;
+      const priceId = STRIPE_PRICES.plus;
 
-    const { data, error } = await supabase.functions.invoke('create-checkout-session', {
-      body: { plan, priceId },
-      headers: { Authorization: `Bearer ${session.access_token}` },
-    });
+      const { data, error } = await supabase.functions.invoke('create-checkout-session', {
+        body: { plan, priceId },
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
 
-    if (error) {
-      let errMsg = error.message;
-      if (error instanceof FunctionsHttpError) {
-        try { errMsg = await error.context?.text() || errMsg; } catch (_e) {}
+      if (error) {
+        let errMsg = error.message;
+        if (error instanceof FunctionsHttpError) {
+          try { errMsg = await error.context?.text() || errMsg; } catch { /* ignore */ }
+        }
+        throw new Error(errMsg);
       }
-      throw new Error(errMsg);
+
+      if (!data?.url) throw new Error('No checkout URL returned from Stripe');
+
+      await Linking.openURL(data.url);
+      setTimeout(() => checkSubscriptionStatus(), 2000);
+    } catch (err: any) {
+      showAlert('Error', err?.message || 'Could not open checkout');
+    } finally {
+      safeSetState(setLoading, false);
     }
-
-    if (!data?.url) throw new Error('No checkout URL returned from Stripe');
-
-    await Linking.openURL(data.url);
-    setTimeout(() => checkSubscriptionStatus(), 2000);
   };
 
   // ── Manage subscription (Stripe portal) ──
@@ -335,51 +454,29 @@ export default function SubscriptionScreen() {
   // ── Main purchase handler ──
   const handleUpgrade = async () => {
     if (loading) return;
-    safeSetState(setLoading, true);
-    try {
-      if (selectedPlan === 'go') {
-        await purchaseGoWithAppleIAP();
-      } else {
-        router.push('/checkout');
-      }
-    } catch (err: any) {
-      showAlert('Purchase Failed', err?.message || 'Something went wrong. Please try again.');
-    } finally {
-      safeSetState(setLoading, false);
+    if (selectedPlan === 'go') {
+      await purchaseGoWithAppleIAP();
+    } else {
+      router.push('/checkout');
     }
   };
 
-  // ── "Buy on Web" (Plus only) — Stripe hosted checkout in browser ──
+  // ── "Buy on Web" (Plus only) ──
   const handleBuyOnWeb = async () => {
     if (loading) return;
-    safeSetState(setLoading, true);
-    try {
-      await purchasePlusWithStripe('plus');
-    } catch (err: any) {
-      showAlert('Error', err?.message || 'Could not open web checkout');
-    } finally {
-      safeSetState(setLoading, false);
-    }
+    await purchasePlusWithStripe('plus');
   };
 
   // ── Restore purchases ──
   const handleRestore = async () => {
     safeSetState(setRestoring, true);
     try {
-      if (Platform.OS !== 'web') {
+      // Try RevenueCat first
+      if (!ENV.IS_EXPO_GO && Platform.OS !== 'web') {
         try {
-          const rcModule = await import('react-native-purchases');
-          const Purchases = rcModule.default || rcModule.Purchases || rcModule;
-          if (!Purchases || typeof Purchases.configure !== 'function') {
-            throw new Error('RevenueCat SDK not available');
-          }
-          const apiKey = RC_API_KEY ||
-            (Platform.OS === 'ios'
-              ? (process.env.EXPO_PUBLIC_RC_IOS_KEY || '')
-              : (process.env.EXPO_PUBLIC_RC_ANDROID_KEY || ''));
-          if (apiKey) {
-            try { await Purchases.configure({ apiKey }); } catch (_e) {}
-            const customerInfo = await Purchases.restorePurchases();
+          const configured = await RevenueCatHelper.init();
+          if (configured) {
+            const customerInfo = await RevenueCatHelper.restorePurchases();
             const hasActive = Object.keys(customerInfo.entitlements?.active || {}).length > 0;
             if (hasActive && user?.id) {
               await supabase.from('user_profiles').update({ subscription_tier: 'go' }).eq('id', user.id);
@@ -388,14 +485,16 @@ export default function SubscriptionScreen() {
               return;
             }
           }
-        } catch (_e) {
-          // Silently fail - RevenueCat not available in Expo Go
+        } catch {
+          // RevenueCat restore failed, try fallback
         }
       }
+
+      // Fallback to hook restore
       await restorePurchases();
       await checkSubscriptionStatus();
       showAlert('Purchases Restored', 'Your purchases have been restored successfully.');
-    } catch (_e) {
+    } catch {
       showAlert('No Purchases Found', 'No previous purchases were found for this account.');
     } finally {
       safeSetState(setRestoring, false);
@@ -418,14 +517,12 @@ export default function SubscriptionScreen() {
 
   return (
     <View style={[styles.root, { backgroundColor: T.bg }]}>
-      {/* Full-screen gradient background */}
       <LinearGradient
         colors={[T.gradientStart, T.gradientEnd, T.gradientStart]}
         locations={[0, 0.5, 1]}
         style={StyleSheet.absoluteFill}
       />
 
-      {/* Decorative glow blobs */}
       <View style={[styles.blob1, { backgroundColor: planColor }]} />
       <View style={[styles.blob2, { backgroundColor: selectedPlan === 'go' ? '#0096FF' : '#FF2D55' }]} />
 
@@ -493,7 +590,7 @@ export default function SubscriptionScreen() {
             : 'Advanced intelligence via Stripe checkout'}
         </Text>
 
-        {/* Plan toggle (glass pill) */}
+        {/* Plan toggle */}
         {Platform.OS === 'ios' ? (
           <BlurView intensity={60} tint={T.blurTint} style={[styles.toggle, { borderColor: T.cardBorder }]} experimentalBlurMethod="dimezisBlurView">
             {(['go', 'plus'] as const).map((p) => (
@@ -656,7 +753,7 @@ export default function SubscriptionScreen() {
         </TouchableOpacity>
       </ScrollView>
 
-      {/* ── Bottom CTA (glass bar) ── */}
+      {/* ── Bottom CTA ── */}
       {Platform.OS === 'ios' ? (
         <BlurView
           intensity={80}
