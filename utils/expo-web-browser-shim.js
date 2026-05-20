@@ -31,7 +31,11 @@ const SafeWebBrowser = {
         return ExpoWebBrowser.openBrowserAsync(url, options);
       }
     } catch (_e) {}
-    // Fallback to Linking
+    // Web fallback: keep navigation inside the current tab/app
+    if (typeof window !== 'undefined' && typeof window.location !== 'undefined') {
+      window.location.href = url;
+      return Promise.resolve({ type: 'opened' });
+    }
     const { Linking } = require('react-native');
     return Linking.openURL(url).then(function () { return { type: 'opened' }; });
   },
@@ -42,6 +46,10 @@ const SafeWebBrowser = {
         return ExpoWebBrowser.openAuthSessionAsync(url, redirectUrl, options);
       }
     } catch (_e) {}
+    if (typeof window !== 'undefined' && typeof window.location !== 'undefined') {
+      window.location.href = url;
+      return Promise.resolve({ type: 'opened' });
+    }
     const { Linking } = require('react-native');
     return Linking.openURL(url).then(function () { return { type: 'opened' }; });
   },

@@ -9,7 +9,6 @@ import {
   ActivityIndicator,
   Animated,
   Image,
-  Linking,
 } from 'react-native';
 import { useRouter, Redirect } from 'expo-router';
 import { useAuth, useAlert, getSupabaseClient } from '@/template';
@@ -98,28 +97,6 @@ async function performAppleSignIn(showAlert: (title: string, msg?: string) => vo
   } catch (e: any) {
     if (e?.code === 'ERR_REQUEST_CANCELED') return { user: null };
     return { user: null, error: e?.message || 'Apple Sign In failed' };
-  }
-}
-
-// ── Google OAuth via Supabase URL (no WebBrowser needed) ──
-async function performGoogleSignIn(): Promise<{ error?: string }> {
-  try {
-    const supabase = getSupabaseClient();
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: 'haitian-chatgpt://auth/callback',
-        skipBrowserRedirect: true,
-      },
-    });
-    if (error) return { error: error.message };
-    if (data?.url) {
-      await Linking.openURL(data.url);
-      return {};
-    }
-    return { error: 'Could not get Google sign-in URL' };
-  } catch (e: any) {
-    return { error: e?.message || 'Google sign-in failed' };
   }
 }
 
@@ -218,15 +195,7 @@ function WelcomeScreen() {
   const handleGoogle = async () => {
     setLoading('google');
     try {
-      // Try template signInWithGoogle first, fallback to direct OAuth URL
-      let result: any;
-      try {
-        result = await signInWithGoogle();
-      } catch (innerErr: any) {
-        // Template method failed (e.g. WebBrowser issue), use direct Linking
-        result = await performGoogleSignIn();
-      }
-
+      const result: any = await signInWithGoogle();
       const error = result?.error;
       if (error) {
         const lower = (error || '').toLowerCase();
@@ -237,12 +206,7 @@ function WelcomeScreen() {
       const msg = (err?.message || '').toLowerCase();
       const isCancellation = msg.includes('cancel') || msg.includes('dismiss') || msg.includes('closed');
       if (!isCancellation) {
-        // Final fallback: open OAuth URL directly
-        try {
-          await performGoogleSignIn();
-        } catch (e2) {
-          showAlert('Error', 'Google sign-in failed. Please try again.');
-        }
+        showAlert('Sign In Failed', err?.message || 'Google sign-in failed. Please try again.');
       }
     } finally {
       setLoading(null);
