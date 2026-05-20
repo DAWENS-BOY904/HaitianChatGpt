@@ -419,17 +419,19 @@ export default function RootScreen() {
   }, []);
 
   // After login completes, redirect to home
+  // After onboarding check, redirect to onboarding if needed
   useEffect(() => {
-    if (!loading && user) {
+    if (loading || checkingOnboarding) return;
+    if (user) {
       router.replace('/home');
+    } else if (showOnboarding) {
+      router.replace('/onboarding');
     }
-  }, [user, loading]);
+  }, [user, loading, checkingOnboarding, showOnboarding]);
 
   if (loading || checkingOnboarding) return <SplashScreen />;
   if (user) return <SplashScreen />; // show splash while effect fires
-  if (showOnboarding) {
-    router.replace('/onboarding');
-    return <SplashScreen />;
-  }
+  if (showOnboarding) return <SplashScreen />; // show splash while effect fires navigation
   return <WelcomeScreen />;
 }
+
