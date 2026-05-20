@@ -1253,6 +1253,8 @@ export default function SettingsScreen() {
             Dawinix HT · Version {currentVersion}
           </Text>
         </View>
+      </ScrollView>
+
       {/* EDIT PROFILE MODAL */}
       <Modal visible={editModalVisible} transparent animationType="slide" onRequestClose={() => setEditModalVisible(false)}>
         <View style={{ flex: 1, backgroundColor: isDark ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.3)' }}>
@@ -1332,7 +1334,7 @@ export default function SettingsScreen() {
         </View>
       </Modal>
 
-      {/* ACCENT COLOR PICKER MODAL */}
+      {/* ACCENT COLOR PICKER MODAL - outside ScrollView */
       <Modal visible={accentPickerVisible} transparent animationType="slide" onRequestClose={() => setAccentPickerVisible(false)}>
         <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.45)' }}>
           <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setAccentPickerVisible(false)} />

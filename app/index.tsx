@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { useRouter, Redirect } from 'expo-router';
 import { useAuth, useAlert, getSupabaseClient } from '@/template';
+import { hasSeenOnboarding } from './onboarding';
 import { useTheme } from '../hooks/useTheme';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -406,16 +407,29 @@ export default function RootScreen() {
   const { user, loading } = useAuth();
   const { isDark } = useTheme();
   const router = useRouter();
+  const [checkingOnboarding, setCheckingOnboarding] = useState(true);
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
-  // After login completes, redirect to home — using useEffect prevents
-  // the white-screen race between auth state update and Stack navigation.
+  // Check first-launch onboarding status
+  useEffect(() => {
+    hasSeenOnboarding().then((seen) => {
+      setShowOnboarding(!seen);
+      setCheckingOnboarding(false);
+    });
+  }, []);
+
+  // After login completes, redirect to home
   useEffect(() => {
     if (!loading && user) {
       router.replace('/home');
     }
   }, [user, loading]);
 
-  if (loading) return <SplashScreen />;
+  if (loading || checkingOnboarding) return <SplashScreen />;
   if (user) return <SplashScreen />; // show splash while effect fires
+  if (showOnboarding) {
+    router.replace('/onboarding');
+    return <SplashScreen />;
+  }
   return <WelcomeScreen />;
 }

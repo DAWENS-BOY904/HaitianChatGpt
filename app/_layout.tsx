@@ -129,6 +129,7 @@ export default function RootLayout() {
                     <Stack.Screen name="spotify-connect" />
                     <Stack.Screen name="shazam-connect" />
                     <Stack.Screen name="subscription-success" />
+                    <Stack.Screen name="onboarding" options={{ headerShown: false, gestureEnabled: false }} />
                     </Stack>
                   </ConversationProvider>
                 </ProfileProvider>
