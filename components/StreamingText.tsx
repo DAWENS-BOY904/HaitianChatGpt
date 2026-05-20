@@ -69,7 +69,7 @@ export function StreamingText({
     loop.start();
 
     return () => loop.stop();
-  }, [cursor, cursorOpacity]);
+  }, [cursor]);
 
   // ── Delay helper ──
   const getNextDelay = useCallback(
@@ -138,7 +138,7 @@ export function StreamingText({
       {cursor && (
         <Animated.Text
           style={[
-            { opacity: cursorOpacity, color: 'inherit' },
+            { opacity: cursorOpacity },
             cursorStyle,
           ]}
         >
@@ -158,10 +158,9 @@ export function useStreamingText(options: {
   const [displayedText, setDisplayedText] = useState('');
   const [isComplete, setIsComplete] = useState(false);
 
-  return {
-    displayedText,
-    isComplete,
-    StreamingTextComponent: (overrideProps?: Partial<StreamingTextProps>) => (
+  // Create a wrapper that syncs state from the component
+  const StreamingTextComponent = useCallback((overrideProps?: Partial<StreamingTextProps>) => {
+    return (
       <StreamingText
         text={options.text}
         {...options}
@@ -170,8 +169,18 @@ export function useStreamingText(options: {
           setIsComplete(true);
           options.onComplete?.();
         }}
+        onCharacterTyped={(char, index) => {
+          setDisplayedText(options.text.substring(0, index + 1));
+          options.onCharacterTyped?.(char, index);
+        }}
       />
-    ),
+    );
+  }, [options]);
+
+  return {
+    displayedText,
+    isComplete,
+    StreamingTextComponent,
   };
 }
 
