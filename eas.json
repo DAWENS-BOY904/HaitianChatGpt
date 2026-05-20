@@ -8,8 +8,7 @@
       "developmentClient": true,
       "distribution": "internal",
       "ios": {
-        "simulator": true,
-        "resourceClass": "m-medium"
+        "simulator": true
       },
       "env": {
         "EXPO_NO_CAPABILITY_SYNC": "1",
@@ -33,12 +32,10 @@
         "buildType": "app-bundle"
       },
       "ios": {
-        "credentialsSource": "remote",
-        "resourceClass": "m-medium"
+        "credentialsSource": "remote"
       },
       "env": {
         "EXPO_NO_CAPABILITY_SYNC": "1",
-        "EAS_NO_FROZEN_LOCKFILE": "1",
         "npm_config_legacy_peer_deps": "true"
       }
     }
