@@ -11,10 +11,10 @@ const RC_ENTITLEMENT_MAP: Record<string, string> = {
 
 // Map Stripe product IDs → plan names used in the app
 const PRODUCT_PLAN_MAP: Record<string, string> = {
-  'prod_ThBGbK8D1tAh0w': 'plus',  // Premium Yearly product
-  'prod_UOHQvMBEjUgzfG': 'plus',  // Premium Monthly product
-  'prod_ThBG24kiMMlK4f': 'plus',  // Lifetime Access
-  'prod_TedMqtvOncuFAL': 'go',    // Pro / Go plan
+  'prod_ThBGbK8D1tAh0w': 'plus',
+  'prod_UOHQvMBEjUgzfG': 'plus',
+  'prod_ThBG24kiMMlK4f': 'plus',
+  'prod_TedMqtvOncuFAL': 'go',
 };
 
 const logStep = (step: string, details?: any) => {
@@ -36,7 +36,18 @@ Deno.serve(async (req) => {
   try {
     logStep('Function started');
 
-    // ── Check RevenueCat entitlements first ─────────────────────────────
+    // ── Authenticate user first (required for all paths) ─────────────────
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) throw new Error('Authorization header missing');
+
+    const token = authHeader.replace('Bearer ', '');
+    const { data: userData, error: userError } = await supabaseAdmin.auth.getUser(token);
+    if (userError || !userData?.user) throw new Error('Unauthorized');
+
+    const user = userData.user;
+    logStep('User authenticated', { userId: user.id, email: user.email });
+
+    // ── Check RevenueCat entitlements (now user is defined) ───────────────
     const rcSecretKey = Deno.env.get('REVENUECAT_SECRET_KEY')
       || Deno.env.get('REVENUECAT_IOS_KEY')
       || '';
@@ -90,34 +101,25 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ── Check Stripe subscriptions ────────────────────────────────────────
     const stripeKey = Deno.env.get('STRIPE_SECRET_KEY');
-    if (!stripeKey) {
-      // No Stripe either — return free
+    if (!stripeKey || !user.email) {
+      // No Stripe configured or no email — return free
       return new Response(
         JSON.stringify({ subscribed: false, plan: null, subscription_end: null }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
 
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) throw new Error('Authorization header missing');
-
-    const token = authHeader.replace('Bearer ', '');
-    const { data: userData, error: userError } = await supabaseAdmin.auth.getUser(token);
-    if (userError || !userData?.user?.email) throw new Error('Unauthorized');
-    const user = userData.user;
-    logStep('User authenticated', { userId: user.id, email: user.email });
-
     // ── Find Stripe customer by email ──
     const searchRes = await fetch(
-      `https://api.stripe.com/v1/customers?email=${encodeURIComponent(user.email!)}&limit=1`,
+      `https://api.stripe.com/v1/customers?email=${encodeURIComponent(user.email)}&limit=1`,
       { headers: { Authorization: `Bearer ${stripeKey}`, 'Stripe-Version': '2025-03-31.basil' } },
     );
     const searchData = await searchRes.json();
 
     if (!searchData?.data?.length) {
       logStep('No Stripe customer found');
-      // Sync user_profiles back to free
       try {
         await supabaseAdmin.from('user_profiles').update({
           subscription_tier: 'free',
@@ -151,14 +153,12 @@ Deno.serve(async (req) => {
       stripeSubscriptionId = sub.id;
       subscriptionEnd = new Date(sub.current_period_end * 1000).toISOString();
 
-      // Determine plan from product ID
       const productId = sub.items?.data?.[0]?.price?.product?.id
         ?? sub.items?.data?.[0]?.price?.product
         ?? '';
       plan = PRODUCT_PLAN_MAP[productId] || 'plus';
       logStep('Active subscription', { subId: sub.id, productId, plan, subscriptionEnd });
 
-      // ── Update subscription_purchases table (use try-catch, not .catch()) ──
       try {
         await supabaseAdmin.from('subscription_purchases').upsert({
           user_id: user.id,
@@ -180,7 +180,6 @@ Deno.serve(async (req) => {
         }, { onConflict: 'transaction_id' });
       } catch (_e) {}
 
-      // ── Sync user_profiles.subscription_tier ──
       try {
         await supabaseAdmin.from('user_profiles').update({
           subscription_tier: plan,
@@ -190,7 +189,6 @@ Deno.serve(async (req) => {
 
     } else {
       logStep('No active subscription');
-      // Sync user_profiles back to free if expired
       try {
         await supabaseAdmin.from('user_profiles').update({
           subscription_tier: 'free',
