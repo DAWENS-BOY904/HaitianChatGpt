@@ -74,3 +74,4 @@
     "owner": "expo-production"
   }
 }
+please check home page to see if app ready for submit and Implement a proper microphone permission request flow in the voice input feature using expo-av's requestPermissionsAsync, with a user-friendly prompt explaining why the permission is needed before recording starts Add the app version number (from expo-constants) to the Settings screen footer so users can see the current version — common requirement for App Store review.
