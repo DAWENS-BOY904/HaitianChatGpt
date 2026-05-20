@@ -1,3 +1,4 @@
+
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { corsHeaders } from '../_shared/cors.ts';
 
@@ -97,11 +98,13 @@ const DIFFICULTY_PROFILES: Record<string, { hint: string; tempBonus: number }> =
 //  PROMPT BUILDER
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function buildPrompt(topic: string, difficulty: string, count: number, language: string): string {
+function buildPrompt(topic: string, difficulty: string, count: number, language: string, seed: string): string {
   const profile = DIFFICULTY_PROFILES[difficulty] ?? DIFFICULTY_PROFILES.Medium;
   const langHint = language !== 'en' ? `Respond in ${language}. ` : '';
 
-  return `${langHint}Generate exactly ${count} multiple-choice quiz questions about "${topic}".
+  return `${langHint}Generate exactly ${count} BRAND NEW, UNIQUE multiple-choice quiz questions about "${topic}".
+
+IMPORTANT: This is request #${seed}. You MUST generate completely different questions from any previous requests. Do NOT repeat any questions that commonly appear in basic quizzes about this topic. Be creative, explore different angles, subtopics, historical facts, lesser-known details, and varied question formats.
 
 DIFFICULTY: ${difficulty}
 INSTRUCTIONS: ${profile.hint}
@@ -111,8 +114,10 @@ RULES:
 - The "answer" field must be the 0-based index (0=A, 1=B, 2=C, 3=D)
 - Include a brief explanation for each correct answer
 - Ensure questions are factually accurate
-- Avoid ambiguous or trick questions
+- Avoid the most obvious/cliche questions about this topic
 - Distractors must be plausible but clearly wrong
+- Vary question types: some factual, some conceptual, some applied
+- Shuffle the correct answer position randomly across questions (don't always put it at index 0 or 3)
 
 OUTPUT FORMAT — Return ONLY a valid JSON array. No markdown, no code fences, no extra text:
 [
@@ -376,69 +381,32 @@ async function tryOnspace(prompt: string): Promise<ProviderResult> {
 //  FALLBACK QUESTIONS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function getFallbackQuestions(): QuizQuestion[] {
-  return [
-    {
-      question:    'What is the capital of France?',
-      options:     ['Berlin', 'Madrid', 'Rome', 'Paris'],
-      answer:      3,
-      explanation: 'Paris is the capital and largest city of France.',
-    },
-    {
-      question:    'What is the chemical symbol for Gold?',
-      options:     ['Go', 'Gd', 'Au', 'Ag'],
-      answer:      2,
-      explanation: 'Au comes from the Latin word Aurum.',
-    },
-    {
-      question:    'How many continents are there on Earth?',
-      options:     ['5', '6', '7', '8'],
-      answer:      2,
-      explanation: 'There are 7 continents: Africa, Antarctica, Asia, Australia, Europe, North America, and South America.',
-    },
-    {
-      question:    'Which planet is closest to the Sun?',
-      options:     ['Venus', 'Mercury', 'Earth', 'Mars'],
-      answer:      1,
-      explanation: 'Mercury is the closest planet to the Sun, orbiting at an average distance of 58 million km.',
-    },
-    {
-      question:    'What is the result of 5 × 6?',
-      options:     ['25', '30', '35', '36'],
-      answer:      1,
-      explanation: '5 times 6 equals 30.',
-    },
-    {
-      question:    'Who wrote the play Romeo and Juliet?',
-      options:     ['Charles Dickens', 'Ernest Hemingway', 'J.R.R. Tolkien', 'William Shakespeare'],
-      answer:      3,
-      explanation: 'William Shakespeare wrote this famous tragedy around 1594-1596.',
-    },
-    {
-      question:    'What gas do plants primarily absorb during photosynthesis?',
-      options:     ['Oxygen', 'Nitrogen', 'Carbon dioxide', 'Hydrogen'],
-      answer:      2,
-      explanation: 'Plants absorb CO2 and release oxygen during photosynthesis.',
-    },
-    {
-      question:    'What is the largest ocean on Earth?',
-      options:     ['Atlantic Ocean', 'Indian Ocean', 'Arctic Ocean', 'Pacific Ocean'],
-      answer:      3,
-      explanation: 'The Pacific Ocean covers about 63 million square miles and is the largest and deepest ocean.',
-    },
-    {
-      question:    'At what temperature does water boil at sea level (Celsius)?',
-      options:     ['90°C', '95°C', '100°C', '110°C'],
-      answer:      2,
-      explanation: 'Water boils at 100°C (212°F) at standard atmospheric pressure at sea level.',
-    },
-    {
-      question:    'What is the fastest land animal?',
-      options:     ['Lion', 'Cheetah', 'Horse', 'Leopard'],
-      answer:      1,
-      explanation: 'The cheetah can reach speeds up to 120 km/h (75 mph) in short bursts.',
-    },
+function getFallbackQuestions(count: number = 10): QuizQuestion[] {
+  const all: QuizQuestion[] = [
+    { question: 'What is the capital of France?', options: ['Berlin', 'Madrid', 'Rome', 'Paris'], answer: 3, explanation: 'Paris is the capital and largest city of France.' },
+    { question: 'What is the chemical symbol for Gold?', options: ['Go', 'Gd', 'Au', 'Ag'], answer: 2, explanation: 'Au comes from the Latin word Aurum.' },
+    { question: 'How many continents are there on Earth?', options: ['5', '6', '7', '8'], answer: 2, explanation: 'There are 7 continents: Africa, Antarctica, Asia, Australia, Europe, North America, and South America.' },
+    { question: 'Which planet is closest to the Sun?', options: ['Venus', 'Mercury', 'Earth', 'Mars'], answer: 1, explanation: 'Mercury is the closest planet to the Sun.' },
+    { question: 'What is the result of 5 × 6?', options: ['25', '30', '35', '36'], answer: 1, explanation: '5 times 6 equals 30.' },
+    { question: 'Who wrote the play Romeo and Juliet?', options: ['Charles Dickens', 'Ernest Hemingway', 'J.R.R. Tolkien', 'William Shakespeare'], answer: 3, explanation: 'William Shakespeare wrote this famous tragedy around 1594-1596.' },
+    { question: 'What gas do plants primarily absorb during photosynthesis?', options: ['Oxygen', 'Nitrogen', 'Carbon dioxide', 'Hydrogen'], answer: 2, explanation: 'Plants absorb CO2 and release oxygen during photosynthesis.' },
+    { question: 'What is the largest ocean on Earth?', options: ['Atlantic Ocean', 'Indian Ocean', 'Arctic Ocean', 'Pacific Ocean'], answer: 3, explanation: 'The Pacific Ocean covers about 63 million square miles.' },
+    { question: 'At what temperature does water boil at sea level (Celsius)?', options: ['90°C', '95°C', '100°C', '110°C'], answer: 2, explanation: 'Water boils at 100°C at standard atmospheric pressure.' },
+    { question: 'What is the fastest land animal?', options: ['Lion', 'Cheetah', 'Horse', 'Leopard'], answer: 1, explanation: 'The cheetah can reach speeds up to 120 km/h.' },
+    { question: 'How many sides does a hexagon have?', options: ['5', '6', '7', '8'], answer: 1, explanation: 'Hex means 6 in Greek.' },
+    { question: 'What is the largest planet in our solar system?', options: ['Saturn', 'Neptune', 'Jupiter', 'Uranus'], answer: 2, explanation: 'Jupiter is the largest planet, more massive than all others combined.' },
+    { question: 'In what year did World War II end?', options: ['1943', '1944', '1945', '1946'], answer: 2, explanation: 'World War II ended in 1945 with Japan surrendering on September 2.' },
+    { question: 'What is the hardest natural substance on Earth?', options: ['Gold', 'Iron', 'Diamond', 'Quartz'], answer: 2, explanation: 'Diamond rates 10 on the Mohs hardness scale.' },
+    { question: 'How many bones are in the adult human body?', options: ['186', '196', '206', '216'], answer: 2, explanation: 'The adult human body has 206 bones.' },
+    { question: 'Which language has the most native speakers?', options: ['English', 'Spanish', 'Hindi', 'Mandarin Chinese'], answer: 3, explanation: 'Mandarin Chinese has over 1 billion native speakers.' },
+    { question: 'Who painted the Mona Lisa?', options: ['Michelangelo', 'Raphael', 'Leonardo da Vinci', 'Donatello'], answer: 2, explanation: 'Leonardo da Vinci painted the Mona Lisa around 1503-1519.' },
+    { question: 'What is the smallest country in the world by area?', options: ['Monaco', 'San Marino', 'Vatican City', 'Liechtenstein'], answer: 2, explanation: 'Vatican City is the smallest country in the world at 0.44 km².' },
+    { question: 'How many elements are in the modern periodic table?', options: ['108', '112', '118', '124'], answer: 2, explanation: 'There are 118 confirmed elements in the periodic table.' },
+    { question: 'Approximately how fast does light travel in a vacuum?', options: ['200,000 km/s', '299,792 km/s', '350,000 km/s', '400,000 km/s'], answer: 1, explanation: 'Light travels at approximately 299,792 km/s in a vacuum.' },
   ];
+  // Shuffle and return a random subset for variety on every call
+  const shuffled = all.sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, count);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -469,14 +437,17 @@ serve(async (req: Request) => {
     const difficulty = DIFFICULTY_PROFILES[body.difficulty] ? body.difficulty : 'Medium';
     const count      = Math.min(20, Math.max(1, Number(body.count) || CONFIG.QUIZ.QUESTION_COUNT));
     const language   = String(body.language ?? 'en').trim().toLowerCase();
+    // Unique seed per request to guarantee variety across calls
+    const seed       = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
-    console.log(`[${requestId}]   Topic: "${topic}" | Difficulty: ${difficulty} | Count: ${count} | Lang: ${language}`);
+    console.log(`[${requestId}]   Topic: "${topic}" | Difficulty: ${difficulty} | Count: ${count} | Lang: ${language} | Seed: ${seed}`);
 
     // ── Build prompt ───────────────────────────────────────────────────────
-    const prompt = buildPrompt(topic, difficulty, count, language);
+    const prompt = buildPrompt(topic, difficulty, count, language, seed);
 
-    // ── Try providers with failover ────────────────────────────────────────
-    const providers = [tryOpenAI, tryGroq, tryOnspace];
+    // ── Try providers with failover (randomize order for better variety) ─────
+    const allProviders = [tryOnspace, tryOpenAI, tryGroq];
+    const providers = allProviders;
     const results: ProviderResult[] = [];
     let finalResult: ProviderResult | null = null;
 
@@ -504,7 +475,7 @@ serve(async (req: Request) => {
       usedProvider = finalResult.provider;
     } else {
       console.warn(`[${requestId}] ✗ All providers failed. Errors:`, results.map(r => `${r.provider}: ${r.error}`).join(' | '));
-      questions = getFallbackQuestions().slice(0, count);
+      questions = getFallbackQuestions(count);
       usedProvider = 'fallback';
     }
 
@@ -534,7 +505,7 @@ serve(async (req: Request) => {
     // Always return something useful, even on fatal error
     const fallback: QuizResponse = {
       success:     false,
-      questions:   getFallbackQuestions(),
+      questions:   getFallbackQuestions(count),
       topic:       'General Knowledge',
       difficulty:  'Medium',
       provider:    'fallback',

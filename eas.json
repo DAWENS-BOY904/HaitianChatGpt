@@ -3,13 +3,19 @@
     "version": ">= 16.0.0",
     "appVersionSource": "remote"
   },
+  {
   "build": {
     "development": {
       "developmentClient": true,
       "distribution": "internal",
       "ios": {
         "simulator": true
+      },
+      "env": {
+        "EXPO_PUBLIC_RC_IOS_KEY": "appl_LCOBkSEKCqNFllINWlYWexOVaHf",
+        "EXPO_PUBLIC_RC_ANDROID_KEY": "goog_htwkRFMSklkJWsTytqppHVTxkkP"
       }
+      
     },
     "preview": {
       "distribution": "internal",

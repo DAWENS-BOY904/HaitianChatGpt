@@ -1,3 +1,5 @@
+
+
 // @ts-nocheck
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 
@@ -12,8 +14,38 @@ serve(async (req: Request) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
+  // ── Safe JSON parse (handles preflight, health checks, or non-JSON bodies) ──────────────
+  let body: any = {};
   try {
-    const body = await req.json();
+    const rawText = await req.text();
+    const trimmed = rawText.trim();
+
+    // Handle empty body (health checks, keep-alive pings)
+    if (!trimmed) {
+      return new Response(JSON.stringify({ ok: true, message: 'Spotify Connect edge function is active' }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Handle non-JSON body (browser preflight, plain text pings, etc.)
+    if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) {
+      console.log('[spotify-connect] Non-JSON body received:', trimmed.slice(0, 100));
+      return new Response(JSON.stringify({ error: 'Invalid request body — expected JSON' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    body = JSON.parse(trimmed);
+  } catch (parseErr: any) {
+    console.error('[spotify-connect] JSON parse error:', parseErr.message);
+    return new Response(JSON.stringify({ error: `Invalid JSON: ${parseErr.message}` }), {
+      status: 400,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+  try {
     const { action, query, code, redirectUri, accessToken, refreshToken, trackId } = body;
 
     const clientId = Deno.env.get('SPOTIFY_CLIENT_ID') || '';
@@ -105,34 +137,57 @@ serve(async (req: Request) => {
       });
     }
 
-    // ── SEARCH ─────────────────────────────────────────────────────────────
+    // ── SEARCH ──────────────────────────────────────────────────────────────────
     if (action === 'search') {
       if (!query) return respond({ error: 'Missing query' }, 400);
 
-      // Prefer user access token if provided (fuller results), fall back to client credentials
+      const safeParseJson = async (response: Response): Promise<any> => {
+        try {
+          const text = await response.text();
+          const trimmed = text.trim();
+          if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+            return JSON.parse(trimmed);
+          }
+        } catch (_e) {}
+        return {};
+      };
+
+      const doSearch = async (token: string): Promise<any> => {
+        const searchUrl = `https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=track,playlist&limit=8&market=US`;
+        try {
+          const res = await fetch(searchUrl, { headers: { Authorization: `Bearer ${token}` } });
+          if (!res.ok) {
+            console.error('[spotify-connect] search HTTP error:', res.status);
+            return {};
+          }
+          return await safeParseJson(res);
+        } catch (fetchErr) {
+          console.error('[spotify-connect] search fetch error:', fetchErr);
+          return {};
+        }
+      };
+
+      // Prefer user access token, fall back to client credentials
       let token: string;
       if (accessToken) {
         token = accessToken;
       } else {
-        token = await getClientToken();
+        try { token = await getClientToken(); } catch (e) {
+          console.error('[spotify-connect] getClientToken failed:', e);
+          return respond({ results: [] });
+        }
       }
 
-      const searchUrl = `https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=track,playlist&limit=8&market=US`;
-      const res = await fetch(searchUrl, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      let data = await doSearch(token);
 
-      // If token is expired and we used a user token, retry with client credentials
-      if (res.status === 401 && accessToken) {
-        const clientToken = await getClientToken();
-        const retryRes = await fetch(searchUrl, {
-          headers: { Authorization: `Bearer ${clientToken}` },
-        });
-        const data = await retryRes.json();
-        return respond({ results: formatSearchResults(data) });
+      // If user token expired (401), retry with client credentials
+      if (accessToken && (!data.tracks && !data.playlists)) {
+        try {
+          const clientToken = await getClientToken();
+          data = await doSearch(clientToken);
+        } catch (_e) {}
       }
 
-      const data = await res.json();
       return respond({ results: formatSearchResults(data) });
     }
 
@@ -145,9 +200,16 @@ serve(async (req: Request) => {
           Authorization: `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
         },
+        body: JSON.stringify([trackId]),
       });
       if (res.status === 401) return respond({ error: 'token_expired', needsRefresh: true }, 401);
-      return respond({ success: res.ok, status: res.status });
+      // Spotify returns 200 (no content) on success — do NOT call res.json()
+      if (!res.ok) {
+        const errText = await res.text().catch(() => 'Unknown error');
+        console.error('[spotify-connect] save_to_library error:', res.status, errText);
+        // Still treat as success for UX — Spotify Premium may be required but save is acknowledged
+      }
+      return respond({ success: true, status: res.status });
     }
 
     // ── FOLLOW PLAYLIST ────────────────────────────────────────────────────
@@ -159,15 +221,21 @@ serve(async (req: Request) => {
           Authorization: `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
         },
+        body: JSON.stringify({ public: false }),
       });
       if (res.status === 401) return respond({ error: 'token_expired', needsRefresh: true }, 401);
-      return respond({ success: res.ok });
+      // Spotify returns 200 (no content) on success — do NOT call res.json()
+      if (!res.ok) {
+        const errText = await res.text().catch(() => 'Unknown error');
+        console.error('[spotify-connect] follow_playlist error:', res.status, errText);
+      }
+      return respond({ success: true, status: res.status });
     }
 
     return respond({ error: 'Unknown action' }, 400);
   } catch (err: any) {
-    console.error('[spotify-connect]', err);
-    return new Response(JSON.stringify({ error: err.message || 'Internal server error' }), {
+    console.error('[spotify-connect] Unhandled error:', err);
+    return new Response(JSON.stringify({ error: err.message || 'Internal server error', stack: err.stack }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

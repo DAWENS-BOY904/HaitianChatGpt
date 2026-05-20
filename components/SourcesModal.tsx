@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, useMemo, memo } from 'react';
 import {
   View,
@@ -15,8 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { BlurView } from 'expo-blur';
 import { useTheme } from '../hooks/useTheme';
-import { Spacing, BorderRadius, Typography } from '../constants/theme';
-import { WebViewModal } from './WebViewModal';
+import * as WebBrowser from '../utils/web-browser';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -41,15 +41,17 @@ interface SourcesModalProps {
 
 // ── Helpers ──
 function getDomain(url: string): string {
+  if (!url || typeof url !== 'string') return 'unknown';
   try {
     const u = new URL(url);
     return u.hostname.replace('www.', '');
   } catch {
-    return url.slice(0, 30);
+    return (url || '').slice(0, 30);
   }
 }
 
 function getFaviconUrl(url: string): string {
+  if (!url || typeof url !== 'string') return '';
   try {
     const u = new URL(url);
     return `https://www.google.com/s2/favicons?domain=${u.hostname}&sz=128`;
@@ -259,8 +261,6 @@ export const SourcesListModal = memo(function SourcesListModal({
   onClose,
 }: SourcesModalProps) {
   const { colors, isDark } = useTheme();
-  const [selectedUrl, setSelectedUrl] = useState('');
-  const [webViewVisible, setWebViewVisible] = useState(false);
   const translateY = useMemo(() => new Animated.Value(SCREEN_HEIGHT), []);
   const opacity = useMemo(() => new Animated.Value(0), []);
 
@@ -296,14 +296,16 @@ export const SourcesListModal = memo(function SourcesListModal({
     }
   }, [visible, translateY, opacity]);
 
-  const handleOpenUrl = useCallback((url: string) => {
-    setSelectedUrl(url);
-    setWebViewVisible(true);
-  }, []);
-
-  const handleCloseWebView = useCallback(() => {
-    setWebViewVisible(false);
-    setSelectedUrl('');
+  // Open URL in-app browser — NEVER open external Safari/Chrome/system browser
+  const handleOpenUrl = useCallback(async (url: string) => {
+    if (!url || typeof url !== 'string') return;
+    // Ensure full URL
+    const fullUrl = url.startsWith('http') ? url : `https://${url}`;
+    try {
+      await WebBrowser.openBrowserAsync(fullUrl);
+    } catch (_e) {
+      // silently ignore — never goes outside app
+    }
   }, []);
 
   const renderItem = useCallback(
@@ -363,65 +365,56 @@ export const SourcesListModal = memo(function SourcesListModal({
     [isDark, colors, sources.length, onClose]
   );
 
-  if (!visible && !webViewVisible) return null;
+  if (!visible) return null;
 
   return (
-    <>
-      <Modal
-        visible={visible}
-        transparent
-        animationType="none"
-        statusBarTranslucent
-        onRequestClose={onClose}
-      >
-        <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} translucent backgroundColor="transparent" />
+    <Modal
+      visible={visible}
+      transparent
+      animationType="none"
+      statusBarTranslucent
+      onRequestClose={onClose}
+    >
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} translucent backgroundColor="transparent" />
 
-        <Animated.View style={[styles.backdrop, { opacity }]}>
+      <Animated.View style={[styles.backdrop, { opacity }]}>
+        <BlurView
+          intensity={isDark ? 70 : 50}
+          tint={isDark ? 'dark' : 'light'}
+          style={StyleSheet.absoluteFill}
+        />
+        <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={onClose} />
+      </Animated.View>
+
+      <Animated.View
+        style={[
+          styles.sheet,
+          {
+            backgroundColor: isDark ? 'rgba(18,18,22,0.98)' : 'rgba(245,245,248,0.98)',
+            transform: [{ translateY }],
+          },
+        ]}
+      >
+        {Platform.OS === 'ios' && (
           <BlurView
-            intensity={isDark ? 70 : 50}
+            intensity={isDark ? 20 : 15}
             tint={isDark ? 'dark' : 'light'}
             style={StyleSheet.absoluteFill}
           />
-          <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={onClose} />
-        </Animated.View>
+        )}
 
-        <Animated.View
-          style={[
-            styles.sheet,
-            {
-              backgroundColor: isDark ? 'rgba(18,18,22,0.98)' : 'rgba(245,245,248,0.98)',
-              transform: [{ translateY }],
-            },
-          ]}
-        >
-          {Platform.OS === 'ios' && (
-            <BlurView
-              intensity={isDark ? 20 : 15}
-              tint={isDark ? 'dark' : 'light'}
-              style={StyleSheet.absoluteFill}
-            />
-          )}
-
-          <FlatList
-            data={sources}
-            renderItem={renderItem}
-            keyExtractor={keyExtractor}
-            contentContainerStyle={styles.listContent}
-            showsVerticalScrollIndicator={false}
-            ListHeaderComponent={ListHeaderComponent}
-            ListEmptyComponent={ListEmptyComponent}
-            ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
-          />
-        </Animated.View>
-      </Modal>
-
-      {/* WebView opens INSIDE the app - never Safari */}
-      <WebViewModal
-        visible={webViewVisible}
-        url={selectedUrl}
-        onClose={handleCloseWebView}
-      />
-    </>
+        <FlatList
+          data={sources}
+          renderItem={renderItem}
+          keyExtractor={keyExtractor}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+          ListHeaderComponent={ListHeaderComponent}
+          ListEmptyComponent={ListEmptyComponent}
+          ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
+        />
+      </Animated.View>
+    </Modal>
   );
 });
 
@@ -533,26 +526,92 @@ const pillStyles = StyleSheet.create({
 export const SourcesModal = SourcesListModal;
 
 export function parseSources(content: string): { text: string; sources: Source[] } {
+  // Default safe return
+  const defaultResult = { text: '', sources: [] as Source[] };
+
+  // Null/undefined/empty check
+  if (!content || typeof content !== 'string') {
+    return defaultResult;
+  }
+
   const startTag = '[SOURCES]';
   const endTag = '[/SOURCES]';
-  const start = content.indexOf(startTag);
-  const end = content.indexOf(endTag);
 
-  if (start === -1 || end === -1 || end <= start) {
+  // Ensure tags are non-empty
+  if (!startTag || !endTag) {
     return { text: content, sources: [] };
   }
 
-  const sourcesJson = content.substring(start + startTag.length, end).trim();
+  const start = content.indexOf(startTag);
+  const end = content.indexOf(endTag);
+
+  // Validate indices: both must be found, start before end, and not at invalid positions
+  if (
+    start === -1 || 
+    end === -1 || 
+    end <= start || 
+    start + startTag.length > content.length ||
+    end + endTag.length > content.length
+  ) {
+    return { text: content, sources: [] };
+  }
+
+  // Safely extract the JSON string between tags
+  const sourcesJsonStart = start + startTag.length;
+  const sourcesJsonEnd = end;
+
+  if (sourcesJsonStart > sourcesJsonEnd || sourcesJsonStart < 0 || sourcesJsonEnd > content.length) {
+    return { text: content, sources: [] };
+  }
+
+  const sourcesJson = content.substring(sourcesJsonStart, sourcesJsonEnd).trim();
+
+  // Safely extract text before and after
   const textBefore = content.substring(0, start).trim();
   const textAfter = content.substring(end + endTag.length).trim();
-  const text = [textBefore, textAfter].filter(Boolean).join('\\n\\n');
+  const text = [textBefore, textAfter].filter(Boolean).join('\n\n');
 
+  // Empty JSON content check
+  if (!sourcesJson) {
+    return { text, sources: [] };
+  }
+
+  // Safe JSON parse with try/catch
   try {
-    const sources: Source[] = JSON.parse(sourcesJson);
-    if (!Array.isArray(sources)) return { text: content, sources: [] };
+    const parsed = JSON.parse(sourcesJson);
+
+    // Validate parsed result is an array
+    if (!Array.isArray(parsed)) {
+      return { text, sources: [] };
+    }
+
+    // Filter and validate each source object
+    const sources: Source[] = parsed
+      .filter((item: any): item is Source => {
+        // Must be a non-null object with at least a title and url
+        return (
+          item !== null &&
+          typeof item === 'object' &&
+          typeof item.title === 'string' &&
+          typeof item.url === 'string' &&
+          item.title.trim().length > 0 &&
+          item.url.trim().length > 0
+        );
+      })
+      .map((item: Source) => ({
+        title: item.title.trim(),
+        url: item.url.trim(),
+        snippet: typeof item.snippet === 'string' ? item.snippet.trim() : undefined,
+        favicon: typeof item.favicon === 'string' ? item.favicon.trim() : undefined,
+        date: typeof item.date === 'string' ? item.date.trim() : undefined,
+        domain: typeof item.domain === 'string' ? item.domain.trim() : undefined,
+      }));
+
     return { text, sources };
+
   } catch {
-    return { text: content, sources: [] };
+    // JSON parse failed — return text without sources
+    return { text, sources: [] };
   }
 }
 

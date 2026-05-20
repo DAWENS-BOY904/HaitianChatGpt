@@ -13,8 +13,8 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Animated,
+  Share,
 } from 'react-native';
-// react-native-version-check replaced with expo-compatible implementation
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { useTheme } from '../hooks/useTheme';
@@ -29,13 +29,14 @@ import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useProfile } from '../contexts/ProfileContext';
 import { Image as ExpoImageBadge } from 'expo-image';
+import * as WebBrowser from '../utils/web-browser';
 import { WebView } from 'react-native-webview';
 
 const PERSONA_LINK = 'https://perso.na/s/rKzyfH-XZ9663D';
 const AGE_VERIFIED_KEY = 'age_verification_completed';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// AGE VERIFICATION MODAL — Full-screen with dark/light mode support
+// AGE VERIFICATION MODAL
 // ═══════════════════════════════════════════════════════════════════════════════
 function AgeVerificationModal({ visible, onClose, onVerified }: {
   visible: boolean; onClose: () => void; onVerified: () => void;
@@ -44,9 +45,11 @@ function AgeVerificationModal({ visible, onClose, onVerified }: {
   const insets2 = useSafeAreaInsets();
   const [step, setStep] = useState<'consent' | 'camera' | 'device' | 'webview'>('consent');
   const [webviewLoading, setWebviewLoading] = useState(true);
-  useEffect(() => { if (visible) setStep('consent'); }, [visible]);
 
-  // Dark/Light theme tokens
+  useEffect(() => {
+    if (visible) setStep('consent');
+  }, [visible]);
+
   const bg = isDark ? '#000000' : '#FFFFFF';
   const primaryText = isDark ? '#FFFFFF' : '#000000';
   const secondaryText = isDark ? 'rgba(255,255,255,0.55)' : '#475569';
@@ -62,20 +65,27 @@ function AgeVerificationModal({ visible, onClose, onVerified }: {
   const qrIconColor = isDark ? '#E2E8F0' : '#1E293B';
 
   const handleCopyLink = async () => {
-    try { const Clip = require('expo-clipboard'); await Clip.setStringAsync(PERSONA_LINK); } catch (_e) {}
+    try {
+      const Clipboard = await import('expo-clipboard');
+      await Clipboard.setStringAsync(PERSONA_LINK);
+    } catch (_e) {
+      try { await Share.share({ message: PERSONA_LINK }); } catch (_e2) {}
+    }
   };
+
   const handleSendEmail = () => {
     Linking.openURL(`mailto:?subject=Age Verification&body=Continue your age verification: ${PERSONA_LINK}`);
   };
+
   const handleVerified = async () => {
     await AsyncStorage.setItem(AGE_VERIFIED_KEY, 'true');
-    onVerified(); onClose();
+    onVerified();
+    onClose();
   };
 
   return (
     <Modal visible={visible} transparent={false} animationType="slide" onRequestClose={onClose}>
       <View style={{ flex: 1, backgroundColor: bg }}>
-        {/* Header */}
         <View style={{
           flexDirection: 'row', alignItems: 'center',
           paddingTop: insets2.top + 8, paddingHorizontal: 16, paddingBottom: 12,
@@ -100,7 +110,6 @@ function AgeVerificationModal({ visible, onClose, onVerified }: {
           </TouchableOpacity>
         </View>
 
-        {/* CONSENT STEP */}
         {step === 'consent' && (
           <ScrollView contentContainerStyle={{ padding: 28, alignItems: 'center', flexGrow: 1 }} showsVerticalScrollIndicator={false}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 32, marginTop: 16 }}>
@@ -108,7 +117,7 @@ function AgeVerificationModal({ visible, onClose, onVerified }: {
                 <Ionicons name="star" size={28} color="#FFF" />
               </View>
               <View style={{ flexDirection: 'row', gap: 5 }}>
-                {[0,1,2].map(i => <View key={i} style={{ width: 5, height: 5, borderRadius: 2.5, backgroundColor: borderColor }} />)}
+                {[0, 1, 2].map(i => <View key={i} style={{ width: 5, height: 5, borderRadius: 2.5, backgroundColor: borderColor }} />)}
               </View>
               <View style={{ width: 56, height: 56, borderRadius: 28, borderWidth: 2, borderColor, alignItems: 'center', justifyContent: 'center' }}>
                 <Ionicons name="shield-checkmark-outline" size={28} color={secondaryText} />
@@ -140,7 +149,6 @@ function AgeVerificationModal({ visible, onClose, onVerified }: {
           </ScrollView>
         )}
 
-        {/* CAMERA STEP */}
         {step === 'camera' && (
           <ScrollView contentContainerStyle={{ padding: 28, alignItems: 'center', flexGrow: 1 }} showsVerticalScrollIndicator={false}>
             <Text style={{ fontSize: 28, fontWeight: '700', color: primaryText, textAlign: 'left', width: '100%', marginBottom: 12 }}>
@@ -166,7 +174,6 @@ function AgeVerificationModal({ visible, onClose, onVerified }: {
           </ScrollView>
         )}
 
-        {/* DEVICE STEP */}
         {step === 'device' && (
           <ScrollView contentContainerStyle={{ padding: 28 }} showsVerticalScrollIndicator={false}>
             <Text style={{ fontSize: 26, fontWeight: '700', color: primaryText, marginBottom: 12 }}>Continue on another device</Text>
@@ -194,7 +201,6 @@ function AgeVerificationModal({ visible, onClose, onVerified }: {
           </ScrollView>
         )}
 
-        {/* WEBVIEW STEP */}
         {step === 'webview' && (
           <View style={{ flex: 1 }}>
             {webviewLoading && (
@@ -230,9 +236,9 @@ function AgeVerificationModal({ visible, onClose, onVerified }: {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// VERIFIED BADGE COMPONENT — Updated for Pro & Plus
+// VERIFIED BADGE COMPONENT
 // ═══════════════════════════════════════════════════════════════════════════════
-function VerifiedBadge({ onPress, tier }: { onPress: () => void; tier: 'pro' | 'plus' | null }) {
+function VerifiedBadge({ onPress, tier }: { onPress: () => void; tier: 'pro' | 'plus' | 'go' | null }) {
   const glowAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -250,6 +256,8 @@ function VerifiedBadge({ onPress, tier }: { onPress: () => void; tier: 'pro' | '
 
   const badgeSource = tier === 'plus'
     ? require('../assets/images/plus-badge.png')
+    : tier === 'go'
+    ? require('../assets/images/plan-go.png')
     : require('../assets/images/verified-badge.png');
 
   return (
@@ -258,11 +266,7 @@ function VerifiedBadge({ onPress, tier }: { onPress: () => void; tier: 'pro' | '
         opacity: glowAnim.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] }),
         transform: [{ scale: glowAnim.interpolate({ inputRange: [0, 1], outputRange: [0.95, 1.05] }) }],
       }}>
-        <ExpoImageBadge
-          source={badgeSource}
-          style={{ width: 22, height: 22 }}
-          contentFit="contain"
-        />
+        <ExpoImageBadge source={badgeSource} style={{ width: 22, height: 22 }} contentFit="contain" />
       </Animated.View>
     </TouchableOpacity>
   );
@@ -271,17 +275,14 @@ function VerifiedBadge({ onPress, tier }: { onPress: () => void; tier: 'pro' | '
 // ═══════════════════════════════════════════════════════════════════════════════
 // VERIFIED BADGE MODAL
 // ═══════════════════════════════════════════════════════════════════════════════
-function VerifiedBadgeModal({ visible, onClose, isDark, tier }: { 
-  visible: boolean; 
-  onClose: () => void; 
-  isDark: boolean;
-  tier: 'pro' | 'plus';
+function VerifiedBadgeModal({ visible, onClose, isDark, tier }: {
+  visible: boolean; onClose: () => void; isDark: boolean; tier: 'pro' | 'plus' | 'go';
 }) {
   const bg = isDark ? '#1C1C1E' : '#FFFFFF';
   const primaryText = isDark ? '#FFFFFF' : '#000000';
   const secondaryText = isDark ? 'rgba(255,255,255,0.65)' : 'rgba(0,0,0,0.6)';
-
   const isPlus = tier === 'plus';
+  const isGo = tier === 'go';
 
   const proBenefits = [
     { icon: '💰', text: '$20 welcome reward (credited after verification approval)' },
@@ -291,7 +292,6 @@ function VerifiedBadgeModal({ visible, onClose, isDark, tier }: {
     { icon: '⚡', text: 'Priority system performance' },
     { icon: '🎯', text: 'Full premium feature access' },
   ];
-
   const plusBenefits = [
     { icon: '✨', text: 'Advanced AI model access' },
     { icon: '🚀', text: 'Faster response times' },
@@ -300,14 +300,25 @@ function VerifiedBadgeModal({ visible, onClose, isDark, tier }: {
     { icon: '⚡', text: 'Priority support' },
     { icon: '🎯', text: 'Exclusive Plus features' },
   ];
+  const goBenefits = [
+    { icon: '🚀', text: 'Faster response times' },
+    { icon: '📸', text: 'Photo upload access' },
+    { icon: '💬', text: 'Extended message limits' },
+    { icon: '⚡', text: 'Standard priority support' },
+    { icon: '🎯', text: 'Go Plan features' },
+  ];
 
-  const benefits = isPlus ? plusBenefits : proBenefits;
-  const badgeSource = isPlus 
+  const benefits = isPlus ? plusBenefits : isGo ? goBenefits : proBenefits;
+  const badgeSource = isPlus
     ? require('../assets/images/plus-badge.png')
+    : isGo
+    ? require('../assets/images/plan-go.png')
     : require('../assets/images/verified-badge.png');
-  const title = isPlus ? '✔ Verified Plus Member' : '✔ Verified Pro Member';
-  const subtitle = isPlus 
+  const title = isPlus ? '✔ Verified Plus Member' : isGo ? '✔ Verified Go Member' : '✔ Verified Pro Member';
+  const subtitle = isPlus
     ? 'This badge confirms that the user is a Plus Plan Verified Member.'
+    : isGo
+    ? 'This badge confirms that the user is a Go Plan Verified Member.'
     : 'This badge confirms that the user is a Pro Plan Verified Member.';
 
   return (
@@ -321,19 +332,10 @@ function VerifiedBadgeModal({ visible, onClose, isDark, tier }: {
           >
             <Text style={{ color: primaryText, fontSize: 16, fontWeight: '600' }}>✕</Text>
           </TouchableOpacity>
-
           <View style={{ padding: 28, alignItems: 'center' }}>
-            <ExpoImageBadge
-              source={badgeSource}
-              style={{ width: 72, height: 72, marginBottom: 16 }}
-              contentFit="contain"
-            />
-
+            <ExpoImageBadge source={badgeSource} style={{ width: 72, height: 72, marginBottom: 16 }} contentFit="contain" />
             <Text style={{ fontSize: 22, fontWeight: '800', color: primaryText, marginBottom: 6, textAlign: 'center' }}>{title}</Text>
-            <Text style={{ fontSize: 14, color: secondaryText, textAlign: 'center', lineHeight: 20, marginBottom: 24 }}>
-              {subtitle}
-            </Text>
-
+            <Text style={{ fontSize: 14, color: secondaryText, textAlign: 'center', lineHeight: 20, marginBottom: 24 }}>{subtitle}</Text>
             <View style={{ width: '100%', backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)', borderRadius: 16, padding: 16, marginBottom: 20 }}>
               <Text style={{ fontSize: 13, fontWeight: '700', color: secondaryText, marginBottom: 12, textTransform: 'uppercase' }}>
                 {isPlus ? 'Plus Benefits' : 'Exclusive Benefits'}
@@ -345,7 +347,6 @@ function VerifiedBadgeModal({ visible, onClose, isDark, tier }: {
                 </View>
               ))}
             </View>
-
             <View style={{ backgroundColor: 'rgba(220,38,38,0.1)', borderRadius: 12, padding: 12, width: '100%', borderWidth: 1, borderColor: 'rgba(220,38,38,0.2)' }}>
               <Text style={{ fontSize: 12, color: '#DC2626', textAlign: 'center', fontWeight: '600', lineHeight: 18 }}>
                 All benefits are activated only for verified {isPlus ? 'Plus' : 'Pro'} members. Badge status is controlled by the system only.
@@ -388,7 +389,6 @@ function EditModalContent({
       showsVerticalScrollIndicator={false}
     >
       <View style={{ alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)', marginBottom: 20 }} />
-
       <Text style={{ fontSize: 20, fontWeight: '700', color: primaryText, textAlign: 'center', marginBottom: 6 }}>Edit Profile</Text>
       <Text style={{ fontSize: 13, color: secondaryText, textAlign: 'center', marginBottom: 16 }}>Your profile helps people recognize you.</Text>
 
@@ -402,23 +402,14 @@ function EditModalContent({
             <Text style={{ fontSize: 36, fontWeight: '700', color: primaryText }}>{initials}</Text>
           )}
         </View>
-        <View style={{
-          position: 'absolute', bottom: 0, right: 0,
-          width: 28, height: 28, borderRadius: 14,
-          backgroundColor: '#10A37F', alignItems: 'center', justifyContent: 'center',
-          borderWidth: 2, borderColor: isDark ? '#1C1C1E' : '#F2F2F7',
-        }}>
+        <View style={{ position: 'absolute', bottom: 0, right: 0, width: 28, height: 28, borderRadius: 14, backgroundColor: '#10A37F', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: isDark ? '#1C1C1E' : '#F2F2F7' }}>
           <Ionicons name="camera" size={14} color="#FFF" />
         </View>
       </TouchableOpacity>
 
       <Text style={{ fontSize: 13, fontWeight: '500', color: secondaryText, marginBottom: 6, marginLeft: 2 }}>Display Name</Text>
       <TextInput
-        style={{
-          backgroundColor: inputBg, borderRadius: 12, paddingHorizontal: 16,
-          paddingVertical: 12, fontSize: 16, color: primaryText, marginBottom: 12,
-          borderWidth: 1, borderColor,
-        }}
+        style={{ backgroundColor: inputBg, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, fontSize: 16, color: primaryText, marginBottom: 12, borderWidth: 1, borderColor }}
         value={editName}
         onChangeText={onChangeName}
         placeholder="Your name"
@@ -428,13 +419,7 @@ function EditModalContent({
 
       <Text style={{ fontSize: 13, fontWeight: '500', color: secondaryText, marginBottom: 6, marginLeft: 2 }}>Username</Text>
       <TextInput
-        style={{
-          backgroundColor: canChange ? inputBg : (isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)'),
-          borderRadius: 12, paddingHorizontal: 16,
-          paddingVertical: 14, fontSize: 16,
-          color: canChange ? primaryText : secondaryText, marginBottom: 6,
-          borderWidth: 1, borderColor,
-        }}
+        style={{ backgroundColor: canChange ? inputBg : (isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)'), borderRadius: 12, paddingHorizontal: 16, paddingVertical: 14, fontSize: 16, color: canChange ? primaryText : secondaryText, marginBottom: 6, borderWidth: 1, borderColor }}
         value={editUsername}
         onChangeText={onChangeUsername}
         placeholder="username"
@@ -451,20 +436,12 @@ function EditModalContent({
       {canChange && <View style={{ marginBottom: 12 }} />}
 
       <TouchableOpacity
-        style={{
-          backgroundColor: '#10A37F', borderRadius: 50, paddingVertical: 14,
-          alignItems: 'center', marginBottom: 10,
-          opacity: savingProfile ? 0.7 : 1,
-        }}
+        style={{ backgroundColor: '#10A37F', borderRadius: 50, paddingVertical: 14, alignItems: 'center', marginBottom: 10, opacity: savingProfile ? 0.7 : 1 }}
         onPress={onSave}
         disabled={savingProfile}
         activeOpacity={0.8}
       >
-        {savingProfile ? (
-          <ActivityIndicator color="#FFF" />
-        ) : (
-          <Text style={{ fontSize: 17, fontWeight: '700', color: '#FFF' }}>Save Changes</Text>
-        )}
+        {savingProfile ? <ActivityIndicator color="#FFF" /> : <Text style={{ fontSize: 17, fontWeight: '700', color: '#FFF' }}>Save Changes</Text>}
       </TouchableOpacity>
 
       <TouchableOpacity style={{ alignItems: 'center', paddingVertical: 10 }} onPress={onClose}>
@@ -490,16 +467,14 @@ function GuestSettings() {
 
   return (
     <View style={{ flex: 1, backgroundColor: bg }}>
-      <View style={{
-        flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-        paddingTop: insets.top + 12, paddingBottom: 12, paddingHorizontal: 20,
-      }}>
-        <Text style={{ fontSize: 19, fontWeight: '700', color: primaryText }}>Settings</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingTop: insets.top + 12, paddingBottom: 12, paddingHorizontal: 20 }}>
+        <Text style={{ fontSize: 17, fontWeight: '700', color: primaryText }}>Settings</Text>
         <TouchableOpacity
-          style={{ position: 'absolute', right: 16, top: insets.top + 8, width: 34, height: 34, borderRadius: 17, backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.09)', alignItems: 'center', justifyContent: 'center' }}
+          style={{ position: 'absolute', right: 16, top: insets.top + 4, width: 36, height: 36, borderRadius: 18, backgroundColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.08)', alignItems: 'center', justifyContent: 'center' }}
           onPress={() => router.back()}
+          activeOpacity={0.7}
         >
-          <Ionicons name="close" size={18} color={primaryText} />
+          <Ionicons name="close" size={17} color={primaryText} />
         </TouchableOpacity>
       </View>
 
@@ -513,12 +488,7 @@ function GuestSettings() {
             ].map((item, i, arr) => (
               <TouchableOpacity
                 key={item.label}
-                style={{
-                  flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-                  paddingVertical: 14, paddingHorizontal: 16,
-                  borderBottomWidth: i < arr.length - 1 ? StyleSheet.hairlineWidth : 0,
-                  borderBottomColor: divider,
-                }}
+                style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, paddingHorizontal: 16, borderBottomWidth: i < arr.length - 1 ? StyleSheet.hairlineWidth : 0, borderBottomColor: divider }}
                 onPress={() => router.push(item.route as any)}
                 activeOpacity={0.6}
               >
@@ -560,28 +530,28 @@ function GuestSettings() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// ACCENT COLOR PICKER
+// ACCENT COLORS
 // ═══════════════════════════════════════════════════════════════════════════════
 const ACCENT_COLORS: Array<{ hex: string; name: string }> = [
-  { hex: '#10A37F', name: 'Green'   },
-  { hex: '#0A84FF', name: 'Blue'    },
-  { hex: '#FF9F0A', name: 'Orange'  },
-  { hex: '#FF453A', name: 'Red'     },
-  { hex: '#BF5AF2', name: 'Purple'  },
-  { hex: '#FF375F', name: 'Pink'    },
-  { hex: '#30D158', name: 'Mint'    },
-  { hex: '#5AC8FA', name: 'Sky'     },
-  { hex: '#FFD60A', name: 'Yellow'  },
-  { hex: '#FF6B00', name: 'Amber'   },
-  { hex: '#64D2FF', name: 'Cyan'    },
-  { hex: '#FF2D55', name: 'Rose'    },
+  { hex: '#10A37F', name: 'Green' },
+  { hex: '#0A84FF', name: 'Blue' },
+  { hex: '#FF9F0A', name: 'Orange' },
+  { hex: '#FF453A', name: 'Red' },
+  { hex: '#BF5AF2', name: 'Purple' },
+  { hex: '#FF375F', name: 'Pink' },
+  { hex: '#30D158', name: 'Mint' },
+  { hex: '#5AC8FA', name: 'Sky' },
+  { hex: '#FFD60A', name: 'Yellow' },
+  { hex: '#FF6B00', name: 'Amber' },
+  { hex: '#64D2FF', name: 'Cyan' },
+  { hex: '#FF2D55', name: 'Rose' },
 ];
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // MAIN SETTINGS SCREEN
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function SettingsScreen() {
-  const { colors, isDark } = useTheme();
+  const { isDark } = useTheme();
   const { settings, updateSetting } = useSettings();
   const { tier } = useSubscription();
   const { user, logout } = useAuth();
@@ -608,9 +578,9 @@ export default function SettingsScreen() {
   const [verifiedBadgeModalVisible, setVerifiedBadgeModalVisible] = useState(false);
   const [ageVerifiedModalVisible, setAgeVerifiedModalVisible] = useState(false);
   const [isAgeVerified, setIsAgeVerified] = useState(false);
+  const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'update' | 'no-update' | 'version'>('idle');
 
   const currentVersion = Constants.expoConfig?.version || '1.0.0';
-  const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'update' | 'no-update' | 'version'>('idle');
 
   const bg = isDark ? '#000000' : '#F2F2F7';
   const cardBg = isDark ? '#1C1C1E' : '#FFFFFF';
@@ -620,6 +590,18 @@ export default function SettingsScreen() {
   const divider = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
   const switchTrackFalse = isDark ? '#3A3A3C' : '#E5E5EA';
   const switchTrackTrue = '#34C759';
+
+  const openLink = async (url: string) => {
+    if (url.startsWith('/')) {
+      router.push(url as any);
+    } else {
+      try {
+        await WebBrowser.openBrowserAsync(url, { toolbarColor: isDark ? '#000000' : '#FFFFFF', controlsColor: '#10A37F', showTitle: true });
+      } catch (_e) {
+        Linking.openURL(url);
+      }
+    }
+  };
 
   useEffect(() => {
     checkAdminAccess();
@@ -632,83 +614,49 @@ export default function SettingsScreen() {
           const data = JSON.parse(cached);
           if (data.username) setUsername(data.username);
           if (data.full_name) setFullName(data.full_name);
-          if (data.profile_photo_url) {
-            setProfilePhoto(data.profile_photo_url);
-            setGlobalPhoto(data.profile_photo_url);
-          }
-          if (data.full_name || data.username) {
-            setGlobalName(data.full_name || data.username || '');
-            setGlobalUsername(data.username || '');
-          }
+          if (data.profile_photo_url) { setProfilePhoto(data.profile_photo_url); setGlobalPhoto(data.profile_photo_url); }
+          if (data.full_name || data.username) { setGlobalName(data.full_name || data.username || ''); setGlobalUsername(data.username || ''); }
         } catch (_e) {}
       }
     }).catch(() => {});
     loadProfile();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   const checkAdminAccess = async () => {
     if (!user) return;
-    const adminEmails = ['berryxoe@gmail.com', 'newdawens@gmail.com'];
-    setIsAdmin(adminEmails.includes(user.email || ''));
+    setIsAdmin(['berryxoe@gmail.com', 'newdawens@gmail.com'].includes(user.email || ''));
   };
 
   const checkUpdate = async () => {
     setUpdateStatus('checking');
     try {
-      // Use expo-updates for OTA update checks when available
       if (Platform.OS !== 'web') {
         try {
           const Updates = require('expo-updates');
           const update = await Updates.checkForUpdateAsync();
-          if (update.isAvailable) {
-            setUpdateStatus('update');
-            return;
-          }
-        } catch (_e) {
-          // expo-updates not configured or in dev mode — fall through
-        }
+          if (update.isAvailable) { setUpdateStatus('update'); return; }
+        } catch (_e) {}
       }
       setUpdateStatus('no-update');
-      setTimeout(() => {
-        setUpdateStatus('version');
-        setTimeout(() => { setUpdateStatus('no-update'); }, 3000);
-      }, 3000);
-    } catch (e) {
-      setUpdateStatus('idle');
-    }
+      setTimeout(() => { setUpdateStatus('version'); setTimeout(() => setUpdateStatus('no-update'), 3000); }, 3000);
+    } catch (e) { setUpdateStatus('idle'); }
   };
 
   const openStore = () => {
-    // Open the appropriate store page
     const appId = 'app.onspace.dawinix2027';
-    const url = Platform.OS === 'ios'
-      ? `https://apps.apple.com/app/id${appId}`
-      : `https://play.google.com/store/apps/details?id=${appId}`;
-    Linking.openURL(url);
+    Linking.openURL(Platform.OS === 'ios' ? `https://apps.apple.com/app/id${appId}` : `https://play.google.com/store/apps/details?id=${appId}`);
   };
 
   const handleUpdatePress = () => {
-    if (updateStatus === 'update') { openStore(); } else { checkUpdate(); }
-  };
-
-  const getUpdateLabel = () => {
-    switch (updateStatus) {
-      case 'checking': return 'Checking...';
-      case 'update': return 'Update';
-      case 'no-update': return 'Up to date';
-      case 'version': return `v${currentVersion}`;
-      default: return 'Check update';
-    }
+    if (updateStatus === 'update') { openStore(); }
+    else if (updateStatus === 'idle' || updateStatus === 'no-update' || updateStatus === 'version') { checkUpdate(); }
   };
 
   const loadProfile = async () => {
     if (!user) return;
     try {
-      const { data } = await supabase
-        .from('user_profiles')
-        .select('username, profile_photo_url, full_name, username_last_changed')
-        .eq('id', user.id)
-        .single();
+      const { data } = await supabase.from('user_profiles').select('username, profile_photo_url, full_name, username_last_changed').eq('id', user.id).single();
       if (data) {
         setUsername(data.username || '');
         setFullName(data.full_name || '');
@@ -724,17 +672,13 @@ export default function SettingsScreen() {
 
   const canChangeUsername = (): boolean => {
     if (!usernameLastChanged) return true;
-    const lastChanged = new Date(usernameLastChanged);
-    const now = new Date();
-    const daysDiff = (now.getTime() - lastChanged.getTime()) / (1000 * 60 * 60 * 24);
+    const daysDiff = (new Date().getTime() - new Date(usernameLastChanged).getTime()) / (1000 * 60 * 60 * 24);
     return daysDiff >= 14;
   };
 
   const daysUntilUsernameChange = (): number => {
     if (!usernameLastChanged) return 0;
-    const lastChanged = new Date(usernameLastChanged);
-    const now = new Date();
-    const daysDiff = (now.getTime() - lastChanged.getTime()) / (1000 * 60 * 60 * 24);
+    const daysDiff = (new Date().getTime() - new Date(usernameLastChanged).getTime()) / (1000 * 60 * 60 * 24);
     return Math.max(0, Math.ceil(14 - daysDiff));
   };
 
@@ -758,14 +702,11 @@ export default function SettingsScreen() {
       const arrayBuffer = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
       const ext = asset.uri.split('.').pop()?.toLowerCase() || 'jpg';
       const mimeType = ext === 'png' ? 'image/png' : 'image/jpeg';
-      const filePath = `${user!.id}/avatar_${Date.now()}.${ext}`;
-      const { error: uploadError } = await supabase.storage
-        .from('profile-images')
-        .upload(filePath, arrayBuffer, { contentType: mimeType, upsert: true });
+      if (!user?.id) throw new Error('User not authenticated');
+      const filePath = `${user.id}/avatar_${Date.now()}.${ext}`;
+      const { error: uploadError } = await supabase.storage.from('profile-images').upload(filePath, arrayBuffer, { contentType: mimeType, upsert: true });
       if (uploadError) throw uploadError;
-      const { data: urlData } = supabase.storage
-        .from('profile-images')
-        .getPublicUrl(filePath);
+      const { data: urlData } = supabase.storage.from('profile-images').getPublicUrl(filePath);
       setEditPhoto(urlData.publicUrl);
     } catch (e) {
       showAlert('Upload failed', 'Could not upload photo. Try again.');
@@ -778,18 +719,9 @@ export default function SettingsScreen() {
     setPhotoPickerVisible(false);
     await new Promise(r => setTimeout(r, 350));
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      showAlert('Permission needed', 'Please allow photo access to change your profile picture.');
-      setEditModalVisible(true);
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true, aspect: [1, 1], quality: 0.8, base64: true,
-    });
-    if (!result.canceled && result.assets[0]) {
-      await uploadAsset(result.assets[0]);
-    }
+    if (status !== 'granted') { showAlert('Permission needed', 'Please allow photo access to change your profile picture.'); setEditModalVisible(true); return; }
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [1, 1], quality: 0.8, base64: true });
+    if (!result.canceled && result.assets[0]) await uploadAsset(result.assets[0]);
     setEditModalVisible(true);
   };
 
@@ -797,17 +729,9 @@ export default function SettingsScreen() {
     setPhotoPickerVisible(false);
     await new Promise(r => setTimeout(r, 350));
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') {
-      showAlert('Permission needed', 'Please allow camera access to take a profile photo.');
-      setEditModalVisible(true);
-      return;
-    }
-    const result = await ImagePicker.launchCameraAsync({
-      allowsEditing: true, aspect: [1, 1], quality: 0.8, base64: true,
-    });
-    if (!result.canceled && result.assets[0]) {
-      await uploadAsset(result.assets[0]);
-    }
+    if (status !== 'granted') { showAlert('Permission needed', 'Please allow camera access to take a profile photo.'); setEditModalVisible(true); return; }
+    const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, aspect: [1, 1], quality: 0.8, base64: true });
+    if (!result.canceled && result.assets[0]) await uploadAsset(result.assets[0]);
     setEditModalVisible(true);
   };
 
@@ -818,23 +742,15 @@ export default function SettingsScreen() {
       const updates: any = { full_name: editName, profile_photo_url: editPhoto };
       const usernameChanged = editUsername !== username;
       if (usernameChanged) {
-        if (!canChangeUsername()) {
-          showAlert('Username locked', `You can change your username in ${daysUntilUsernameChange()} days.`);
-          setSavingProfile(false);
-          return;
-        }
+        if (!canChangeUsername()) { showAlert('Username locked', `You can change your username in ${daysUntilUsernameChange()} days.`); setSavingProfile(false); return; }
         updates.username = editUsername;
         updates.username_last_changed = new Date().toISOString();
       }
       const { error } = await supabase.from('user_profiles').update(updates).eq('id', user.id);
       if (error) throw error;
-      setFullName(editName);
-      setUsername(editUsername);
-      setProfilePhoto(editPhoto);
+      setFullName(editName); setUsername(editUsername); setProfilePhoto(editPhoto);
       if (usernameChanged) setUsernameLastChanged(new Date().toISOString());
-      setGlobalPhoto(editPhoto);
-      setGlobalName(editName);
-      setGlobalUsername(editUsername);
+      setGlobalPhoto(editPhoto); setGlobalName(editName); setGlobalUsername(editUsername);
       setEditModalVisible(false);
     } catch (e: any) {
       showAlert('Error', e.message || 'Failed to save profile');
@@ -849,10 +765,7 @@ export default function SettingsScreen() {
       {
         text: 'Log Out', style: 'destructive',
         onPress: async () => {
-          try {
-            await AsyncStorage.removeItem('passkey_session_active');
-            await AsyncStorage.removeItem('passkey_user_id');
-          } catch (_) {}
+          try { await AsyncStorage.removeItem('passkey_session_active'); await AsyncStorage.removeItem('passkey_user_id'); } catch (_) {}
           await logout();
           router.replace('/login');
         },
@@ -878,33 +791,24 @@ export default function SettingsScreen() {
   const initials = (displayName[0] || 'U').toUpperCase();
 
   const Card = ({ children }: { children: React.ReactNode }) => (
-    <View style={{ backgroundColor: cardBg, borderRadius: 16, overflow: 'hidden', marginHorizontal: 16 }}>
-      {children}
-    </View>
+    <View style={{ backgroundColor: cardBg, borderRadius: 16, overflow: 'hidden', marginHorizontal: 16 }}>{children}</View>
   );
 
   const SectionLabel = ({ text }: { text: string }) => (
-    <Text style={{ fontSize: 13, fontWeight: '600', color: sectionLabel, marginBottom: 8, marginLeft: 20, marginTop: 24, textTransform: 'uppercase' }}>
-      {text}
-    </Text>
+    <Text style={{ fontSize: 13, fontWeight: '600', color: sectionLabel, marginBottom: 8, marginLeft: 20, marginTop: 24, textTransform: 'uppercase' }}>{text}</Text>
   );
 
   const Row = ({ icon, label, value, onPress, isLast, showChevron = true, rightEl }: {
-    icon: string; label: string; value?: string; onPress?: () => void; isLast?: boolean; showChevron?: boolean; rightEl?: React.ReactNode;
+    icon?: string; label: string; value?: string; onPress?: () => void; isLast?: boolean; showChevron?: boolean; rightEl?: React.ReactNode;
   }) => (
     <TouchableOpacity
-      style={{
-        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-        paddingVertical: 14, paddingHorizontal: 16,
-        borderBottomWidth: isLast ? 0 : StyleSheet.hairlineWidth,
-        borderBottomColor: divider,
-      }}
+      style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, paddingHorizontal: 16, borderBottomWidth: isLast ? 0 : StyleSheet.hairlineWidth, borderBottomColor: divider }}
       onPress={onPress}
       disabled={!onPress}
       activeOpacity={onPress ? 0.6 : 1}
     >
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
-        <Ionicons name={icon as any} size={20} color={secondaryText} />
+        {icon ? <Ionicons name={icon as any} size={20} color={secondaryText} /> : null}
         <Text style={{ fontSize: 16, color: primaryText, fontWeight: '400' }}>{label}</Text>
       </View>
       {rightEl ? rightEl : (
@@ -919,36 +823,21 @@ export default function SettingsScreen() {
   const SwitchRow = ({ icon, label, value, onChange, isLast }: {
     icon: string; label: string; value: boolean; onChange: (v: boolean) => void; isLast?: boolean;
   }) => (
-    <View style={{
-      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-      paddingVertical: 14, paddingHorizontal: 16,
-      borderBottomWidth: isLast ? 0 : StyleSheet.hairlineWidth,
-      borderBottomColor: divider,
-    }}>
+    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, paddingHorizontal: 16, borderBottomWidth: isLast ? 0 : StyleSheet.hairlineWidth, borderBottomColor: divider }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
         <Ionicons name={icon as any} size={20} color={secondaryText} />
         <Text style={{ fontSize: 16, color: primaryText, fontWeight: '400' }}>{label}</Text>
       </View>
-      <Switch
-        value={value}
-        onValueChange={onChange}
-        trackColor={{ true: switchTrackTrue, false: switchTrackFalse }}
-        thumbColor={Platform.OS === 'ios' ? undefined : '#FFFFFF'}
-      />
+      <Switch value={value} onValueChange={onChange} trackColor={{ true: switchTrackTrue, false: switchTrackFalse }} thumbColor={Platform.OS === 'ios' ? undefined : '#FFFFFF'} />
     </View>
   );
 
   const AccentColorRow = () => {
     const current = settings.accentColor || '#10A37F';
-    const found = ACCENT_COLORS.find(c => c.hex === current);
-    const currentName = found?.name || 'Green';
+    const currentName = ACCENT_COLORS.find(c => c.hex === current)?.name || 'Green';
     return (
       <TouchableOpacity
-        style={{
-          flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-          paddingVertical: 14, paddingHorizontal: 16,
-          borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: divider,
-        }}
+        style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, paddingHorizontal: 16, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: divider }}
         onPress={() => setAccentPickerVisible(true)}
         activeOpacity={0.6}
       >
@@ -969,15 +858,10 @@ export default function SettingsScreen() {
     const [showDropdown, setShowDropdown] = useState(false);
     const current = settings.appearance || 'System';
     const options = ['System', 'Light', 'Dark'];
-
     return (
       <>
         <TouchableOpacity
-          style={{
-            flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-            paddingVertical: 14, paddingHorizontal: 16,
-            borderBottomWidth: showDropdown ? 0 : StyleSheet.hairlineWidth, borderBottomColor: divider,
-          }}
+          style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, paddingHorizontal: 16, borderBottomWidth: showDropdown ? 0 : StyleSheet.hairlineWidth, borderBottomColor: divider }}
           onPress={() => setShowDropdown(!showDropdown)}
           activeOpacity={0.6}
         >
@@ -987,10 +871,9 @@ export default function SettingsScreen() {
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
             <Text style={{ fontSize: 15, color: secondaryText }}>{current}</Text>
-            <Ionicons name={showDropdown ? "chevron-up" : "chevron-down"} size={16} color={secondaryText} />
+            <Ionicons name={showDropdown ? 'chevron-up' : 'chevron-down'} size={16} color={secondaryText} />
           </View>
         </TouchableOpacity>
-
         {showDropdown && (
           <View style={{ backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7', marginHorizontal: 16, marginBottom: 8, borderRadius: 12, overflow: 'hidden' }}>
             {options.map((opt, i) => {
@@ -998,17 +881,12 @@ export default function SettingsScreen() {
               return (
                 <TouchableOpacity
                   key={opt}
-                  style={{
-                    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-                    paddingVertical: 12, paddingHorizontal: 16,
-                    borderBottomWidth: i < options.length - 1 ? StyleSheet.hairlineWidth : 0,
-                    borderBottomColor: divider,
-                  }}
+                  style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, paddingHorizontal: 16, borderBottomWidth: i < options.length - 1 ? StyleSheet.hairlineWidth : 0, borderBottomColor: divider }}
                   onPress={() => { updateSetting('appearance', opt); setShowDropdown(false); }}
                   activeOpacity={0.6}
                 >
                   <Text style={{ fontSize: 16, color: primaryText }}>{opt}</Text>
-                  {isSelected && <Ionicons name="checkmark" size={20} color="#34C759" />}
+                  {isSelected ? <Ionicons name="checkmark" size={20} color="#34C759" /> : null}
                 </TouchableOpacity>
               );
             })}
@@ -1020,32 +898,22 @@ export default function SettingsScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: bg }}>
-      <View style={{
-        flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-        paddingTop: insets.top + 12, paddingBottom: 12, paddingHorizontal: 20,
-      }}>
-        <Text style={{ fontSize: 19, fontWeight: '700', color: primaryText }}>Settings</Text>
+      {/* HEADER */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingTop: insets.top + 16, paddingBottom: 16, paddingHorizontal: 20 }}>
+        <Text style={{ fontSize: 17, fontWeight: '700', color: primaryText }}>Settings</Text>
         <TouchableOpacity
-          style={{
-            position: 'absolute', right: 16, top: insets.top + 8,
-            width: 34, height: 34, borderRadius: 17,
-            backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.09)',
-            alignItems: 'center', justifyContent: 'center',
-          }}
+          style={{ position: 'absolute', right: 16, top: insets.top + 8, width: 36, height: 36, borderRadius: 18, backgroundColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.08)', alignItems: 'center', justifyContent: 'center' }}
           onPress={() => router.back()}
+          activeOpacity={0.7}
         >
-          <Ionicons name="close" size={18} color={primaryText} />
+          <Ionicons name="close" size={17} color={primaryText} />
         </TouchableOpacity>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}>
         {/* PROFILE */}
         <View style={{ alignItems: 'center', paddingVertical: 20 }}>
-          <View style={{
-            width: 84, height: 84, borderRadius: 42, overflow: 'hidden',
-            backgroundColor: isDark ? '#3A3A3C' : '#E5E5EA',
-            alignItems: 'center', justifyContent: 'center', marginBottom: 12,
-          }}>
+          <View style={{ width: 84, height: 84, borderRadius: 42, overflow: 'hidden', backgroundColor: isDark ? '#3A3A3C' : '#E5E5EA', alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
             {profilePhoto ? (
               <Image source={{ uri: profilePhoto }} style={{ width: 84, height: 84 }} contentFit="cover" />
             ) : (
@@ -1061,11 +929,7 @@ export default function SettingsScreen() {
           </View>
           {displayUsername ? <Text style={{ fontSize: 15, color: secondaryText, marginBottom: 14 }}>{displayUsername}</Text> : null}
           <TouchableOpacity
-            style={{
-              paddingHorizontal: 22, paddingVertical: 9, borderRadius: 20, borderWidth: 1,
-              borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)',
-              backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
-            }}
+            style={{ paddingHorizontal: 22, paddingVertical: 9, borderRadius: 20, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)', backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)' }}
             onPress={openEditModal}
           >
             <Text style={{ fontSize: 15, color: primaryText, fontWeight: '500' }}>Edit profile</Text>
@@ -1077,10 +941,8 @@ export default function SettingsScreen() {
         <Card>
           <Row icon="mail-outline" label="Email" value={(user?.email?.length ?? 0) > 22 ? (user?.email?.slice(0, 20) + '...') : (user?.email || '')} />
           <Row icon="star-outline" label="Subscription" value={tierLabel()} showChevron={false} />
-          {!isPaidPlan && (
-            <Row icon="arrow-up-circle-outline" label="Upgrade to Plus" showChevron={false} />
-          )}
-          <Row icon="refresh-outline" label="Restore purchases" onPress={() => router.push('/subscription')} isLast />
+          {!isPaidPlan ? <Row icon="arrow-up-circle-outline" label="Upgrade to Plus" showChevron={false} /> : null}
+          <Row icon="refresh-outline" label="Restore purchases" onPress={() => router.push('/subscription')} />
           <Row icon="receipt-outline" label="Orders" onPress={() => router.push('/orders')} />
           <Row icon="person-circle-outline" label="Personalization" onPress={() => router.push('/personalization')} />
           <Row icon="notifications-outline" label="Notifications" onPress={() => router.push('/notifications')} />
@@ -1090,9 +952,9 @@ export default function SettingsScreen() {
           <Row icon="apps-outline" label="Apps & connectors" onPress={() => router.push('/app-connect')} />
           <Row icon="archive-outline" label="Archived chats" onPress={() => router.push('/archived-chats')} />
           <Row icon="lock-closed-outline" label="Security" onPress={() => router.push('/security')} />
-          {!isAgeVerified && (
+          {!isAgeVerified ? (
             <Row icon="shield-checkmark-outline" label="Age verification" onPress={() => setAgeVerifiedModalVisible(true)} isLast />
-          )}
+          ) : null}
         </Card>
 
         {/* APP */}
@@ -1127,9 +989,15 @@ export default function SettingsScreen() {
           <SwitchRow icon="create-outline" label="Autocomplete" value={settings.autocomplete} onChange={v => updateSetting('autocomplete', v)} />
           <SwitchRow icon="trending-up-outline" label="Trending searches" value={settings.trendingSearches} onChange={v => updateSetting('trendingSearches', v)} isLast />
         </Card>
+        <Text style={{ fontSize: 13, color: secondaryText, marginTop: 8, marginHorizontal: 20, lineHeight: 18 }}>
+          Background conversations keep the conversation going in other apps or while your screen is off.{' '}
+          <Text style={{ color: '#007AFF', fontWeight: '500' }} onPress={() => openLink('https://dawinix.com/voice-suggest/')}>
+            Learn more
+          </Text>
+        </Text>
 
         {/* ADMIN */}
-        {isAdmin && (
+        {isAdmin ? (
           <>
             <SectionLabel text="Admin" />
             <Card>
@@ -1138,43 +1006,46 @@ export default function SettingsScreen() {
               <Row icon="mail-outline" label="Send Email to Users" onPress={() => router.push('/admin-email')} isLast />
             </Card>
           </>
-        )}
+        ) : null}
 
         {/* ABOUT */}
         <SectionLabel text="About" />
         <Card>
-          <Row icon="bug-outline" label="Report bug" showChevron={false} />
-          <Row icon="help-circle-outline" label="Help Center" showChevron={false} />
-          <Row icon="document-text-outline" label="Terms of Use" showChevron={false} />
-          <Row icon="shield-checkmark-outline" label="Privacy Policy" showChevron={false} />
+          <Row icon="bug-outline" label="Report bug" showChevron={false} onPress={() => openLink('/bugreport')} />
+          <Row icon="help-circle-outline" label="Help Center" showChevron={false} onPress={() => openLink('https://yourapp.com/help')} />
+          <Row icon="document-text-outline" label="Terms of Use" showChevron={false} onPress={() => openLink('https://yourapp.com/terms')} />
+          <Row icon="shield-outline" label="Privacy Policy" showChevron={false} onPress={() => openLink('https://yourapp.com/privacy')} />
           <Row
-            icon="cloud-download-outline"
+            icon="refresh-circle-outline"
             label="Check for updates"
-            isLast
             showChevron={false}
             onPress={handleUpdatePress}
             rightEl={
               updateStatus === 'checking' ? (
                 <ActivityIndicator size="small" color={secondaryText} />
               ) : (
-                <Text style={{ fontSize: 15, color: secondaryText }}>{getUpdateLabel()}</Text>
+                <View style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: updateStatus === 'update' ? '#FF453A' : (updateStatus === 'no-update' ? '#34C759' : '#10A37F') }} />
               )
             }
+            isLast
           />
         </Card>
 
         {/* LOG OUT */}
-        <View style={{ marginTop: 32, paddingHorizontal: 16 }}>
-          <Card>
-            <TouchableOpacity
-              style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 15, paddingHorizontal: 16 }}
-              onPress={handleLogout}
-              activeOpacity={0.6}
-            >
-              <Ionicons name="log-out-outline" size={20} color="#FF453A" />
-              <Text style={{ fontSize: 16, color: '#FF453A', fontWeight: '600', marginLeft: 12 }}>Log out</Text>
-            </TouchableOpacity>
-          </Card>
+        <View style={{ marginTop: 24, marginHorizontal: 16, marginBottom: 8 }}>
+          <TouchableOpacity
+            style={{ backgroundColor: cardBg, borderRadius: 16, flexDirection: 'row', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4, elevation: 1 }}
+            onPress={handleLogout}
+            activeOpacity={0.6}
+          >
+            <Ionicons name="arrow-forward-circle-outline" size={22} color={primaryText} />
+            <Text style={{ fontSize: 16, color: primaryText, fontWeight: '500', marginLeft: 14, flex: 1 }}>Log out</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* VERSION FOOTER */}
+        <View style={{ alignItems: 'center', paddingBottom: 12, paddingTop: 4 }}>
+          <Text style={{ fontSize: 13, color: secondaryText }}>Dawinix HT · Version {currentVersion}</Text>
         </View>
       </ScrollView>
 
@@ -1183,10 +1054,7 @@ export default function SettingsScreen() {
         <View style={{ flex: 1, backgroundColor: isDark ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.3)' }}>
           <TouchableOpacity style={{ flex: 0.25 }} activeOpacity={1} onPress={() => setEditModalVisible(false)} />
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 0.75, maxHeight: 560 }}>
-            <View style={{
-              flex: 1, borderTopLeftRadius: 24, borderTopRightRadius: 24,
-              overflow: 'hidden', backgroundColor: isDark ? '#1C1C1E' : '#F2F2F7',
-            }}>
+            <View style={{ flex: 1, borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: 'hidden', backgroundColor: isDark ? '#1C1C1E' : '#F2F2F7' }}>
               <EditModalContent
                 isDark={isDark}
                 editPhoto={editPhoto}
@@ -1265,7 +1133,6 @@ export default function SettingsScreen() {
             <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)', alignSelf: 'center', marginTop: 12, marginBottom: 16 }} />
             <Text style={{ fontSize: 18, fontWeight: '700', color: primaryText, textAlign: 'center', marginBottom: 4 }}>Accent Color</Text>
             <Text style={{ fontSize: 13, color: secondaryText, textAlign: 'center', marginBottom: 20, paddingHorizontal: 24 }}>Choose a color that reflects your style</Text>
-
             {(settings.accentColor || '#10A37F') === '#10A37F' ? (
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 16 }}>
                 <View style={{ backgroundColor: '#10A37F22', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 5, borderWidth: 1, borderColor: '#10A37F55' }}>
@@ -1279,37 +1146,20 @@ export default function SettingsScreen() {
                   {ACCENT_COLORS.find(c => c.hex === settings.accentColor)?.name || 'Custom'}
                 </Text>
                 <TouchableOpacity
-                  onPress={() => { updateSetting('accentColor', '#10A37F'); }}
+                  onPress={() => updateSetting('accentColor', '#10A37F')}
                   style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.07)', borderRadius: 14, paddingHorizontal: 10, paddingVertical: 4 }}
                 >
                   <Text style={{ color: secondaryText, fontSize: 12, fontWeight: '500' }}>Reset to default</Text>
                 </TouchableOpacity>
               </View>
             )}
-
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 16, paddingHorizontal: 24 }}>
               {ACCENT_COLORS.map(item => {
                 const isSelected = (settings.accentColor || '#10A37F') === item.hex;
                 const isDefault = item.hex === '#10A37F';
                 return (
-                  <TouchableOpacity
-                    key={item.hex}
-                    onPress={() => { updateSetting('accentColor', item.hex); }}
-                    activeOpacity={0.75}
-                    style={{ alignItems: 'center', gap: 6 }}
-                  >
-                    <View style={{
-                      width: 52, height: 52, borderRadius: 26,
-                      backgroundColor: item.hex,
-                      alignItems: 'center', justifyContent: 'center',
-                      borderWidth: isSelected ? 3.5 : 0,
-                      borderColor: isDark ? '#FFF' : '#000',
-                      shadowColor: item.hex,
-                      shadowOffset: { width: 0, height: 2 },
-                      shadowOpacity: isSelected ? 0.5 : 0.15,
-                      shadowRadius: isSelected ? 8 : 3,
-                      elevation: isSelected ? 6 : 2,
-                    }}>
+                  <TouchableOpacity key={item.hex} onPress={() => updateSetting('accentColor', item.hex)} activeOpacity={0.75} style={{ alignItems: 'center', gap: 6 }}>
+                    <View style={{ width: 52, height: 52, borderRadius: 26, backgroundColor: item.hex, alignItems: 'center', justifyContent: 'center', borderWidth: isSelected ? 3.5 : 0, borderColor: isDark ? '#FFF' : '#000', shadowColor: item.hex, shadowOffset: { width: 0, height: 2 }, shadowOpacity: isSelected ? 0.5 : 0.15, shadowRadius: isSelected ? 8 : 3, elevation: isSelected ? 6 : 2 }}>
                       {isSelected ? <Ionicons name="checkmark" size={22} color="#FFF" /> : null}
                     </View>
                     <Text style={{ fontSize: 11, color: isSelected ? primaryText : secondaryText, fontWeight: isSelected ? '600' : '400' }}>
@@ -1319,7 +1169,6 @@ export default function SettingsScreen() {
                 );
               })}
             </View>
-
             <View style={{ paddingHorizontal: 20, paddingTop: 24 }}>
               <TouchableOpacity
                 style={{ backgroundColor: settings.accentColor || '#10A37F', borderRadius: 50, paddingVertical: 15, alignItems: 'center' }}

@@ -1,3 +1,4 @@
+// fix some error
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View,
@@ -376,6 +377,7 @@ export function QuizView({ questions, onClose, onViewResults, onTryAnother, onHa
   const [loadingNext, setLoadingNext] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
   const [perfectScore, setPerfectScore] = useState(false);
+  const [showHarderPrompt, setShowHarderPrompt] = useState(false);
 
   // Reanimated values
   const cardOpacity = useSharedValue(1);
@@ -419,6 +421,8 @@ export function QuizView({ questions, onClose, onViewResults, onTryAnother, onHa
       if (nextIdx >= total) {
         const finalScore = newScore;
         const isPerfect = finalScore === total;
+        const pct = finalScore / total;
+        setShowHarderPrompt(!isPerfect && pct >= 0.8);
         setPerfectScore(isPerfect);
         setFinished(true);
         onComplete?.();
@@ -580,27 +584,53 @@ export function QuizView({ questions, onClose, onViewResults, onTryAnother, onHa
             <Text style={[s.scoreMessage, { color: subC }]}>{getScoreMessage()}</Text>
           </View>
 
+          {/* Auto-detect 80%+ — prompt harder quiz */}
+          {showHarderPrompt && (
+            <Animated.View entering={ZoomIn.springify()} style={[s.harderPromptBox, { backgroundColor: isDark ? 'rgba(255,159,10,0.12)' : 'rgba(255,159,10,0.1)', borderColor: 'rgba(255,159,10,0.4)' }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <Text style={{ fontSize: 20 }}>🔥</Text>
+                <Text style={{ color: '#FF9F0A', fontSize: 15, fontWeight: '700' }}>Great score! Ready for harder?</Text>
+              </View>
+              <Text style={{ color: subC, fontSize: 13, marginBottom: 12, lineHeight: 18 }}>You scored 80%+. Jump to the next difficulty level instantly.</Text>
+              <TouchableOpacity
+                style={[s.harderPromptBtn, loadingNext && { opacity: 0.6 }]}
+                disabled={loadingNext}
+                onPress={async () => {
+                  setShowHarderPrompt(false);
+                  if (onNextQuiz) { setLoadingNext(true); try { await onNextQuiz(); } finally { setLoadingNext(false); } }
+                  else { onHarderQuiz(); }
+                }}
+                activeOpacity={0.82}
+              >
+                <Ionicons name="trending-up" size={16} color="#FFF" />
+                <Text style={{ color: '#FFF', fontSize: 15, fontWeight: '700' }}>{loadingNext ? 'Generating…' : 'Try Harder Quiz →'}</Text>
+              </TouchableOpacity>
+            </Animated.View>
+          )}
+
           <TouchableOpacity style={[s.viewResultsBtn, { backgroundColor: viewResultsBg, borderColor: viewResultsBorder }]} onPress={() => onViewResults(answers, questions)}>
             <Text style={[s.viewResultsBtnText, { color: textC }]}>View results</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[s.nextQuizBtn, { backgroundColor: nextBg, borderColor: nextBorder }, loadingNext && { opacity: 0.6 }]}
-            disabled={loadingNext}
-            onPress={async () => {
-              if (onNextQuiz) { setLoadingNext(true); try { await onNextQuiz(); } finally { setLoadingNext(false); } }
-              else { onTryAnother(); }
-            }}
-          >
-            {loadingNext ? (
-              <Text style={[s.nextQuizLabel, { color: textC }]}>Generating quiz…</Text>
-            ) : (
-              <>
-                <Text style={[s.nextQuizLabel, { color: textC }]}>Next quiz</Text>
-                <Text style={[s.nextQuizSub, { color: nextSubC }]}>Try another general knowledge quiz</Text>
-              </>
-            )}
-          </TouchableOpacity>
+          {!showHarderPrompt && (
+            <TouchableOpacity
+              style={[s.nextQuizBtn, { backgroundColor: nextBg, borderColor: nextBorder }, loadingNext && { opacity: 0.6 }]}
+              disabled={loadingNext}
+              onPress={async () => {
+                if (onNextQuiz) { setLoadingNext(true); try { await onNextQuiz(); } finally { setLoadingNext(false); } }
+                else { onTryAnother(); }
+              }}
+            >
+              {loadingNext ? (
+                <Text style={[s.nextQuizLabel, { color: textC }]}>Generating quiz…</Text>
+              ) : (
+                <>
+                  <Text style={[s.nextQuizLabel, { color: textC }]}>Next quiz</Text>
+                  <Text style={[s.nextQuizSub, { color: nextSubC }]}>Try another general knowledge quiz</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
 
           {quizHistory && quizHistory.length > 0 && (
             <View style={[s.historySection, { backgroundColor: historyBg, borderColor: historyBorder }]}>
@@ -687,4 +717,6 @@ const s = StyleSheet.create({
   historyDate: { fontSize: 12 },
   historyScore: { minWidth: 44, alignItems: 'flex-end' },
   historyScoreText: { fontSize: 16, fontWeight: '700' },
+  harderPromptBox: { marginHorizontal: 16, marginBottom: 10, borderRadius: 16, padding: 16, borderWidth: 1.5 },
+  harderPromptBtn: { backgroundColor: '#FF9F0A', borderRadius: 50, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
 });

@@ -1,4 +1,4 @@
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
 import { callAI, detectContentType, generateImageSmart, searchImages } from '../_shared/ai-providers.ts';
@@ -42,14 +42,95 @@ interface ApiInfo {
   notes: string;
 }
 
+// ── Configuration ──────────────────────────────────────────────────────────
+
+const CONFIG = {
+  MAX_BODY_SIZE: 10 * 1024 * 1024, // 10MB
+  MAX_FILE_CONTENT_SIZE: 500 * 1024, // 500KB per file
+  CACHE_MAX_SIZE: 100,
+  CACHE_TTL_MS: 30 * 60 * 1000,
+  RATE_LIMIT_WINDOW_MS: 60 * 1000, // 1 minute
+  RATE_LIMIT_MAX_REQUESTS: 30,
+  ALLOWED_MODELS: ['onspace-ai', 'openai-gpt4', 'google-gemini', 'claude-3', 'groq-llama', 'gemini'],
+  EXPO_PUSH_URL: Deno.env.get('EXPO_PUSH_URL') || 'https://exp.host/--/api/v2/push/send',
+};
+
+// ── Safe base64 decoder ────────────────────────────────────────────────────
+function safeAtob(base64: string): Uint8Array {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+// ── Rate Limiter ───────────────────────────────────────────────────────────
+class RateLimiter {
+  private requests = new Map<string, number[]>();
+
+  isAllowed(clientId: string): boolean {
+    const now = Date.now();
+    const window = CONFIG.RATE_LIMIT_WINDOW_MS;
+    const max = CONFIG.RATE_LIMIT_MAX_REQUESTS;
+
+    const timestamps = this.requests.get(clientId) || [];
+    const valid = timestamps.filter(t => now - t < window);
+
+    if (valid.length >= max) return false;
+
+    valid.push(now);
+    this.requests.set(clientId, valid);
+    return true;
+  }
+
+  cleanup(): void {
+    const now = Date.now();
+    for (const [key, timestamps] of this.requests.entries()) {
+      const valid = timestamps.filter(t => now - t < CONFIG.RATE_LIMIT_WINDOW_MS);
+      if (valid.length === 0) this.requests.delete(key);
+      else this.requests.set(key, valid);
+    }
+  }
+}
+
+const rateLimiter = new RateLimiter();
+
 // ── Response Cache ─────────────────────────────────────────────────────────
 
-const responseCache = new Map<string, CachedResponse>();
-const CACHE_MAX_SIZE = 100;
-const CACHE_TTL_MS = 30 * 60 * 1000;
+class SafeCache {
+  private cache = new Map<string, CachedResponse>();
+  private maxSize: number;
+  private ttlMs: number;
+
+  constructor(maxSize: number, ttlMs: number) {
+    this.maxSize = maxSize;
+    this.ttlMs = ttlMs;
+  }
+
+  get(key: string): string | null {
+    const cached = this.cache.get(key);
+    if (!cached) return null;
+    if (Date.now() - cached.timestamp > this.ttlMs) {
+      this.cache.delete(key);
+      return null;
+    }
+    return cached.content;
+  }
+
+  set(key: string, content: string, query: string): void {
+    if (this.cache.size >= this.maxSize) {
+      const oldestKey = this.cache.keys().next().value;
+      this.cache.delete(oldestKey);
+    }
+    this.cache.set(key, { content, timestamp: Date.now(), query });
+  }
+}
+
+const responseCache = new SafeCache(CONFIG.CACHE_MAX_SIZE, CONFIG.CACHE_TTL_MS);
 
 function getCacheKey(messages: ChatMessage[]): string {
-  const lastUserMessage = messages.filter(function(m) { return m.role === 'user'; }).slice(-1)[0];
+  const lastUserMessage = messages.filter(m => m.role === 'user').slice(-1)[0];
   if (!lastUserMessage) return '';
   const content = typeof lastUserMessage.content === 'string'
     ? lastUserMessage.content
@@ -63,22 +144,35 @@ function getCacheKey(messages: ChatMessage[]): string {
   return Math.abs(hash).toString();
 }
 
-function getCachedResponse(cacheKey: string): string | null {
-  const cached = responseCache.get(cacheKey);
-  if (!cached) return null;
-  if (Date.now() - cached.timestamp > CACHE_TTL_MS) {
-    responseCache.delete(cacheKey);
-    return null;
-  }
-  return cached.content;
+// ── UUID Validator ─────────────────────────────────────────────────────────
+function isValidUUID(str: string): boolean {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(str);
 }
 
-function setCachedResponse(cacheKey: string, content: string, query: string): void {
-  if (responseCache.size >= CACHE_MAX_SIZE) {
-    const oldestKey = responseCache.keys().next().value;
-    responseCache.delete(oldestKey);
+// ── Input Sanitizer ────────────────────────────────────────────────────────
+function sanitizeString(val: unknown): string {
+  if (typeof val !== 'string') return '';
+  return val
+    .replace(/[<>]/g, '')
+    .replace(/javascript:/gi, '')
+    .replace(/on\w+\s*=/gi, '')
+    .trim();
+}
+
+function sanitizeImageUrl(url: string): string | null {
+  if (!url) return null;
+  if (url.startsWith('data:image/')) {
+    const match = url.match(/^data:image\/(png|jpeg|jpg|webp|gif);base64,[A-Za-z0-9+/=]+$/);
+    return match ? url : null;
   }
-  responseCache.set(cacheKey, { content: content, timestamp: Date.now(), query: query });
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return null;
+    return url;
+  } catch {
+    return null;
+  }
 }
 
 // ── Safety Module ──────────────────────────────────────────────────────────
@@ -90,11 +184,11 @@ function detectSelfHarm(text: string): boolean {
     'end it all', 'no reason to live',
   ];
   const lower = text.toLowerCase();
-  return triggers.some(function(t) { return lower.includes(t); });
+  return triggers.some(t => lower.includes(t));
 }
 
 function generateCrisisResponse(): string {
-  const lines = [
+  return [
     'I am really sorry you are feeling this way.',
     '',
     'You are not alone, and there are people who want to help you right now.',
@@ -109,8 +203,7 @@ function generateCrisisResponse(): string {
     '- Many people who felt this way before are still here today',
     '',
     'If you want, you can talk to me about what is happening. I am here to listen.',
-  ];
-  return lines.join('\n');
+  ].join('\n');
 }
 
 // ── Date/Time Context ──────────────────────────────────────────────────────
@@ -126,19 +219,18 @@ function buildDateTimeContext(): string {
   const year = now.getUTCFullYear();
   const hh = now.getUTCHours().toString().padStart(2, '0');
   const mm = now.getUTCMinutes().toString().padStart(2, '0');
-  const lines = [
+  return [
     '==============================',
     'REAL-TIME DATE & TIME (AUTHORITATIVE):',
     '==============================',
-    'Today: ' + dayName + ', ' + month + ' ' + day + ', ' + year,
-    'Time (UTC): ' + hh + ':' + mm,
-    'Day of week: ' + dayName,
+    `Today: ${dayName}, ${month} ${day}, ${year}`,
+    `Time (UTC): ${hh}:${mm}`,
+    `Day of week: ${dayName}`,
     '',
     'RULES: Always use these system-provided values. Never guess or hardcode dates.',
     'Only mention date/time when user explicitly asks or it is clearly needed.',
     '==============================',
-  ];
-  return lines.join('\n');
+  ].join('\n');
 }
 
 // ── Known APIs ─────────────────────────────────────────────────────────────
@@ -196,9 +288,9 @@ function detectAndInjectApiVersions(userMessage: string): string {
 
   for (const apiName of Object.keys(keywordMap)) {
     const keywords = keywordMap[apiName];
-    if (keywords.some(function(kw) { return msgLower.includes(kw); })) {
-      const api = KNOWN_APIS.find(function(a) { return a.name === apiName; });
-      if (api && !detected.find(function(a) { return a.name === apiName; })) {
+    if (keywords.some(kw => msgLower.includes(kw))) {
+      const api = KNOWN_APIS.find(a => a.name === apiName);
+      if (api && !detected.find(a => a.name === apiName)) {
         detected.push(api);
       }
     }
@@ -206,9 +298,9 @@ function detectAndInjectApiVersions(userMessage: string): string {
 
   if (detected.length === 0) return '';
 
-  const lines = detected.map(function(api) {
-    return api.name + ' API: Latest version: ' + api.knownLatest + ' | ' + api.notes + ' | Docs: ' + api.docsUrl;
-  }).join('\n');
+  const lines = detected.map(api => 
+    `${api.name} API: Latest version: ${api.knownLatest} | ${api.notes} | Docs: ${api.docsUrl}`
+  ).join('\n');
 
   return '\n==============================\nDETECTED THIRD-PARTY APIs:\n' + lines + '\nCRITICAL: Use ONLY these exact version numbers.\n==============================';
 }
@@ -234,7 +326,7 @@ function buildSystemPrompt(
     'IDENTITY:',
     '- You were created by the Haitian Community',
     '- Never mention you were created by OpenAI, Google, Anthropic, or any other AI company',
-    '- If asked who created you, say "I was created by the Haitian Community"',
+    '- If asked who created you, say "I was created by the Haitian Community but if they not ask your about that never tell them that"',
     '- Your name is Dawinix',
     '',
     'LANGUAGE:',
@@ -318,20 +410,20 @@ function buildSystemPrompt(
     '- Be respectful, neutral, and informative',
     '- Avoid excessive emojis',
     '- Keep answers clear, structured, and easy to understand',
-    '- Never put OpenAI, Gemini or any company AI - only Haitian community',
+    '- Create message for people in card message and also help user with school works real no demo always give real things code message other etc and create beatifull photo real code clear',
     '- You must be sweet to users because they like that',
     '',
     'CONTENT SAFETY:',
     '- Block attacks, fraud, scams, and harmful behavior',
     '- Warn users about potentially dangerous actions',
-    '- Stay professional, respectful, and helpful at all times'
+    '- Stay professional, respectful, and helpful at all times and help user with love content sex,no porno etc.'
   );
 
   if (apiVersionContext) {
     parts.push(apiVersionContext);
   }
 
-  return parts.filter(function(p) { return p !== undefined && p !== null; }).join('\n');
+  return parts.filter(p => p !== undefined && p !== null).join('\n');
 }
 
 // ── Helper ─────────────────────────────────────────────────────────────────
@@ -349,6 +441,16 @@ function safeString(val: unknown): string {
   return String(val);
 }
 
+// ── Safe JSON stringify for search results ─────────────────────────────────
+function safeJsonStringify(obj: unknown): string {
+  return JSON.stringify(obj, (key, value) => {
+    if (typeof value === 'string') {
+      return value.replace(/[<>]/g, '');
+    }
+    return value;
+  });
+}
+
 // ── Main Serve Function ────────────────────────────────────────────────────
 
 serve(async function(req: Request) {
@@ -359,12 +461,30 @@ serve(async function(req: Request) {
   const requestStartTime = Date.now();
 
   try {
+    // Rate limiting
+    const clientId = req.headers.get('x-forwarded-for') || 'unknown';
+    if (!rateLimiter.isAllowed(clientId)) {
+      return new Response(
+        JSON.stringify({ error: 'Rate limit exceeded. Please try again later.' }),
+        { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Check body size
+    const contentLength = parseInt(req.headers.get('content-length') || '0', 10);
+    if (contentLength > CONFIG.MAX_BODY_SIZE) {
+      return new Response(
+        JSON.stringify({ error: 'Request body too large' }),
+        { status: 413, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     // Parse body
     let body: ChatBody;
     try {
       body = await req.json();
     } catch (e) {
-      console.error('[chat] JSON parse error:', e);
+      console.error('[chat] JSON parse error');
       return new Response(
         JSON.stringify({ error: 'Invalid JSON body' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -373,10 +493,23 @@ serve(async function(req: Request) {
 
     const rawMessages = body.messages;
     const conversationId = body.conversationId;
-    const aiModel = body.aiModel || 'onspace-ai';
+    let aiModel = body.aiModel || 'onspace-ai';
     const fileContents = body.fileContents;
     const userImageUrl = body.userImageUrl;
     const base64Image = body.base64Image;
+
+    // Validate aiModel
+    if (!CONFIG.ALLOWED_MODELS.includes(aiModel)) {
+      aiModel = 'onspace-ai';
+    }
+
+    // Validate conversationId
+    if (!conversationId || !isValidUUID(conversationId)) {
+      return new Response(
+        JSON.stringify({ error: 'Valid conversationId (UUID) is required' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     // Validate messages
     const messages: ChatMessage[] = [];
@@ -385,7 +518,7 @@ serve(async function(req: Request) {
         if (!m || !m.role) continue;
         let content: ChatMessage['content'];
         if (typeof m.content === 'string') {
-          content = m.content;
+          content = sanitizeString(m.content);
         } else if (Array.isArray(m.content)) {
           const mapped: Array<{ type: string; text?: string; image_url?: { url: string } }> = [];
           for (const c of m.content) {
@@ -394,19 +527,20 @@ serve(async function(req: Request) {
               continue;
             }
             if (typeof c === 'string') {
-              mapped.push({ type: 'text', text: c });
+              mapped.push({ type: 'text', text: sanitizeString(c) });
               continue;
             }
             if (typeof c === 'object' && c !== null) {
               const obj = c as Record<string, unknown>;
               if (obj.type === 'text') {
-                mapped.push({ type: 'text', text: safeString(obj.text) });
+                mapped.push({ type: 'text', text: sanitizeString(obj.text) });
               } else if (obj.type === 'image_url') {
-                mapped.push({ type: 'image_url', image_url: obj.image_url as { url: string } });
+                const url = sanitizeImageUrl(safeString((obj.image_url as any)?.url));
+                if (url) mapped.push({ type: 'image_url', image_url: { url } });
               } else if (obj.text) {
-                mapped.push({ type: 'text', text: safeString(obj.text) });
+                mapped.push({ type: 'text', text: sanitizeString(obj.text) });
               } else if (obj.content) {
-                mapped.push({ type: 'text', text: safeString(obj.content) });
+                mapped.push({ type: 'text', text: sanitizeString(obj.content) });
               } else {
                 mapped.push({ type: 'text', text: '' });
               }
@@ -414,9 +548,9 @@ serve(async function(req: Request) {
             }
             mapped.push({ type: 'text', text: '' });
           }
-          const filtered = mapped.filter(function(c) {
-            return (c.type === 'text' && c.text !== '') || c.type === 'image_url';
-          });
+          const filtered = mapped.filter(c => 
+            (c.type === 'text' && c.text !== '') || c.type === 'image_url'
+          );
           if (filtered.length === 0) {
             content = '';
           } else if (filtered.length === 1 && filtered[0].type === 'text') {
@@ -425,24 +559,17 @@ serve(async function(req: Request) {
             content = filtered;
           }
         } else if (m.content !== null && m.content !== undefined) {
-          content = safeString(m.content);
+          content = sanitizeString(m.content);
         } else {
           content = '';
         }
-        messages.push({ role: m.role, content: content, image_url: m.image_url });
+        messages.push({ role: m.role, content, image_url: sanitizeImageUrl(m.image_url) || undefined });
       }
     }
 
     if (!messages || messages.length === 0) {
       return new Response(
         JSON.stringify({ error: 'Messages array is required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    if (!conversationId) {
-      return new Response(
-        JSON.stringify({ error: 'conversationId is required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -476,7 +603,7 @@ serve(async function(req: Request) {
 
     const authResult = await supabaseClient.auth.getUser(token);
     if (authResult.error || !authResult.data.user) {
-      console.error('[chat] Auth error:', authResult.error?.message);
+      console.error('[chat] Auth failed');
       return new Response(
         JSON.stringify({ error: 'Invalid or expired token' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -502,15 +629,15 @@ serve(async function(req: Request) {
         .single();
       if (!settingsResult.error && settingsResult.data) {
         const d = settingsResult.data;
-        userLanguage = safeString(d.app_language) || 'English';
-        baseTone = safeString(d.base_tone) || 'balanced';
-        customInstructions = safeString(d.custom_instructions) || '';
-        nickname = safeString(d.nickname) || '';
-        occupation = safeString(d.occupation) || '';
-        interests = Array.isArray(d.interests) ? d.interests as string[] : [];
+        userLanguage = sanitizeString(d.app_language) || 'English';
+        baseTone = sanitizeString(d.base_tone) || 'balanced';
+        customInstructions = sanitizeString(d.custom_instructions) || '';
+        nickname = sanitizeString(d.nickname) || '';
+        occupation = sanitizeString(d.occupation) || '';
+        interests = Array.isArray(d.interests) ? d.interests.map((i: any) => sanitizeString(i)).filter(Boolean) : [];
       }
     } catch (settingsErr) {
-      console.log('[chat] Settings fetch error (non-fatal):', settingsErr);
+      console.log('[chat] Settings fetch error (non-fatal)');
     }
 
     // Extract last user content
@@ -520,7 +647,7 @@ serve(async function(req: Request) {
     if (typeof rawContent === 'string') {
       lastUserContent = rawContent;
     } else if (Array.isArray(rawContent)) {
-      lastUserContent = rawContent.map(function(c) {
+      lastUserContent = rawContent.map(c => {
         if (!c) return '';
         if (typeof c === 'string') return c;
         if (typeof c === 'object') {
@@ -539,7 +666,7 @@ serve(async function(req: Request) {
       const crisisResponse = generateCrisisResponse();
       const stream = createStreamingResponse(crisisResponse, 'safety', 12);
       return new Response(stream, {
-        headers: { ...corsHeaders, 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no' },
+        headers: { ...corsHeaders, 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no', 'Connection': 'keep-alive' },
       });
     }
 
@@ -560,24 +687,27 @@ serve(async function(req: Request) {
     let base64ImagePart: { type: 'image_url'; image_url: { url: string } } | null = null;
     if (base64ImageData) {
       const cleanBase64 = base64ImageData.replace(/^data:image\/[a-z+]+;base64,/, '');
-      base64ImagePart = {
-        type: 'image_url',
-        image_url: { url: 'data:image/jpeg;base64,' + cleanBase64 },
-      };
+      const validatedUrl = sanitizeImageUrl('data:image/jpeg;base64,' + cleanBase64);
+      if (validatedUrl) {
+        base64ImagePart = {
+          type: 'image_url',
+          image_url: { url: validatedUrl },
+        };
+      }
     }
 
     // Build conversation message array
     for (const msg of messages) {
       if (!msg || !msg.role) continue;
       const isLastMsg = msg === messages[messages.length - 1];
-      const imgSrc = msg.image_url || (isLastMsg && userImageUrl ? userImageUrl : undefined);
+      const imgSrc = msg.image_url || (isLastMsg && userImageUrl ? sanitizeImageUrl(userImageUrl) || undefined : undefined);
 
       if (isLastMsg && msg.role === 'user' && base64ImagePart) {
         let textContent = '';
         if (typeof msg.content === 'string') {
           textContent = msg.content.trim();
         } else if (Array.isArray(msg.content)) {
-          textContent = msg.content.map(function(c: any) {
+          textContent = msg.content.map((c: any) => {
             if (typeof c === 'object' && c && c.text) return c.text;
             return '';
           }).join(' ').trim();
@@ -599,7 +729,7 @@ serve(async function(req: Request) {
       if (typeof msg.content === 'string') {
         msgContent = msg.content;
       } else if (Array.isArray(msg.content)) {
-        msgContent = msg.content.map(function(c: any) {
+        msgContent = msg.content.map((c: any) => {
           if (typeof c === 'object' && c && c.text) return c.text;
           return '';
         }).join(' ');
@@ -620,10 +750,11 @@ serve(async function(req: Request) {
       }
     }
 
-    // Add file contents
+    // Add file contents (with size limit)
     if (fileContents && fileContents.length > 0) {
-      const fileContext = fileContents.map(function(f) {
-        return 'File: ' + f.name + '\nType: ' + f.type + '\nContent:\n' + f.content;
+      const fileContext = fileContents.map(f => {
+        const content = f.content.slice(0, CONFIG.MAX_FILE_CONTENT_SIZE);
+        return `File: ${sanitizeString(f.name)}\nType: ${sanitizeString(f.type)}\nContent:\n${content}`;
       }).join('\n\n---\n\n');
       aiMessages.push({ role: 'user', content: 'Here are the uploaded files for analysis:\n\n' + fileContext });
     }
@@ -635,8 +766,8 @@ serve(async function(req: Request) {
     if (detectionResult.type === 'search') {
       // Image search
       const searchQuery = lastUserContent
-        .replace(/ban m(wen)?|banm|montre m(wen)?|cherche|search for|find|show me|look for|fetch|get|send|voye|search|chache|trouve|buscar|mostrar|encontrar/gi, '')
-        .replace(/foto|fotos|photo|photos|imaj|image|images/gi, '')
+        .replace(/\b(?:ban m(?:wen)?|banm|montre m(?:wen)?|cherche|search for|find|show me|look for|fetch|get|send|voye|search|chache|trouve|buscar|mostrar|encontrar)\b/gi, '')
+        .replace(/\b(?:foto|fotos|photo|photos|imaj|image|images)\b/gi, '')
         .replace(/\s+/g, ' ')
         .trim() || lastUserContent;
 
@@ -645,7 +776,7 @@ serve(async function(req: Request) {
 
       if (searchResult.images && searchResult.images.length > 0) {
         aiResponse = {
-          content: 'Men kek imaj mwen jwenn pou "' + searchQuery + '":\n\n[IMAGE_SEARCH_RESULTS:' + JSON.stringify(searchResult.images) + ']',
+          content: 'Men kek imaj mwen jwenn pou "' + searchQuery + '":\n\n[IMAGE_SEARCH_RESULTS:' + safeJsonStringify(searchResult.images) + ']',
           model: 'image-search',
           tokens: 0,
         };
@@ -671,11 +802,7 @@ serve(async function(req: Request) {
               const mimeType = matches[1];
               const ext = (mimeType.split('/')[1] || 'png').replace('+', '.');
               const base64Data = matches[2];
-              const binaryStr = atob(base64Data);
-              const bytes = new Uint8Array(binaryStr.length);
-              for (let i = 0; i < binaryStr.length; i++) {
-                bytes[i] = binaryStr.charCodeAt(i);
-              }
+              const bytes = safeAtob(base64Data);
               const fileName = 'ai-gen/' + Date.now() + '-' + Math.random().toString(36).slice(2) + '.' + ext;
               const uploadResult = await supabaseAdmin.storage
                 .from('chat-images')
@@ -686,7 +813,7 @@ serve(async function(req: Request) {
               }
             }
           } catch (uploadErr) {
-            console.error('[chat] Failed to upload base64 image:', uploadErr);
+            console.error('[chat] Failed to upload base64 image');
           }
         }
 
@@ -722,9 +849,9 @@ serve(async function(req: Request) {
 
     // Handle AI errors with cache fallback
     if (!aiResponse || (!aiResponse.content && aiResponse.error)) {
-      console.error('[chat] AI Error:', aiResponse ? aiResponse.error : 'no response');
+      console.error('[chat] AI Error');
       const cacheKey = getCacheKey(aiMessages);
-      const cachedResponse = getCachedResponse(cacheKey);
+      const cachedResponse = responseCache.get(cacheKey);
       let fallbackContent: string;
       if (cachedResponse) {
         fallbackContent = 'I am experiencing connectivity issues right now, but here is a previous response that might help:\n\n' + cachedResponse + '\n\n*This is a cached response. Please try again when my connection improves.*';
@@ -733,7 +860,7 @@ serve(async function(req: Request) {
       }
       const fallbackStream = createStreamingResponse(fallbackContent, 'fallback', 12);
       return new Response(fallbackStream, {
-        headers: { ...corsHeaders, 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no' },
+        headers: { ...corsHeaders, 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no', 'Connection': 'keep-alive' },
       });
     }
 
@@ -757,49 +884,50 @@ serve(async function(req: Request) {
     // Cache successful response
     if (aiResponse && aiResponse.content && !aiResponse.error) {
       const cacheKey = getCacheKey(aiMessages);
-      const lastUserMsg = messages.filter(function(m) { return m.role === 'user'; }).slice(-1)[0];
+      const lastUserMsg = messages.filter(m => m.role === 'user').slice(-1)[0];
       const query = typeof lastUserMsg?.content === 'string' ? lastUserMsg.content : '';
-      setCachedResponse(cacheKey, cleanMessage, query);
+      responseCache.set(cacheKey, cleanMessage, query);
     }
 
     // Update conversation timestamp (non-fatal)
-    Promise.resolve(
-      supabaseAdmin
+    try {
+      await supabaseAdmin
         .from('conversations')
         .update({ updated_at: new Date().toISOString() })
-        .eq('id', conversationId)
-    ).then(function() {}).catch(function(e: any) {
-      console.log('[chat] Conversation update error (non-fatal):', e?.message);
-    });
+        .eq('id', conversationId);
+    } catch (e) {
+      console.log('[chat] Conversation update error (non-fatal)');
+    }
 
     // Auto-save AI-generated image URLs to media_files
     if (imageUrl && user.id) {
-      supabaseAdmin.from('media_files').insert({
-        user_id: user.id,
-        file_type: 'image',
-        file_url: imageUrl,
-        file_name: 'ai-image-' + Date.now() + '.jpg',
-        file_size: 0,
-      }).then(function() {
+      try {
+        await supabaseAdmin.from('media_files').insert({
+          user_id: user.id,
+          file_type: 'image',
+          file_url: imageUrl,
+          file_name: 'ai-image-' + Date.now() + '.jpg',
+          file_size: 0,
+        });
         console.log('[chat] AI image auto-saved to media_files');
-      }).catch(function(saveErr: any) {
-        console.log('[chat] Could not auto-save AI image:', saveErr?.message);
-      });
+      } catch (saveErr) {
+        console.log('[chat] Could not auto-save AI image');
+      }
     }
 
     // Push notification for long requests (>5s) — non-fatal
     const requestDurationMs = Date.now() - requestStartTime;
     if (requestDurationMs > 5000) {
-      supabaseAdmin
-        .from('user_profiles')
-        .select('push_token')
-        .eq('id', user.id)
-        .single()
-        .then(function(profileResult: any) {
-          const pushToken = profileResult.data?.push_token;
-          if (!pushToken) return;
+      try {
+        const profileResult = await supabaseAdmin
+          .from('user_profiles')
+          .select('push_token')
+          .eq('id', user.id)
+          .single();
+        const pushToken = profileResult.data?.push_token;
+        if (pushToken) {
           const preview = cleanMessage.replace(/[#*`\[\]]/g, '').slice(0, 80);
-          fetch('https://exp.host/--/api/v2/push/send', {
+          await fetch(CONFIG.EXPO_PUSH_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
             body: JSON.stringify({
@@ -811,9 +939,11 @@ serve(async function(req: Request) {
               badge: 1,
               priority: 'high',
             }),
-          }).catch(function() {});
-        })
-        .catch(function() {});
+          });
+        }
+      } catch {
+        // Silently fail for push notifications
+      }
     }
 
     // Stream response
@@ -827,12 +957,13 @@ serve(async function(req: Request) {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',
         'X-Accel-Buffering': 'no',
+        'Connection': 'keep-alive',
       },
     });
 
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error('[chat] Unhandled error:', errorMessage);
+    console.error('[chat] Unhandled error');
     return new Response(
       JSON.stringify({ error: 'Internal server error. Please try again.' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

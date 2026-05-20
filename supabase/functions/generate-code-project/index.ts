@@ -1,13 +1,21 @@
 /**
  * PRODUCTION AI CODE GENERATION ENGINE
- * Streams real, production-ready code with terminal logs and file operations
+ * Primary: Kimi API (Moonshot)
+ * Fallback 1: OnSpace AI
+ * Fallback 2: OpenAI
  */
 
 import { corsHeaders } from '../_shared/cors.ts';
 
-// AI Provider Configuration
+// AI Provider Keys
+const KIMI_API_KEY = Deno.env.get('MOONSHOT_API_KEY');
+const KIMI_API_URL = 'https://api.moonshot.cn/v1';
+
 const ONSPACE_AI_KEY = Deno.env.get('ONSPACE_AI_API_KEY');
 const ONSPACE_AI_URL = Deno.env.get('ONSPACE_AI_BASE_URL') || 'https://api.onspace.ai';
+
+const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+const OPENAI_API_URL = 'https://api.openai.com/v1';
 
 interface GenerationRequest {
   description: string;
@@ -33,6 +41,9 @@ const PROJECT_STRUCTURES: Record<string, string[]> = {
   php: ['index.php', 'config.php', 'composer.json'],
   java: ['Main.java', 'pom.xml'],
   node: ['package.json', 'server.js', '.env.example'],
+  css: ['index.html', 'styles.css'],
+  react: ['package.json', 'src/App.jsx', 'src/index.js', 'public/index.html'],
+  vue: ['package.json', 'src/App.vue', 'src/main.js'],
 };
 
 Deno.serve(async (req) => {
@@ -45,7 +56,7 @@ Deno.serve(async (req) => {
     const body: GenerationRequest = await req.json();
     const { description, language, mode, aiMode, images, userId } = body;
 
-    console.log(`🚀 Generating ${mode} ${language} project (${aiMode} mode)`);
+    console.log(`🚀 Generating ${mode} ${language} project (${aiMode} mode) | Kimi-first strategy`);
 
     // Create streaming response
     const stream = new ReadableStream({
@@ -59,63 +70,92 @@ Deno.serve(async (req) => {
         try {
           // Step 1: Analyze request
           send('log', '🔍 Analyzing project requirements...');
-          await delay(500);
+          await delay(400);
 
           // Step 2: Determine file structure
           const files = PROJECT_STRUCTURES[language] || PROJECT_STRUCTURES.javascript;
-          send('log', `📁 Creating ${files.length} files...`);
-          await delay(300);
+          send('log', `📁 Planning ${files.length}-file project structure...`);
+          await delay(200);
 
-          // Step 3: Generate AI prompt
+          // Step 3: Build prompts
           const systemPrompt = buildSystemPrompt(language, mode, aiMode);
           const userPrompt = buildUserPrompt(description, language, files);
 
-          // Step 4: Call AI to generate code
-          send('log', '🤖 Generating production code...');
+          // Step 4: Call AI with fallback chain
+          send('log', '🤖 Connecting to Kimi AI...');
+          let aiResponse = '';
 
-          const aiResponse = await callOnSpaceAI(systemPrompt, userPrompt, images);
+          // ── Try Kimi first ──────────────────────────────────────────────
+          try {
+            aiResponse = await callKimiAI(systemPrompt, userPrompt, images, aiMode);
+            send('log', '✅ Kimi AI responded');
+          } catch (kimiErr: any) {
+            console.error('Kimi failed:', kimiErr.message);
+            send('log', '⚡ Switching to OnSpace AI...');
+
+            // ── Try OnSpace AI second ───────────────────────────────────
+            try {
+              aiResponse = await callOnSpaceAI(systemPrompt, userPrompt, images);
+              send('log', '✅ OnSpace AI responded');
+            } catch (onspaceErr: any) {
+              console.error('OnSpace AI failed:', onspaceErr.message);
+              send('log', '⚡ Switching to OpenAI...');
+
+              // ── Try OpenAI third ────────────────────────────────────────
+              try {
+                aiResponse = await callOpenAI(systemPrompt, userPrompt, images, aiMode);
+                send('log', '✅ OpenAI responded');
+              } catch (openaiErr: any) {
+                console.error('OpenAI also failed:', openaiErr.message);
+                throw new Error('All AI providers failed. Please try again.');
+              }
+            }
+          }
+
+          if (!aiResponse || aiResponse.trim().length < 50) {
+            throw new Error('AI returned an empty response. Please try again.');
+          }
 
           // Step 5: Parse and stream files
+          send('log', '📝 Parsing generated files...');
           const generatedFiles = parseAIResponse(aiResponse, files, language);
 
           for (const file of generatedFiles) {
-            send('log', `📝 Creating file: ${file.path}`);
-            await delay(200);
-
-            // Stream file content character by character (simulation)
+            send('log', `📄 Creating: ${file.path}`);
+            await delay(150);
             send('file_created', file);
-            await delay(100);
+            await delay(80);
           }
 
-          // Step 6: Generate environment variables
+          // Step 6: Detect and emit environment variables
           const envVars = detectEnvironmentVariables(aiResponse);
           if (Object.keys(envVars).length > 0) {
-            send('log', '🔑 Generating environment variables...');
+            send('log', '🔑 Detecting environment variables...');
             for (const [key, value] of Object.entries(envVars)) {
               send('env_var', { key, value });
-              await delay(100);
+              await delay(80);
             }
           }
 
           // Step 7: Generate instructions
-          send('log', '📋 Generating setup instructions...');
+          send('log', '📋 Generating setup guide...');
           const instructions = generateInstructions(language, generatedFiles, envVars);
           for (const instruction of instructions) {
             send('instruction', instruction);
-            await delay(150);
+            await delay(100);
           }
 
-          // Step 8: Stream completion
-          send('log', '✅ Project generated successfully');
+          send('log', '✅ Project generated successfully!');
           send('completed', {
             previewable: isPreviewable(language),
             requiresPro: requiresProPlan(language),
+            filesCount: generatedFiles.length,
           });
 
           controller.close();
         } catch (error: any) {
           console.error('Generation error:', error);
-          send('error', error.message || 'Generation failed');
+          send('error', error.message || 'Code generation failed. Please try again.');
           controller.close();
         }
       },
@@ -142,23 +182,80 @@ Deno.serve(async (req) => {
   }
 });
 
-// ==================== AI INTEGRATION ====================
+// ==================== KIMI AI (PRIMARY) ====================
 
-async function callOnSpaceAI(systemPrompt: string, userPrompt: string, images?: string[]): Promise<string> {
-  if (!ONSPACE_AI_KEY) {
-    throw new Error('OnSpace AI API key not configured');
+async function callKimiAI(
+  systemPrompt: string,
+  userPrompt: string,
+  images?: string[],
+  aiMode?: string,
+): Promise<string> {
+  if (!KIMI_API_KEY) throw new Error('Kimi API key (MOONSHOT_API_KEY) not configured');
+
+  // Select model based on aiMode
+  const model = aiMode === 'deep_thinking'
+    ? 'moonshot-v1-128k'
+    : aiMode === 'agent'
+    ? 'moonshot-v1-32k'
+    : 'moonshot-v1-8k';
+
+  const messages: any[] = [
+    { role: 'system', content: systemPrompt },
+  ];
+
+  // Build user content — Kimi supports vision via file IDs but we send text here
+  // If images are passed as base64, embed them in the prompt description
+  let fullUserPrompt = userPrompt;
+  if (images && images.length > 0) {
+    fullUserPrompt += `\n\n[Note: ${images.length} image(s) provided by the user. Incorporate the design/content from these images into the generated code.]`;
   }
+
+  messages.push({ role: 'user', content: fullUserPrompt });
+
+  const response = await fetch(`${KIMI_API_URL}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${KIMI_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model,
+      messages,
+      max_tokens: 16000,
+      temperature: 0.3,
+      top_p: 1,
+    }),
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Kimi API error ${response.status}: ${errText.slice(0, 300)}`);
+  }
+
+  const data = await response.json();
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) throw new Error('Kimi returned empty content');
+  return content;
+}
+
+// ==================== ONSPACE AI (FALLBACK 1) ====================
+
+async function callOnSpaceAI(
+  systemPrompt: string,
+  userPrompt: string,
+  images?: string[],
+): Promise<string> {
+  if (!ONSPACE_AI_KEY) throw new Error('OnSpace AI key not configured');
 
   const messages: any[] = [
     { role: 'system', content: systemPrompt },
     { role: 'user', content: userPrompt },
   ];
 
-  // Add images if provided
   if (images && images.length > 0) {
     messages.push({
       role: 'user',
-      content: `Analyze these images and incorporate them into the project:\n${images.map((_, i) => `Image ${i + 1}`).join('\n')}`,
+      content: `Analyze the provided ${images.length} image(s) and incorporate their design/content into the generated code.`,
     });
   }
 
@@ -172,88 +269,168 @@ async function callOnSpaceAI(systemPrompt: string, userPrompt: string, images?: 
       model: 'gpt-4-turbo',
       messages,
       max_tokens: 8000,
-      temperature: 0.7,
+      temperature: 0.4,
     }),
   });
 
   if (!response.ok) {
-    throw new Error(`AI API error: ${response.status}`);
+    const errText = await response.text();
+    throw new Error(`OnSpace AI error ${response.status}: ${errText.slice(0, 300)}`);
   }
 
   const data = await response.json();
-  return data.choices[0]?.message?.content || '';
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) throw new Error('OnSpace AI returned empty content');
+  return content;
+}
+
+// ==================== OPENAI (FALLBACK 2) ====================
+
+async function callOpenAI(
+  systemPrompt: string,
+  userPrompt: string,
+  images?: string[],
+  aiMode?: string,
+): Promise<string> {
+  if (!OPENAI_API_KEY) throw new Error('OpenAI API key not configured');
+
+  const model = aiMode === 'deep_thinking' ? 'gpt-4o' : 'gpt-4o-mini';
+
+  const messages: any[] = [
+    { role: 'system', content: systemPrompt },
+  ];
+
+  // Build vision-capable user message if images provided
+  if (images && images.length > 0) {
+    const content: any[] = [{ type: 'text', text: userPrompt }];
+    for (const img of images.slice(0, 3)) {
+      content.push({
+        type: 'image_url',
+        image_url: { url: `data:image/jpeg;base64,${img}`, detail: 'low' },
+      });
+    }
+    messages.push({ role: 'user', content });
+  } else {
+    messages.push({ role: 'user', content: userPrompt });
+  }
+
+  const response = await fetch(`${OPENAI_API_URL}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${OPENAI_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model,
+      messages,
+      max_tokens: 8000,
+      temperature: 0.4,
+    }),
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`OpenAI error ${response.status}: ${errText.slice(0, 300)}`);
+  }
+
+  const data = await response.json();
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) throw new Error('OpenAI returned empty content');
+  return content;
 }
 
 // ==================== PROMPT ENGINEERING ====================
 
 function buildSystemPrompt(language: string, mode: string, aiMode: string): string {
-  const basePrompt = `You are an expert ${language} developer. Generate complete, production-ready code.`;
+  const modeInstructions = mode === 'real'
+    ? 'Generate REAL, FUNCTIONAL, PRODUCTION-READY code with NO placeholders, NO demo data, NO fake implementations. Every function must actually work.'
+    : 'Generate a clean demo with clearly labeled simulated functionality.';
 
-  const modeInstructions = mode === 'real' 
-    ? 'Generate REAL, FUNCTIONAL, PRODUCTION-READY code with NO placeholders, NO demo data, NO fake implementations.'
-    : 'Generate a clean demo with simulated functionality.';
-
-  const aiModeInstructions = {
-    instant: 'Provide concise, efficient code.',
-    deep_thinking: 'Add comprehensive error handling, edge cases, and best practices.',
-    agent: 'Include research-backed patterns, scalability considerations, and documentation.',
+  const depthMap: Record<string, string> = {
+    instant: 'Be concise and efficient. Focus on core functionality.',
+    deep_thinking: 'Add comprehensive error handling, edge cases, accessibility, and full best practices. Write complete, deeply commented code.',
+    agent: 'Apply research-backed architecture patterns, scalability considerations, full documentation, and production-grade code quality.',
   };
 
-  return `${basePrompt}
+  return `You are an expert ${language} developer and software architect. Generate complete, production-ready code files.
 
 ${modeInstructions}
 
-${aiModeInstructions[aiMode]}
+${depthMap[aiMode] || depthMap.instant}
 
-CRITICAL RULES:
-1. Generate COMPLETE files - no truncation, no "rest of code here" placeholders
-2. Include ALL imports, ALL functions, ALL necessary code
+ABSOLUTE RULES — NEVER BREAK THESE:
+1. Generate COMPLETE files — NO truncation, NO "// ... rest of code", NO placeholders
+2. Include ALL imports, ALL functions, ALL logic — nothing omitted
 3. Use modern best practices for ${language}
-4. Add inline comments explaining complex logic
-5. Ensure code is immediately runnable
-6. Handle errors gracefully
-7. Use environment variables for secrets
+4. Add meaningful inline comments for complex logic
+5. Code must be immediately runnable without modifications
+6. Handle errors gracefully with try/catch
+7. Use environment variables for ALL secrets/API keys
+8. Write clean, readable, well-structured code
 
-Format your response as:
+RESPONSE FORMAT — use EXACTLY this pattern for each file:
 FILE: path/to/file.ext
 \`\`\`language
-[COMPLETE FILE CONTENT]
+[COMPLETE, FULLY FUNCTIONAL FILE CONTENT HERE]
 \`\`\`
 
-ENV: VARIABLE_NAME=description
-ENV: ANOTHER_VAR=description`;
+For environment variables needed:
+ENV: VARIABLE_NAME=description of what to put here`;
 }
 
 function buildUserPrompt(description: string, language: string, files: string[]): string {
-  return `Create a ${language} project with the following requirements:
+  return `Build a complete, production-ready ${language} project:
 
+PROJECT REQUIREMENTS:
 ${description}
 
-Generate these files (FULL CONTENT for each):
+GENERATE THESE FILES (provide FULL content for every file — no omissions):
 ${files.map((f, i) => `${i + 1}. ${f}`).join('\n')}
 
-Make it production-ready, complete, and immediately usable.`;
+Requirements:
+- Every file must be complete and immediately usable
+- No placeholder comments or TODO stubs (unless genuinely needed for user to fill in API keys)
+- Include real logic, real UI, real functionality
+- Make it impressive and professional`;
 }
 
 // ==================== RESPONSE PARSING ====================
 
 function parseAIResponse(response: string, expectedFiles: string[], language: string): ProjectFile[] {
   const files: ProjectFile[] = [];
-  
-  // Extract FILE blocks
-  const fileRegex = /FILE:\s*(.+?)\n```(\w+)?\n([\s\S]+?)```/g;
+
+  // Match FILE: path\n```lang\ncontent\n``` blocks
+  const fileRegex = /FILE:\s*(.+?)\s*\n```(\w*)\n?([\s\S]+?)```/g;
   let match;
 
   while ((match = fileRegex.exec(response)) !== null) {
     const [, path, lang, content] = match;
-    files.push({
-      path: path.trim(),
-      content: content.trim(),
-      language: lang || language,
-    });
+    if (path && content) {
+      files.push({
+        path: path.trim(),
+        content: content.trim(),
+        language: lang?.trim() || language,
+      });
+    }
   }
 
-  // Ensure all expected files are present
+  // Fallback: try to detect fenced blocks without FILE: header
+  if (files.length === 0) {
+    const fenceRegex = /```(\w+)\n([\s\S]+?)```/g;
+    let idx = 0;
+    while ((match = fenceRegex.exec(response)) !== null) {
+      const lang = match[1]?.toLowerCase() || language;
+      const content = match[2]?.trim();
+      if (content && content.length > 20) {
+        const ext = langToExt(lang);
+        const filePath = expectedFiles[idx] || `file${idx}.${ext}`;
+        files.push({ path: filePath, content, language: lang });
+        idx++;
+      }
+    }
+  }
+
+  // Ensure all expected files have at least a placeholder
   for (const expectedFile of expectedFiles) {
     if (!files.find(f => f.path === expectedFile)) {
       files.push({
@@ -267,103 +444,103 @@ function parseAIResponse(response: string, expectedFiles: string[], language: st
   return files;
 }
 
+function langToExt(lang: string): string {
+  const map: Record<string, string> = {
+    html: 'html', css: 'css', javascript: 'js', js: 'js',
+    typescript: 'ts', ts: 'ts', python: 'py', php: 'php',
+    java: 'java', json: 'json', bash: 'sh', shell: 'sh',
+    markdown: 'md', sql: 'sql', vue: 'vue', jsx: 'jsx', tsx: 'tsx',
+  };
+  return map[lang] || 'txt';
+}
+
 function generatePlaceholderContent(filename: string, language: string): string {
   if (filename.endsWith('.json')) {
-    return JSON.stringify({ name: 'generated-project', version: '1.0.0' }, null, 2);
+    return JSON.stringify({ name: 'generated-project', version: '1.0.0', description: 'AI-generated project' }, null, 2);
   }
-
   if (filename.endsWith('.md')) {
-    return '# Generated Project\n\nThis is a generated project file.';
+    return `# Generated Project\n\nAI-generated ${language} project.\n\n## Setup\n\nSee instructions below.`;
   }
-
-  return `// Generated file: ${filename}\n// TODO: Implement functionality`;
+  if (filename.endsWith('.env.example')) {
+    return '# Copy this to .env and fill in your values\n# API_KEY=your_key_here\n';
+  }
+  if (filename.endsWith('requirements.txt')) {
+    return '# Python dependencies\n# Add your requirements here\n';
+  }
+  return `# Generated: ${filename}\n# This file is part of the AI-generated project`;
 }
 
 // ==================== ENVIRONMENT VARIABLES ====================
 
 function detectEnvironmentVariables(response: string): Record<string, string> {
   const envVars: Record<string, string> = {};
-  
-  // Extract ENV declarations
+
   const envRegex = /ENV:\s*(\w+)=(.+)/g;
   let match;
-
   while ((match = envRegex.exec(response)) !== null) {
     const [, key, description] = match;
-    envVars[key] = description.trim();
+    envVars[key.trim()] = description.trim();
   }
 
-  // Common patterns
-  if (response.includes('OPENAI_API_KEY') || response.includes('openai')) {
+  // Auto-detect common patterns in code
+  if (/OPENAI_API_KEY|openai\.com/.test(response) && !envVars.OPENAI_API_KEY) {
     envVars.OPENAI_API_KEY = 'Your OpenAI API key from platform.openai.com';
   }
-
-  if (response.includes('STRIPE') || response.includes('payment')) {
+  if (/STRIPE_SECRET|stripe\.com/.test(response) && !envVars.STRIPE_SECRET_KEY) {
     envVars.STRIPE_SECRET_KEY = 'Your Stripe secret key from dashboard.stripe.com';
   }
-
-  if (response.includes('DATABASE_URL') || response.includes('postgres')) {
-    envVars.DATABASE_URL = 'PostgreSQL connection string';
+  if (/DATABASE_URL|postgres|mysql/.test(response) && !envVars.DATABASE_URL) {
+    envVars.DATABASE_URL = 'Your database connection string';
+  }
+  if (/KIMI|moonshot/.test(response) && !envVars.MOONSHOT_API_KEY) {
+    envVars.MOONSHOT_API_KEY = 'Your Kimi API key from platform.moonshot.cn';
   }
 
   return envVars;
 }
 
-// ==================== INSTRUCTIONS ====================
+// ==================== SETUP INSTRUCTIONS ====================
 
 function generateInstructions(language: string, files: ProjectFile[], envVars: Record<string, string>): string[] {
   const instructions: string[] = [];
 
-  instructions.push('## Installation');
+  const hasEnv = Object.keys(envVars).length > 0;
 
   switch (language) {
     case 'typescript':
     case 'javascript':
     case 'node':
+    case 'react':
+    case 'vue':
       instructions.push('```bash\nnpm install\n```');
+      if (hasEnv) instructions.push('Create a `.env` file with the variables listed below, then run:');
+      instructions.push(language === 'typescript' ? '```bash\nnpm run dev\n```' : '```bash\nnode src/index.js\n```');
       break;
     case 'python':
       instructions.push('```bash\npip install -r requirements.txt\n```');
-      break;
-    case 'php':
-      instructions.push('```bash\ncomposer install\n```');
-      break;
-    case 'java':
-      instructions.push('```bash\nmvn install\n```');
-      break;
-  }
-
-  if (Object.keys(envVars).length > 0) {
-    instructions.push('## Environment Setup');
-    instructions.push('Create a `.env` file with:');
-    instructions.push('```env');
-    for (const [key, description] of Object.entries(envVars)) {
-      instructions.push(`${key}=  # ${description}`);
-    }
-    instructions.push('```');
-  }
-
-  instructions.push('## Running');
-
-  switch (language) {
-    case 'typescript':
-      instructions.push('```bash\nnpm run dev\n```');
-      break;
-    case 'javascript':
-      instructions.push('```bash\nnode src/index.js\n```');
-      break;
-    case 'python':
+      if (hasEnv) instructions.push('Set the environment variables in a `.env` file, then:');
       instructions.push('```bash\npython main.py\n```');
       break;
     case 'php':
+      instructions.push('```bash\ncomposer install\n```');
       instructions.push('```bash\nphp -S localhost:8000\n```');
       break;
-    case 'node':
-      instructions.push('```bash\nnode server.js\n```');
+    case 'java':
+      instructions.push('```bash\nmvn install && mvn exec:java\n```');
       break;
     case 'html':
-      instructions.push('Open `index.html` in your browser');
+    case 'css':
+      instructions.push('Open `index.html` in your browser — no build step required!');
       break;
+    default:
+      instructions.push(`Run the main entry file for ${language}.`);
+  }
+
+  if (hasEnv) {
+    instructions.push('\n**Required environment variables:**');
+    for (const [key, desc] of Object.entries(envVars)) {
+      instructions.push(`- \`${key}\` — ${desc}`);
+    }
   }
 
   return instructions;
@@ -372,11 +549,11 @@ function generateInstructions(language: string, files: ProjectFile[], envVars: R
 // ==================== UTILITIES ====================
 
 function isPreviewable(language: string): boolean {
-  return ['html', 'typescript', 'javascript'].includes(language);
+  return ['html', 'css', 'javascript', 'typescript', 'react', 'vue'].includes(language);
 }
 
 function requiresProPlan(language: string): boolean {
-  return ['typescript'].includes(language);
+  return ['typescript', 'react', 'vue', 'java'].includes(language);
 }
 
 function delay(ms: number): Promise<void> {

@@ -1,12 +1,20 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
 
+// ── RevenueCat entitlement → plan name ───────────────────────────────────
+const RC_ENTITLEMENT_MAP: Record<string, string> = {
+  'plus': 'plus',
+  'go': 'go',
+  'premium': 'plus',
+  'pro': 'go',
+};
+
 // Map Stripe product IDs → plan names used in the app
 const PRODUCT_PLAN_MAP: Record<string, string> = {
-  'prod_ThBGbK8D1tAh0w': 'plus',  // Premium Yearly product
-  'prod_UOHQvMBEjUgzfG': 'plus',  // Premium Monthly product
-  'prod_ThBG24kiMMlK4f': 'plus',  // Lifetime Access
-  'prod_TedMqtvOncuFAL': 'go',    // Pro / Go plan
+  'prod_ThBGbK8D1tAh0w': 'plus',
+  'prod_UOHQvMBEjUgzfG': 'plus',
+  'prod_ThBG24kiMMlK4f': 'plus',
+  'prod_TedMqtvOncuFAL': 'go',
 };
 
 const logStep = (step: string, details?: any) => {
@@ -28,28 +36,90 @@ Deno.serve(async (req) => {
   try {
     logStep('Function started');
 
-    const stripeKey = Deno.env.get('STRIPE_SECRET_KEY');
-    if (!stripeKey) throw new Error('STRIPE_SECRET_KEY not configured');
-
+    // ── Authenticate user first (required for all paths) ─────────────────
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) throw new Error('Authorization header missing');
 
     const token = authHeader.replace('Bearer ', '');
     const { data: userData, error: userError } = await supabaseAdmin.auth.getUser(token);
-    if (userError || !userData?.user?.email) throw new Error('Unauthorized');
+    if (userError || !userData?.user) throw new Error('Unauthorized');
+
     const user = userData.user;
     logStep('User authenticated', { userId: user.id, email: user.email });
 
+    // ── Check RevenueCat entitlements (now user is defined) ───────────────
+    const rcSecretKey = Deno.env.get('REVENUECAT_SECRET_KEY')
+      || Deno.env.get('REVENUECAT_IOS_KEY')
+      || '';
+
+    if (rcSecretKey) {
+      try {
+        const rcRes = await fetch(
+          `https://api.revenuecat.com/v1/subscribers/${encodeURIComponent(user.id)}`,
+          {
+            headers: {
+              'Authorization': `Bearer ${rcSecretKey}`,
+              'Content-Type': 'application/json',
+              'X-Platform': 'web',
+            },
+          },
+        );
+        if (rcRes.ok) {
+          const rcData = await rcRes.json();
+          const entitlements: Record<string, any> = rcData?.subscriber?.entitlements || {};
+          const activeEntitlement = Object.entries(entitlements).find(
+            ([, v]) => v?.expires_date === null || new Date(v?.expires_date) > new Date(),
+          );
+          if (activeEntitlement) {
+            const [entitlementId, entitlementData] = activeEntitlement;
+            const rcPlan = RC_ENTITLEMENT_MAP[entitlementId.toLowerCase()] || 'plus';
+            const rcExpiry = entitlementData?.expires_date || null;
+            logStep('RC active entitlement found', { entitlementId, rcPlan, rcExpiry });
+
+            // Sync to user_profiles
+            try {
+              await supabaseAdmin.from('user_profiles').update({
+                subscription_tier: rcPlan,
+                subscription_expires_at: rcExpiry,
+              }).eq('id', user.id);
+            } catch (_e) {}
+
+            return new Response(
+              JSON.stringify({
+                subscribed: true,
+                plan: rcPlan,
+                subscription_end: rcExpiry,
+                provider: 'revenuecat',
+              }),
+              { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+            );
+          }
+          logStep('RC subscriber exists but no active entitlements');
+        }
+      } catch (rcErr: any) {
+        logStep('RC check error (non-fatal)', { msg: rcErr?.message });
+      }
+    }
+
+    // ── Check Stripe subscriptions ────────────────────────────────────────
+    const stripeKey = Deno.env.get('STRIPE_SECRET_KEY');
+    if (!stripeKey || !user.email) {
+      // No Stripe configured or no email — return free
+      return new Response(
+        JSON.stringify({ subscribed: false, plan: null, subscription_end: null }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
     // ── Find Stripe customer by email ──
     const searchRes = await fetch(
-      `https://api.stripe.com/v1/customers?email=${encodeURIComponent(user.email!)}&limit=1`,
+      `https://api.stripe.com/v1/customers?email=${encodeURIComponent(user.email)}&limit=1`,
       { headers: { Authorization: `Bearer ${stripeKey}`, 'Stripe-Version': '2025-03-31.basil' } },
     );
     const searchData = await searchRes.json();
 
     if (!searchData?.data?.length) {
       logStep('No Stripe customer found');
-      // Sync user_profiles back to free
       try {
         await supabaseAdmin.from('user_profiles').update({
           subscription_tier: 'free',
@@ -83,14 +153,12 @@ Deno.serve(async (req) => {
       stripeSubscriptionId = sub.id;
       subscriptionEnd = new Date(sub.current_period_end * 1000).toISOString();
 
-      // Determine plan from product ID
       const productId = sub.items?.data?.[0]?.price?.product?.id
         ?? sub.items?.data?.[0]?.price?.product
         ?? '';
       plan = PRODUCT_PLAN_MAP[productId] || 'plus';
       logStep('Active subscription', { subId: sub.id, productId, plan, subscriptionEnd });
 
-      // ── Update subscription_purchases table (use try-catch, not .catch()) ──
       try {
         await supabaseAdmin.from('subscription_purchases').upsert({
           user_id: user.id,
@@ -112,7 +180,6 @@ Deno.serve(async (req) => {
         }, { onConflict: 'transaction_id' });
       } catch (_e) {}
 
-      // ── Sync user_profiles.subscription_tier ──
       try {
         await supabaseAdmin.from('user_profiles').update({
           subscription_tier: plan,
@@ -122,7 +189,6 @@ Deno.serve(async (req) => {
 
     } else {
       logStep('No active subscription');
-      // Sync user_profiles back to free if expired
       try {
         await supabaseAdmin.from('user_profiles').update({
           subscription_tier: 'free',

@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useRouter, Redirect } from 'expo-router';
 import { useAuth, useAlert, getSupabaseClient } from '@/template';
+import { hasSeenOnboarding } from './onboarding';
 import { useTheme } from '../hooks/useTheme';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -39,42 +40,40 @@ async function sendLoginConfirmationEmail(userId: string, email: string) {
   }
 }
 
-// ── Real Google G SVG icon via colored text segments ──
-function GoogleIcon({ size = 20 }: { size?: number }) {
-  return (
-    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-      <Text style={{ fontSize: size * 0.85, fontWeight: '700', letterSpacing: -1 }}>
-        <Text style={{ color: '#4285F4' }}>G</Text>
-      </Text>
-    </View>
-  );
-}
-
-// ── Proper Google icon using colored circles ──
-function GoogleLogo({ size = 20 }: { size?: number }) {
-  const s = size;
-  return (
-    <View style={{ width: s, height: s, borderRadius: s / 2, overflow: 'hidden', backgroundColor: 'white', alignItems: 'center', justifyContent: 'center' }}>
-      <Text style={{ fontSize: s * 0.7, fontWeight: '900', color: '#4285F4', lineHeight: s * 0.75 }}>G</Text>
-    </View>
-  );
-}
-
-// ── Apple Sign-In ──
+// ── Apple Sign-In (dynamic import to avoid web bundle errors) ──
 async function performAppleSignIn(showAlert: (title: string, msg?: string) => void): Promise<{ user: any; error?: string }> {
-  if (Platform.OS === 'web') return { user: null, error: 'Apple Sign In not available on web.' };
+  if (Platform.OS !== 'ios') return { user: null, error: 'Apple Sign In is only available on iOS.' };
+
+  let AppleAuthentication: any;
+  let Crypto: any;
   try {
-    const AppleAuthentication = await import('expo-apple-authentication');
-    const available = await AppleAuthentication.isAvailableAsync();
-    if (!available) return { user: null, error: 'Apple Sign In not available on this device.' };
+    AppleAuthentication = require('expo-apple-authentication');
+    Crypto = require('expo-crypto');
+    // Validate the module loaded correctly
+    if (!AppleAuthentication || typeof AppleAuthentication.signInAsync !== 'function') {
+      throw new Error('Apple Authentication module not properly loaded');
+    }
+  } catch (_e) {
+    return { user: null, error: 'Apple Sign In requires a native development build.' };
+  }
 
-    const charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    let rawNonce = '';
-    for (let i = 0; i < 32; i++) rawNonce += charset[Math.floor(Math.random() * charset.length)];
+  try {
+    // Check availability safely — some builds don't have isAvailableAsync
+    if (typeof AppleAuthentication.isAvailableAsync === 'function') {
+      const available = await AppleAuthentication.isAvailableAsync();
+      if (!available) return { user: null }; // silently skip — not available
+    }
 
-    const msgBuffer = new TextEncoder().encode(rawNonce);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
-    const hashedNonce = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+    const rawNonce = Array.from({ length: 32 }, () =>
+      'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'[
+        Math.floor(Math.random() * 62)
+      ]
+    ).join('');
+
+    const hashedNonce = await Crypto.digestStringAsync(
+      Crypto.CryptoDigestAlgorithm.SHA256,
+      rawNonce
+    );
 
     const credential = await AppleAuthentication.signInAsync({
       requestedScopes: [
@@ -92,7 +91,26 @@ async function performAppleSignIn(showAlert: (title: string, msg?: string) => vo
       token: credential.identityToken,
       nonce: rawNonce,
     });
+
     if (error) return { user: null, error: error.message };
+
+    if (credential.fullName || credential.email) {
+      const updates: any = {};
+      if (credential.fullName?.givenName || credential.fullName?.familyName) {
+        updates.data = {
+          ...(updates.data || {}),
+          full_name: [credential.fullName.givenName, credential.fullName.familyName]
+            .filter(Boolean)
+            .join(' '),
+          given_name: credential.fullName.givenName,
+          family_name: credential.fullName.familyName,
+        };
+      }
+      if (Object.keys(updates).length > 0) {
+        await supabase.auth.updateUser(updates);
+      }
+    }
+
     return { user: data?.user ?? null };
   } catch (e: any) {
     if (e?.code === 'ERR_REQUEST_CANCELED') return { user: null };
@@ -273,12 +291,11 @@ function WelcomeScreen() {
           {loading === 'google' ? (
             <ActivityIndicator size="small" color={colors.text} />
           ) : (
-            <>
-              {/* Colored Google G */}
-              <View style={{ width: 22, height: 22, alignItems: 'center', justifyContent: 'center' }}>
-                <Text style={{ fontSize: 15, fontWeight: '900', color: '#4285F4' }}>G</Text>
-              </View>
-            </>
+            <Image
+              source={{ uri: 'https://www.citypng.com/public/uploads/preview/google-logo-icon-gsuite-hd-701751694791470gzbayltphh.png' }}
+              style={{ width: 22, height: 22 }}
+              resizeMode="contain"
+            />
           )}
           <Text style={{ fontWeight: '600', fontSize: 16, color: colors.text }}>
             {loading === 'google' ? 'Signing in...' : 'Continue with Google'}
@@ -353,7 +370,32 @@ const styles = StyleSheet.create({
 export default function RootScreen() {
   const { user, loading } = useAuth();
   const { isDark } = useTheme();
-  if (loading) return <SplashScreen />;
-  if (user) return <Redirect href="/home" />;
+  const router = useRouter();
+  const [checkingOnboarding, setCheckingOnboarding] = useState(true);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+
+  // Check first-launch onboarding status
+  useEffect(() => {
+    hasSeenOnboarding().then((seen) => {
+      setShowOnboarding(!seen);
+      setCheckingOnboarding(false);
+    });
+  }, []);
+
+  // After login completes, redirect to home
+  // After onboarding check, redirect to onboarding if needed
+  useEffect(() => {
+    if (loading || checkingOnboarding) return;
+    if (user) {
+      router.replace('/home');
+    } else if (showOnboarding) {
+      router.replace('/onboarding');
+    }
+  }, [user, loading, checkingOnboarding, showOnboarding]);
+
+  if (loading || checkingOnboarding) return <SplashScreen />;
+  if (user) return <SplashScreen />; // show splash while effect fires
+  if (showOnboarding) return <SplashScreen />; // show splash while effect fires navigation
   return <WelcomeScreen />;
 }
+
