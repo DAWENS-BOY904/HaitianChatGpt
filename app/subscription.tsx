@@ -39,9 +39,18 @@ async function getPurchases() {
 }
 
 // ── Environment config ───────────────────────────────────────────────────
+const RC_IOS_KEY_HARDCODED = 'appl_LCOBkSEKCqNFllINWlYWexOVaHf';
+const RC_ANDROID_KEY_HARDCODED = 'goog_htwkRFMSklkJWsTytqppHVTxkkP';
+
 const ENV = {
-  RC_IOS_KEY: Constants.expoConfig?.extra?.revenueCatIosKey || process.env.EXPO_PUBLIC_RC_IOS_KEY || '',
-  RC_ANDROID_KEY: Constants.expoConfig?.extra?.revenueCatAndroidKey || process.env.EXPO_PUBLIC_RC_ANDROID_KEY || '',
+  RC_IOS_KEY:
+    Constants.expoConfig?.extra?.revenueCatIosKey ||
+    process.env.EXPO_PUBLIC_RC_IOS_KEY ||
+    RC_IOS_KEY_HARDCODED,
+  RC_ANDROID_KEY:
+    Constants.expoConfig?.extra?.revenueCatAndroidKey ||
+    process.env.EXPO_PUBLIC_RC_ANDROID_KEY ||
+    RC_ANDROID_KEY_HARDCODED,
   IS_EXPO_GO: Constants.appOwnership === 'expo',
 };
 
