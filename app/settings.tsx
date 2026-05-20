@@ -1405,3 +1405,4 @@ export default function SettingsScreen() {
     </View>
   );
 }
+Add the app version number (from expo-constants) to the Settings screen footer so users can see the current version — required for App Store review.
