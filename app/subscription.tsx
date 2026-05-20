@@ -830,4 +830,3 @@ const styles = StyleSheet.create({
   refreshBtn: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingVertical: 2 },
   refreshText: { fontSize: 10, color: 'rgba(255,255,255,0.2)' },
 });
-implement web purchases in app/subscription.tsx using the RevenueCat REST API v2 instead of Stripe: call the RevenueCat API to create a purchase or redirect to a hosted paywall, then verify entitlements server-side via the check-subscription edge function.
