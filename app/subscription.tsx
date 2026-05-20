@@ -151,7 +151,7 @@ export default function SubscriptionScreen() {
   const [managing, setManaging] = useState(false);
   const [checkingStatus, setCheckingStatus] = useState(false);
   const [subscriptionInfo, setSubscriptionInfo] = useState<{
-    subscribed: boolean; plan: string | null; subscription_end: string | null;
+    subscribed: boolean; plan: string | null; subscription_end: string | null; provider?: string;
   } | null>(null);
   const isMounted = useRef(true);
 
@@ -175,6 +175,7 @@ export default function SubscriptionScreen() {
           subscribed: data.subscribed ?? false,
           plan: data.plan ?? null,
           subscription_end: data.subscription_end ?? null,
+          provider: data.provider ?? undefined,
         });
       }
     } catch { console.log('[subscription] status check failed'); }
@@ -185,7 +186,7 @@ export default function SubscriptionScreen() {
 
   const checkRCAvailable = async (): Promise<boolean> => {
     if (Platform.OS === 'web') {
-      showAlert('Not Available', 'In-App Purchases are not available on web. Use "Buy on Web" below.');
+      showAlert('Not Available', 'In-App Purchases are not available on web. Use "Buy via Web Billing" below.');
       return false;
     }
     if (ENV.IS_EXPO_GO) {
@@ -260,7 +261,7 @@ export default function SubscriptionScreen() {
     } finally { safe(setLoading, false); }
   };
 
-  // ── Web Purchase via Stripe checkout (connected to RevenueCat via webhook) ──
+  // ── Web Purchase via RevenueCat Web Billing API v2 ────────────────────
   const purchaseOnWeb = async () => {
     if (webLoading) return;
     safe(setWebLoading, true);
@@ -270,17 +271,37 @@ export default function SubscriptionScreen() {
         showAlert('Sign In Required', 'Please sign in to purchase on web.');
         return;
       }
-      const { data, error } = await supabase.functions.invoke('create-checkout-session', {
-        body: { plan: selectedPlan, mode: 'hosted' },
+
+      // Call the RC web checkout edge function (uses RC API v2, falls back to Stripe)
+      const { data, error } = await supabase.functions.invoke('revenuecat-web-checkout', {
+        body: { plan: selectedPlan, billingCycle },
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
+
       if (error) {
         let msg = error.message;
-        if (error instanceof FunctionsHttpError) { try { msg = await error.context?.text() || msg; } catch { /* ignore */ } }
+        if (error instanceof FunctionsHttpError) {
+          try { msg = await error.context?.text() || msg; } catch { /* ignore */ }
+        }
         throw new Error(msg);
       }
+
       const url = data?.url;
-      if (!url) throw new Error('No checkout URL received.');
+      if (!url) throw new Error('No checkout URL received from RevenueCat.');
+
+      const provider: string = data?.provider || 'revenuecat';
+      console.log(`[web-purchase] Opening ${provider} checkout`);
+
+      // Open URL — prefer in-app browser on native, Linking on web
+      if (Platform.OS !== 'web') {
+        try {
+          const wb = require('../utils/web-browser.native');
+          if (typeof wb?.openInAppBrowser === 'function') {
+            wb.openInAppBrowser(url);
+            return;
+          }
+        } catch { /* fall through */ }
+      }
       await Linking.openURL(url);
     } catch (err: any) {
       showAlert('Web Purchase Error', err?.message || 'Could not open web checkout. Please try again.');
@@ -291,9 +312,16 @@ export default function SubscriptionScreen() {
     if (managing) return;
     safe(setManaging, true);
     try {
-      if (Platform.OS === 'ios') await Linking.openURL('https://apps.apple.com/account/subscriptions');
-      else if (Platform.OS === 'android') await Linking.openURL('https://play.google.com/store/account/subscriptions');
-      else await Linking.openURL('https://app.revenuecat.com');
+      // If subscribed via RC, open RC billing portal; otherwise native store
+      if (subscriptionInfo?.provider === 'revenuecat') {
+        await Linking.openURL('https://app.revenuecat.com/billing');
+      } else if (Platform.OS === 'ios') {
+        await Linking.openURL('https://apps.apple.com/account/subscriptions');
+      } else if (Platform.OS === 'android') {
+        await Linking.openURL('https://play.google.com/store/account/subscriptions');
+      } else {
+        await Linking.openURL('https://app.revenuecat.com/billing');
+      }
     } catch { showAlert('Error', 'Could not open subscription management.'); }
     finally { safe(setManaging, false); }
   };
@@ -333,7 +361,7 @@ export default function SubscriptionScreen() {
       ? `Subscribe with Google — ${currentPrice}/mo`
       : `Subscribe — ${currentPrice}/mo`;
 
-  const BOTTOM_BAR_H = isSubscribed ? 130 : selectedPlan === 'plus' ? 180 : 140;
+  const BOTTOM_BAR_H = isSubscribed ? 130 : selectedPlan === 'plus' ? 195 : 145;
 
   return (
     <View style={styles.root}>
@@ -524,10 +552,14 @@ export default function SubscriptionScreen() {
               </TouchableOpacity>
             )}
 
-            {/* Web purchase — always shown for Plus; on web it's the primary button */}
+            {/* Web purchase via RevenueCat Web Billing API v2 */}
             {(selectedPlan === 'plus' || Platform.OS === 'web') && (
               <TouchableOpacity
-                style={[styles.webBtn, Platform.OS === 'web' && styles.webBtnPrimary, webLoading && { opacity: 0.6 }]}
+                style={[
+                  styles.webBtn,
+                  Platform.OS === 'web' && styles.webBtnPrimary,
+                  webLoading && { opacity: 0.6 },
+                ]}
                 onPress={purchaseOnWeb}
                 disabled={webLoading}
               >
@@ -537,7 +569,9 @@ export default function SubscriptionScreen() {
                     <View style={styles.btnRow}>
                       <Ionicons name="globe-outline" size={17} color={Platform.OS === 'web' ? '#fff' : GREEN} />
                       <Text style={[styles.webBtnText, Platform.OS === 'web' && { color: '#fff' }]}>
-                        {Platform.OS === 'web' ? `Subscribe on Web — ${currentPrice}/mo` : 'Buy on Web instead'}
+                        {Platform.OS === 'web'
+                          ? `Subscribe on Web — ${currentPrice}/mo`
+                          : 'Buy via Web Billing'}
                       </Text>
                     </View>
                   )}
@@ -552,7 +586,7 @@ export default function SubscriptionScreen() {
             ? 'Billed via Apple. Manage in Settings — Subscriptions.'
             : Platform.OS === 'android'
               ? 'Billed via Google Play. Manage in Play Store — Subscriptions.'
-              : 'Secure payment via Stripe.'}
+              : 'Secure payment powered by RevenueCat.'}
         </Text>
 
         {/* Refresh status */}
@@ -800,13 +834,13 @@ const styles = StyleSheet.create({
   // Web purchase button
   webBtn: {
     width: '100%',
-    height: 44,
+    height: 46,
     borderRadius: 50,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(46,204,90,0.08)',
     borderWidth: 1,
-    borderColor: 'rgba(46,204,90,0.25)',
+    borderColor: 'rgba(46,204,90,0.28)',
   },
   webBtnPrimary: {
     backgroundColor: CARD_BG,
