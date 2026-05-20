@@ -24,6 +24,7 @@ import Animated, {
   runOnJS,
   interpolate,
   Extrapolate,
+  useAnimatedReaction,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useTheme } from '../hooks/useTheme';
@@ -97,6 +98,7 @@ export function ToolsModal({
 
   const translateY = useSharedValue(SCREEN_HEIGHT);
   const opacity = useSharedValue(0);
+  const backdropProgress = useSharedValue(0);
 
   useEffect(() => {
     if (visible) {
@@ -105,10 +107,12 @@ export function ToolsModal({
       setSelectedPhotos(new Map());
       translateY.value = withSpring(0, { damping: 26, stiffness: 300, mass: 0.8 });
       opacity.value = withTiming(1, { duration: 220 });
+      backdropProgress.value = withTiming(1, { duration: 280 });
       if (!isPro) loadRecentPhotos();
     } else {
       translateY.value = withSpring(SCREEN_HEIGHT, { damping: 26, stiffness: 300 });
       opacity.value = withTiming(0, { duration: 180 });
+      backdropProgress.value = withTiming(0, { duration: 200 });
       const t = setTimeout(() => {
         setRendered(false);
         setSelectedPhotos(new Map());
@@ -174,14 +178,29 @@ export function ToolsModal({
   }));
 
   const backdropOpacity = useAnimatedStyle(() => ({
-    opacity: interpolate(opacity.value, [0, 1], [0, 1], Extrapolate.CLAMP),
+    opacity: interpolate(backdropProgress.value, [0, 1], [0, 1], Extrapolate.CLAMP),
   }));
 
+  // Swipe gesture — supports both up and down with spring physics
   const pan = Gesture.Pan()
-    .onUpdate((e) => { if (e.translationY > 0) translateY.value = e.translationY; })
+    .onUpdate((e) => {
+      // Allow both directions but with resistance for upward swipe
+      if (e.translationY > 0) {
+        translateY.value = e.translationY;
+      } else if (e.translationY < 0) {
+        // Upward swipe with slight resistance (rubber band effect)
+        translateY.value = e.translationY * 0.35;
+      }
+    })
     .onEnd((e) => {
-      if (e.translationY > 100 || e.velocityY > 500) { runOnJS(onClose)(); }
-      else { translateY.value = withSpring(0, { damping: 26, stiffness: 300 }); }
+      if (e.translationY > 100 || e.velocityY > 500) {
+        runOnJS(onClose)();
+      } else if (e.translationY < -80 || e.velocityY < -600) {
+        // Swipe up to expand — snap to top with spring
+        translateY.value = withSpring(0, { damping: 22, stiffness: 380, mass: 0.7 });
+      } else {
+        translateY.value = withSpring(0, { damping: 26, stiffness: 300 });
+      }
     });
 
   const handleCamera = async () => {
@@ -357,8 +376,22 @@ function ProToolsModal({
   return (
     <Modal visible={visible} transparent animationType="none" statusBarTranslucent onRequestClose={onClose}>
       <View style={{ flex: 1, justifyContent: 'flex-end' }}>
+        {/* Blur backdrop */}
         <Animated.View style={[StyleSheet.absoluteFill, backdropOpacity]}>
-          <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' }} onPress={onClose} />
+          {Platform.OS === 'ios' ? (
+            <BlurView
+              intensity={isDark ? 45 : 35}
+              tint={isDark ? 'dark' : 'light'}
+              style={StyleSheet.absoluteFill}
+            >
+              <Pressable style={{ flex: 1 }} onPress={onClose} />
+            </BlurView>
+          ) : (
+            <Pressable
+              style={{ flex: 1, backgroundColor: isDark ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0.42)' }}
+              onPress={onClose}
+            />
+          )}
         </Animated.View>
         <GestureDetector gesture={pan}>
           <Animated.View style={[s.sheetOuter, modalStyle]}>
@@ -476,8 +509,22 @@ function FreeToolsModal({
   return (
     <Modal visible={visible} transparent animationType="none" statusBarTranslucent onRequestClose={onClose}>
       <View style={{ flex: 1, justifyContent: 'flex-end' }}>
+        {/* Blur backdrop */}
         <Animated.View style={[StyleSheet.absoluteFill, backdropOpacity]}>
-          <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.38)' }} onPress={onClose} />
+          {Platform.OS === 'ios' ? (
+            <BlurView
+              intensity={isDark ? 45 : 35}
+              tint={isDark ? 'dark' : 'light'}
+              style={StyleSheet.absoluteFill}
+            >
+              <Pressable style={{ flex: 1 }} onPress={onClose} />
+            </BlurView>
+          ) : (
+            <Pressable
+              style={{ flex: 1, backgroundColor: isDark ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0.42)' }}
+              onPress={onClose}
+            />
+          )}
         </Animated.View>
         <GestureDetector gesture={pan}>
           <Animated.View style={[s.sheetOuter, modalStyle]}>
@@ -592,8 +639,22 @@ function GuestToolsModal({
   return (
     <Modal visible={visible} transparent animationType="none" statusBarTranslucent onRequestClose={onClose}>
       <View style={{ flex: 1, justifyContent: 'flex-end' }}>
+        {/* Blur backdrop */}
         <Animated.View style={[StyleSheet.absoluteFill, backdropOpacity]}>
-          <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.38)' }} onPress={onClose} />
+          {Platform.OS === 'ios' ? (
+            <BlurView
+              intensity={isDark ? 45 : 35}
+              tint={isDark ? 'dark' : 'light'}
+              style={StyleSheet.absoluteFill}
+            >
+              <Pressable style={{ flex: 1 }} onPress={onClose} />
+            </BlurView>
+          ) : (
+            <Pressable
+              style={{ flex: 1, backgroundColor: isDark ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0.42)' }}
+              onPress={onClose}
+            />
+          )}
         </Animated.View>
         <GestureDetector gesture={pan}>
           <Animated.View style={[s.sheetOuter, modalStyle]}>
