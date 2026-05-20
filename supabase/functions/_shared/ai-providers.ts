@@ -1,4 +1,5 @@
-// AI Provider Service - Handles all AI model integrations By Dawns (PRODUCTION-READY 2026)
+// AI Provider Service - Handles all AI model integrations (PRODUCTION-READY 2026)
+// Compatible with Deno, Node.js (18+), and modern browsers
 
 interface AIMessage {
   role: 'system' | 'user' | 'assistant';
@@ -12,8 +13,59 @@ interface AIResponse {
   error?: string;
 }
 
+// ── Environment compatibility layer ──────────────────────────────────────
+function getEnv(key: string): string | undefined {
+  try {
+    if (typeof Deno !== 'undefined') {
+      return Deno.env.get(key);
+    }
+  } catch { /* not Deno */ }
+
+  try {
+    if (typeof process !== 'undefined' && process.env) {
+      return process.env[key];
+    }
+  } catch { /* not Node */ }
+
+  return undefined;
+}
+
+// ── Safe timeout helper (cross-platform) ─────────────────────────────────
+function createTimeoutSignal(ms: number): AbortSignal {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), ms);
+
+  // Clean up timeout when signal is aborted externally
+  if (typeof controller.signal.addEventListener === 'function') {
+    controller.signal.addEventListener('abort', () => clearTimeout(timeout));
+  }
+
+  return controller.signal;
+}
+
+// ── Safe base64 decoding (cross-platform) ────────────────────────────────
+function safeAtob(base64: string): Uint8Array {
+  let binary: string;
+
+  if (typeof globalThis !== 'undefined' && 'atob' in globalThis) {
+    binary = globalThis.atob(base64);
+  } else if (typeof Buffer !== 'undefined') {
+    return Buffer.from(base64, 'base64');
+  } else {
+    throw new Error('Base64 decoding not supported in this environment');
+  }
+
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
 // CRITICAL: List of models that CANNOT generate images
-const TEXT_ONLY_MODELS = ['groq-llama', 'groq-llama-4', 'llama-3.3-70b-versatile', 'llama-4-maverick'];
+const TEXT_ONLY_MODELS = [
+  'groq-llama', 'groq-llama-4', 'llama-3.3-70b-versatile', 'llama-4-maverick'
+];
 
 /**
  * Check if a model is text-only (cannot generate images)
@@ -23,9 +75,60 @@ export function isTextOnlyModel(modelId: string): boolean {
   return TEXT_ONLY_MODELS.some(m => normalized.includes(m));
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ── Configuration from environment ───────────────────────────────────────
+const CONFIG = {
+  ONSPACE_AI_BASE_URL: getEnv('ONSPACE_AI_BASE_URL') || 'https://api.onspace.ai',
+  DEFAULT_TEXT_MODEL: getEnv('DEFAULT_TEXT_MODEL') || 'gpt-4o',
+  DEFAULT_IMAGE_MODEL: getEnv('DEFAULT_IMAGE_MODEL') || 'dalle-3',
+  MAX_RETRIES: parseInt(getEnv('AI_MAX_RETRIES') || '3', 10),
+  BASE_DELAY_MS: parseInt(getEnv('AI_BASE_DELAY_MS') || '1000', 10),
+  REQUEST_TIMEOUT_MS: parseInt(getEnv('AI_REQUEST_TIMEOUT_MS') || '45000', 10),
+  IMAGE_TIMEOUT_MS: parseInt(getEnv('AI_IMAGE_TIMEOUT_MS') || '60000', 10),
+};
+
+// ── Simple rate limiter ──────────────────────────────────────────────────
+class RateLimiter {
+  private lastCall: Map<string, number> = new Map();
+  private minInterval: number;
+
+  constructor(minIntervalMs: number = 100) {
+    this.minInterval = minIntervalMs;
+  }
+
+  async waitForSlot(key: string): Promise<void> {
+    const now = Date.now();
+    const last = this.lastCall.get(key) || 0;
+    const wait = Math.max(0, this.minInterval - (now - last));
+
+    if (wait > 0) {
+      await new Promise(r => setTimeout(r, wait));
+    }
+    this.lastCall.set(key, Date.now());
+  }
+}
+
+const rateLimiter = new RateLimiter();
+
+// ── Input sanitization ───────────────────────────────────────────────────
+function sanitizeMessage(content: string): string {
+  // Remove potential XSS vectors while preserving legitimate content
+  return content
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    .replace(/javascript:/gi, '')
+    .replace(/on\w+\s*=/gi, '')
+    .trim();
+}
+
+function sanitizeMessages(messages: AIMessage[]): AIMessage[] {
+  return messages.map(m => ({
+    ...m,
+    content: sanitizeMessage(m.content),
+  }));
+}
+
+// ─────────────────────────────────────────────────────────────────────────
 // POOR-CONNECTION RESILIENCE HELPERS
-// ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────
 
 /**
  * Fetch with automatic exponential-backoff retry for transient network errors.
@@ -34,13 +137,16 @@ export function isTextOnlyModel(modelId: string): boolean {
 async function fetchWithRetry(
   url: string,
   init: RequestInit,
-  maxRetries = 3,
-  baseDelayMs = 1000,
+  maxRetries: number = CONFIG.MAX_RETRIES,
+  baseDelayMs: number = CONFIG.BASE_DELAY_MS,
 ): Promise<Response> {
   let lastError: Error | null = null;
+
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
+      await rateLimiter.waitForSlot(url);
       const res = await fetch(url, init);
+
       // Retry on rate-limit or server errors
       if ((res.status === 429 || res.status >= 500) && attempt < maxRetries) {
         const retryAfter = parseInt(res.headers.get('retry-after') || '0', 10);
@@ -62,12 +168,16 @@ async function fetchWithRetry(
   throw lastError || new Error('Max retries exceeded');
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// TEXT GENERATION PROVIDERS
+// ─────────────────────────────────────────────────────────────────────────
+
 /**
- * OnSpace AI - PRIMARY TEXT GENERATION (uses configured ONSPACE_AI_API_KEY)
+ * OnSpace AI - PRIMARY TEXT GENERATION
  */
 export async function callOnSpaceAI(messages: AIMessage[]): Promise<AIResponse> {
-  const apiKey = Deno.env.get('ONSPACE_AI_API_KEY');
-  const baseUrl = Deno.env.get('ONSPACE_AI_BASE_URL') || 'https://api.onspace.ai';
+  const apiKey = getEnv('ONSPACE_AI_API_KEY');
+  const baseUrl = CONFIG.ONSPACE_AI_BASE_URL;
 
   if (!apiKey) {
     return { content: '', model: 'onspace-ai', error: 'FALLBACK_NEEDED' };
@@ -89,12 +199,12 @@ export async function callOnSpaceAI(messages: AIMessage[]): Promise<AIResponse> 
         },
         body: JSON.stringify({
           model,
-          messages: messages.map(m => ({ role: m.role, content: m.content })),
+          messages: sanitizeMessages(messages).map(m => ({ role: m.role, content: m.content })),
           temperature: 0.7,
           max_tokens: 4096,
           stream: false,
         }),
-        signal: AbortSignal.timeout(45000),
+        signal: createTimeoutSignal(CONFIG.REQUEST_TIMEOUT_MS),
       }, 2);
 
       if (!response.ok) {
@@ -111,7 +221,7 @@ export async function callOnSpaceAI(messages: AIMessage[]): Promise<AIResponse> 
         continue;
       }
 
-      return { content, model: `onspace-ai (${model})` };
+      return { content: content.trim(), model: `onspace-ai (${model})` };
     } catch (error: any) {
       console.log(`OnSpace AI ${model} exception:`, error.message);
     }
@@ -124,7 +234,7 @@ export async function callOnSpaceAI(messages: AIMessage[]): Promise<AIResponse> 
  * OpenAI GPT-4 Integration
  */
 export async function callOpenAI(messages: AIMessage[]): Promise<AIResponse> {
-  const apiKey = Deno.env.get('OPENAI_API_KEY');
+  const apiKey = getEnv('OPENAI_API_KEY');
   if (!apiKey) return { content: '', model: 'openai-gpt4', error: 'FALLBACK_NEEDED' };
 
   try {
@@ -135,18 +245,21 @@ export async function callOpenAI(messages: AIMessage[]): Promise<AIResponse> {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o',
-        messages: messages.map(m => ({ role: m.role, content: m.content })),
+        model: CONFIG.DEFAULT_TEXT_MODEL,
+        messages: sanitizeMessages(messages).map(m => ({ role: m.role, content: m.content })),
         temperature: 0.7,
         max_tokens: 4096,
       }),
-      signal: AbortSignal.timeout(45000),
+      signal: createTimeoutSignal(CONFIG.REQUEST_TIMEOUT_MS),
     }, 2);
 
     const data = await response.json();
-    if (!response.ok) return { content: '', model: 'openai-gpt4', error: data.error?.message || 'OpenAI Error' };
+    if (!response.ok) {
+      return { content: '', model: 'openai-gpt4', error: data.error?.message || 'OpenAI Error' };
+    }
 
-    return { content: data.choices[0].message.content, model: 'openai-gpt4' };
+    const content = data.choices?.[0]?.message?.content;
+    return { content: content?.trim() || '', model: 'openai-gpt4' };
   } catch (error: any) {
     return { content: '', model: 'openai-gpt4', error: error.message };
   }
@@ -155,12 +268,12 @@ export async function callOpenAI(messages: AIMessage[]): Promise<AIResponse> {
 /**
  * Google Gemini Integration
  */
-export async function callGemini(messages: AIMessage[], modelName: string = 'gemini-1.5-flash'): Promise<AIResponse> {
-  const apiKey = Deno.env.get('GOOGLE_AI_API_KEY');
-
-  if (!apiKey) {
-    return { content: '', model: 'google-gemini', error: 'FALLBACK_NEEDED' };
-  }
+export async function callGemini(
+  messages: AIMessage[], 
+  modelName: string = 'gemini-1.5-flash'
+): Promise<AIResponse> {
+  const apiKey = getEnv('GOOGLE_AI_API_KEY');
+  if (!apiKey) return { content: '', model: 'google-gemini', error: 'FALLBACK_NEEDED' };
 
   try {
     let validModelName = 'gemini-2.5-flash';
@@ -170,8 +283,9 @@ export async function callGemini(messages: AIMessage[], modelName: string = 'gem
       validModelName = 'gemini-1.5-pro';
     }
 
+    const sanitizedMessages = sanitizeMessages(messages);
     const requestBody: any = {
-      contents: messages
+      contents: sanitizedMessages
         .filter(m => m.role !== 'system')
         .map(m => ({
           role: m.role === 'assistant' ? 'model' : 'user',
@@ -183,7 +297,7 @@ export async function callGemini(messages: AIMessage[], modelName: string = 'gem
       },
     };
 
-    const systemMessage = messages.find(m => m.role === 'system');
+    const systemMessage = sanitizedMessages.find(m => m.role === 'system');
     if (systemMessage) {
       requestBody.system_instruction = {
         parts: [{ text: systemMessage.content }]
@@ -196,7 +310,7 @@ export async function callGemini(messages: AIMessage[], modelName: string = 'gem
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestBody),
-        signal: AbortSignal.timeout(45000),
+        signal: createTimeoutSignal(CONFIG.REQUEST_TIMEOUT_MS),
       }, 2
     );
 
@@ -211,7 +325,7 @@ export async function callGemini(messages: AIMessage[], modelName: string = 'gem
       return { content: '', model: 'google-gemini', error: 'FALLBACK_NEEDED' };
     }
 
-    return { content, model: `google-gemini (${validModelName})` };
+    return { content: content.trim(), model: `google-gemini (${validModelName})` };
 
   } catch (error: any) {
     return { content: '', model: 'google-gemini', error: 'FALLBACK_NEEDED' };
@@ -222,15 +336,13 @@ export async function callGemini(messages: AIMessage[], modelName: string = 'gem
  * Claude 3.5 Sonnet Integration
  */
 export async function callClaude(messages: AIMessage[]): Promise<AIResponse> {
-  const apiKey = Deno.env.get('ANTHROPIC_API_KEY');
-
-  if (!apiKey) {
-    return { content: '', model: 'claude-3-5', error: 'FALLBACK_NEEDED' };
-  }
+  const apiKey = getEnv('ANTHROPIC_API_KEY');
+  if (!apiKey) return { content: '', model: 'claude-3-5', error: 'FALLBACK_NEEDED' };
 
   try {
-    const systemMessage = messages.find(m => m.role === 'system')?.content;
-    const conversationMessages = messages
+    const sanitizedMessages = sanitizeMessages(messages);
+    const systemMessage = sanitizedMessages.find(m => m.role === 'system')?.content;
+    const conversationMessages = sanitizedMessages
       .filter(m => m.role !== 'system')
       .map(m => ({
         role: m.role === 'assistant' ? ('assistant' as const) : ('user' as const),
@@ -254,7 +366,7 @@ export async function callClaude(messages: AIMessage[]): Promise<AIResponse> {
         system: systemMessage,
         messages: conversationMessages,
       }),
-      signal: AbortSignal.timeout(45000),
+      signal: createTimeoutSignal(CONFIG.REQUEST_TIMEOUT_MS),
     }, 2);
 
     const data = await response.json();
@@ -268,7 +380,7 @@ export async function callClaude(messages: AIMessage[]): Promise<AIResponse> {
       return { content: '', model: 'claude-3-5', error: 'FALLBACK_NEEDED' };
     }
 
-    return { content: textContent, model: 'claude-3-5' };
+    return { content: textContent.trim(), model: 'claude-3-5' };
 
   } catch (error: any) {
     return { content: '', model: 'claude-3-5', error: 'FALLBACK_NEEDED' };
@@ -279,10 +391,8 @@ export async function callClaude(messages: AIMessage[]): Promise<AIResponse> {
  * Groq Llama Integration - TEXT ONLY (fast fallback)
  */
 export async function callGroq(messages: AIMessage[]): Promise<AIResponse> {
-  const apiKey = Deno.env.get('GROQ_API_KEY');
-  if (!apiKey) {
-    return { content: '', model: 'groq-llama-4', error: 'FALLBACK_NEEDED' };
-  }
+  const apiKey = getEnv('GROQ_API_KEY');
+  if (!apiKey) return { content: '', model: 'groq-llama-4', error: 'FALLBACK_NEEDED' };
 
   try {
     const response = await fetchWithRetry('https://api.groq.com/openai/v1/chat/completions', {
@@ -293,7 +403,7 @@ export async function callGroq(messages: AIMessage[]): Promise<AIResponse> {
       },
       body: JSON.stringify({
         model: 'llama-3.3-70b-versatile',
-        messages: messages.map(m => ({
+        messages: sanitizeMessages(messages).map(m => ({
           role: m.role,
           content: m.content || '',
         })),
@@ -301,7 +411,7 @@ export async function callGroq(messages: AIMessage[]): Promise<AIResponse> {
         max_completion_tokens: 4000,
         stream: false,
       }),
-      signal: AbortSignal.timeout(30000),
+      signal: createTimeoutSignal(30000),
     }, 2);
 
     if (!response.ok) {
@@ -315,16 +425,16 @@ export async function callGroq(messages: AIMessage[]): Promise<AIResponse> {
       return { content: '', model: 'groq-llama-4', error: 'FALLBACK_NEEDED' };
     }
 
-    return { content, model: 'groq-llama-4' };
+    return { content: content.trim(), model: 'groq-llama-4' };
 
   } catch (error: any) {
     return { content: '', model: 'groq-llama-4', error: 'FALLBACK_NEEDED' };
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// IMAGE GENERATION — FIXED DALL-E 3 + STABILITY AI FALLBACK
-// ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────
+// IMAGE GENERATION
+// ─────────────────────────────────────────────────────────────────────────
 
 /**
  * Build an enhanced image prompt for logos, photos, and designs
@@ -345,19 +455,18 @@ function buildEnhancedImagePrompt(userPrompt: string): string {
   if (isPhoto || isPerson) {
     return `${userPrompt}. Ultra realistic photography, shot on Sony A7IV with 85mm f/1.8 lens, natural cinematic lighting, bokeh background, magazine-quality photo, ultra sharp focus, 8K resolution, photorealistic detail, professional color grading, no watermarks.`;
   }
-  // Generic — use premium quality descriptors
   return `${userPrompt}. Masterpiece quality, ultra high resolution 4K, vibrant colors, highly detailed, professional studio lighting, sharp focus, award-winning composition, no watermarks, no artifacts.`;
 }
 
 /**
- * DALL-E 3 Image Generation via OpenAI (FIXED endpoint)
+ * DALL-E 3 Image Generation via OpenAI
  */
 export async function generateImageWithDalle(prompt: string): Promise<{
   imageUrl?: string;
   revisedPrompt?: string;
   error?: string;
 }> {
-  const apiKey = Deno.env.get('OPENAI_API_KEY');
+  const apiKey = getEnv('OPENAI_API_KEY');
   if (!apiKey) {
     console.log('[Image] OPENAI_API_KEY not set — skipping DALL-E');
     return { error: 'Missing OPENAI_API_KEY' };
@@ -382,7 +491,7 @@ export async function generateImageWithDalle(prompt: string): Promise<{
         style: 'vivid',
         response_format: 'url',
       }),
-      signal: AbortSignal.timeout(60000),
+      signal: createTimeoutSignal(CONFIG.IMAGE_TIMEOUT_MS),
     });
 
     const data = await response.json();
@@ -390,10 +499,6 @@ export async function generateImageWithDalle(prompt: string): Promise<{
     if (!response.ok) {
       const errMsg = data.error?.message || `OpenAI Error: ${response.status}`;
       console.log(`[Image] DALL-E 3 failed (${response.status}): ${errMsg.slice(0, 200)}`);
-      // If quota exceeded, try the b64_json format as alternative
-      if (response.status === 429) {
-        console.log('[Image] DALL-E quota exceeded');
-      }
       return { error: errMsg };
     }
 
@@ -402,7 +507,6 @@ export async function generateImageWithDalle(prompt: string): Promise<{
       return { error: 'No image data in DALL-E response' };
     }
 
-    // Handle both URL and base64 responses
     const imageUrl = imageResult.url || (imageResult.b64_json ? `data:image/png;base64,${imageResult.b64_json}` : undefined);
     if (!imageUrl) {
       return { error: 'No image URL returned from DALL-E' };
@@ -418,14 +522,13 @@ export async function generateImageWithDalle(prompt: string): Promise<{
 }
 
 /**
- * ElevenLabs Image Generation (Priority 2 — after DALL-E 3)
- * Uses the ElevenLabs text-to-image endpoint
+ * ElevenLabs Image Generation
  */
 export async function generateImageWithElevenLabs(prompt: string): Promise<{
   imageUrl?: string;
   error?: string;
 }> {
-  const apiKey = Deno.env.get('ELEVENLABS_API_KEY');
+  const apiKey = getEnv('ELEVENLABS_API_KEY');
   if (!apiKey) {
     console.log('[Image] ELEVENLABS_API_KEY not set — skipping ElevenLabs');
     return { error: 'ElevenLabs key not configured' };
@@ -447,7 +550,7 @@ export async function generateImageWithElevenLabs(prompt: string): Promise<{
         width: 1024,
         height: 1024,
       }),
-      signal: AbortSignal.timeout(60000),
+      signal: createTimeoutSignal(CONFIG.IMAGE_TIMEOUT_MS),
     });
 
     if (!response.ok) {
@@ -456,32 +559,20 @@ export async function generateImageWithElevenLabs(prompt: string): Promise<{
       return { error: `ElevenLabs error: ${response.status}` };
     }
 
-    // ElevenLabs returns binary image data directly
     const contentType = response.headers.get('content-type') || 'image/jpeg';
     if (contentType.startsWith('image/')) {
       const arrayBuffer = await response.arrayBuffer();
       const bytes = new Uint8Array(arrayBuffer);
-      let binary = '';
-      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-      const base64 = btoa(binary);
+      const base64 = btoa(String.fromCharCode(...bytes));
       const imageUrl = `data:${contentType};base64,${base64}`;
       console.log('[Image] ElevenLabs success!');
       return { imageUrl };
     }
 
-    // If JSON response with URL
     const data = await response.json().catch(() => null);
-    if (data?.url) {
-      console.log('[Image] ElevenLabs success (URL response)');
-      return { imageUrl: data.url };
-    }
-    if (data?.image_url) {
-      console.log('[Image] ElevenLabs success (image_url field)');
-      return { imageUrl: data.image_url };
-    }
-    if (data?.data?.[0]?.url) {
-      return { imageUrl: data.data[0].url };
-    }
+    if (data?.url) return { imageUrl: data.url };
+    if (data?.image_url) return { imageUrl: data.image_url };
+    if (data?.data?.[0]?.url) return { imageUrl: data.data[0].url };
 
     return { error: 'No image data returned from ElevenLabs' };
   } catch (error: any) {
@@ -491,14 +582,13 @@ export async function generateImageWithElevenLabs(prompt: string): Promise<{
 }
 
 /**
- * Midjourney Image Generation (Priority 3 — after ElevenLabs)
- * Uses the Midjourney REST API via MIDJOURNEY_API_KEY
+ * Midjourney Image Generation
  */
 export async function generateImageWithMidjourney(prompt: string): Promise<{
   imageUrl?: string;
   error?: string;
 }> {
-  const apiKey = Deno.env.get('MIDJOURNEY_API_KEY');
+  const apiKey = getEnv('MIDJOURNEY_API_KEY');
   if (!apiKey) {
     console.log('[Image] MIDJOURNEY_API_KEY not set — skipping Midjourney');
     return { error: 'Midjourney key not configured' };
@@ -506,7 +596,6 @@ export async function generateImageWithMidjourney(prompt: string): Promise<{
 
   const enhancedPrompt = buildEnhancedImagePrompt(prompt);
 
-  // Try multiple Midjourney-compatible REST API endpoints
   const endpoints = [
     {
       url: 'https://api.useapi.net/v2/jobs/imagine',
@@ -527,7 +616,7 @@ export async function generateImageWithMidjourney(prompt: string): Promise<{
         method: 'POST',
         headers: endpoint.headers,
         body: endpoint.body,
-        signal: AbortSignal.timeout(90000),
+        signal: createTimeoutSignal(90000),
       });
 
       if (!response.ok) {
@@ -539,7 +628,6 @@ export async function generateImageWithMidjourney(prompt: string): Promise<{
       const data = await response.json().catch(() => null);
       if (!data) { console.log('[Image] Midjourney returned non-JSON'); continue; }
 
-      // Handle various response shapes
       const imageUrl =
         data.imageUrl ||
         data.image_url ||
@@ -554,7 +642,7 @@ export async function generateImageWithMidjourney(prompt: string): Promise<{
         return { imageUrl };
       }
 
-      // Poll for async job completion (useapi.net pattern)
+      // Poll for async job completion
       const jobId = data.jobid || data.job_id || data.id;
       if (jobId) {
         console.log(`[Image] Midjourney job submitted: ${jobId}, polling...`);
@@ -564,7 +652,7 @@ export async function generateImageWithMidjourney(prompt: string): Promise<{
             const pollUrl = `https://api.useapi.net/v2/jobs/?jobid=${jobId}`;
             const pollRes = await fetch(pollUrl, {
               headers: { 'Authorization': `Bearer ${apiKey}` },
-              signal: AbortSignal.timeout(15000),
+              signal: createTimeoutSignal(15000),
             });
             if (!pollRes.ok) continue;
             const pollData = await pollRes.json().catch(() => null);
@@ -599,13 +687,12 @@ export async function generateImageWithMidjourney(prompt: string): Promise<{
 
 /**
  * Stability AI Image Generation (FALLBACK)
- * Uses the stable-diffusion-xl-1024-v1-0 model
  */
 export async function generateImageWithStabilityAI(prompt: string): Promise<{
   imageUrl?: string;
   error?: string;
 }> {
-  const apiKey = Deno.env.get('STABILITY_AI_API_KEY');
+  const apiKey = getEnv('STABILITY_AI_API_KEY');
   if (!apiKey) {
     console.log('[Image] STABILITY_AI_API_KEY not set — skipping Stability AI');
     return { error: 'Stability AI key not configured' };
@@ -634,7 +721,7 @@ export async function generateImageWithStabilityAI(prompt: string): Promise<{
         steps: 35,
         style_preset: 'digital-art',
       }),
-      signal: AbortSignal.timeout(60000),
+      signal: createTimeoutSignal(CONFIG.IMAGE_TIMEOUT_MS),
     });
 
     if (!response.ok) {
@@ -662,14 +749,13 @@ export async function generateImageWithStabilityAI(prompt: string): Promise<{
 
 /**
  * OnSpace AI Image Generation via chat completions
- * Tries multiple image-capable models
  */
 export async function generateImageWithOnSpaceAI(prompt: string): Promise<{
   imageUrl?: string;
   error?: string;
 }> {
-  const apiKey = Deno.env.get('ONSPACE_AI_API_KEY');
-  const baseUrl = Deno.env.get('ONSPACE_AI_BASE_URL');
+  const apiKey = getEnv('ONSPACE_AI_API_KEY');
+  const baseUrl = CONFIG.ONSPACE_AI_BASE_URL;
 
   if (!apiKey || !baseUrl) {
     return { error: 'OnSpace AI not configured' };
@@ -677,7 +763,6 @@ export async function generateImageWithOnSpaceAI(prompt: string): Promise<{
 
   const enhancedPrompt = buildEnhancedImagePrompt(prompt);
 
-  // Try Gemini image generation models via OnSpace AI gateway
   const imageModels = [
     'google/gemini-2.0-flash-exp',
     'google/gemini-2.5-flash',
@@ -704,7 +789,7 @@ export async function generateImageWithOnSpaceAI(prompt: string): Promise<{
           max_tokens: 8192,
           temperature: 0.7,
         }),
-        signal: AbortSignal.timeout(45000),
+        signal: createTimeoutSignal(CONFIG.REQUEST_TIMEOUT_MS),
       });
 
       if (!response.ok) {
@@ -737,15 +822,14 @@ export async function generateImageWithOnSpaceAI(prompt: string): Promise<{
 }
 
 /**
- * Gemini Image Generation via OnSpace AI (Nano Banana 2 = gemini-3.1-flash-image-preview)
- * Best for: fast generation, text rendering in images, logos, banners
+ * Gemini Image Generation via OnSpace AI
  */
 export async function generateImageWithGeminiOnSpace(prompt: string): Promise<{
   imageUrl?: string;
   error?: string;
 }> {
-  const apiKey = Deno.env.get('ONSPACE_AI_API_KEY');
-  const baseUrl = Deno.env.get('ONSPACE_AI_BASE_URL') || 'https://api.onspace.ai';
+  const apiKey = getEnv('ONSPACE_AI_API_KEY');
+  const baseUrl = CONFIG.ONSPACE_AI_BASE_URL;
 
   if (!apiKey) {
     return { error: 'OnSpace AI key not configured' };
@@ -753,12 +837,10 @@ export async function generateImageWithGeminiOnSpace(prompt: string): Promise<{
 
   const enhancedPrompt = buildEnhancedImagePrompt(prompt);
 
-  // Nano Banana 2 (gemini-3.1-flash-image-preview) = fastest, best text rendering
-  // Nano Banana Pro (gemini-3-pro-image-preview) = highest quality
   const imageModels = [
-    'google/gemini-3.1-flash-image-preview',  // Nano Banana 2 — fast, good quality
-    'google/gemini-3-pro-image-preview',       // Nano Banana Pro — highest quality
-    'google/gemini-2.5-flash-image',           // Nano Banana — predecessor fallback
+    'google/gemini-3.1-flash-image-preview',
+    'google/gemini-3-pro-image-preview',
+    'google/gemini-2.5-flash-image',
   ];
 
   for (const model of imageModels) {
@@ -772,16 +854,11 @@ export async function generateImageWithGeminiOnSpace(prompt: string): Promise<{
         },
         body: JSON.stringify({
           model,
-          messages: [
-            {
-              role: 'user',
-              content: enhancedPrompt,
-            },
-          ],
+          messages: [{ role: 'user', content: enhancedPrompt }],
           max_tokens: 8192,
           temperature: 1.0,
         }),
-        signal: AbortSignal.timeout(60000),
+        signal: createTimeoutSignal(CONFIG.IMAGE_TIMEOUT_MS),
       });
 
       if (!response.ok) {
@@ -793,7 +870,6 @@ export async function generateImageWithGeminiOnSpace(prompt: string): Promise<{
       const data = await response.json();
       const content: string = data.choices?.[0]?.message?.content || '';
 
-      // Check for inline data (base64 image)
       const parts = data.choices?.[0]?.message?.parts || [];
       for (const part of parts) {
         if (part?.inline_data?.data) {
@@ -831,8 +907,7 @@ export async function generateImageWithGemini(prompt: string): Promise<{
   imageUrl?: string;
   error?: string;
 }> {
-  const apiKey = Deno.env.get('GOOGLE_AI_API_KEY');
-
+  const apiKey = getEnv('GOOGLE_AI_API_KEY');
   if (!apiKey) {
     return { error: 'Google AI API key not configured' };
   }
@@ -861,7 +936,7 @@ export async function generateImageWithGemini(prompt: string): Promise<{
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(requestBody),
-          signal: AbortSignal.timeout(45000),
+          signal: createTimeoutSignal(CONFIG.REQUEST_TIMEOUT_MS),
         }
       );
 
@@ -889,10 +964,39 @@ export async function generateImageWithGemini(prompt: string): Promise<{
   }
 }
 
+// ── Image URL validation ─────────────────────────────────────────────────
+function isValidImageUrl(url: string): boolean {
+  if (url.startsWith('data:image/')) {
+    return /^data:image\/[a-z+]+;base64,[A-Za-z0-9+/=]+$/.test(url);
+  }
+  try {
+    const parsed = new URL(url);
+    return ['http:', 'https:'].includes(parsed.protocol);
+  } catch {
+    return false;
+  }
+}
+
+// ── Safe base64 to binary conversion ─────────────────────────────────────
+function base64ToBytes(dataUrl: string): { bytes: Uint8Array; mimeType: string; ext: string } | null {
+  const matches = dataUrl.match(/^data:(image\/[a-z+]+);base64,(.+)$/);
+  if (!matches) return null;
+
+  const mimeType = matches[1];
+  const ext = mimeType.split('/')[1]?.replace('+xml', '') || 'png';
+  const base64Data = matches[2];
+
+  try {
+    const bytes = safeAtob(base64Data);
+    return { bytes, mimeType, ext };
+  } catch {
+    return null;
+  }
+}
+
 /**
  * SMART IMAGE GENERATION ROUTER
- * Priority: DALL-E 3 → Stability AI → Gemini → OnSpace AI
- * Uploads base64 images to Supabase storage and returns public URL
+ * Priority: Gemini OnSpace → DALL-E 3 → ElevenLabs → Midjourney → Stability AI → Gemini Native → OnSpace AI
  */
 export async function generateImageSmart(
   prompt: string,
@@ -909,23 +1013,23 @@ export async function generateImageSmart(
   // Helper to upload base64 to storage
   async function uploadBase64Image(dataUrl: string): Promise<string | null> {
     if (!supabaseAdmin) return null;
+
+    const parsed = base64ToBytes(dataUrl);
+    if (!parsed) return null;
+
     try {
-      const matches = dataUrl.match(/^data:(image\/[a-z+]+);base64,(.+)$/);
-      if (!matches) return null;
-      const mimeType = matches[1];
-      const ext = mimeType.split('/')[1]?.replace('+xml', '') || 'png';
-      const base64Data = matches[2];
-      const binary = atob(base64Data);
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      const { bytes, mimeType, ext } = parsed;
       const fileName = `ai-gen/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+
       const { error: uploadErr } = await supabaseAdmin.storage
         .from('chat-images')
         .upload(fileName, bytes, { contentType: mimeType, upsert: true });
+
       if (uploadErr) {
         console.error('[Image] Storage upload error:', uploadErr.message);
         return null;
       }
+
       const { data: urlData } = supabaseAdmin.storage.from('chat-images').getPublicUrl(fileName);
       return urlData?.publicUrl || null;
     } catch (e: any) {
@@ -935,75 +1039,44 @@ export async function generateImageSmart(
   }
 
   async function resolveImageUrl(rawUrl: string): Promise<string> {
+    if (!isValidImageUrl(rawUrl)) {
+      throw new Error('Invalid image URL format');
+    }
     if (rawUrl.startsWith('data:image/')) {
       const uploaded = await uploadBase64Image(rawUrl);
-      return uploaded || rawUrl; // Fall back to data URL if upload fails
+      return uploaded || rawUrl;
     }
     return rawUrl;
   }
 
-  // ── Priority 1: Gemini via OnSpace AI (Nano Banana 2 — fast, free, great text) ──
-  const geminiOnSpaceResult = await generateImageWithGeminiOnSpace(prompt);
-  if (geminiOnSpaceResult.imageUrl) {
-    const resolvedUrl = await resolveImageUrl(geminiOnSpaceResult.imageUrl);
-    console.log('[Image] Gemini OnSpace (Nano Banana 2) success');
-    return { imageUrl: resolvedUrl, model: 'gemini-nano-banana-2' };
-  }
-  console.log('[Image] Gemini OnSpace failed:', geminiOnSpaceResult.error);
+  // Try providers in order, return on first success
+  const providers = [
+    { name: 'gemini-nano-banana-2', fn: () => generateImageWithGeminiOnSpace(prompt) },
+    { name: 'dalle-3', fn: () => generateImageWithDalle(prompt) },
+    { name: 'elevenlabs', fn: () => generateImageWithElevenLabs(prompt) },
+    { name: 'midjourney', fn: () => generateImageWithMidjourney(prompt) },
+    { name: 'stability-ai', fn: () => generateImageWithStabilityAI(prompt) },
+    { name: 'gemini-image', fn: () => generateImageWithGemini(prompt) },
+    { name: 'onspace-ai', fn: () => generateImageWithOnSpaceAI(prompt) },
+  ];
 
-  // ── Priority 2: DALL-E 3 (OpenAI) — high quality, realistic ──────────────
-  const dalleResult = await generateImageWithDalle(prompt);
-  if (dalleResult.imageUrl) {
-    const resolvedUrl = await resolveImageUrl(dalleResult.imageUrl);
-    console.log('[Image] DALL-E 3 success, URL resolved:', resolvedUrl.startsWith('http') ? 'public URL' : 'data URL');
-    return { imageUrl: resolvedUrl, model: 'dalle-3', revisedPrompt: dalleResult.revisedPrompt };
+  for (const provider of providers) {
+    try {
+      const result = await provider.fn();
+      if (result.imageUrl) {
+        const resolvedUrl = await resolveImageUrl(result.imageUrl);
+        console.log(`[Image] ${provider.name} success`);
+        return { 
+          imageUrl: resolvedUrl, 
+          model: provider.name, 
+          revisedPrompt: result.revisedPrompt 
+        };
+      }
+      console.log(`[Image] ${provider.name} failed:`, result.error);
+    } catch (error: any) {
+      console.log(`[Image] ${provider.name} exception:`, error.message);
+    }
   }
-  console.log('[Image] DALL-E 3 failed:', dalleResult.error);
-
-  // ── Priority 3: ElevenLabs ────────────────────────────────────────────────
-  const elevenLabsResult = await generateImageWithElevenLabs(prompt);
-  if (elevenLabsResult.imageUrl) {
-    const resolvedUrl = await resolveImageUrl(elevenLabsResult.imageUrl);
-    console.log('[Image] ElevenLabs success');
-    return { imageUrl: resolvedUrl, model: 'elevenlabs' };
-  }
-  console.log('[Image] ElevenLabs failed:', elevenLabsResult.error);
-
-  // ── Priority 4: Midjourney ────────────────────────────────────────────────
-  const midjourneyResult = await generateImageWithMidjourney(prompt);
-  if (midjourneyResult.imageUrl) {
-    const resolvedUrl = await resolveImageUrl(midjourneyResult.imageUrl);
-    console.log('[Image] Midjourney success');
-    return { imageUrl: resolvedUrl, model: 'midjourney' };
-  }
-  console.log('[Image] Midjourney failed:', midjourneyResult.error);
-
-  // ── Priority 5: Stability AI ──────────────────────────────────────────────
-  const stabilityResult = await generateImageWithStabilityAI(prompt);
-  if (stabilityResult.imageUrl) {
-    const resolvedUrl = await resolveImageUrl(stabilityResult.imageUrl);
-    console.log('[Image] Stability AI success');
-    return { imageUrl: resolvedUrl, model: 'stability-ai' };
-  }
-  console.log('[Image] Stability AI failed:', stabilityResult.error);
-
-  // ── Priority 6: Gemini native (direct Google API) ─────────────────────────
-  const geminiResult = await generateImageWithGemini(prompt);
-  if (geminiResult.imageUrl) {
-    const resolvedUrl = await resolveImageUrl(geminiResult.imageUrl);
-    console.log('[Image] Gemini native image success');
-    return { imageUrl: resolvedUrl, model: 'gemini-image' };
-  }
-  console.log('[Image] Gemini native failed:', geminiResult.error);
-
-  // ── Priority 7: OnSpace AI text models ────────────────────────────────────
-  const onspaceResult = await generateImageWithOnSpaceAI(prompt);
-  if (onspaceResult.imageUrl) {
-    const resolvedUrl = await resolveImageUrl(onspaceResult.imageUrl);
-    console.log('[Image] OnSpace AI image success');
-    return { imageUrl: resolvedUrl, model: 'onspace-ai' };
-  }
-  console.log('[Image] OnSpace AI failed:', onspaceResult.error);
 
   return {
     error: 'Image generation is temporarily unavailable. All providers failed.',
@@ -1011,10 +1084,18 @@ export async function generateImageSmart(
   };
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// MAIN AI ROUTER
+// ─────────────────────────────────────────────────────────────────────────
+
 /**
  * Main AI router with automatic fallback
  */
-export async function callAI(modelId: string, messages: AIMessage[], isImageTask: boolean = false): Promise<AIResponse> {
+export async function callAI(
+  modelId: string, 
+  messages: AIMessage[], 
+  isImageTask: boolean = false
+): Promise<AIResponse> {
   console.log(`AI Request - model: ${modelId}, imageTask: ${isImageTask}`);
 
   if (isImageTask && isTextOnlyModel(modelId)) {
@@ -1045,9 +1126,9 @@ export async function callAI(modelId: string, messages: AIMessage[], isImageTask
 
     console.log(`Trying: ${currentModel}${i > 0 ? ' (fallback)' : ''}`);
 
-    let response: AIResponse;
-
     try {
+      let response: AIResponse;
+
       switch (currentModel) {
         case 'onspace-ai':
           response = await callOnSpaceAI(messages);
@@ -1091,25 +1172,33 @@ export async function callAI(modelId: string, messages: AIMessage[], isImageTask
   };
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// IMAGE SEARCH
+// ─────────────────────────────────────────────────────────────────────────
+
 /**
  * Search for images using Unsplash API
  */
-export async function searchImages(query: string, limit: number = 10): Promise<{
+export async function searchImages(
+  query: string, 
+  limit: number = 10
+): Promise<{
   images: Array<{ url: string; title?: string; source: string; resolution?: string }>;
   error?: string;
 }> {
-  const accessKey = Deno.env.get('UNSPLASH_ACCESS_KEY');
+  const accessKey = getEnv('UNSPLASH_ACCESS_KEY');
   if (!accessKey) {
     return { images: [], error: 'Unsplash API key not configured' };
   }
 
   try {
-    const response = await fetch(`https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&per_page=${limit}&orientation=landscape`, {
-      headers: {
-        'Authorization': `Client-ID ${accessKey}`,
-      },
-      signal: AbortSignal.timeout(10000),
-    });
+    const response = await fetch(
+      `https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&per_page=${limit}&orientation=landscape`,
+      {
+        headers: { 'Authorization': `Client-ID ${accessKey}` },
+        signal: createTimeoutSignal(10000),
+      }
+    );
 
     if (!response.ok) {
       return { images: [], error: `Unsplash API error: ${response.status}` };
@@ -1130,6 +1219,10 @@ export async function searchImages(query: string, limit: number = 10): Promise<{
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// CONTENT TYPE DETECTION
+// ─────────────────────────────────────────────────────────────────────────
+
 /**
  * Detect content type from user message
  */
@@ -1144,7 +1237,6 @@ export function detectContentType(userMessage: string): {
   const lowerMsg = userMessage.toLowerCase();
 
   const imageKeywords = [
-    // English — explicit creation intent only
     'create a logo', 'create logo', 'generate logo', 'make a logo', 'design a logo', 'build a logo',
     'generate a logo', 'make me a logo', 'design me a logo',
     'create an image', 'create image', 'generate image', 'make an image', 'design an image',
@@ -1160,16 +1252,16 @@ export function detectContentType(userMessage: string): {
     'create a thumbnail', 'generate thumbnail',
     'generate a visual', 'create a visual', 'make a visual',
     'create an illustration', 'generate an illustration',
-    // Haitian Creole — explicit creation
+    // Haitian Creole
     'kreye yon logo', 'kreye logo', 'fe yon logo', 'fe logo', 'desine logo',
     'kreye foto', 'kreye imaj', 'fe imaj', 'kreye yon imaj', 'kreye yon foto',
     'fè yon logo', 'fè logo', 'fè yon imaj', 'fè imaj',
-    // French — explicit creation
+    // French
     'créer un logo', 'creer un logo', 'générer une image', 'generer une image',
     'créer une image', 'faire un logo', 'dessine moi', 'génère une image',
-    // Spanish — explicit creation
+    // Spanish
     'crear un logo', 'generar una imagen', 'crear una imagen', 'hacer un logo',
-    // Generic generation phrases (must contain action verbs)
+    // Generic generation phrases
     'generate an image of', 'create an image of', 'make an image of',
     'generate a picture of', 'create a picture of', 'make a picture of',
     'generate a photo of', 'create a photo of', 'make a photo of',
@@ -1193,7 +1285,7 @@ export function detectContentType(userMessage: string): {
     // Spanish
     'buscar fotos', 'encontrar fotos', 'mostrar fotos', 'buscar imagenes',
     'encuentra fotos', 'muestra fotos',
-    // Generic patterns - detect "X photo/image" search intent
+    // Generic patterns
     'photo company', 'photo openai', 'photo google', 'image company', 'image openai',
   ];
 
@@ -1207,10 +1299,18 @@ export function detectContentType(userMessage: string): {
     'generate csv', 'generate html', 'generate json',
   ];
 
-  const hasImageKeywords = imageKeywords.some(keyword => lowerMsg.includes(keyword));
-  const hasSearchKeywords = searchKeywords.some(keyword => lowerMsg.includes(keyword));
-  const hasFileKeywords = fileKeywords.some(keyword => lowerMsg.includes(keyword));
-  const hasEditKeywords = editKeywords.some(keyword => lowerMsg.includes(keyword));
+  const hasImageKeywords = imageKeywords.some(keyword => 
+    new RegExp(`\b${keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\b`).test(lowerMsg)
+  );
+  const hasSearchKeywords = searchKeywords.some(keyword => 
+    new RegExp(`\b${keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\b`).test(lowerMsg)
+  );
+  const hasFileKeywords = fileKeywords.some(keyword => 
+    new RegExp(`\b${keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\b`).test(lowerMsg)
+  );
+  const hasEditKeywords = editKeywords.some(keyword => 
+    new RegExp(`\b${keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\b`).test(lowerMsg)
+  );
 
   if (hasEditKeywords) {
     return { type: 'image', thinkingMode: 'editing_image', suggestedModel: 'google-gemini', isImageTask: true, hasImageKeywords: true, hasFileKeywords: false };
