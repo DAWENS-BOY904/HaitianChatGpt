@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 /**
  * Safe shim for expo-web-browser.
  * Native: uses expo-web-browser (SFSafariViewController / Chrome Custom Tabs) — stays in-app.
@@ -104,3 +105,5 @@ const SafeWebBrowser = {
 };
 
 module.exports = SafeWebBrowser;
+=======
+>>>>>>> c90bdfeec38fa314b854e700e0b6893f489604cc
