@@ -22,6 +22,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as LocalAuthentication from 'expo-local-authentication';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
+import * as Linking from 'expo-linking';
 
 // ── AI Logo ──
 const AI_LOGO_URL = 'https://uzxmmddivzqjhcnnrkns.supabase.co/storage/v1/object/public/logo/logo.png';
@@ -345,63 +346,22 @@ export default function LoginScreen() {
     }
     setAppleLoading(true);
     try {
-      let AppleAuthentication: any;
-      try {
-        const appleModule = require('expo-apple-authentication');
-        AppleAuthentication = appleModule;
-        if (!AppleAuthentication?.signInAsync || !AppleAuthentication?.AppleAuthenticationScope) {
-          throw new Error('Apple Authentication module not properly loaded');
-        }
-        if (typeof AppleAuthentication.isAvailableAsync === 'function') {
-          const isAvailable = await AppleAuthentication.isAvailableAsync();
-          if (!isAvailable) {
-            throw new Error('Apple Sign In not available on this device');
-          }
-        }
-      } catch (moduleErr: any) {
-        console.log('[Apple Sign In] Module error:', moduleErr?.message);
-        showAlert('Apple Sign In unavailable on this device.');
-        return;
-      }
-
-      const credential = await AppleAuthentication.signInAsync({
-        requestedScopes: [
-          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
-          AppleAuthentication.AppleAuthenticationScope.EMAIL,
-        ],
-      });
-
-      const identityToken = credential?.identityToken;
-      if (!identityToken) {
-        showAlert('Sign In Failed', 'No identity token returned from Apple.');
-        return;
-      }
-
-      const { data, error } = await appleSupabase.auth.signInWithIdToken({
+      const redirectUrl = Linking.createURL('/');
+      const { data, error } = await appleSupabase.auth.signInWithOAuth({
         provider: 'apple',
-        token: identityToken,
+        options: {
+          redirectTo: redirectUrl,
+          skipBrowserRedirect: true,
+        },
       });
-
       if (error) {
-        showAlert('Sign In Failed', error.message || 'Apple Sign In failed.');
+        showAlert('Sign In Failed', error.message || 'Failed to start Apple Sign In.');
         return;
       }
-
-      if (data?.session) {
-        const supabase = getSupabaseClient();
-        await supabase.auth.setSession({
-          access_token: data.session.access_token,
-          refresh_token: data.session.refresh_token,
-        });
-        if (data.session.user) {
-          sendLoginConfirmationEmail(data.session.user.id, data.session.user.email || '');
-        }
-        router.replace('/home');
+      if (data?.url) {
+        await Linking.openURL(data.url);
       }
     } catch (e: any) {
-      if (e?.code === 'ERR_REQUEST_CANCELED') {
-        return;
-      }
       const msg = (e?.message || '').toLowerCase();
       const isCancellation = msg.includes('cancel') || msg.includes('dismiss') || msg.includes('closed');
       if (!isCancellation) {
