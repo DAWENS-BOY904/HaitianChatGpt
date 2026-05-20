@@ -830,3 +830,4 @@ const styles = StyleSheet.create({
   refreshBtn: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingVertical: 2 },
   refreshText: { fontSize: 10, color: 'rgba(255,255,255,0.2)' },
 });
+for the web use https://www.revenuecat.com/docs/api-v2#tag/App/operation/update-app instead of stripe use via revenu web functionn.
