@@ -10,7 +10,7 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "app.onspace.dawinix2026.v2",
+      "bundleIdentifier": "app.onspace.dawinix2026",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSMicrophoneUsageDescription": "Dawinix uses your microphone for voice input and voice messages.",
@@ -27,7 +27,7 @@
         "foregroundImage": "./assets/images/logo.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "app.onspace.dawinix2026.v2",
+      "package": "app.onspace.dawinix2026",
       "versionCode": 1,
       "edgeToEdgeEnabled": true,
       "permissions": [
