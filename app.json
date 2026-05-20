@@ -46,11 +46,12 @@
     "experiments": {
       "typedRoutes": true
     },
-    "extra": {
+   "extra": {
+      "router": {},
       "eas": {
         "projectId": "4e273b4c-f781-4751-85ba-caf9379e8953"
-      }
-    }
+       }
+    },
+    "owner": "expo-production"
   }
 }
-
