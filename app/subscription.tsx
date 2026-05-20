@@ -52,7 +52,7 @@ function getRCApiKey() {
 
 // ── Product IDs ───────────────────────────────────────────────────────────
 const RC_PRODUCTS = {
-  go_monthly: 'app.dawinix.go.monthly',
+  go_monthly: 'app.dawinix.go.monthly2026',
   go_annual: 'app.dawinix.go.annual',
   plus_monthly: 'app.dawinix.plus.monthly',
   plus_annual: 'app.dawinix.plus.annual',
