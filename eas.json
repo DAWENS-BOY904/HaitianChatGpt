@@ -41,6 +41,30 @@
         "EAS_NO_FROZEN_LOCKFILE": "1",
         "npm_config_legacy_peer_deps": "true"
       }
+    },
+    "local": {
+      "autoIncrement": true,
+      "android": {
+        "buildType": "apk"
+      },
+      "ios": {
+        "credentialsSource": "local",
+        "simulator": false
+      },
+      "env": {
+        "EXPO_NO_CAPABILITY_SYNC": "1",
+        "EAS_NO_FROZEN_LOCKFILE": "1",
+        "npm_config_legacy_peer_deps": "true"
+      }
+    },
+    "local-apk": {
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_NO_CAPABILITY_SYNC": "1",
+        "npm_config_legacy_peer_deps": "true"
+      }
     }
   },
   "submit": {
