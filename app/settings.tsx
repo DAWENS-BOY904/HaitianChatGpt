@@ -1246,8 +1246,13 @@ export default function SettingsScreen() {
             <Text style={{ fontSize: 16, color: primaryText, fontWeight: '500', marginLeft: 14, flex: 1 }}>Log out</Text>
           </TouchableOpacity>
         </View>
-      </ScrollView>
 
+        {/* VERSION FOOTER */}
+        <View style={{ alignItems: 'center', paddingBottom: 12, paddingTop: 4 }}>
+          <Text style={{ fontSize: 13, color: secondaryText }}>
+            Dawinix HT · Version {currentVersion}
+          </Text>
+        </View>
       {/* EDIT PROFILE MODAL */}
       <Modal visible={editModalVisible} transparent animationType="slide" onRequestClose={() => setEditModalVisible(false)}>
         <View style={{ flex: 1, backgroundColor: isDark ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.3)' }}>
@@ -1405,4 +1410,3 @@ export default function SettingsScreen() {
     </View>
   );
 }
-Add the app version number (from expo-constants) to the Settings screen footer so users can see the current version — required for App Store review.
