@@ -19,17 +19,6 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
       type: 'sourceFile',
     };
   }
-  // On web: shim expo-auth-session
-  if (platform === 'web' && moduleName === 'expo-auth-session') {
-    return {
-      filePath: path.resolve(__dirname, 'utils/expo-auth-session-shim.web.js'),
-      type: 'sourceFile',
-    };
-  }
-  if (originalResolveRequest) {
-    return originalResolveRequest(context, moduleName, platform);
-  }
-  return context.resolveRequest(context, moduleName, platform);
-};
+
 
 module.exports = config;
