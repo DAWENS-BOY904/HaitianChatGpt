@@ -1,6 +1,14 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
 
+// ── RevenueCat entitlement → plan name ───────────────────────────────────
+const RC_ENTITLEMENT_MAP: Record<string, string> = {
+  'plus': 'plus',
+  'go': 'go',
+  'premium': 'plus',
+  'pro': 'go',
+};
+
 // Map Stripe product IDs → plan names used in the app
 const PRODUCT_PLAN_MAP: Record<string, string> = {
   'prod_ThBGbK8D1tAh0w': 'plus',  // Premium Yearly product
@@ -28,8 +36,68 @@ Deno.serve(async (req) => {
   try {
     logStep('Function started');
 
+    // ── Check RevenueCat entitlements first ─────────────────────────────
+    const rcSecretKey = Deno.env.get('REVENUECAT_SECRET_KEY')
+      || Deno.env.get('REVENUECAT_IOS_KEY')
+      || '';
+
+    if (rcSecretKey) {
+      try {
+        const rcRes = await fetch(
+          `https://api.revenuecat.com/v1/subscribers/${encodeURIComponent(user.id)}`,
+          {
+            headers: {
+              'Authorization': `Bearer ${rcSecretKey}`,
+              'Content-Type': 'application/json',
+              'X-Platform': 'web',
+            },
+          },
+        );
+        if (rcRes.ok) {
+          const rcData = await rcRes.json();
+          const entitlements: Record<string, any> = rcData?.subscriber?.entitlements || {};
+          const activeEntitlement = Object.entries(entitlements).find(
+            ([, v]) => v?.expires_date === null || new Date(v?.expires_date) > new Date(),
+          );
+          if (activeEntitlement) {
+            const [entitlementId, entitlementData] = activeEntitlement;
+            const rcPlan = RC_ENTITLEMENT_MAP[entitlementId.toLowerCase()] || 'plus';
+            const rcExpiry = entitlementData?.expires_date || null;
+            logStep('RC active entitlement found', { entitlementId, rcPlan, rcExpiry });
+
+            // Sync to user_profiles
+            try {
+              await supabaseAdmin.from('user_profiles').update({
+                subscription_tier: rcPlan,
+                subscription_expires_at: rcExpiry,
+              }).eq('id', user.id);
+            } catch (_e) {}
+
+            return new Response(
+              JSON.stringify({
+                subscribed: true,
+                plan: rcPlan,
+                subscription_end: rcExpiry,
+                provider: 'revenuecat',
+              }),
+              { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+            );
+          }
+          logStep('RC subscriber exists but no active entitlements');
+        }
+      } catch (rcErr: any) {
+        logStep('RC check error (non-fatal)', { msg: rcErr?.message });
+      }
+    }
+
     const stripeKey = Deno.env.get('STRIPE_SECRET_KEY');
-    if (!stripeKey) throw new Error('STRIPE_SECRET_KEY not configured');
+    if (!stripeKey) {
+      // No Stripe either — return free
+      return new Response(
+        JSON.stringify({ subscribed: false, plan: null, subscription_end: null }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
 
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) throw new Error('Authorization header missing');
