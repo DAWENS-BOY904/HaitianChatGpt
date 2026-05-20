@@ -3,7 +3,6 @@
     "version": ">= 16.0.0",
     "appVersionSource": "remote"
   },
-  {
   "build": {
     "development": {
       "developmentClient": true,
@@ -15,7 +14,6 @@
         "EXPO_PUBLIC_RC_IOS_KEY": "appl_LCOBkSEKCqNFllINWlYWexOVaHf",
         "EXPO_PUBLIC_RC_ANDROID_KEY": "goog_htwkRFMSklkJWsTytqppHVTxkkP"
       }
-      
     },
     "preview": {
       "distribution": "internal",
@@ -35,7 +33,8 @@
         "credentialsSource": "remote"
       },
       "env": {
-        "npm_config_legacy_peer_deps": "true"
+        "npm_config_legacy_peer_deps": "true",
+        "EXPO_NO_CAPABILITY_SYNC": "1"
       }
     }
   },
