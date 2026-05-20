@@ -1405,7 +1405,6 @@ export default function SettingsScreen() {
     </View>
   );
 }
-import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
   Text,
