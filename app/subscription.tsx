@@ -9,7 +9,6 @@ import {
   Linking,
   ActivityIndicator,
   StatusBar,
-  Dimensions,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,8 +20,6 @@ import { useAlert, useAuth, getSupabaseClient } from '@/template';
 import { useFocusEffect } from '@react-navigation/native';
 import { FunctionsHttpError } from '@supabase/supabase-js';
 import Constants from 'expo-constants';
-
-const { height: SCREEN_H } = Dimensions.get('window');
 
 // ── RevenueCat SDK (lazy loaded — not available on web) ───────────────────
 let PurchasesModule: any = null;
@@ -146,7 +143,6 @@ export default function SubscriptionScreen() {
   const [selectedPlan, setSelectedPlan] = useState<'go' | 'plus'>('plus');
   const [billingCycle, setBillingCycle] = useState<'annual' | 'monthly'>('annual');
   const [loading, setLoading] = useState(false);
-  const [webLoading, setWebLoading] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [managing, setManaging] = useState(false);
   const [checkingStatus, setCheckingStatus] = useState(false);
@@ -185,7 +181,7 @@ export default function SubscriptionScreen() {
 
   const checkRCAvailable = async (): Promise<boolean> => {
     if (Platform.OS === 'web') {
-      showAlert('Not Available', 'In-App Purchases are not available on web. Use "Buy on Web" below.');
+      showAlert('Not Available', 'In-App Purchases are not available on web. Please use the iOS or Android app.');
       return false;
     }
     if (ENV.IS_EXPO_GO) {
@@ -260,33 +256,6 @@ export default function SubscriptionScreen() {
     } finally { safe(setLoading, false); }
   };
 
-  // ── Web Purchase via Stripe checkout (connected to RevenueCat via webhook) ──
-  const purchaseOnWeb = async () => {
-    if (webLoading) return;
-    safe(setWebLoading, true);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) {
-        showAlert('Sign In Required', 'Please sign in to purchase on web.');
-        return;
-      }
-      const { data, error } = await supabase.functions.invoke('create-checkout-session', {
-        body: { plan: selectedPlan, mode: 'hosted' },
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      });
-      if (error) {
-        let msg = error.message;
-        if (error instanceof FunctionsHttpError) { try { msg = await error.context?.text() || msg; } catch { /* ignore */ } }
-        throw new Error(msg);
-      }
-      const url = data?.url;
-      if (!url) throw new Error('No checkout URL received.');
-      await Linking.openURL(url);
-    } catch (err: any) {
-      showAlert('Web Purchase Error', err?.message || 'Could not open web checkout. Please try again.');
-    } finally { safe(setWebLoading, false); }
-  };
-
   const handleManage = async () => {
     if (managing) return;
     safe(setManaging, true);
@@ -333,62 +302,66 @@ export default function SubscriptionScreen() {
       ? `Subscribe with Google — ${currentPrice}/mo`
       : `Subscribe — ${currentPrice}/mo`;
 
-  const BOTTOM_BAR_H = isSubscribed ? 130 : selectedPlan === 'plus' ? 180 : 140;
-
   return (
     <View style={styles.root}>
       <StatusBar barStyle="light-content" backgroundColor={DARK_BG} />
 
-      {/* Subtle green glow */}
+      {/* Subtle green glow at top */}
       <View style={styles.glowTop} />
 
       {/* Close button */}
-      <View style={[styles.closeWrap, { top: insets.top + 10 }]}>
+      <View style={[styles.closeWrap, { top: insets.top + 14 }]}>
         <TouchableOpacity style={styles.closeBtn} onPress={() => router.back()} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-          <Ionicons name="close" size={17} color="#fff" />
+          <Ionicons name="close" size={18} color="#fff" />
         </TouchableOpacity>
       </View>
 
       <ScrollView
         style={{ flex: 1 }}
-        contentContainerStyle={[
-          styles.scroll,
-          { paddingTop: insets.top + 48, paddingBottom: BOTTOM_BAR_H + 16 },
-        ]}
+        contentContainerStyle={[styles.scroll, { paddingTop: insets.top + 60, paddingBottom: insets.bottom + 180 }]}
         showsVerticalScrollIndicator={false}
-        bounces={false}
       >
-        {/* App Icon + Title */}
-        <View style={styles.header}>
-          <View style={styles.iconWrap}>
-            <View style={styles.iconGlow} />
-            <View style={styles.iconCard}>
-              <Image source={GO_LOGO} style={styles.iconImage} contentFit="cover" transition={200} />
-            </View>
+        {/* App Icon */}
+        <View style={styles.iconWrap}>
+          <View style={styles.iconGlow} />
+          <View style={styles.iconCard}>
+            <Image source={GO_LOGO} style={styles.iconImage} contentFit="cover" transition={200} />
           </View>
-          <Text style={styles.title}>Dawinix Go</Text>
-          <Text style={styles.subtitle}>Unlock the full power of Dawinix Go{'\n'}and take your productivity to the next level.</Text>
         </View>
+
+        {/* Title */}
+        <Text style={styles.title}>Dawinix Go</Text>
+        <Text style={styles.subtitle}>
+          Unlock the full power of Dawinix Go{'\n'}and take your productivity to the next level.
+        </Text>
 
         {/* Plan Toggle */}
         <View style={styles.planToggleWrap}>
-          {(['go', 'plus'] as const).map((plan) => (
-            <TouchableOpacity
-              key={plan}
-              style={[styles.planToggleBtn, selectedPlan === plan && styles.planToggleBtnActive]}
-              onPress={() => setSelectedPlan(plan)}
-            >
-              {selectedPlan === plan && (
-                <LinearGradient colors={['#1a7a32', GREEN]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
-              )}
-              <Text style={[styles.planToggleText, selectedPlan === plan && styles.planToggleTextActive]}>
-                {plan === 'go' ? '⚡ Go' : '✦ Plus'}
-              </Text>
-            </TouchableOpacity>
-          ))}
+          <TouchableOpacity
+            style={[styles.planToggleBtn, selectedPlan === 'go' && styles.planToggleBtnActive]}
+            onPress={() => setSelectedPlan('go')}
+          >
+            {selectedPlan === 'go'
+              ? <LinearGradient colors={['#1a7a32', GREEN]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+              : null}
+            <Text style={[styles.planToggleText, selectedPlan === 'go' && styles.planToggleTextActive]}>
+              {'⚡ Go'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.planToggleBtn, selectedPlan === 'plus' && styles.planToggleBtnActive]}
+            onPress={() => setSelectedPlan('plus')}
+          >
+            {selectedPlan === 'plus'
+              ? <LinearGradient colors={['#1a7a32', GREEN]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+              : null}
+            <Text style={[styles.planToggleText, selectedPlan === 'plus' && styles.planToggleTextActive]}>
+              {'✦ Plus'}
+            </Text>
+          </TouchableOpacity>
         </View>
 
-        {/* Feature List Card */}
+        {/* Feature Card */}
         <View style={styles.featureCard}>
           <Text style={styles.featureCardTitle}>
             {selectedPlan === 'go' ? 'GO PLAN FEATURES' : 'PLUS PLAN FEATURES'}
@@ -398,16 +371,19 @@ export default function SubscriptionScreen() {
               key={feature}
               style={[
                 styles.featureRow,
-                i < features.length - 1 && styles.featureRowBorder,
+                i < features.length - 1 && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(46,204,90,0.12)' },
               ]}
             >
-              <Ionicons name="checkmark-circle" size={20} color={GREEN} />
+              <View style={styles.featureCheckCircle}>
+                <Ionicons name="checkmark-circle" size={22} color={GREEN} />
+              </View>
               <Text style={styles.featureText}>{feature}</Text>
             </View>
           ))}
         </View>
 
-        {/* Billing Cycle — Annual */}
+        {/* Billing Cycle Cards */}
+        {/* Annual */}
         <TouchableOpacity
           style={[styles.billingCard, billingCycle === 'annual' && styles.billingCardActive]}
           onPress={() => setBillingCycle('annual')}
@@ -425,16 +401,16 @@ export default function SubscriptionScreen() {
             </View>
             <View style={styles.billingRight}>
               <Text style={[styles.billingPerMonth, billingCycle === 'annual' && { color: GREEN }]}>
-                {pricing.annualPerMonth} / mo
+                {pricing.annualPerMonth} / month
               </Text>
               {billingCycle === 'annual'
-                ? <Ionicons name="checkmark-circle" size={22} color={GREEN} />
+                ? <Ionicons name="checkmark-circle" size={24} color={GREEN} />
                 : <View style={styles.emptyCircle} />}
             </View>
           </View>
         </TouchableOpacity>
 
-        {/* Billing Cycle — Monthly */}
+        {/* Monthly */}
         <TouchableOpacity
           style={[styles.billingCard, billingCycle === 'monthly' && styles.billingCardActive]}
           onPress={() => setBillingCycle('monthly')}
@@ -447,15 +423,15 @@ export default function SubscriptionScreen() {
             </View>
             <View style={styles.billingRight}>
               {billingCycle === 'monthly'
-                ? <Ionicons name="checkmark-circle" size={22} color={GREEN} />
+                ? <Ionicons name="checkmark-circle" size={24} color={GREEN} />
                 : <View style={styles.emptyCircle} />}
             </View>
           </View>
         </TouchableOpacity>
 
-        {/* Cancel anytime */}
+        {/* Cancel anytime note */}
         <View style={styles.cancelRow}>
-          <Ionicons name="shield-checkmark" size={13} color={GREEN} />
+          <Ionicons name="shield-checkmark" size={14} color={GREEN} />
           <Text style={styles.cancelText}>Cancel anytime. No hidden fees.</Text>
         </View>
 
@@ -467,12 +443,11 @@ export default function SubscriptionScreen() {
         </TouchableOpacity>
       </ScrollView>
 
-      {/* ── Bottom CTA Bar ── */}
-      <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 10 }]}>
-        {/* Active badge */}
+      {/* Bottom CTA */}
+      <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 16 }]}>
         {user && isSubscribed && (
           <View style={styles.activeBadge}>
-            <Ionicons name="checkmark-circle" size={13} color={GREEN} />
+            <Ionicons name="checkmark-circle" size={14} color={GREEN} />
             <Text style={styles.activeBadgeText}>
               {subscriptionInfo?.plan?.toUpperCase()} active
               {subscriptionInfo?.subscription_end
@@ -483,84 +458,48 @@ export default function SubscriptionScreen() {
         )}
 
         {isSubscribed ? (
-          /* Manage button */
           <TouchableOpacity style={styles.manageBtn} onPress={handleManage} disabled={managing}>
             {managing
               ? <ActivityIndicator color="#fff" />
               : (
                 <View style={styles.btnRow}>
-                  <Ionicons name={Platform.OS === 'ios' ? 'logo-apple' : 'logo-google-playstore'} size={17} color="#fff" />
+                  <Ionicons name={Platform.OS === 'ios' ? 'logo-apple' : 'logo-google-playstore'} size={18} color="#fff" />
                   <Text style={styles.subscribeBtnText}>Manage Subscription</Text>
                 </View>
               )}
           </TouchableOpacity>
         ) : (
-          <>
-            {/* Primary subscribe button (native IAP) */}
-            {Platform.OS !== 'web' && (
-              <TouchableOpacity
-                style={[styles.subscribeBtn, loading && { opacity: 0.6 }]}
-                onPress={purchaseWithRC}
-                disabled={loading}
-              >
-                <LinearGradient
-                  colors={['#23a844', GREEN, '#23a844']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={StyleSheet.absoluteFill}
-                />
-                {loading
-                  ? <ActivityIndicator color="#fff" />
-                  : (
-                    <View style={styles.btnRow}>
-                      <Ionicons
-                        name={Platform.OS === 'ios' ? 'logo-apple' : 'logo-google-playstore'}
-                        size={19}
-                        color="#fff"
-                      />
-                      <Text style={styles.subscribeBtnText}>{subscribeLabel}</Text>
-                    </View>
-                  )}
-              </TouchableOpacity>
-            )}
-
-            {/* Web purchase — always shown for Plus; on web it's the primary button */}
-            {(selectedPlan === 'plus' || Platform.OS === 'web') && (
-              <TouchableOpacity
-                style={[styles.webBtn, Platform.OS === 'web' && styles.webBtnPrimary, webLoading && { opacity: 0.6 }]}
-                onPress={purchaseOnWeb}
-                disabled={webLoading}
-              >
-                {webLoading
-                  ? <ActivityIndicator color={Platform.OS === 'web' ? '#fff' : GREEN} size="small" />
-                  : (
-                    <View style={styles.btnRow}>
-                      <Ionicons name="globe-outline" size={17} color={Platform.OS === 'web' ? '#fff' : GREEN} />
-                      <Text style={[styles.webBtnText, Platform.OS === 'web' && { color: '#fff' }]}>
-                        {Platform.OS === 'web' ? `Subscribe on Web — ${currentPrice}/mo` : 'Buy on Web instead'}
-                      </Text>
-                    </View>
-                  )}
-              </TouchableOpacity>
-            )}
-          </>
+          <TouchableOpacity style={[styles.subscribeBtn, loading && { opacity: 0.6 }]} onPress={purchaseWithRC} disabled={loading}>
+            <LinearGradient
+              colors={['#23a844', GREEN, '#23a844']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={StyleSheet.absoluteFill}
+            />
+            {loading
+              ? <ActivityIndicator color="#fff" />
+              : (
+                <View style={styles.btnRow}>
+                  <Ionicons name={Platform.OS === 'ios' ? 'logo-apple' : Platform.OS === 'android' ? 'logo-google-playstore' : 'storefront-outline'} size={20} color="#fff" />
+                  <Text style={styles.subscribeBtnText}>{subscribeLabel}</Text>
+                </View>
+              )}
+          </TouchableOpacity>
         )}
 
-        {/* Billing note */}
         <Text style={styles.billingNote}>
           {Platform.OS === 'ios'
             ? 'Billed via Apple. Manage in Settings — Subscriptions.'
             : Platform.OS === 'android'
               ? 'Billed via Google Play. Manage in Play Store — Subscriptions.'
-              : 'Secure payment via Stripe.'}
+              : 'In-App Purchases available on iOS and Android.'}
         </Text>
 
-        {/* Refresh status */}
         {user && (
           <TouchableOpacity style={styles.refreshBtn} onPress={checkSubscriptionStatus} disabled={checkingStatus}>
             {checkingStatus
-              ? <ActivityIndicator size="small" color="rgba(255,255,255,0.25)" />
-              : <Ionicons name="refresh" size={11} color="rgba(255,255,255,0.25)" />}
+              ? <ActivityIndicator size="small" color="rgba(255,255,255,0.3)" />
+              : <Ionicons name="refresh" size={12} color="rgba(255,255,255,0.3)" />}
             <Text style={styles.refreshText}>Refresh Status</Text>
           </TouchableOpacity>
         )}
@@ -570,138 +509,132 @@ export default function SubscriptionScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: DARK_BG },
-
+  root: {
+    flex: 1,
+    backgroundColor: DARK_BG,
+  },
   glowTop: {
     position: 'absolute',
-    top: -70,
+    top: -80,
     alignSelf: 'center',
-    width: 220,
-    height: 220,
-    borderRadius: 110,
-    backgroundColor: 'rgba(46,204,90,0.07)',
+    width: 260,
+    height: 260,
+    borderRadius: 130,
+    backgroundColor: 'rgba(46,204,90,0.08)',
   },
-
-  closeWrap: { position: 'absolute', left: 16, zIndex: 20 },
+  closeWrap: {
+    position: 'absolute',
+    left: 18,
+    zIndex: 20,
+  },
   closeBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.11)',
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(255,255,255,0.12)',
     alignItems: 'center',
     justifyContent: 'center',
   },
+  scroll: {
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
 
-  scroll: { alignItems: 'center', paddingHorizontal: 18 },
-
-  // Header
-  header: { alignItems: 'center', marginBottom: 16 },
-  iconWrap: { alignItems: 'center', marginBottom: 10, position: 'relative' },
+  // Icon
+  iconWrap: { alignItems: 'center', marginBottom: 16, position: 'relative' },
   iconGlow: {
     position: 'absolute',
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: 'rgba(46,204,90,0.15)',
-    top: 2,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: 'rgba(46,204,90,0.18)',
+    top: 4,
   },
   iconCard: {
-    width: 80,
-    height: 80,
-    borderRadius: 20,
+    width: 96,
+    height: 96,
+    borderRadius: 22,
     overflow: 'hidden',
     borderWidth: 1.5,
-    borderColor: 'rgba(46,204,90,0.32)',
+    borderColor: 'rgba(46,204,90,0.35)',
     shadowColor: GREEN,
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.45,
-    shadowRadius: 18,
-    elevation: 10,
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    elevation: 12,
   },
   iconImage: { width: '100%', height: '100%' },
-  title: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#fff',
-    letterSpacing: -0.5,
-    marginBottom: 5,
-  },
-  subtitle: {
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.45)',
-    textAlign: 'center',
-    lineHeight: 19,
-  },
 
-  // Plan toggle
+  // Text
+  title: { fontSize: 28, fontWeight: '700', color: '#fff', textAlign: 'center', marginBottom: 8, letterSpacing: -0.5 },
+  subtitle: { fontSize: 14, color: 'rgba(255,255,255,0.5)', textAlign: 'center', lineHeight: 20, marginBottom: 28 },
+
+  // Plan Toggle
   planToggleWrap: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: 'rgba(255,255,255,0.06)',
     borderRadius: 50,
     padding: 4,
     width: '100%',
-    marginBottom: 14,
+    marginBottom: 22,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.07)',
+    borderColor: 'rgba(255,255,255,0.08)',
     overflow: 'hidden',
   },
   planToggleBtn: {
     flex: 1,
-    paddingVertical: 11,
+    paddingVertical: 13,
     borderRadius: 46,
     alignItems: 'center',
     overflow: 'hidden',
     position: 'relative',
   },
   planToggleBtnActive: {},
-  planToggleText: { fontSize: 14, fontWeight: '500', color: 'rgba(255,255,255,0.35)', zIndex: 1 },
+  planToggleText: { fontSize: 15, fontWeight: '500', color: 'rgba(255,255,255,0.38)', zIndex: 1 },
   planToggleTextActive: { color: '#fff', fontWeight: '700', zIndex: 1 },
 
-  // Feature card
+  // Feature Card
   featureCard: {
     width: '100%',
     backgroundColor: CARD_BG,
-    borderRadius: 16,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: CARD_BORDER,
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 4,
-    marginBottom: 12,
+    paddingHorizontal: 18,
+    paddingTop: 16,
+    paddingBottom: 6,
+    marginBottom: 14,
     shadowColor: GREEN,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 14,
-    elevation: 5,
+    shadowOpacity: 0.1,
+    shadowRadius: 16,
+    elevation: 6,
   },
   featureCardTitle: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '700',
     color: GREEN,
     letterSpacing: 1.2,
-    marginBottom: 10,
+    marginBottom: 14,
   },
   featureRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 9,
-    gap: 10,
+    paddingVertical: 13,
+    gap: 12,
   },
-  featureRowBorder: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(46,204,90,0.10)',
-  },
-  featureText: { fontSize: 14, color: '#fff', fontWeight: '400', flex: 1, lineHeight: 19 },
+  featureCheckCircle: { width: 24, alignItems: 'center' },
+  featureText: { fontSize: 15, color: '#fff', fontWeight: '400', flex: 1, lineHeight: 21 },
 
-  // Billing cards
+  // Billing Cards
   billingCard: {
     width: '100%',
     backgroundColor: UNSELECTED_CARD,
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: UNSELECTED_BORDER,
-    padding: 14,
-    marginBottom: 8,
+    padding: 18,
+    marginBottom: 10,
     overflow: 'visible',
     position: 'relative',
   },
@@ -710,39 +643,41 @@ const styles = StyleSheet.create({
     borderColor: CARD_BORDER,
     shadowColor: GREEN,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 10,
-    elevation: 4,
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    elevation: 5,
   },
   saveBadge: {
     position: 'absolute',
-    top: -11,
-    left: 14,
+    top: -12,
+    left: 16,
     backgroundColor: '#c8a227',
     borderRadius: 20,
-    paddingHorizontal: 9,
-    paddingVertical: 2,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
     zIndex: 2,
   },
-  saveBadgeText: { fontSize: 10, fontWeight: '800', color: '#000', letterSpacing: 0.5 },
-  billingCardRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 2 },
-  billingCycleLabel: { fontSize: 15, fontWeight: '600', color: '#fff', marginBottom: 2 },
-  billingCyclePrice: { fontSize: 12, color: 'rgba(255,255,255,0.38)' },
-  billingRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  billingPerMonth: { fontSize: 13, fontWeight: '600', color: 'rgba(255,255,255,0.85)' },
+  saveBadgeText: { fontSize: 11, fontWeight: '800', color: '#000', letterSpacing: 0.5 },
+  billingCardRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 4 },
+  billingCycleLabel: { fontSize: 17, fontWeight: '600', color: '#fff', marginBottom: 3 },
+  billingCyclePrice: { fontSize: 13, color: 'rgba(255,255,255,0.4)' },
+  billingRight: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  billingPerMonth: { fontSize: 14, fontWeight: '600', color: 'rgba(255,255,255,0.9)' },
   emptyCircle: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.22)',
+    borderColor: 'rgba(255,255,255,0.25)',
   },
 
-  cancelRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 6, marginBottom: 2 },
-  cancelText: { fontSize: 12, color: 'rgba(255,255,255,0.4)' },
+  // Cancel row
+  cancelRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, marginBottom: 6 },
+  cancelText: { fontSize: 13, color: 'rgba(255,255,255,0.45)' },
 
-  restoreBtn: { paddingVertical: 10, paddingHorizontal: 16 },
-  restoreText: { fontSize: 12, color: 'rgba(255,255,255,0.3)', textDecorationLine: 'underline' },
+  // Restore
+  restoreBtn: { padding: 14, marginTop: 4 },
+  restoreText: { fontSize: 13, color: 'rgba(255,255,255,0.35)', textDecorationLine: 'underline' },
 
   // Bottom bar
   bottomBar: {
@@ -750,15 +685,14 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    paddingHorizontal: 18,
-    paddingTop: 12,
-    backgroundColor: 'rgba(6,6,6,0.97)',
+    paddingHorizontal: 20,
+    paddingTop: 14,
+    backgroundColor: 'rgba(6,6,6,0.96)',
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(255,255,255,0.05)',
+    borderTopColor: 'rgba(255,255,255,0.06)',
     alignItems: 'center',
     gap: 6,
   },
-
   activeBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -768,65 +702,36 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 5,
     borderWidth: 1,
-    borderColor: 'rgba(46,204,90,0.2)',
-    marginBottom: 2,
+    borderColor: 'rgba(46,204,90,0.22)',
+    marginBottom: 4,
   },
   activeBadgeText: { color: GREEN, fontSize: 12, fontWeight: '600' },
-
   subscribeBtn: {
     width: '100%',
-    height: 50,
+    height: 54,
     borderRadius: 50,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
     shadowColor: GREEN,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 14,
-    elevation: 9,
+    shadowOpacity: 0.4,
+    shadowRadius: 16,
+    elevation: 10,
   },
   manageBtn: {
     width: '100%',
-    height: 50,
+    height: 54,
     borderRadius: 50,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.09)',
+    backgroundColor: 'rgba(255,255,255,0.1)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderColor: 'rgba(255,255,255,0.12)',
   },
-
-  // Web purchase button
-  webBtn: {
-    width: '100%',
-    height: 44,
-    borderRadius: 50,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(46,204,90,0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(46,204,90,0.25)',
-  },
-  webBtnPrimary: {
-    backgroundColor: CARD_BG,
-    borderColor: CARD_BORDER,
-    shadowColor: GREEN,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
-    elevation: 6,
-  },
-  webBtnText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: GREEN,
-  },
-
-  btnRow: { flexDirection: 'row', alignItems: 'center', gap: 7, zIndex: 1 },
-  subscribeBtnText: { fontSize: 16, fontWeight: '700', color: '#fff' },
-
-  billingNote: { fontSize: 10, color: 'rgba(255,255,255,0.25)', textAlign: 'center' },
-  refreshBtn: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingVertical: 2 },
-  refreshText: { fontSize: 10, color: 'rgba(255,255,255,0.2)' },
+  btnRow: { flexDirection: 'row', alignItems: 'center', gap: 8, zIndex: 1 },
+  subscribeBtnText: { fontSize: 17, fontWeight: '700', color: '#fff' },
+  billingNote: { fontSize: 11, color: 'rgba(255,255,255,0.3)', textAlign: 'center' },
+  refreshBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 2 },
+  refreshText: { fontSize: 11, color: 'rgba(255,255,255,0.25)' },
 });
