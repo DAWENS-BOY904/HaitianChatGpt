@@ -1193,3 +1193,4 @@ const styles = StyleSheet.create({
   },
   refreshText: { fontSize: 11 },
 });
+remove all stripe make all via https://app.revenuecat.com web revenue.
