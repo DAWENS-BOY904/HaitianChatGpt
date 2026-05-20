@@ -149,3 +149,4 @@ const styles = StyleSheet.create({
     borderRadius: 2,
   },
 });
+please remove this function to home page 
