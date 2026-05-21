@@ -1,311 +1,866 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Platform } from 'react-native';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  ScrollView,
+  Platform,
+  Linking,
+  ActivityIndicator,
+  StatusBar,
+  Dimensions,
+} from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '../hooks/useTheme';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useSubscription } from '../hooks/useSubscription';
 import { useRouter } from 'expo-router';
-import { Spacing, Typography, BorderRadius } from '../constants/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useAlert } from '@/template';
+import { useAlert, useAuth, getSupabaseClient } from '@/template';
+import { useFocusEffect } from '@react-navigation/native';
+import { FunctionsHttpError } from '@supabase/supabase-js';
+import Constants from 'expo-constants';
 
-export default function SubscriptionScreen() {
-  const { colors } = useTheme();
-  const { tier, upgradeSubscription, restorePurchases } = useSubscription();
-  const { showAlert } = useAlert();
-  const router = useRouter();
-  const insets = useSafeAreaInsets();
+const { height: SCREEN_H } = Dimensions.get('window');
 
- const plans = [
-  {
-    id: 'free' as const,
-    name: 'Free',
-    price: '$0',
-    period: 'Forever',
-    features: [
-      '20 messages per day',
-      'Basic AI responses',
-      'Limited chat history (7 days)',
-      'Standard response speed',
-      'No media uploads',
-      'No group creation',
-      'Community support only',
-      'Ads included',
-    ],
-    color: '#6B7280',
-  },
-  {
-    id: 'premium_monthly' as const,
-    name: 'Premium Monthly',
-    price: '$10',
-    period: 'per month',
-    features: [
-      '1,000 messages per day',
-      'Advanced AI responses',
-      'Faster response speed',
-      'Unlimited chat history',
-      'Media uploads (images & files)',
-      'Create groups (up to 256 members)',
-      'Profile customization',
-      'No ads',
-      'Priority support',
-    ],
-    color: '#10A37F',
-    popular: true,
-  },
-  {
-    id: 'premium_yearly' as const,
-    name: 'Premium Yearly',
-    price: '$20',
-    period: 'per year',
-    savings: 'Save $100/year',
-    features: [
-      '1,000 messages per day',
-      'Advanced AI responses',
-      'Faster response speed',
-      'Unlimited chat history',
-      'Media uploads (images & files)',
-      'Create groups (up to 256 members)',
-      'Early access to new features',
-      'Automatic chat backup',
-      'Profile customization',
-      'No ads',
-      '24/7 priority support',
-    ],
-    color: '#0084FF',
-  },
-  {
-    id: 'lifetime' as const,
-    name: 'Lifetime',
-    price: '$80',
-    period: 'one-time',
-    savings: 'Best Value',
-    features: [
-      'Unlimited messages',
-      'All premium AI features',
-      'Ultra-fast response speed',
-      'Unlimited chat history',
-      'All media uploads supported',
-      'Large groups (up to 512 members)',
-      'Full profile & theme customization',
-      'Beta & experimental features access',
-      'Lifetime updates',
-      'No ads ever',
-      'VIP priority support',
-      'Lifetime member badge',
-    ],
-    color: '#FF9500',
-    recommended: true,
-  },
+// ── RevenueCat SDK (lazy loaded — not available on web) ───────────────────
+let PurchasesModule: any = null;
+async function getPurchases() {
+  if (Platform.OS === 'web') return null;
+  if (PurchasesModule) return PurchasesModule;
+  try {
+    const rc = await import('react-native-purchases');
+    PurchasesModule = rc.default || (rc as any).Purchases || rc;
+    return PurchasesModule;
+  } catch { return null; }
+}
+
+// ── Environment config ────────────────────────────────────────────────────
+const RC_IOS_KEY_HARDCODED = 'appl_LCOBkSEKCqNFllINWlYWexOVaHf';
+const RC_ANDROID_KEY_HARDCODED = 'goog_htwkRFMSklkJWsTytqppHVTxkkP';
+const ENV = {
+  RC_IOS_KEY: Constants.expoConfig?.extra?.revenueCatIosKey || process.env.EXPO_PUBLIC_RC_IOS_KEY || RC_IOS_KEY_HARDCODED,
+  RC_ANDROID_KEY: Constants.expoConfig?.extra?.revenueCatAndroidKey || process.env.EXPO_PUBLIC_RC_ANDROID_KEY || RC_ANDROID_KEY_HARDCODED,
+  IS_EXPO_GO: Constants.appOwnership === 'expo',
+};
+function getRCApiKey() {
+  if (Platform.OS === 'ios') return ENV.RC_IOS_KEY;
+  if (Platform.OS === 'android') return ENV.RC_ANDROID_KEY;
+  return '';
+}
+
+// ── Product IDs ───────────────────────────────────────────────────────────
+const RC_PRODUCTS = {
+  go_monthly: 'app.dawinix.go.monthly2026',
+  go_annual: 'app.dawinix.go.annual',
+  plus_monthly: 'app.dawinix.plus.monthly',
+  plus_annual: 'app.dawinix.plus.annual',
+};
+
+// ── Pricing ───────────────────────────────────────────────────────────────
+const PRICING = {
+  go: { monthly: '$7.99', annual: '$47.99', annualPerMonth: '$4.00', savePct: '50%' },
+  plus: { monthly: '$9.99', annual: '$59.99', annualPerMonth: '$5.00', savePct: '50%' },
+};
+
+// ── Features ──────────────────────────────────────────────────────────────
+const GO_FEATURES = [
+  'Basic AI models',
+  'More daily messages',
+  '10 image uploads / session',
+  '10 file uploads / session',
+  'Group chat creation',
+  'Longer conversation memory',
 ];
 
-  const handleSubscribe = async (planId: typeof tier) => {
-    if (planId === tier) {
-      showAlert('Info', 'You already have this plan');
-      return;
-    }
+const PLUS_FEATURES = [
+  'Everything in Go',
+  'Advanced AI (GPT-4o & Claude)',
+  'Unlimited daily usage',
+  '50 images per day',
+  '50 file uploads per session',
+  'Group chat creation',
+  'Longer conversation memory',
+  'Priority access to new features',
+  'No ads',
+];
 
-    const { error } = await upgradeSubscription(planId);
-    if (error) {
-      showAlert('Error', error);
-    } else {
-      showAlert('Success', `Successfully upgraded to ${plans.find(p => p.id === planId)?.name}`);
-      router.back();
+const GO_LOGO = require('../assets/images/plan-go.png');
+
+// ── Theme constants ───────────────────────────────────────────────────────
+const GREEN = '#2ECC5A';
+const DARK_BG = '#060606';
+const CARD_BG = 'rgba(16,40,22,0.92)';
+const CARD_BORDER = 'rgba(46,204,90,0.22)';
+const UNSELECTED_CARD = 'rgba(28,28,30,0.85)';
+const UNSELECTED_BORDER = 'rgba(255,255,255,0.08)';
+
+// ── RevenueCat Helper ─────────────────────────────────────────────────────
+class RevenueCatHelper {
+  private static isConfigured = false;
+  private static Purchases: any = null;
+
+  static async init(): Promise<boolean> {
+    if (this.isConfigured) return true;
+    const Purchases = await getPurchases();
+    if (!Purchases) return false;
+    this.Purchases = Purchases;
+    const apiKey = getRCApiKey();
+    if (!apiKey) return false;
+    try {
+      await Purchases.configure({ apiKey });
+      this.isConfigured = true;
+      return true;
+    } catch (err: any) {
+      console.log('[RevenueCat] configure error:', err.message);
+      return false;
     }
+  }
+
+  static async getOfferings() {
+    if (!this.isConfigured) await this.init();
+    if (!this.Purchases) throw new Error('RevenueCat not initialized');
+    return this.Purchases.getOfferings();
+  }
+
+  static async purchasePackage(pkg: any) {
+    if (!this.Purchases) throw new Error('RevenueCat not initialized');
+    return this.Purchases.purchasePackage(pkg);
+  }
+
+  static async restorePurchases() {
+    if (!this.Purchases) throw new Error('RevenueCat not initialized');
+    return this.Purchases.restorePurchases();
+  }
+}
+
+export default function SubscriptionScreen() {
+  const { restorePurchases } = useSubscription();
+  const { showAlert } = useAlert();
+  const { user } = useAuth();
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const supabase = getSupabaseClient();
+
+  const [selectedPlan, setSelectedPlan] = useState<'go' | 'plus'>('plus');
+  const [billingCycle, setBillingCycle] = useState<'annual' | 'monthly'>('annual');
+  const [loading, setLoading] = useState(false);
+  const [webLoading, setWebLoading] = useState(false);
+  const [restoring, setRestoring] = useState(false);
+  const [managing, setManaging] = useState(false);
+  const [checkingStatus, setCheckingStatus] = useState(false);
+  const [subscriptionInfo, setSubscriptionInfo] = useState<{
+    subscribed: boolean; plan: string | null; subscription_end: string | null; provider?: string;
+  } | null>(null);
+  const isMounted = useRef(true);
+
+  useEffect(() => { return () => { isMounted.current = false; }; }, []);
+
+  const safe = useCallback(<S,>(setter: React.Dispatch<React.SetStateAction<S>>, value: S) => {
+    if (isMounted.current) setter(value);
+  }, []);
+
+  const checkSubscriptionStatus = useCallback(async () => {
+    if (!user) return;
+    safe(setCheckingStatus, true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) return;
+      const { data, error } = await supabase.functions.invoke('check-subscription', {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (!error && data) {
+        safe(setSubscriptionInfo, {
+          subscribed: data.subscribed ?? false,
+          plan: data.plan ?? null,
+          subscription_end: data.subscription_end ?? null,
+          provider: data.provider ?? undefined,
+        });
+      }
+    } catch { console.log('[subscription] status check failed'); }
+    finally { safe(setCheckingStatus, false); }
+  }, [user, supabase, safe]);
+
+  useFocusEffect(useCallback(() => { checkSubscriptionStatus(); }, [checkSubscriptionStatus]));
+
+  const checkRCAvailable = async (): Promise<boolean> => {
+    if (Platform.OS === 'web') {
+      showAlert('Not Available', 'In-App Purchases are not available on web. Use "Buy via Web Billing" below.');
+      return false;
+    }
+    if (ENV.IS_EXPO_GO) {
+      showAlert('Development Build Required', 'In-App Purchases require a development build.\n\nBuild with EAS:\n\neas build --profile development');
+      return false;
+    }
+    const Purchases = await getPurchases();
+    if (!Purchases) { showAlert('SDK Missing', 'Please run:\n\nnpx expo install react-native-purchases'); return false; }
+    if (!getRCApiKey()) { showAlert('Configuration Error', 'RevenueCat API key is missing.'); return false; }
+    return true;
+  };
+
+  const purchaseWithRC = async () => {
+    const ok = await checkRCAvailable();
+    if (!ok) return;
+    safe(setLoading, true);
+    try {
+      const configured = await RevenueCatHelper.init();
+      if (!configured) throw new Error('Failed to configure RevenueCat. Check your API keys.');
+      const offerings = await RevenueCatHelper.getOfferings();
+      const offering = offerings.current;
+      if (!offering) throw new Error('No offerings available. Check App Store Connect setup.');
+
+      const productKey = `${selectedPlan}_${billingCycle}` as keyof typeof RC_PRODUCTS;
+      const productId = RC_PRODUCTS[productKey];
+
+      let pkg = offering.availablePackages.find(
+        (p: any) => p.product?.productIdentifier === productId || p.product?.identifier === productId,
+      );
+
+      if (!pkg) {
+        const pkgType = billingCycle === 'annual' ? 'ANNUAL' : 'MONTHLY';
+        pkg = offering.availablePackages.find((p: any) => p.packageType === pkgType)
+          || offering.availablePackages[0];
+      }
+
+      if (!pkg) throw new Error(`${selectedPlan} ${billingCycle} plan not found. Contact support.`);
+
+      const { customerInfo } = await RevenueCatHelper.purchasePackage(pkg);
+      const receiptData = JSON.stringify(customerInfo);
+      const transactionId = customerInfo?.originalAppUserId || `rc_${Date.now()}`;
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error('Not authenticated');
+
+      const { data, error } = await supabase.functions.invoke('verify-purchase', {
+        body: { platform: Platform.OS, receipt: receiptData, transactionId, productId, isSandbox: __DEV__ },
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+
+      if (error) {
+        let msg = error.message;
+        if (error instanceof FunctionsHttpError) { try { msg = await error.context?.text() || msg; } catch { /* ignore */ } }
+        throw new Error(msg);
+      }
+
+      if (user?.id) {
+        await supabase.from('user_profiles').update({
+          subscription_tier: selectedPlan,
+          subscription_expires_at: data?.subscription?.expiresAt || null,
+        }).eq('id', user.id);
+      }
+
+      showAlert(
+        `Subscribed to ${selectedPlan === 'go' ? 'Go' : 'Plus'}!`,
+        `Your Dawinix ${selectedPlan === 'go' ? 'Go' : 'Plus'} plan is now active. Enjoy!`,
+      );
+      await checkSubscriptionStatus();
+      router.push('/subscription-success');
+    } catch (err: any) {
+      if (err?.userCancelled || err?.code === '1' || String(err?.message).toLowerCase().includes('cancel')) return;
+      showAlert('Purchase Failed', err?.message || 'Something went wrong. Please try again.');
+    } finally { safe(setLoading, false); }
+  };
+
+  // ── Web Purchase via RevenueCat Web Billing API v2 ────────────────────
+  const purchaseOnWeb = async () => {
+    if (webLoading) return;
+    safe(setWebLoading, true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        showAlert('Sign In Required', 'Please sign in to purchase on web.');
+        return;
+      }
+
+      // Call the RC web checkout edge function (uses RC API v2, falls back to Stripe)
+      const { data, error } = await supabase.functions.invoke('revenuecat-web-checkout', {
+        body: { plan: selectedPlan, billingCycle },
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+
+      if (error) {
+        let msg = error.message;
+        if (error instanceof FunctionsHttpError) {
+          try { msg = await error.context?.text() || msg; } catch { /* ignore */ }
+        }
+        throw new Error(msg);
+      }
+
+      const url = data?.url;
+      if (!url) throw new Error('No checkout URL received from RevenueCat.');
+
+      const provider: string = data?.provider || 'revenuecat';
+      console.log(`[web-purchase] Opening ${provider} checkout`);
+
+      // Open URL — prefer in-app browser on native, Linking on web
+      if (Platform.OS !== 'web') {
+        try {
+          const wb = require('../utils/web-browser.native');
+          if (typeof wb?.openInAppBrowser === 'function') {
+            wb.openInAppBrowser(url);
+            return;
+          }
+        } catch { /* fall through */ }
+      }
+      await Linking.openURL(url);
+    } catch (err: any) {
+      showAlert('Web Purchase Error', err?.message || 'Could not open web checkout. Please try again.');
+    } finally { safe(setWebLoading, false); }
+  };
+
+  const handleManage = async () => {
+    if (managing) return;
+    safe(setManaging, true);
+    try {
+      // If subscribed via RC, open RC billing portal; otherwise native store
+      if (subscriptionInfo?.provider === 'revenuecat') {
+        await Linking.openURL('https://app.revenuecat.com/billing');
+      } else if (Platform.OS === 'ios') {
+        await Linking.openURL('https://apps.apple.com/account/subscriptions');
+      } else if (Platform.OS === 'android') {
+        await Linking.openURL('https://play.google.com/store/account/subscriptions');
+      } else {
+        await Linking.openURL('https://app.revenuecat.com/billing');
+      }
+    } catch { showAlert('Error', 'Could not open subscription management.'); }
+    finally { safe(setManaging, false); }
   };
 
   const handleRestore = async () => {
-    const { error } = await restorePurchases();
-    if (error) {
-      showAlert('Error', error);
-    } else {
-      showAlert('Success', 'Purchases restored successfully');
-    }
+    safe(setRestoring, true);
+    try {
+      if (!ENV.IS_EXPO_GO && Platform.OS !== 'web') {
+        const configured = await RevenueCatHelper.init();
+        if (configured) {
+          const customerInfo = await RevenueCatHelper.restorePurchases();
+          const active = customerInfo.entitlements?.active || {};
+          if (Object.keys(active).length > 0 && user?.id) {
+            const activePlan = Object.keys(active)[0].toLowerCase().includes('plus') ? 'plus' : 'go';
+            await supabase.from('user_profiles').update({ subscription_tier: activePlan }).eq('id', user.id);
+            showAlert('Purchases Restored', `Your Dawinix ${activePlan === 'plus' ? 'Plus' : 'Go'} subscription has been restored.`);
+            await checkSubscriptionStatus();
+            return;
+          }
+        }
+      }
+      await restorePurchases();
+      await checkSubscriptionStatus();
+      showAlert('Purchases Restored', 'Your purchases have been restored successfully.');
+    } catch { showAlert('No Purchases Found', 'No previous purchases were found for this account.'); }
+    finally { safe(setRestoring, false); }
   };
 
-  const styles = StyleSheet.create({
-    container: {
-      flex: 1,
-      backgroundColor: colors.background,
-      paddingTop: Platform.select({ ios: insets.top, android: insets.top, default: 0 }),
-    },
-    header: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      padding: Spacing.md,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border,
-    },
-    backButton: {
-      padding: Spacing.xs,
-      marginRight: Spacing.sm,
-    },
-    headerTitle: {
-      ...Typography.heading,
-      color: colors.text,
-    },
-    content: {
-      padding: Spacing.md,
-    },
-    planCard: {
-      backgroundColor: colors.card,
-      borderRadius: BorderRadius.md,
-      padding: Spacing.lg,
-      marginBottom: Spacing.md,
-      borderWidth: 2,
-      borderColor: 'transparent',
-    },
-    activePlan: {
-      borderColor: colors.primary,
-    },
-    planHeader: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      marginBottom: Spacing.sm,
-    },
-    planName: {
-      ...Typography.heading,
-      color: colors.text,
-    },
-    badge: {
-      paddingHorizontal: Spacing.sm,
-      paddingVertical: 4,
-      borderRadius: BorderRadius.sm,
-      backgroundColor: colors.primary,
-    },
-    badgeText: {
-      ...Typography.small,
-      color: '#FFFFFF',
-      fontWeight: '600',
-    },
-    priceContainer: {
-      marginBottom: Spacing.md,
-    },
-    price: {
-      ...Typography.title,
-      color: colors.text,
-      fontSize: 32,
-    },
-    period: {
-      ...Typography.body,
-      color: colors.textSecondary,
-    },
-    savings: {
-      ...Typography.caption,
-      color: '#10A37F',
-      fontWeight: '600',
-      marginTop: 4,
-    },
-    features: {
-      marginBottom: Spacing.md,
-    },
-    feature: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      marginBottom: Spacing.xs,
-      gap: Spacing.sm,
-    },
-    featureText: {
-      ...Typography.body,
-      color: colors.text,
-    },
-    subscribeButton: {
-      backgroundColor: colors.primary,
-      borderRadius: BorderRadius.sm,
-      padding: Spacing.md,
-      alignItems: 'center',
-    },
-    subscribedButton: {
-      backgroundColor: colors.border,
-    },
-    buttonText: {
-      ...Typography.body,
-      color: '#FFFFFF',
-      fontWeight: '600',
-    },
-    restoreButton: {
-      padding: Spacing.md,
-      alignItems: 'center',
-      marginTop: Spacing.lg,
-    },
-    restoreText: {
-      ...Typography.body,
-      color: colors.primary,
-    },
-  });
+  const features = selectedPlan === 'go' ? GO_FEATURES : PLUS_FEATURES;
+  const pricing = PRICING[selectedPlan];
+  const currentPrice = billingCycle === 'annual' ? pricing.annualPerMonth : pricing.monthly;
+  const isSubscribed = subscriptionInfo?.subscribed ?? false;
+
+  const subscribeLabel = Platform.OS === 'ios'
+    ? `Subscribe with Apple — ${currentPrice}/mo`
+    : Platform.OS === 'android'
+      ? `Subscribe with Google — ${currentPrice}/mo`
+      : `Subscribe — ${currentPrice}/mo`;
+
+  const BOTTOM_BAR_H = isSubscribed ? 130 : selectedPlan === 'plus' ? 195 : 145;
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={24} color={colors.text} />
+    <View style={styles.root}>
+      <StatusBar barStyle="light-content" backgroundColor={DARK_BG} />
+
+      {/* Subtle green glow */}
+      <View style={styles.glowTop} />
+
+      {/* Close button */}
+      <View style={[styles.closeWrap, { top: insets.top + 10 }]}>
+        <TouchableOpacity style={styles.closeBtn} onPress={() => router.back()} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+          <Ionicons name="close" size={17} color="#fff" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Subscription Plans</Text>
       </View>
 
-      <ScrollView style={styles.content}>
-        {plans.map(plan => (
-          <View
-            key={plan.id}
-            style={[
-              styles.planCard,
-              tier === plan.id && styles.activePlan,
-            ]}
-          >
-            <View style={styles.planHeader}>
-              <Text style={styles.planName}>{plan.name}</Text>
-              {plan.popular && (
-                <View style={[styles.badge, { backgroundColor: plan.color }]}>
-                  <Text style={styles.badgeText}>POPULAR</Text>
-                </View>
-              )}
-              {plan.recommended && (
-                <View style={[styles.badge, { backgroundColor: plan.color }]}>
-                  <Text style={styles.badgeText}>BEST VALUE</Text>
-                </View>
-              )}
-              {tier === plan.id && (
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>CURRENT</Text>
-                </View>
-              )}
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={[
+          styles.scroll,
+          { paddingTop: insets.top + 48, paddingBottom: BOTTOM_BAR_H + 16 },
+        ]}
+        showsVerticalScrollIndicator={false}
+        bounces={false}
+      >
+        {/* App Icon + Title */}
+        <View style={styles.header}>
+          <View style={styles.iconWrap}>
+            <View style={styles.iconGlow} />
+            <View style={styles.iconCard}>
+              <Image source={GO_LOGO} style={styles.iconImage} contentFit="cover" transition={200} />
             </View>
+          </View>
+          <Text style={styles.title}>Dawinix Go</Text>
+          <Text style={styles.subtitle}>Unlock the full power of Dawinix Go{'\n'}and take your productivity to the next level.</Text>
+        </View>
 
-            <View style={styles.priceContainer}>
-              <Text style={styles.price}>{plan.price}</Text>
-              <Text style={styles.period}>{plan.period}</Text>
-              {plan.savings && <Text style={styles.savings}>{plan.savings}</Text>}
-            </View>
-
-            <View style={styles.features}>
-              {plan.features.map((feature, index) => (
-                <View key={index} style={styles.feature}>
-                  <Ionicons name="checkmark-circle" size={20} color={plan.color} />
-                  <Text style={styles.featureText}>{feature}</Text>
-                </View>
-              ))}
-            </View>
-
+        {/* Plan Toggle */}
+        <View style={styles.planToggleWrap}>
+          {(['go', 'plus'] as const).map((plan) => (
             <TouchableOpacity
-              style={[
-                styles.subscribeButton,
-                { backgroundColor: plan.color },
-                tier === plan.id && styles.subscribedButton,
-              ]}
-              onPress={() => handleSubscribe(plan.id)}
-              disabled={tier === plan.id}
+              key={plan}
+              style={[styles.planToggleBtn, selectedPlan === plan && styles.planToggleBtnActive]}
+              onPress={() => setSelectedPlan(plan)}
             >
-              <Text style={styles.buttonText}>
-                {tier === plan.id ? 'Current Plan' : plan.id === 'free' ? 'Downgrade' : 'Subscribe'}
+              {selectedPlan === plan && (
+                <LinearGradient colors={['#1a7a32', GREEN]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+              )}
+              <Text style={[styles.planToggleText, selectedPlan === plan && styles.planToggleTextActive]}>
+                {plan === 'go' ? '⚡ Go' : '✦ Plus'}
               </Text>
             </TouchableOpacity>
-          </View>
-        ))}
+          ))}
+        </View>
 
-        <TouchableOpacity style={styles.restoreButton} onPress={handleRestore}>
-          <Text style={styles.restoreText}>Restore Purchases</Text>
+        {/* Feature List Card */}
+        <View style={styles.featureCard}>
+          <Text style={styles.featureCardTitle}>
+            {selectedPlan === 'go' ? 'GO PLAN FEATURES' : 'PLUS PLAN FEATURES'}
+          </Text>
+          {features.map((feature, i) => (
+            <View
+              key={feature}
+              style={[
+                styles.featureRow,
+                i < features.length - 1 && styles.featureRowBorder,
+              ]}
+            >
+              <Ionicons name="checkmark-circle" size={20} color={GREEN} />
+              <Text style={styles.featureText}>{feature}</Text>
+            </View>
+          ))}
+        </View>
+
+        {/* Billing Cycle — Annual */}
+        <TouchableOpacity
+          style={[styles.billingCard, billingCycle === 'annual' && styles.billingCardActive]}
+          onPress={() => setBillingCycle('annual')}
+          activeOpacity={0.8}
+        >
+          {billingCycle === 'annual' && (
+            <View style={styles.saveBadge}>
+              <Text style={styles.saveBadgeText}>SAVE {pricing.savePct}</Text>
+            </View>
+          )}
+          <View style={styles.billingCardRow}>
+            <View>
+              <Text style={styles.billingCycleLabel}>Annual</Text>
+              <Text style={styles.billingCyclePrice}>{pricing.annual} / year</Text>
+            </View>
+            <View style={styles.billingRight}>
+              <Text style={[styles.billingPerMonth, billingCycle === 'annual' && { color: GREEN }]}>
+                {pricing.annualPerMonth} / mo
+              </Text>
+              {billingCycle === 'annual'
+                ? <Ionicons name="checkmark-circle" size={22} color={GREEN} />
+                : <View style={styles.emptyCircle} />}
+            </View>
+          </View>
+        </TouchableOpacity>
+
+        {/* Billing Cycle — Monthly */}
+        <TouchableOpacity
+          style={[styles.billingCard, billingCycle === 'monthly' && styles.billingCardActive]}
+          onPress={() => setBillingCycle('monthly')}
+          activeOpacity={0.8}
+        >
+          <View style={styles.billingCardRow}>
+            <View>
+              <Text style={styles.billingCycleLabel}>Monthly</Text>
+              <Text style={styles.billingCyclePrice}>{pricing.monthly} / month</Text>
+            </View>
+            <View style={styles.billingRight}>
+              {billingCycle === 'monthly'
+                ? <Ionicons name="checkmark-circle" size={22} color={GREEN} />
+                : <View style={styles.emptyCircle} />}
+            </View>
+          </View>
+        </TouchableOpacity>
+
+        {/* Cancel anytime */}
+        <View style={styles.cancelRow}>
+          <Ionicons name="shield-checkmark" size={13} color={GREEN} />
+          <Text style={styles.cancelText}>Cancel anytime. No hidden fees.</Text>
+        </View>
+
+        {/* Restore */}
+        <TouchableOpacity onPress={handleRestore} style={styles.restoreBtn} disabled={restoring}>
+          {restoring
+            ? <ActivityIndicator color="rgba(255,255,255,0.4)" size="small" />
+            : <Text style={styles.restoreText}>Restore Purchases</Text>}
         </TouchableOpacity>
       </ScrollView>
+
+      {/* ── Bottom CTA Bar ── */}
+      <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 10 }]}>
+        {/* Active badge */}
+        {user && isSubscribed && (
+          <View style={styles.activeBadge}>
+            <Ionicons name="checkmark-circle" size={13} color={GREEN} />
+            <Text style={styles.activeBadgeText}>
+              {subscriptionInfo?.plan?.toUpperCase()} active
+              {subscriptionInfo?.subscription_end
+                ? ` · renews ${new Date(subscriptionInfo.subscription_end).toLocaleDateString()}`
+                : ''}
+            </Text>
+          </View>
+        )}
+
+        {isSubscribed ? (
+          /* Manage button */
+          <TouchableOpacity style={styles.manageBtn} onPress={handleManage} disabled={managing}>
+            {managing
+              ? <ActivityIndicator color="#fff" />
+              : (
+                <View style={styles.btnRow}>
+                  <Ionicons name={Platform.OS === 'ios' ? 'logo-apple' : 'logo-google-playstore'} size={17} color="#fff" />
+                  <Text style={styles.subscribeBtnText}>Manage Subscription</Text>
+                </View>
+              )}
+          </TouchableOpacity>
+        ) : (
+          <>
+            {/* Primary subscribe button (native IAP) */}
+            {Platform.OS !== 'web' && (
+              <TouchableOpacity
+                style={[styles.subscribeBtn, loading && { opacity: 0.6 }]}
+                onPress={purchaseWithRC}
+                disabled={loading}
+              >
+                <LinearGradient
+                  colors={['#23a844', GREEN, '#23a844']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={StyleSheet.absoluteFill}
+                />
+                {loading
+                  ? <ActivityIndicator color="#fff" />
+                  : (
+                    <View style={styles.btnRow}>
+                      <Ionicons
+                        name={Platform.OS === 'ios' ? 'logo-apple' : 'logo-google-playstore'}
+                        size={19}
+                        color="#fff"
+                      />
+                      <Text style={styles.subscribeBtnText}>{subscribeLabel}</Text>
+                    </View>
+                  )}
+              </TouchableOpacity>
+            )}
+
+            {/* Web purchase via RevenueCat Web Billing API v2 */}
+            {(selectedPlan === 'plus' || Platform.OS === 'web') && (
+              <TouchableOpacity
+                style={[
+                  styles.webBtn,
+                  Platform.OS === 'web' && styles.webBtnPrimary,
+                  webLoading && { opacity: 0.6 },
+                ]}
+                onPress={purchaseOnWeb}
+                disabled={webLoading}
+              >
+                {webLoading
+                  ? <ActivityIndicator color={Platform.OS === 'web' ? '#fff' : GREEN} size="small" />
+                  : (
+                    <View style={styles.btnRow}>
+                      <Ionicons name="globe-outline" size={17} color={Platform.OS === 'web' ? '#fff' : GREEN} />
+                      <Text style={[styles.webBtnText, Platform.OS === 'web' && { color: '#fff' }]}>
+                        {Platform.OS === 'web'
+                          ? `Subscribe on Web — ${currentPrice}/mo`
+                          : 'Buy via Web Billing'}
+                      </Text>
+                    </View>
+                  )}
+              </TouchableOpacity>
+            )}
+          </>
+        )}
+
+        {/* Billing note */}
+        <Text style={styles.billingNote}>
+          {Platform.OS === 'ios'
+            ? 'Billed via Apple. Manage in Settings — Subscriptions.'
+            : Platform.OS === 'android'
+              ? 'Billed via Google Play. Manage in Play Store — Subscriptions.'
+              : 'Secure payment powered by RevenueCat.'}
+        </Text>
+
+        {/* Refresh status */}
+        {user && (
+          <TouchableOpacity style={styles.refreshBtn} onPress={checkSubscriptionStatus} disabled={checkingStatus}>
+            {checkingStatus
+              ? <ActivityIndicator size="small" color="rgba(255,255,255,0.25)" />
+              : <Ionicons name="refresh" size={11} color="rgba(255,255,255,0.25)" />}
+            <Text style={styles.refreshText}>Refresh Status</Text>
+          </TouchableOpacity>
+        )}
+      </View>
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: DARK_BG },
+
+  glowTop: {
+    position: 'absolute',
+    top: -70,
+    alignSelf: 'center',
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    backgroundColor: 'rgba(46,204,90,0.07)',
+  },
+
+  closeWrap: { position: 'absolute', left: 16, zIndex: 20 },
+  closeBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.11)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  scroll: { alignItems: 'center', paddingHorizontal: 18 },
+
+  // Header
+  header: { alignItems: 'center', marginBottom: 16 },
+  iconWrap: { alignItems: 'center', marginBottom: 10, position: 'relative' },
+  iconGlow: {
+    position: 'absolute',
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: 'rgba(46,204,90,0.15)',
+    top: 2,
+  },
+  iconCard: {
+    width: 80,
+    height: 80,
+    borderRadius: 20,
+    overflow: 'hidden',
+    borderWidth: 1.5,
+    borderColor: 'rgba(46,204,90,0.32)',
+    shadowColor: GREEN,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.45,
+    shadowRadius: 18,
+    elevation: 10,
+  },
+  iconImage: { width: '100%', height: '100%' },
+  title: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#fff',
+    letterSpacing: -0.5,
+    marginBottom: 5,
+  },
+  subtitle: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.45)',
+    textAlign: 'center',
+    lineHeight: 19,
+  },
+
+  // Plan toggle
+  planToggleWrap: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 50,
+    padding: 4,
+    width: '100%',
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.07)',
+    overflow: 'hidden',
+  },
+  planToggleBtn: {
+    flex: 1,
+    paddingVertical: 11,
+    borderRadius: 46,
+    alignItems: 'center',
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  planToggleBtnActive: {},
+  planToggleText: { fontSize: 14, fontWeight: '500', color: 'rgba(255,255,255,0.35)', zIndex: 1 },
+  planToggleTextActive: { color: '#fff', fontWeight: '700', zIndex: 1 },
+
+  // Feature card
+  featureCard: {
+    width: '100%',
+    backgroundColor: CARD_BG,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: CARD_BORDER,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 4,
+    marginBottom: 12,
+    shadowColor: GREEN,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 14,
+    elevation: 5,
+  },
+  featureCardTitle: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: GREEN,
+    letterSpacing: 1.2,
+    marginBottom: 10,
+  },
+  featureRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 9,
+    gap: 10,
+  },
+  featureRowBorder: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(46,204,90,0.10)',
+  },
+  featureText: { fontSize: 14, color: '#fff', fontWeight: '400', flex: 1, lineHeight: 19 },
+
+  // Billing cards
+  billingCard: {
+    width: '100%',
+    backgroundColor: UNSELECTED_CARD,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: UNSELECTED_BORDER,
+    padding: 14,
+    marginBottom: 8,
+    overflow: 'visible',
+    position: 'relative',
+  },
+  billingCardActive: {
+    backgroundColor: CARD_BG,
+    borderColor: CARD_BORDER,
+    shadowColor: GREEN,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  saveBadge: {
+    position: 'absolute',
+    top: -11,
+    left: 14,
+    backgroundColor: '#c8a227',
+    borderRadius: 20,
+    paddingHorizontal: 9,
+    paddingVertical: 2,
+    zIndex: 2,
+  },
+  saveBadgeText: { fontSize: 10, fontWeight: '800', color: '#000', letterSpacing: 0.5 },
+  billingCardRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 2 },
+  billingCycleLabel: { fontSize: 15, fontWeight: '600', color: '#fff', marginBottom: 2 },
+  billingCyclePrice: { fontSize: 12, color: 'rgba(255,255,255,0.38)' },
+  billingRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  billingPerMonth: { fontSize: 13, fontWeight: '600', color: 'rgba(255,255,255,0.85)' },
+  emptyCircle: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.22)',
+  },
+
+  cancelRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 6, marginBottom: 2 },
+  cancelText: { fontSize: 12, color: 'rgba(255,255,255,0.4)' },
+
+  restoreBtn: { paddingVertical: 10, paddingHorizontal: 16 },
+  restoreText: { fontSize: 12, color: 'rgba(255,255,255,0.3)', textDecorationLine: 'underline' },
+
+  // Bottom bar
+  bottomBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 18,
+    paddingTop: 12,
+    backgroundColor: 'rgba(6,6,6,0.97)',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(255,255,255,0.05)',
+    alignItems: 'center',
+    gap: 6,
+  },
+
+  activeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(46,204,90,0.1)',
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderWidth: 1,
+    borderColor: 'rgba(46,204,90,0.2)',
+    marginBottom: 2,
+  },
+  activeBadgeText: { color: GREEN, fontSize: 12, fontWeight: '600' },
+
+  subscribeBtn: {
+    width: '100%',
+    height: 50,
+    borderRadius: 50,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    shadowColor: GREEN,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 14,
+    elevation: 9,
+  },
+  manageBtn: {
+    width: '100%',
+    height: 50,
+    borderRadius: 50,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.09)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+
+  // Web purchase button
+  webBtn: {
+    width: '100%',
+    height: 46,
+    borderRadius: 50,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(46,204,90,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(46,204,90,0.28)',
+  },
+  webBtnPrimary: {
+    backgroundColor: CARD_BG,
+    borderColor: CARD_BORDER,
+    shadowColor: GREEN,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  webBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: GREEN,
+  },
+
+  btnRow: { flexDirection: 'row', alignItems: 'center', gap: 7, zIndex: 1 },
+  subscribeBtnText: { fontSize: 16, fontWeight: '700', color: '#fff' },
+
+  billingNote: { fontSize: 10, color: 'rgba(255,255,255,0.25)', textAlign: 'center' },
+  refreshBtn: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingVertical: 2 },
+  refreshText: { fontSize: 10, color: 'rgba(255,255,255,0.2)' },
+});
