@@ -631,16 +631,48 @@ export default function SettingsScreen() {
   const checkUpdate = async () => {
     setUpdateStatus('checking');
     try {
-      if (Platform.OS !== 'web') {
-        try {
-          const Updates = require('expo-updates');
-          const update = await Updates.checkForUpdateAsync();
-          if (update.isAvailable) { setUpdateStatus('update'); return; }
-        } catch (_e) {}
+      if (Platform.OS === 'web') {
+        await new Promise(r => setTimeout(r, 1000));
+        setUpdateStatus('no-update');
+        setTimeout(() => setUpdateStatus('idle'), 3000);
+        return;
       }
-      setUpdateStatus('no-update');
-      setTimeout(() => { setUpdateStatus('version'); setTimeout(() => setUpdateStatus('no-update'), 3000); }, 3000);
-    } catch (e) { setUpdateStatus('idle'); }
+      const Updates = await import('expo-updates');
+      const result = await Updates.checkForUpdateAsync();
+      if (result.isAvailable) {
+        setUpdateStatus('update');
+        showAlert(
+          'Update Available',
+          'A new version is available. Downloading now...',
+          [
+            { text: 'Later', style: 'cancel', onPress: () => setUpdateStatus('idle') },
+            {
+              text: 'Update',
+              onPress: async () => {
+                try {
+                  await Updates.fetchUpdateAsync();
+                  showAlert('Ready', 'Update downloaded. Restart to apply.', [
+                    { text: 'Restart Now', onPress: () => Updates.reloadAsync() },
+                    { text: 'Later', style: 'cancel' },
+                  ]);
+                } catch (fetchErr: any) {
+                  showAlert('Error', fetchErr?.message || 'Failed to download update.');
+                  setUpdateStatus('idle');
+                }
+              },
+            },
+          ]
+        );
+      } else {
+        setUpdateStatus('no-update');
+        showAlert('Up to Date', `You are running the latest version (${currentVersion}).`);
+        setTimeout(() => setUpdateStatus('idle'), 4000);
+      }
+    } catch (e: any) {
+      // expo-updates not available in dev/Expo Go — show version info
+      setUpdateStatus('version');
+      setTimeout(() => setUpdateStatus('idle'), 3000);
+    }
   };
 
   const openStore = () => {

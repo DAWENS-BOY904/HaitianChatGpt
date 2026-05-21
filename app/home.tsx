@@ -86,6 +86,8 @@ import * as Haptics from 'expo-haptics';
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+function ThinkingIndicator({completed,mode,onCancel,isGroupMode}:{userMessage?:string;completed:boolean;mode:'thinking'|'creating_image'|'analyzing'|'editing_image';onCancel?:()=>void;isGroupMode?:boolean}){const d0=useRef(new Animated.Value(0.3)).current,d1=useRef(new Animated.Value(0.3)).current,d2=useRef(new Animated.Value(0.3)).current;useEffect(()=>{const mk=(d:Animated.Value,delay:number)=>Animated.loop(Animated.sequence([Animated.delay(delay),Animated.timing(d,{toValue:1,duration:350,useNativeDriver:true}),Animated.timing(d,{toValue:0.3,duration:350,useNativeDriver:true})]));const a0=mk(d0,0),a1=mk(d1,180),a2=mk(d2,360);a0.start();a1.start();a2.start();return()=>{a0.stop();a1.stop();a2.stop();};},[]);const lbl=mode==='creating_image'?'Creating image':mode==='analyzing'?'Analyzing':mode==='editing_image'?'Editing image':isGroupMode?'Responding':'Thinking';if(completed)return<View style={{flexDirection:'row',alignItems:'center',paddingHorizontal:16,paddingVertical:8,gap:6}}><Ionicons name="checkmark-circle" size={16} color="#34C759"/><Text style={{color:'#34C759',fontSize:14,fontWeight:'500'}}>Done</Text></View>;return<View style={{flexDirection:'row',alignItems:'center',paddingHorizontal:16,paddingVertical:12,gap:10}}><View style={{flexDirection:'row',gap:4}}>{[d0,d1,d2].map((d,i)=><Animated.View key={i} style={{width:7,height:7,borderRadius:3.5,backgroundColor:'#10A37F',opacity:d}}/>)}</View><Text style={{color:'rgba(128,128,128,0.85)',fontSize:14}}>{lbl}...</Text>{onCancel?<TouchableOpacity onPress={onCancel} hitSlop={{top:8,bottom:8,left:8,right:8}}><View style={{width:24,height:24,borderRadius:12,backgroundColor:'rgba(128,128,128,0.12)',alignItems:'center',justifyContent:'center'}}><Ionicons name="stop" size={10} color="rgba(128,128,128,0.75)"/></View></TouchableOpacity>:null}</View>;}
+
 // ── Deep Researchs Progress Card  ──────────────────────────────────────────────
 const DeepResearchCard = memo(function DeepResearchCard({ step, label, done, colors }: { step: number; label: string; done: boolean; colors: any }) {
   const pulse = useRef(new Animated.Value(0.5)).current;
@@ -292,30 +294,7 @@ const mentionStyles = StyleSheet.create({
   name: { fontSize: 15, fontWeight: '500' },
 });
 
-const MUSIC_KEYWORDS_SPOTIFY = [
-  'play music', 'play song', 'play track', 'play artist',
-  'find music', 'search music', 'give me music', 'show me music',
-  'recommend music', 'suggest music', 'music recommendation',
-  'new songs', 'new music', 'latest music',
-  'spotify music', 'spotify playlist', 'spotify song',
-  'listen music', 'listen song',
-  'music for me', 'songs for me',
-  'best songs', 'top songs',
-  'music mix', 'music playlist', 'i need song', 'i want a songs', 'party music',
-  'play a song', 'play some music', 'play my music', 'play trending music',
-  'play popular songs', 'play hit songs', 'play top hits', 'play chill music',
-  'play relaxing music', 'play workout music', 'play gym music', 'play focus music',
-  'play study music', 'play sleep music', 'play sad songs', 'play happy songs',
-  'play love songs', 'play romantic songs', 'play dance music', 'play party songs',
-  'find songs', 'find songs for me', 'search songs', 'search for songs',
-  'get me music', 'get me songs', 'load music', 'load songs',
-  'open music', 'open spotify', 'start music', 'start songs',
-  'resume music', 'resume song', 'next song', 'previous song',
-  'skip song', 'shuffle music', 'repeat song',
-  'song recommendation', 'music suggestions', 'top music', 'hot songs',
-  'viral songs', 'trending songs', 'latest songs', 'best music',
-  'good music', 'cool songs', 'fire songs', 'banger songs', 'music now',
-];
+const MUSIC_KEYWORDS_SPOTIFY=['play music','play song','play track','spotify music','recommend music','listen music','best songs','top songs','music mix','playlist','i need song','party music','find songs','search songs','get me music','trending songs','latest songs'];
 
 const SUPPORTED_AI_MODELS = {
   gemini: 'Gemini',
@@ -4111,4 +4090,3 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-fix thinking.
