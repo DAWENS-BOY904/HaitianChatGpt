@@ -1,30 +1,40 @@
-/*
- * @Description: 
- */
-
 // Powered by OnSpace.AI
-import { MaterialIcons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Platform } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
 export default function TabLayout() {
+  const insets = useSafeAreaInsets();
+
+  const tabBarStyle = {
+    height: Platform.select({
+      ios: insets.bottom + 60,
+      android: insets.bottom + 60,
+      default: 70,
+    }),
+    paddingTop: 8,
+    paddingBottom: Platform.select({
+      ios: insets.bottom + 8,
+      android: insets.bottom + 8,
+      default: 8,
+    }),
+    paddingHorizontal: 16,
+    backgroundColor: '#0a0a0a',
+    borderTopWidth: 1,
+    borderTopColor: '#1a1a1a',
+  };
+
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarStyle: {
-          backgroundColor: '#0a0a0a',
-          borderTopColor: '#1a1a1a',
-          borderTopWidth: 1,
-          height: Platform.OS === 'ios' ? 85 : 65,
-          paddingBottom: Platform.OS === 'ios' ? 25 : 10,
-          paddingTop: 10,
-        },
-        tabBarActiveTintColor: '#FFD700',
+        tabBarStyle,
+        tabBarActiveTintColor: '#10A37F',
         tabBarInactiveTintColor: '#666',
         tabBarLabelStyle: {
           fontSize: 12,
-          fontWeight: '600',
+          fontWeight: '500',
         },
       }}
     >
@@ -33,7 +43,7 @@ export default function TabLayout() {
         options={{
           title: 'Gallery',
           tabBarIcon: ({ color, size }) => (
-            <MaterialIcons name="photo-library" size={size} color={color} />
+            <Ionicons name="images-outline" size={size} color={color} />
           ),
         }}
       />
