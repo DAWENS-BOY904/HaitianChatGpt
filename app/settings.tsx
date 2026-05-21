@@ -1184,4 +1184,3 @@ export default function SettingsScreen() {
     </View>
   );
 }
-Implement a real update check in settings using expo-updates checkForUpdateAsync and fetchUpdateAsync, with a progress indicator and success/failure alert, replacing the current stub.
