@@ -1,202 +1,174 @@
-import React, { useCallback } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  Modal,
-  Linking,
-  Platform,
-} from 'react-native';
+import React from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Modal, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { BlurView } from 'expo-blur';
+import * as Clipboard from 'expo-clipboard';
 import { useTheme } from '../hooks/useTheme';
+import { useAlert } from '@/template';
+import { Spacing, Typography, BorderRadius } from '../constants/theme';
 
 interface LinkSafetyModalProps {
   visible: boolean;
   url: string;
   onClose: () => void;
-  onConfirm: () => void;
+  onOpenLink: (url: string) => void;
 }
 
-export function LinkSafetyModal({
-  visible,
-  url,
-  onClose,
-  onConfirm,
-}: LinkSafetyModalProps) {
-  const { colors, isDark } = useTheme();
+export function LinkSafetyModal({ visible, url, onClose, onOpenLink }: LinkSafetyModalProps) {
+  const { colors } = useTheme();
+  const { showAlert } = useAlert();
 
-  const handleOpen = useCallback(() => {
-    onConfirm();
+  const handleCopyLink = async () => {
+    await Clipboard.setStringAsync(url);
+    showAlert('Link Copied', 'The link has been copied to your clipboard');
     onClose();
-    Linking.openURL(url).catch(() => {});
-  }, [url, onConfirm, onClose]);
+  };
 
-  const displayUrl = url.length > 60 ? url.slice(0, 57) + '...' : url;
+  const handleOpenLink = () => {
+    onOpenLink(url);
+    onClose();
+  };
+
+  const styles = StyleSheet.create({
+    overlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      justifyContent: 'flex-end',
+    },
+    container: {
+      backgroundColor: colors.background,
+      borderTopLeftRadius: BorderRadius.xl,
+      borderTopRightRadius: BorderRadius.xl,
+      padding: Spacing.lg,
+      paddingBottom: Spacing.xl * 2,
+    },
+    header: {
+      width: 40,
+      height: 4,
+      backgroundColor: colors.border,
+      borderRadius: 2,
+      alignSelf: 'center',
+      marginBottom: Spacing.lg,
+    },
+    closeButton: {
+      position: 'absolute',
+      top: Spacing.lg,
+      right: Spacing.lg,
+      width: 32,
+      height: 32,
+      borderRadius: BorderRadius.full,
+      backgroundColor: colors.surface,
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 10,
+    },
+    title: {
+      ...Typography.heading,
+      fontSize: 22,
+      color: colors.text,
+      textAlign: 'center',
+      marginBottom: Spacing.md,
+      fontWeight: '600',
+    },
+    message: {
+      ...Typography.body,
+      color: colors.textSecondary,
+      textAlign: 'center',
+      marginBottom: Spacing.lg,
+      lineHeight: 20,
+    },
+    urlContainer: {
+      backgroundColor: colors.surface,
+      borderRadius: BorderRadius.md,
+      padding: Spacing.md,
+      marginBottom: Spacing.xl,
+    },
+    url: {
+      ...Typography.body,
+      color: colors.primary,
+      textAlign: 'center',
+      fontSize: 14,
+    },
+    openButton: {
+      backgroundColor: '#000000',
+      borderRadius: BorderRadius.xl,
+      paddingVertical: Spacing.md + 2,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: Spacing.md,
+    },
+    openButtonText: {
+      ...Typography.body,
+      color: '#FFFFFF',
+      fontWeight: '600',
+      fontSize: 16,
+    },
+    copyButton: {
+      backgroundColor: colors.background,
+      borderRadius: BorderRadius.xl,
+      paddingVertical: Spacing.md + 2,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1,
+      borderColor: colors.border,
+      marginBottom: Spacing.sm,
+    },
+    copyButtonText: {
+      ...Typography.body,
+      color: colors.text,
+      fontWeight: '600',
+      fontSize: 16,
+    },
+    learnMoreButton: {
+      paddingVertical: Spacing.sm,
+      alignItems: 'center',
+    },
+    learnMoreText: {
+      ...Typography.body,
+      color: colors.textSecondary,
+      fontSize: 14,
+    },
+  });
 
   return (
     <Modal
       visible={visible}
       transparent
-      animationType="fade"
-      statusBarTranslucent
+      animationType="slide"
       onRequestClose={onClose}
     >
-      <View style={styles.overlay}>
-        <BlurView
-          intensity={Platform.OS === 'ios' ? 60 : 80}
-          tint={isDark ? 'dark' : 'light'}
-          style={StyleSheet.absoluteFill}
-        />
-        <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose} />
+      <Pressable style={styles.overlay} onPress={onClose}>
+        <Pressable style={styles.container} onPress={(e) => e.stopPropagation()}>
+          <View style={styles.header} />
+          
+          <TouchableOpacity style={styles.closeButton} onPress={onClose}>
+            <Ionicons name="close" size={20} color={colors.text} />
+          </TouchableOpacity>
 
-        <View style={[styles.card, { borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)' }]}>
-          <BlurView
-            intensity={Platform.OS === 'ios' ? 90 : 95}
-            tint={isDark ? 'dark' : 'light'}
-            style={styles.blurCard}
-          >
-            {/* Icon */}
-            <View style={[styles.iconWrap, { backgroundColor: '#FF9F0A22' }]}>
-              <Ionicons name="shield-outline" size={32} color="#FF9F0A" />
-            </View>
+          <Text style={styles.title}>Check this link is safe</Text>
+          
+          <Text style={styles.message}>
+            Some sites restrict our ability to check links. This link isn't verified and may include information from your conversation that could be shared with a third-party site. Make sure you trust this link before proceeding.
+          </Text>
 
-            <Text style={[styles.title, { color: isDark ? '#FFF' : '#000' }]}>
-              Opening External Link
+          <View style={styles.urlContainer}>
+            <Text style={styles.url} numberOfLines={3}>
+              {url}
             </Text>
-            <Text style={[styles.body, { color: isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.55)' }]}>
-              You are about to leave Dawinix and open an external website. Make sure you trust this link before continuing.
-            </Text>
+          </View>
 
-            {/* URL preview */}
-            <View style={[styles.urlBox, {
-              backgroundColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.05)',
-              borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
-            }]}>
-              <Ionicons name="link-outline" size={15} color={isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.4)'} />
-              <Text style={[styles.urlText, { color: isDark ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.65)' }]} numberOfLines={2}>
-                {displayUrl}
-              </Text>
-            </View>
+          <TouchableOpacity style={styles.openButton} onPress={handleOpenLink}>
+            <Text style={styles.openButtonText}>Open link</Text>
+          </TouchableOpacity>
 
-            {/* Buttons */}
-            <View style={styles.btnRow}>
-              <TouchableOpacity
-                style={[styles.btn, styles.cancelBtn, {
-                  backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
-                  borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)',
-                }]}
-                onPress={onClose}
-                activeOpacity={0.75}
-              >
-                <Text style={[styles.cancelText, { color: isDark ? 'rgba(255,255,255,0.8)' : 'rgba(0,0,0,0.7)' }]}>
-                  Cancel
-                </Text>
-              </TouchableOpacity>
+          <TouchableOpacity style={styles.copyButton} onPress={handleCopyLink}>
+            <Text style={styles.copyButtonText}>Copy link</Text>
+          </TouchableOpacity>
 
-              <TouchableOpacity
-                style={[styles.btn, styles.openBtn, { backgroundColor: '#FF9F0A' }]}
-                onPress={handleOpen}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="open-outline" size={16} color="#FFF" style={{ marginRight: 6 }} />
-                <Text style={styles.openText}>Open Link</Text>
-              </TouchableOpacity>
-            </View>
-          </BlurView>
-        </View>
-      </View>
+          <TouchableOpacity style={styles.learnMoreButton} onPress={onClose}>
+            <Text style={styles.learnMoreText}>Learn more</Text>
+          </TouchableOpacity>
+        </Pressable>
+      </Pressable>
     </Modal>
   );
 }
-
-const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-  },
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  card: {
-    width: '100%',
-    maxWidth: 360,
-    borderRadius: 22,
-    overflow: 'hidden',
-    borderWidth: StyleSheet.hairlineWidth,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.4,
-    shadowRadius: 24,
-    elevation: 20,
-  },
-  blurCard: {
-    padding: 24,
-    alignItems: 'center',
-  },
-  iconWrap: {
-    width: 64,
-    height: 64,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: '700',
-    textAlign: 'center',
-    marginBottom: 10,
-  },
-  body: {
-    fontSize: 14,
-    textAlign: 'center',
-    lineHeight: 21,
-    marginBottom: 16,
-  },
-  urlBox: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
-    borderRadius: 12,
-    borderWidth: 1,
-    padding: 12,
-    width: '100%',
-    marginBottom: 22,
-  },
-  urlText: {
-    flex: 1,
-    fontSize: 13,
-    lineHeight: 18,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-  },
-  btnRow: {
-    flexDirection: 'row',
-    gap: 10,
-    width: '100%',
-  },
-  btn: {
-    flex: 1,
-    borderRadius: 14,
-    paddingVertical: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-  },
-  cancelBtn: {
-    borderWidth: 1,
-  },
-  openBtn: {},
-  cancelText: {
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  openText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#FFF',
-  },
-});

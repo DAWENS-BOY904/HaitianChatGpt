@@ -35,8 +35,6 @@ interface AIModel {
 const modelImages: Record<string, any> = {
   'openai-gpt4': require('../assets/models/IMG_0834.jpeg'),
   'google-gemini': require('../assets/models/IMG_0835.png'),
-  'google-gemini-2.0-flash': require('../assets/models/IMG_0835.png'), // Using same Google icon
-  'google-gemini-pro': require('../assets/models/IMG_0835.png'), // Using same Google icon
   'claude-3': require('../assets/models/IMG_0836.png'),
   'groq-llama': require('../assets/models/IMG_0837.png'),
   'mistral-large': require('../assets/models/IMG_0838.png'),
@@ -57,20 +55,34 @@ export default function ModelSelectorScreen() {
     settings.preferredAiModel || 'google-gemini'
   );
 
-  // RECOMMENDED MODELS ONLY - PRODUCTION READY
   const modelMetadata: Record<
     string,
     { color: string; speed: string; bestFor: string }
   > = {
+    'openai-gpt4': {
+      color: '#10A37F',
+      speed: 'Moderate',
+      bestFor: 'Complex reasoning, creative writing',
+    },
     'google-gemini': {
       color: '#4285F4',
       speed: 'Fast',
-      bestFor: 'Best all-around AI - Fast responses, images, code, multilingual',
+      bestFor: 'Quick responses, multimodal tasks',
     },
-    'google-gemini-2.0-flash': {
-      color: '#4285F4',
-      speed: 'Very Fast',
-      bestFor: 'Latest Gemini - Image generation, multimodal AI, advanced reasoning',
+    'claude-3': {
+      color: '#D97757',
+      speed: 'Moderate',
+      bestFor: 'Safe content, long explanations',
+    },
+    'groq-llama': {
+      color: '#F55036',
+      speed: 'Ultra Fast',
+      bestFor: 'Instant chat, real-time answers',
+    },
+    'mistral-large': {
+      color: '#FF7000',
+      speed: 'Fast',
+      bestFor: 'Code & technical tasks',
     },
   };
 

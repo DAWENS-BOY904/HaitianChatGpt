@@ -80,7 +80,6 @@ export function MenuModal({ visible, onClose }: MenuModalProps) {
   };
 
   const handleNewChat = async () => {
-    // Create a new conversation (will be saved to history when first message is sent)
     await createConversation();
     onClose();
   };
@@ -280,25 +279,22 @@ export function MenuModal({ visible, onClose }: MenuModalProps) {
               />
             </View>
 
-           <View style={styles.tabContainer}>
-  {(['ChatGPT', 'Library', 'GPTs', 'GetProject'] as const).map(tab => (
-    <TouchableOpacity
-      key={tab}
-      style={[styles.tab, activeTab === tab && styles.tabActive]}
-      onPress={() => {
-        if (tab === 'GPTs') {
-          onClose();
-          router.push('/gpts');
-        } else if (tab === 'Library') {
-          onClose();
-          router.push('/images');
-        } else if (tab === 'GetProject') {
-          onClose();
-          router.push('/project-get');
-        } else {
-          setActiveTab(tab);
-        }
-      }}
+            <View style={styles.tabContainer}>
+              {(['ChatGPT', 'Library', 'GPTs'] as const).map(tab => (
+                <TouchableOpacity
+                  key={tab}
+                  style={[styles.tab, activeTab === tab && styles.tabActive]}
+                  onPress={() => {
+                    if (tab === 'GPTs') {
+                      onClose();
+                      router.push('/gpts');
+                    } else if (tab === 'Library') {
+                      onClose();
+                      router.push('/images');
+                    } else {
+                      setActiveTab(tab);
+                    }
+                  }}
                 >
                   <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
                     {tab}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -8,7 +8,7 @@ import {
   StatusBar,
   Platform,
 } from 'react-native';
-import { useAuth, useAlert, getSupabaseClient } from '@/template';
+import { useAuth, useAlert } from '@/template';
 import { useTheme } from '../hooks/useTheme';
 import { Spacing, Typography, BorderRadius } from '../constants/theme';
 import { Ionicons } from '@expo/vector-icons';
@@ -25,17 +25,6 @@ export default function LoginPasswordScreen() {
 
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const passwordRef = useRef<TextInput>(null);
-
-  // Auto-focus password field when arriving with email pre-filled
-  useEffect(() => {
-    if (email) {
-      const timer = setTimeout(() => {
-        passwordRef.current?.focus();
-      }, 400);
-      return () => clearTimeout(timer);
-    }
-  }, [email]);
 
   const handleLogin = async () => {
     if (!password.trim()) {
@@ -43,24 +32,9 @@ export default function LoginPasswordScreen() {
       return;
     }
 
-    const result = await signInWithPassword(email, password) as any;
-    if (result?.error) {
-      showAlert('Error', result.error);
-      return;
-    }
-    // Send login confirmation email (non-blocking)
-    if (result?.user) {
-      try {
-        const supabase = getSupabaseClient();
-        await supabase.functions.invoke('send-login-email', {
-          body: {
-            userId: result.user.id,
-            email: result.user.email || email,
-            platform: 'email',
-            loginTime: new Date().toISOString(),
-          },
-        });
-      } catch (_e) {}
+    const { error } = await signInWithPassword(email, password);
+    if (error) {
+      showAlert('Error', error);
     }
   };
 
@@ -69,29 +43,6 @@ export default function LoginPasswordScreen() {
       pathname: '/signup',
       params: { email },
     });
-  };
-
-  const handleForgotPassword = async () => {
-    if (!email?.trim()) {
-      showAlert('Error', 'Please go back and enter your email address first');
-      return;
-    }
-    try {
-      const supabase = (await import('@/template')).getSupabaseClient();
-      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-        redirectTo: 'haitianchatgpt://reset-password',
-      });
-      if (error) {
-        showAlert('Error', error.message);
-      } else {
-        showAlert(
-          'Check your email',
-          `We sent a password reset link to ${email}. Check your inbox and follow the instructions.`
-        );
-      }
-    } catch (e: any) {
-      showAlert('Error', e?.message || 'Failed to send reset email');
-    }
   };
 
   const styles = StyleSheet.create({
@@ -240,7 +191,6 @@ export default function LoginPasswordScreen() {
           <View style={styles.inputWrapper}>
             <Text style={styles.inputLabel}>Password</Text>
             <TextInput
-              ref={passwordRef}
               style={styles.input}
               placeholder=""
               placeholderTextColor={colors.textSecondary}
@@ -248,9 +198,6 @@ export default function LoginPasswordScreen() {
               onChangeText={setPassword}
               secureTextEntry={!showPassword}
               editable={!operationLoading}
-              returnKeyType="go"
-              onSubmitEditing={handleLogin}
-              autoFocus={!email}
             />
           </View>
           <TouchableOpacity 
@@ -275,18 +222,8 @@ export default function LoginPasswordScreen() {
           </Text>
         </TouchableOpacity>
 
-        {/* Forgot Password */}
-        <TouchableOpacity
-          onPress={handleForgotPassword}
-          style={{ alignItems: 'center', marginBottom: Spacing.lg }}
-        >
-          <Text style={{ ...Typography.body, color: colors.text, textDecorationLine: 'underline', fontSize: 15 }}>
-            Forgot password?
-          </Text>
-        </TouchableOpacity>
-
         <View style={styles.signupContainer}>
-          <Text style={styles.signupText}>Don&apos;t have an account?</Text>
+          <Text style={styles.signupText}>Don't have an account?</Text>
           <TouchableOpacity style={styles.signupButton} onPress={handleSignUp}>
             <Text style={styles.signupButtonText}>Sign up</Text>
           </TouchableOpacity>

@@ -1,23 +1,10 @@
-import React, { useState, useCallback, useMemo } from 'react';
-import {
-  View,
-  Text,
-  Modal,
-  TouchableOpacity,
-  StyleSheet,
-  TextInput,
-  ScrollView,
-  Platform,
-  Share,
-  Linking,
-  KeyboardAvoidingView,
-} from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, Modal, TouchableOpacity, StyleSheet, TextInput, ScrollView, Platform, Share, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
 import { Spacing, Typography, BorderRadius } from '../constants/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAlert } from '@/template';
-import { BlurView } from 'expo-blur'; // npm install expo-blur
 
 interface EmailComposerModalProps {
   visible: boolean;
@@ -25,13 +12,22 @@ interface EmailComposerModalProps {
   template?: 'support' | 'relations' | 'custom';
 }
 
-// --- Constants ---
-const RECIPIENT_EMAIL = 'support@haitianchatgpt.com';
+export function EmailComposerModal({ visible, onClose, template = 'support' }: EmailComposerModalProps) {
+  const { colors } = useTheme();
+  const { showAlert } = useAlert();
+  const insets = useSafeAreaInsets();
 
-const TEMPLATES = {
-  support: {
-    subject: 'Support Request – Account Issue',
-    body: `Hello Haitian ChatGPT Support Team,
+  const [recipient, setRecipient] = useState('support@haitianchatgpt.com');
+  const [subject, setSubject] = useState('');
+  const [body, setBody] = useState('');
+  const [showShareSheet, setShowShareSheet] = useState(false);
+
+  const getTemplateContent = () => {
+    switch (template) {
+      case 'support':
+        return {
+          subject: 'Support Request – Account Issue',
+          body: `Hello Haitian ChatGPT Support Team,
 
 I hope you are doing well. I am writing to request assistance with an issue I am experiencing.
 
@@ -47,11 +43,12 @@ I have already tried basic troubleshooting steps such as restarting my device an
 I would appreciate your help in resolving this matter as soon as possible. Thank you for your time and support.
 
 Kind regards,
-[Your Name]`,
-  },
-  relations: {
-    subject: 'Partnership Inquiry',
-    body: `Hello Haitian ChatGPT Team,
+[Your Name]`
+        };
+      case 'relations':
+        return {
+          subject: 'Partnership Inquiry',
+          body: `Hello Haitian ChatGPT Team,
 
 I am reaching out to inquire about potential collaboration opportunities.
 
@@ -66,199 +63,220 @@ Proposal:
 I look forward to discussing this further.
 
 Best regards,
-[Your Name]`,
-  },
-  custom: {
-    subject: '',
-    body: '',
-  },
-} as const;
+[Your Name]`
+        };
+      default:
+        return {
+          subject: '',
+          body: ''
+        };
+    }
+  };
 
-// --- Component ---
-export function EmailComposerModal({
-  visible,
-  onClose,
-  template = 'support',
-}: EmailComposerModalProps) {
-  const { colors, isDark } = useTheme();
-  const { showAlert } = useAlert();
-  const insets = useSafeAreaInsets();
-
-  const [subject, setSubject] = useState('');
-  const [body, setBody] = useState('');
-
-  // Reset fields when modal opens with new template
   React.useEffect(() => {
     if (visible) {
-      const t = TEMPLATES[template];
-      setSubject(t.subject);
-      setBody(t.body);
+      const templateContent = getTemplateContent();
+      setSubject(templateContent.subject);
+      setBody(templateContent.body);
     }
   }, [visible, template]);
 
-  const handleCopyEmail = useCallback(() => {
-    const fullEmail = `To: ${RECIPIENT_EMAIL}\\nSubject: ${subject}\\n\\n${body}`;
-    // Clipboard.setString(fullEmail); // Uncomment when you have @react-native-clipboard/clipboard
+  const handleCopyEmail = () => {
+    const fullEmail = `To: ${recipient}\nSubject: ${subject}\n\n${body}`;
+    // In a real app, copy to clipboard
     showAlert('Copied', 'Email template copied to clipboard');
-  }, [subject, body, showAlert]);
+  };
 
-  const handleSendEmail = useCallback(async () => {
+  const handleSendEmail = async () => {
+    // Show native share sheet for email apps
     if (Platform.OS === 'web') {
-      const mailtoUrl = `mailto:${RECIPIENT_EMAIL}?subject=${encodeURIComponent(
-        subject
-      )}&body=${encodeURIComponent(body)}`;
+      // Open mailto link on web
+      const mailtoUrl = `mailto:${recipient}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
       Linking.openURL(mailtoUrl);
-      return;
+    } else {
+      // Show share options on mobile
+      try {
+        await Share.share({
+          message: `Subject: ${subject}\n\n${body}`,
+          title: 'Send via Email',
+        });
+      } catch (error) {
+        console.error('Share error:', error);
+      }
     }
+  };
 
-    try {
-      await Share.share({
-        message: `Subject: ${subject}\\n\\n${body}`,
-        title: 'Send via Email',
-      });
-    } catch (error) {
-      console.error('Share error:', error);
-    }
-  }, [subject, body]);
-
-  // --- Styles ---
-  const styles = useMemo(
-    () =>
-      StyleSheet.create({
-        overlay: {
-          flex: 1,
-          justifyContent: 'flex-end',
-        },
-        blurBackground: {
-          ...StyleSheet.absoluteFillObject,
-        },
-        container: {
-          backgroundColor: colors.background,
-          borderTopLeftRadius: BorderRadius.xl,
-          borderTopRightRadius: BorderRadius.xl,
-          maxHeight: '92%',
-          overflow: 'hidden',
-        },
-        header: {
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          paddingHorizontal: Spacing.lg,
-          paddingVertical: Spacing.md,
-          borderBottomWidth: StyleSheet.hairlineWidth,
-          borderBottomColor: colors.border,
-        },
-        headerTitle: {
-          ...Typography.heading,
-          color: colors.text,
-          fontSize: 18,
-        },
-        closeButton: {
-          padding: Spacing.xs,
-        },
-        content: {
-          padding: Spacing.lg,
-        },
-        card: {
-          backgroundColor: colors.card,
-          borderRadius: BorderRadius.lg,
-          padding: Spacing.md,
-          marginBottom: Spacing.lg,
-          borderWidth: 1,
-          borderColor: colors.border,
-        },
-        cardHeader: {
-          flexDirection: 'row',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: Spacing.md,
-          paddingBottom: Spacing.md,
-          borderBottomWidth: StyleSheet.hairlineWidth,
-          borderBottomColor: colors.divider,
-        },
-        cardLabel: {
-          ...Typography.caption,
-          color: colors.textSecondary,
-          fontSize: 11,
-          fontWeight: '600',
-          letterSpacing: 0.5,
-          textTransform: 'uppercase',
-        },
-        iconRow: {
-          flexDirection: 'row',
-          gap: Spacing.xs,
-        },
-        iconButton: {
-          padding: Spacing.xs,
-          borderRadius: BorderRadius.md,
-        },
-        field: {
-          marginBottom: Spacing.md,
-        },
-        fieldLabel: {
-          ...Typography.caption,
-          color: colors.textSecondary,
-          fontSize: 12,
-          marginBottom: Spacing.xs,
-          fontWeight: '500',
-        },
-        recipientText: {
-          ...Typography.body,
-          color: colors.text,
-          fontSize: 15,
-          paddingVertical: Spacing.sm,
-        },
-        input: {
-          backgroundColor: colors.surface,
-          borderRadius: BorderRadius.md,
-          padding: Spacing.md,
-          ...Typography.body,
-          color: colors.text,
-          fontSize: 15,
-          borderWidth: 1,
-          borderColor: colors.border,
-        },
-        subjectInput: {
-          fontWeight: '600',
-        },
-        bodyInput: {
-          minHeight: 280,
-          textAlignVertical: 'top',
-          lineHeight: 22,
-        },
-        footer: {
-          flexDirection: 'row',
-          gap: Spacing.sm,
-          padding: Spacing.lg,
-          paddingBottom: Math.max(insets.bottom, Spacing.lg),
-          borderTopWidth: StyleSheet.hairlineWidth,
-          borderTopColor: colors.border,
-          backgroundColor: colors.background,
-        },
-        sendButton: {
-          flex: 1,
-          backgroundColor: colors.primary,
-          borderRadius: BorderRadius.lg,
-          padding: Spacing.md,
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: Spacing.sm,
-          shadowColor: colors.primary,
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.3,
-          shadowRadius: 8,
-          elevation: 4,
-        },
-        sendButtonText: {
-          ...Typography.body,
-          color: '#FFFFFF',
-          fontWeight: '600',
-          fontSize: 16,
-        },
+  const styles = StyleSheet.create({
+    overlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      justifyContent: 'flex-end',
+    },
+    container: {
+      backgroundColor: colors.background,
+      borderTopLeftRadius: BorderRadius.xl,
+      borderTopRightRadius: BorderRadius.xl,
+      maxHeight: '90%',
+      paddingTop: Spacing.md,
+    },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: Spacing.lg,
+      paddingBottom: Spacing.md,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    headerTitle: {
+      ...Typography.heading,
+      color: colors.text,
+      fontSize: 18,
+    },
+    closeButton: {
+      padding: Spacing.xs,
+    },
+    content: {
+      padding: Spacing.lg,
+    },
+    emailPreview: {
+      backgroundColor: colors.card,
+      borderRadius: BorderRadius.lg,
+      padding: Spacing.md,
+      marginBottom: Spacing.lg,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    emailHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: Spacing.md,
+      paddingBottom: Spacing.md,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.divider,
+    },
+    emailLabel: {
+      ...Typography.caption,
+      color: colors.textSecondary,
+      fontSize: 11,
+      fontWeight: '600',
+    },
+    actions: {
+      flexDirection: 'row',
+      gap: Spacing.xs,
+    },
+    actionButton: {
+      padding: Spacing.xs,
+    },
+    section: {
+      marginBottom: Spacing.md,
+    },
+    sectionLabel: {
+      ...Typography.caption,
+      color: colors.textSecondary,
+      fontSize: 12,
+      marginBottom: Spacing.xs,
+    },
+    sectionContent: {
+      ...Typography.body,
+      color: colors.text,
+      fontSize: 15,
+      lineHeight: 22,
+    },
+    subjectInput: {
+      backgroundColor: colors.surface,
+      borderRadius: BorderRadius.md,
+      padding: Spacing.md,
+      ...Typography.body,
+      color: colors.text,
+      fontSize: 15,
+      fontWeight: '600',
+      marginBottom: Spacing.md,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    bodyInput: {
+      backgroundColor: colors.surface,
+      borderRadius: BorderRadius.md,
+      padding: Spacing.md,
+      ...Typography.body,
+      color: colors.text,
+      fontSize: 14,
+      lineHeight: 20,
+      minHeight: 300,
+      textAlignVertical: 'top',
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    footer: {
+      flexDirection: 'row',
+      gap: Spacing.sm,
+      padding: Spacing.lg,
+      paddingBottom: Platform.select({
+        ios: insets.bottom + Spacing.lg,
+        android: Spacing.lg,
+        default: Spacing.lg,
       }),
-    [colors, insets.bottom]
-  );
+      borderTopWidth: 1,
+      borderTopColor: colors.border,
+    },
+    sendButton: {
+      flex: 1,
+      backgroundColor: colors.primary,
+      borderRadius: BorderRadius.lg,
+      padding: Spacing.md,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: Spacing.sm,
+    },
+    sendButtonText: {
+      ...Typography.body,
+      color: '#FFFFFF',
+      fontWeight: '600',
+      fontSize: 16,
+    },
+    shareSheetContainer: {
+      backgroundColor: colors.background,
+      borderTopLeftRadius: BorderRadius.xl,
+      borderTopRightRadius: BorderRadius.xl,
+      padding: Spacing.lg,
+      paddingBottom: Platform.select({
+        ios: insets.bottom + Spacing.lg,
+        android: Spacing.lg,
+        default: Spacing.lg,
+      }),
+    },
+    shareSheetTitle: {
+      ...Typography.heading,
+      color: colors.text,
+      fontSize: 16,
+      marginBottom: Spacing.md,
+      textAlign: 'center',
+    },
+    shareOption: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: Spacing.md,
+      borderRadius: BorderRadius.md,
+      backgroundColor: colors.surface,
+      marginBottom: Spacing.sm,
+    },
+    shareIcon: {
+      width: 44,
+      height: 44,
+      borderRadius: BorderRadius.full,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: Spacing.md,
+    },
+    shareOptionText: {
+      ...Typography.body,
+      color: colors.text,
+      fontSize: 16,
+    },
+  });
 
   return (
     <Modal
@@ -266,121 +284,104 @@ export function EmailComposerModal({
       transparent
       animationType="slide"
       onRequestClose={onClose}
-      statusBarTranslucent
     >
-      <View style={styles.overlay}>
-        {/* 🔵 BLUR BACKGROUND EFFECT */}
-        <BlurView
-          style={styles.blurBackground}
-          intensity={isDark ? 40 : 60}
-          tint={isDark ? 'dark' : 'light'}
-        />
+      <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={onClose}>
+        <View style={styles.container} onStartShouldSetResponder={() => true}>
+          <View style={styles.header}>
+            <Text style={styles.headerTitle}>Email Composer</Text>
+            <TouchableOpacity style={styles.closeButton} onPress={onClose}>
+              <Ionicons name="close" size={24} color={colors.text} />
+            </TouchableOpacity>
+          </View>
 
-        {/* Tap outside to close */}
-        <TouchableOpacity
-          style={StyleSheet.absoluteFill}
-          activeOpacity={1}
-          onPress={onClose}
-        />
-
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 20 : 0}
-        >
-          <View style={styles.container}>
-            {/* Header */}
-            <View style={styles.header}>
-              <Text style={styles.headerTitle}>Email Composer</Text>
-              <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-                <Ionicons name="close" size={24} color={colors.text} />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView
-              style={styles.content}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-            >
-              <View style={styles.card}>
-                {/* Card Header */}
-                <View style={styles.cardHeader}>
-                  <Text style={styles.cardLabel}>New Message</Text>
-                  <View style={styles.iconRow}>
-                    <TouchableOpacity
-                      style={styles.iconButton}
-                      onPress={handleCopyEmail}
-                      activeOpacity={0.7}
-                    >
-                      <Ionicons
-                        name="copy-outline"
-                        size={20}
-                        color={colors.textSecondary}
-                      />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.iconButton}
-                      onPress={handleSendEmail}
-                      activeOpacity={0.7}
-                    >
-                      <Ionicons
-                        name="mail-outline"
-                        size={20}
-                        color={colors.primary}
-                      />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-
-                {/* Recipient */}
-                <View style={styles.field}>
-                  <Text style={styles.fieldLabel}>To</Text>
-                  <Text style={styles.recipientText}>{RECIPIENT_EMAIL}</Text>
-                </View>
-
-                {/* Subject */}
-                <View style={styles.field}>
-                  <Text style={styles.fieldLabel}>Subject</Text>
-                  <TextInput
-                    style={[styles.input, styles.subjectInput]}
-                    value={subject}
-                    onChangeText={setSubject}
-                    placeholder="Email subject"
-                    placeholderTextColor={colors.textSecondary}
-                    multiline
-                    maxLength={200}
-                  />
-                </View>
-
-                {/* Body */}
-                <View style={styles.field}>
-                  <Text style={styles.fieldLabel}>Message</Text>
-                  <TextInput
-                    style={[styles.input, styles.bodyInput]}
-                    value={body}
-                    onChangeText={setBody}
-                    placeholder="Write your message..."
-                    placeholderTextColor={colors.textSecondary}
-                    multiline
-                    textAlignVertical="top"
-                  />
+          <ScrollView style={styles.content}>
+            <View style={styles.emailPreview}>
+              <View style={styles.emailHeader}>
+                <Text style={styles.emailLabel}>Email</Text>
+                <View style={styles.actions}>
+                  <TouchableOpacity style={styles.actionButton} onPress={handleCopyEmail}>
+                    <Ionicons name="copy-outline" size={20} color={colors.text} />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.actionButton} onPress={handleSendEmail}>
+                    <Ionicons name="mail-outline" size={20} color={colors.primary} />
+                  </TouchableOpacity>
                 </View>
               </View>
-            </ScrollView>
 
-            {/* Footer */}
-            <View style={styles.footer}>
-              <TouchableOpacity
-                style={styles.sendButton}
-                onPress={handleSendEmail}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="send" size={20} color="#FFFFFF" />
-                <Text style={styles.sendButtonText}>Send Email</Text>
-              </TouchableOpacity>
+              <View style={styles.section}>
+                <Text style={styles.sectionLabel}>To</Text>
+                <Text style={styles.sectionContent}>{recipient}</Text>
+              </View>
+
+              <View style={styles.section}>
+                <Text style={styles.sectionLabel}>Subject</Text>
+                <TextInput
+                  style={styles.subjectInput}
+                  value={subject}
+                  onChangeText={setSubject}
+                  placeholder="Email subject"
+                  placeholderTextColor={colors.textSecondary}
+                  multiline
+                />
+              </View>
+
+              <View style={styles.section}>
+                <Text style={styles.sectionLabel}>Message</Text>
+                <TextInput
+                  style={styles.bodyInput}
+                  value={body}
+                  onChangeText={setBody}
+                  placeholder="Email body"
+                  placeholderTextColor={colors.textSecondary}
+                  multiline
+                />
+              </View>
             </View>
+          </ScrollView>
+
+          <View style={styles.footer}>
+            <TouchableOpacity
+              style={styles.sendButton}
+              onPress={handleSendEmail}
+            >
+              <Ionicons name="send" size={20} color="#FFFFFF" />
+              <Text style={styles.sendButtonText}>Send Email</Text>
+            </TouchableOpacity>
           </View>
-        </KeyboardAvoidingView>
-      </View>
+        </View>
+      </TouchableOpacity>
+
+      {/* Share Sheet Modal */}
+      <Modal
+        visible={showShareSheet}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowShareSheet(false)}
+      >
+        <TouchableOpacity
+          style={styles.overlay}
+          activeOpacity={1}
+          onPress={() => setShowShareSheet(false)}
+        >
+          <View style={styles.shareSheetContainer} onStartShouldSetResponder={() => true}>
+            <Text style={styles.shareSheetTitle}>Open in</Text>
+
+            <TouchableOpacity style={styles.shareOption}>
+              <View style={[styles.shareIcon, { backgroundColor: '#007AFF' }]}>
+                <Ionicons name="mail" size={24} color="#FFFFFF" />
+              </View>
+              <Text style={styles.shareOptionText}>Mail</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.shareOption}>
+              <View style={[styles.shareIcon, { backgroundColor: '#EA4335' }]}>
+                <Ionicons name="logo-google" size={24} color="#FFFFFF" />
+              </View>
+              <Text style={styles.shareOptionText}>Gmail</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </Modal>
   );
 }

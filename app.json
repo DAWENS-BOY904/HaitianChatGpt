@@ -1,49 +1,26 @@
 {
   "expo": {
-    "name": "Dawinix HT",
-    "slug": "dawinix-ht-ewor4to3vxrkza2nblnst",
+    "name": "onspace-app",
+    "slug": "onspace-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/logo.png",
-    "scheme": "dawinixht",
+    "scheme": "onspaceapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "app.onspace.dawinix2027",
-      "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false,
-        "NSMicrophoneUsageDescription": "Dawinix uses your microphone for voice input and voice messages.",
-        "NSCameraUsageDescription": "Dawinix uses your camera to capture and upload images.",
-        "NSPhotoLibraryUsageDescription": "Dawinix accesses your photo library to upload images.",
-        "NSPhotoLibraryAddUsageDescription": "Dawinix saves generated images to your photo library.",
-        "NSSpeechRecognitionUsageDescription": "Dawinix uses speech recognition for voice-to-text input.",
-        "NSFaceIDUsageDescription": "Dawinix uses Face ID for secure authentication.",
-        "NSContactsUsageDescription": "Dawinix may access contacts to help you share conversations."
-      }
+      "supportsTablet": true
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/logo.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "app.onspace.dawinix2027",
-      "versionCode": 1,
-      "edgeToEdgeEnabled": true,
-      "permissions": [
-        "android.permission.RECORD_AUDIO",
-        "android.permission.CAMERA",
-        "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.WRITE_EXTERNAL_STORAGE",
-        "android.permission.USE_BIOMETRIC",
-        "android.permission.USE_FINGERPRINT",
-        "android.permission.INTERNET",
-        "android.permission.ACCESS_NETWORK_STATE"
-      ]
+      "edgeToEdgeEnabled": true
     },
     "web": {
       "bundler": "metro",
-      "output": "single",
+      "output": "static",
       "favicon": "./assets/images/logo.png"
     },
     "plugins": [
@@ -57,23 +34,10 @@
           "backgroundColor": "#ffffff"
         }
       ],
-      [
-        "expo-secure-store",
-        {
-          "configureAndroidBackup": false
-        }
-      ]
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true
-    },
-    "extra": {
-      "router": {},
-      "eas": {
-        "projectId": "4e273b4c-f781-4751-85ba-caf9379e8953"
-      },
-      "revenueCatIosKey": "appl_LCOBkSEKCqNFllINWlYWexOVaHf",
-      "revenueCatAndroidKey": "goog_htwkRFMSklkJWsTytqppHVTxkkP"
     }
   }
 }
