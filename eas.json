@@ -36,8 +36,7 @@
       },
       "ios": {
         "credentialsSource": "remote",
-        "resourceClass": "m-medium",
-        "enterpriseProvisioning": "universal"
+        "resourceClass": "m-medium"
       },
       "env": {
         "EXPO_NO_CAPABILITY_SYNC": "1",
