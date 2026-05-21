@@ -10,7 +10,7 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "app.onspace.haitianchatgpt",
+      "bundleIdentifier": "app.onspace.dawinix2027",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSMicrophoneUsageDescription": "Dawinix uses your microphone for voice input and voice messages.",
@@ -27,7 +27,7 @@
         "foregroundImage": "./assets/images/logo.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "app.onspace.haitianchatgpt",
+      "package": "app.onspace.dawinix2027",
       "versionCode": 1,
       "edgeToEdgeEnabled": true,
       "permissions": [
