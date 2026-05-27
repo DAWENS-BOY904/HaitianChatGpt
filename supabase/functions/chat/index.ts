@@ -42,14 +42,21 @@ interface ApiInfo {
   notes: string;
 }
 
+interface WebSearchResult {
+  title: string;
+  url: string;
+  snippet: string;
+  domain: string;
+}
+
 // ── Configuration ──────────────────────────────────────────────────────────
 
 const CONFIG = {
-  MAX_BODY_SIZE: 10 * 1024 * 1024, // 10MB
-  MAX_FILE_CONTENT_SIZE: 500 * 1024, // 500KB per file
+  MAX_BODY_SIZE: 10 * 1024 * 1024,
+  MAX_FILE_CONTENT_SIZE: 500 * 1024,
   CACHE_MAX_SIZE: 100,
   CACHE_TTL_MS: 30 * 60 * 1000,
-  RATE_LIMIT_WINDOW_MS: 60 * 1000, // 1 minute
+  RATE_LIMIT_WINDOW_MS: 60 * 1000,
   RATE_LIMIT_MAX_REQUESTS: 30,
   ALLOWED_MODELS: ['onspace-ai', 'openai-gpt4', 'google-gemini', 'claude-3', 'groq-llama', 'gemini'],
   EXPO_PUSH_URL: Deno.env.get('EXPO_PUSH_URL') || 'https://exp.host/--/api/v2/push/send',
@@ -73,12 +80,9 @@ class RateLimiter {
     const now = Date.now();
     const window = CONFIG.RATE_LIMIT_WINDOW_MS;
     const max = CONFIG.RATE_LIMIT_MAX_REQUESTS;
-
     const timestamps = this.requests.get(clientId) || [];
     const valid = timestamps.filter(t => now - t < window);
-
     if (valid.length >= max) return false;
-
     valid.push(now);
     this.requests.set(clientId, valid);
     return true;
@@ -233,6 +237,99 @@ function buildDateTimeContext(): string {
   ].join('\n');
 }
 
+// ── Brave Web Search ───────────────────────────────────────────────────────
+
+/**
+ * Detect if the query needs live web search
+ */
+function needsWebSearch(query: string): boolean {
+  const lq = query.toLowerCase();
+  const triggers = [
+    'latest', 'recent', 'today', 'yesterday', 'this week', 'this month', 'right now',
+    'current', 'breaking', 'news', 'update', 'announce', 'release', 'launch',
+    'who is', 'who are', 'what is the latest', 'how much is', 'what happened', 'when did',
+    'price of', 'stock price', 'bitcoin', 'crypto', 'market cap', 'rate', 'exchange rate',
+    'weather', 'temperature', 'forecast',
+    'score', 'championship', 'tournament', 'match result',
+    'live', 'trending', 'viral', 'popular now',
+    // Haitian Creole
+    'denyè nouvel', 'kounye a', 'jodi a', 'nouvèl', 'ki prix', 'ki kob', 'nouvelles',
+    // French
+    "actualité", "aujourd'hui", "dernières nouvelles",
+    // Spanish
+    'noticias', 'últimas noticias', 'hoy',
+  ];
+  return triggers.some(t => lq.includes(t));
+}
+
+/**
+ * Perform a real Brave Search
+ */
+async function performBraveSearch(query: string): Promise<{ results: WebSearchResult[]; error?: string }> {
+  const apiKey = Deno.env.get('BRAVE_SEARCH_API_KEY');
+  if (!apiKey) {
+    console.log('[search] BRAVE_SEARCH_API_KEY not set');
+    return { results: [] };
+  }
+
+  try {
+    const url = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=6&search_lang=en&result_filter=web`;
+    const response = await fetch(url, {
+      headers: {
+        'Accept': 'application/json',
+        'Accept-Encoding': 'gzip',
+        'X-Subscription-Token': apiKey,
+      },
+      signal: AbortSignal.timeout(8000),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text().catch(() => response.statusText);
+      console.log(`[search] Brave error (${response.status}): ${errText.slice(0, 160)}`);
+      return { results: [], error: `Brave Search error: ${response.status}` };
+    }
+
+    const data = await response.json();
+    const webResults: Array<{ title: string; url: string; description: string }> = data.web?.results || [];
+
+    if (webResults.length === 0) return { results: [] };
+
+    const results: WebSearchResult[] = webResults.slice(0, 5).map(r => {
+      let domain = '';
+      try { domain = new URL(r.url).hostname.replace('www.', ''); } catch {}
+      return { title: r.title || '', url: r.url || '', snippet: r.description || '', domain };
+    }).filter(r => r.url && r.title);
+
+    console.log(`[search] Brave returned ${results.length} results for: ${query.slice(0, 60)}`);
+    return { results };
+  } catch (err: any) {
+    console.error('[search] Brave exception:', err.message);
+    return { results: [], error: err.message };
+  }
+}
+
+/**
+ * Build search context to inject into system prompt
+ */
+function buildSearchContext(results: WebSearchResult[]): string {
+  if (results.length === 0) return '';
+  const lines = results.map((r, i) =>
+    `[${i + 1}] ${r.title}\nURL: ${r.url}\nSnippet: ${r.snippet}`
+  ).join('\n\n');
+  return [
+    '',
+    '==============================',
+    'LIVE WEB SEARCH RESULTS (use these to answer accurately):',
+    '==============================',
+    lines,
+    '==============================',
+    'INSTRUCTIONS: Synthesize the above results into a clear helpful answer.',
+    'At the END of your response append a [SOURCES] block with the sources you cited.',
+    'Format: [SOURCES][{"title":"...","url":"...","snippet":"...","domain":"..."},...][/SOURCES]',
+    '==============================',
+  ].join('\n');
+}
+
 // ── Known APIs ─────────────────────────────────────────────────────────────
 
 const KNOWN_APIS: ApiInfo[] = [
@@ -298,7 +395,7 @@ function detectAndInjectApiVersions(userMessage: string): string {
 
   if (detected.length === 0) return '';
 
-  const lines = detected.map(api => 
+  const lines = detected.map(api =>
     `${api.name} API: Latest version: ${api.knownLatest} | ${api.notes} | Docs: ${api.docsUrl}`
   ).join('\n');
 
@@ -443,9 +540,8 @@ function safeString(val: unknown): string {
   return String(val);
 }
 
-// ── Safe JSON stringify for search results ─────────────────────────────────
 function safeJsonStringify(obj: unknown): string {
-  return JSON.stringify(obj, (key, value) => {
+  return JSON.stringify(obj, (_key, value) => {
     if (typeof value === 'string') {
       return value.replace(/[<>]/g, '');
     }
@@ -485,7 +581,7 @@ serve(async function(req: Request) {
     let body: ChatBody;
     try {
       body = await req.json();
-    } catch (e) {
+    } catch (_e) {
       console.error('[chat] JSON parse error');
       return new Response(
         JSON.stringify({ error: 'Invalid JSON body' }),
@@ -500,12 +596,10 @@ serve(async function(req: Request) {
     const userImageUrl = body.userImageUrl;
     const base64Image = body.base64Image;
 
-    // Validate aiModel
     if (!CONFIG.ALLOWED_MODELS.includes(aiModel)) {
       aiModel = 'onspace-ai';
     }
 
-    // Validate conversationId
     if (!conversationId || !isValidUUID(conversationId)) {
       return new Response(
         JSON.stringify({ error: 'Valid conversationId (UUID) is required' }),
@@ -524,14 +618,8 @@ serve(async function(req: Request) {
         } else if (Array.isArray(m.content)) {
           const mapped: Array<{ type: string; text?: string; image_url?: { url: string } }> = [];
           for (const c of m.content) {
-            if (!c) {
-              mapped.push({ type: 'text', text: '' });
-              continue;
-            }
-            if (typeof c === 'string') {
-              mapped.push({ type: 'text', text: sanitizeString(c) });
-              continue;
-            }
+            if (!c) { mapped.push({ type: 'text', text: '' }); continue; }
+            if (typeof c === 'string') { mapped.push({ type: 'text', text: sanitizeString(c) }); continue; }
             if (typeof c === 'object' && c !== null) {
               const obj = c as Record<string, unknown>;
               if (obj.type === 'text') {
@@ -550,7 +638,7 @@ serve(async function(req: Request) {
             }
             mapped.push({ type: 'text', text: '' });
           }
-          const filtered = mapped.filter(c => 
+          const filtered = mapped.filter(c =>
             (c.type === 'text' && c.text !== '') || c.type === 'image_url'
           );
           if (filtered.length === 0) {
@@ -586,7 +674,6 @@ serve(async function(req: Request) {
       );
     }
 
-    // Check env variables
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
     const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
@@ -612,7 +699,6 @@ serve(async function(req: Request) {
       );
     }
     const user = authResult.data.user;
-
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey);
 
     // Fetch user settings (non-fatal)
@@ -638,7 +724,7 @@ serve(async function(req: Request) {
         occupation = sanitizeString(d.occupation) || '';
         interests = Array.isArray(d.interests) ? d.interests.map((i: any) => sanitizeString(i)).filter(Boolean) : [];
       }
-    } catch (settingsErr) {
+    } catch (_settingsErr) {
       console.log('[chat] Settings fetch error (non-fatal)');
     }
 
@@ -679,9 +765,28 @@ serve(async function(req: Request) {
       userLanguage, baseTone, customInstructions, nickname, occupation, interests, apiVersionContext
     );
 
+    // ── Live Web Search ──────────────────────────────────────────────────────
+    let webSearchResults: WebSearchResult[] = [];
+    let searchContext = '';
+    if (
+      detectionResult.type === 'text' &&
+      !detectionResult.isImageTask &&
+      needsWebSearch(lastUserContent)
+    ) {
+      console.log('[chat] Web search triggered:', lastUserContent.slice(0, 80));
+      const searchRes = await performBraveSearch(lastUserContent);
+      webSearchResults = searchRes.results;
+      searchContext = buildSearchContext(webSearchResults);
+    }
+
+    // Effective system prompt (with optional search context injected)
+    const effectiveSystemPrompt = searchContext
+      ? fullSystemPrompt + searchContext
+      : fullSystemPrompt;
+
     // Build AI messages array
     const aiMessages: Array<{ role: string; content: string | Array<{ type: string; text?: string; image_url?: { url: string } }> }> = [
-      { role: 'system', content: fullSystemPrompt },
+      { role: 'system', content: effectiveSystemPrompt },
     ];
 
     // Handle base64 image
@@ -766,7 +871,7 @@ serve(async function(req: Request) {
     let imageUrl: string | undefined;
 
     if (detectionResult.type === 'search') {
-      // Image search
+      // Unsplash image search
       const searchQuery = lastUserContent
         .replace(/\b(?:ban m(?:wen)?|banm|montre m(?:wen)?|cherche|search for|find|show me|look for|fetch|get|send|voye|search|chache|trouve|buscar|mostrar|encontrar)\b/gi, '')
         .replace(/\b(?:foto|fotos|photo|photos|imaj|image|images)\b/gi, '')
@@ -804,7 +909,6 @@ serve(async function(req: Request) {
       if (imageResult.imageUrl) {
         let resolvedImageUrl = imageResult.imageUrl;
 
-        // Upload base64 to storage if needed
         if (resolvedImageUrl.startsWith('data:image/')) {
           try {
             const matches = resolvedImageUrl.match(/^data:(image\/[a-z+]+);base64,(.+)$/);
@@ -822,7 +926,7 @@ serve(async function(req: Request) {
                 resolvedImageUrl = urlData.data.publicUrl;
               }
             }
-          } catch (uploadErr) {
+          } catch (_uploadErr) {
             console.error('[chat] Failed to upload base64 image');
           }
         }
@@ -845,6 +949,21 @@ serve(async function(req: Request) {
             aiResponse.content = 'I could not generate the image right now. Please try again in a moment.';
           }
         }
+      }
+    } else if (webSearchResults.length > 0) {
+      // Web search enhanced response
+      aiResponse = await callAI(aiModel, aiMessages, false);
+      // If AI did not append [SOURCES] block, append the real search results ourselves
+      if (aiResponse && aiResponse.content && !aiResponse.content.includes('[SOURCES]')) {
+        const sourcesJson = JSON.stringify(
+          webSearchResults.map(r => ({
+            title: r.title,
+            url: r.url,
+            snippet: r.snippet,
+            domain: r.domain,
+          }))
+        );
+        aiResponse.content = aiResponse.content.trim() + '\n\n[SOURCES]\n' + sourcesJson + '\n[/SOURCES]';
       }
     } else {
       // Normal chat
@@ -891,8 +1010,8 @@ serve(async function(req: Request) {
       cleanMessage = 'I am sorry, I could not generate a response right now. Please try again.';
     }
 
-    // Cache successful response
-    if (aiResponse && aiResponse.content && !aiResponse.error) {
+    // Cache successful response (skip cache for web search results since they are live)
+    if (aiResponse && aiResponse.content && !aiResponse.error && webSearchResults.length === 0) {
       const cacheKey = getCacheKey(aiMessages);
       const lastUserMsg = messages.filter(m => m.role === 'user').slice(-1)[0];
       const query = typeof lastUserMsg?.content === 'string' ? lastUserMsg.content : '';
@@ -905,7 +1024,7 @@ serve(async function(req: Request) {
         .from('conversations')
         .update({ updated_at: new Date().toISOString() })
         .eq('id', conversationId);
-    } catch (e) {
+    } catch (_e) {
       console.log('[chat] Conversation update error (non-fatal)');
     }
 
@@ -920,12 +1039,12 @@ serve(async function(req: Request) {
           file_size: 0,
         });
         console.log('[chat] AI image auto-saved to media_files');
-      } catch (saveErr) {
+      } catch (_saveErr) {
         console.log('[chat] Could not auto-save AI image');
       }
     }
 
-    // Push notification for long requests (>5s) — non-fatal
+    // Push notification for long requests (>5s)
     const requestDurationMs = Date.now() - requestStartTime;
     if (requestDurationMs > 5000) {
       try {
@@ -945,14 +1064,14 @@ serve(async function(req: Request) {
               sound: 'default',
               title: 'AI Response Ready',
               body: preview + (cleanMessage.length > 80 ? '...' : ''),
-              data: { conversationId: conversationId, screen: 'home' },
+              data: { conversationId, screen: 'home' },
               badge: 1,
               priority: 'high',
             }),
           });
         }
       } catch {
-        // Silently fail for push notifications
+        // Silent fail
       }
     }
 
@@ -972,7 +1091,6 @@ serve(async function(req: Request) {
     });
 
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
     console.error('[chat] Unhandled error');
     return new Response(
       JSON.stringify({ error: 'Internal server error. Please try again.' }),

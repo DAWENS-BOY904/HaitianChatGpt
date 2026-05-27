@@ -978,29 +978,7 @@ export const MessageItem = memo(function MessageItem({
             </TouchableOpacity>
           ) : null}
 
-          {/* InlineSourcesPill — shown below message when structured sources exist */}
-          {(() => {
-            const srcBlock = blocks.find(b => b.type === 'sources' && b.sources && b.sources.length > 0);
-            if (!srcBlock || !srcBlock.sources) return null;
-            const parsed: Source[] = (() => {
-              const result: Source[] = [];
-              for (const s of srcBlock.sources) {
-                const t = s.trim();
-                if (t.startsWith('{')) { try { result.push(JSON.parse(t)); } catch {} }
-                else if (t.startsWith('[')) { try { const a = JSON.parse(t); if (Array.isArray(a)) result.push(...a); } catch {} }
-                else { result.push({ title: t.startsWith('http') ? getDomainFromSource(t) : t, url: t.startsWith('http') ? t : `https://www.google.com/search?q=${encodeURIComponent(t)}` }); }
-              }
-              return result;
-            })();
-            if (parsed.length === 0) return null;
-            return (
-              <InlineSourcesPill
-                sources={parsed}
-                isDark={isDark}
-                onPress={() => { setInlineSources(parsed); setInlineSourcesVisible(true); }}
-              />
-            );
-          })()}
+
 
           {/* Action row — only shown after streaming completes */}
           {!isGenerating && !streaming && safeContent ? (() => {
@@ -1033,23 +1011,39 @@ export const MessageItem = memo(function MessageItem({
                   <TouchableOpacity onPress={() => onOpenActions?.(message)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} style={assistantStyles.actionBtn}>
                     <Ionicons name="ellipsis-horizontal" size={18} color={colors.textSecondary} />
                   </TouchableOpacity>
+                  {/* Inline Sources button — ChatGPT style */}
+                  {sourcesBlock ? (
+                    <TouchableOpacity
+                      onPress={() => {
+                        try {
+                          let converted: Source[] = [];
+                          // Try to parse JSON sources first
+                          const raw = (sourcesBlock.sources || []).join('\n');
+                          const jsonMatch = raw.match(/\[\{[\s\S]*?\}\]/);
+                          if (jsonMatch) {
+                            try { converted = JSON.parse(jsonMatch[0]); } catch {}
+                          }
+                          if (converted.length === 0) {
+                            converted = (sourcesBlock.sources || []).map(s => ({
+                              title: s.startsWith('http') ? getDomainFromSource(s) : s,
+                              url: s.startsWith('http') ? s : `https://www.google.com/search?q=${encodeURIComponent(s)}`,
+                            }));
+                          }
+                          setSourcesData(converted);
+                          setSourcesModalVisible(true);
+                        } catch {}
+                      }}
+                      hitSlop={{ top: 10, bottom: 10, left: 6, right: 10 }}
+                      style={assistantStyles.sourcesBtn}
+                      activeOpacity={0.7}
+                    >
+                      <View style={[assistantStyles.sourcesCircle, { backgroundColor: '#10A37F' }]}>
+                        <View style={{ width: 9, height: 9, borderRadius: 4.5, backgroundColor: '#fff' }} />
+                      </View>
+                      <Text style={[assistantStyles.sourcesLabel, { color: colors.textSecondary }]}>Sources</Text>
+                    </TouchableOpacity>
+                  ) : null}
                 </View>
-                {/* Sources badge — opens in-app */}
-                {sourcesBlock ? (
-                  <SourcesBadge
-                    sources={sourcesBlock.sources!}
-                    onPress={() => {
-                      try {
-                        const converted: Source[] = (sourcesBlock.sources || []).map(s => ({
-                          title: s.startsWith('http') ? getDomainFromSource(s) : s,
-                          url: s.startsWith('http') ? s : `https://www.google.com/search?q=${encodeURIComponent(s)}`,
-                        }));
-                        setSourcesData(converted);
-                        setSourcesModalVisible(true);
-                      } catch {}
-                    }}
-                  />
-                ) : null}
               </>
             );
           })() : null}
@@ -1096,6 +1090,9 @@ const userStyles = StyleSheet.create({
 const assistantStyles = StyleSheet.create({
   container: { paddingHorizontal: 16, marginBottom: 16 },
   inner: { maxWidth: '100%' },
-  actionRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10, gap: 4 },
+  actionRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10, gap: 4, flexWrap: 'nowrap' },
   actionBtn: { padding: 7, borderRadius: 10 },
+  sourcesBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 7, paddingHorizontal: 6 },
+  sourcesCircle: { width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  sourcesLabel: { fontSize: 14, fontWeight: '500' },
 });
