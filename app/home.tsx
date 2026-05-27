@@ -4090,4 +4090,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-please ai in the top right the 2 icon before tex the ... and the button for new chat please fix background blur lan make one bsckground for both dont separate the blur both in same background also the clock icon and the person icon for the group make them both.
+hello ai if you see this dont skip make change please update the chat header right-side icons (new chat + ellipsis menu buttons) so they share a single BlurView background container, and the empty-state header icons (timer + person-add) are also grouped in one shared blur background.
