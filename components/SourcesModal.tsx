@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   View,
   Text,
@@ -19,7 +19,6 @@ export interface Source {
   title: string;
   url: string;
   snippet?: string;
-  domain?: string;
 }
 
 interface SourcesModalProps {
@@ -51,7 +50,6 @@ export function SourcesModal({ visible, onClose, sources }: SourcesModalProps) {
 
   const textC = isDark ? '#FFFFFF' : '#000000';
   const subC = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.45)';
-
   const handleOpen = (url: string) => {
     Linking.openURL(url).catch(() => {});
     onClose();
@@ -110,9 +108,6 @@ export function SourcesModal({ visible, onClose, sources }: SourcesModalProps) {
   );
 }
 
-// Legacy alias
-export { SourcesModal as SourcesListModal };
-
 function SheetContent({
   sources, textC, subC, isDark, onOpen, onClose,
 }: {
@@ -149,11 +144,11 @@ function SheetContent({
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.listContent}
-          style={{ maxHeight: 440 }}
+          style={{ maxHeight: 420 }}
         >
           {sources.map((source, i) => {
             const faviconUrl = getFaviconUrl(source.url);
-            const domain = source.domain || getDomain(source.url);
+            const domain = getDomain(source.url);
             return (
               <TouchableOpacity
                 key={`source-${i}`}
@@ -203,7 +198,7 @@ function SheetContent({
   );
 }
 
-// ── Inline sources pill rendered inside chat messages ─────────────────────────
+// ── Inline sources pill rendered inside chat messages ──────────────────────────
 interface InlineSourcesPillProps {
   sources: Source[];
   onPress: () => void;
@@ -221,10 +216,7 @@ export function InlineSourcesPill({ sources, onPress, isDark }: InlineSourcesPil
       activeOpacity={0.78}
       style={[
         pillStyles.pill,
-        {
-          backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
-          borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.09)',
-        },
+        { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)', borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.09)' },
       ]}
     >
       <View style={pillStyles.faviconRow}>
@@ -233,11 +225,7 @@ export function InlineSourcesPill({ sources, onPress, isDark }: InlineSourcesPil
             key={i}
             style={[
               pillStyles.faviconCircle,
-              {
-                marginLeft: i > 0 ? -6 : 0,
-                backgroundColor: isDark ? '#3A3A3C' : '#E5E5EA',
-                zIndex: favicons.length - i,
-              },
+              { marginLeft: i > 0 ? -6 : 0, backgroundColor: isDark ? '#3A3A3C' : '#E5E5EA', zIndex: favicons.length - i },
             ]}
           >
             <Image source={{ uri }} style={pillStyles.pillFavicon} contentFit="contain" transition={100} />
@@ -361,6 +349,7 @@ const pillStyles = StyleSheet.create({
     paddingVertical: 6,
     gap: 6,
     marginTop: 8,
+    marginLeft: 16,
     marginBottom: 4,
   },
   faviconRow: {

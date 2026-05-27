@@ -23,7 +23,7 @@ import * as Speech from 'expo-speech';
 import * as WebBrowser from '../utils/web-browser';
 import { BlurView } from 'expo-blur';
 import { CodeBlock } from './CodeBlock';
-import { SourcesModal, Source, InlineSourcesPill } from './SourcesModal';
+import { SourcesListModal as SourcesModal, Source } from './SourcesModal';
 import * as Clipboard from 'expo-clipboard';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -556,13 +556,13 @@ const MarkdownTable = memo(function MarkdownTable({ rows, hasHeader, isDark, col
 });
 
 // ── Inline segment renderer ─────────────────────────────────────────────────
-function renderInlineSegments(content: string, handlePhonePress: (n: string) => void, handleLinkPress: (u: string) => void, isDark = false) {
+function renderInlineSegments(content: string, handlePhonePress: (n: string) => void, handleLinkPress: (u: string) => void) {
   if (!content) return null;
   return parseInlineMarkdown(content).map((seg, si) => {
     if (seg.type === 'strikethrough') return <Text key={si} style={{ textDecorationLine: 'line-through', opacity: 0.62 }}>{seg.content}</Text>;
-    if (seg.type === 'bold') return <Text key={si} style={{ fontWeight: '700', color: isDark ? '#FFFFFF' : '#0A0A0A' }}>{seg.content}</Text>;
-    if (seg.type === 'italic') return <Text key={si} style={{ fontStyle: 'italic', color: isDark ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.82)' }}>{seg.content}</Text>;
-    if (seg.type === 'code_inline') return <Text key={si} style={{ fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)', borderRadius: 5, paddingHorizontal: 3, fontSize: 14, color: isDark ? '#E2E8F0' : '#1A202C' }}>{' '}{seg.content}{' '}</Text>;
+    if (seg.type === 'bold') return <Text key={si} style={{ fontWeight: '700' }}>{seg.content}</Text>;
+    if (seg.type === 'italic') return <Text key={si} style={{ fontStyle: 'italic' }}>{seg.content}</Text>;
+    if (seg.type === 'code_inline') return <Text key={si} style={{ fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', backgroundColor: 'rgba(128,128,128,0.15)', borderRadius: 4 }}>{' '}{seg.content}{' '}</Text>;
     if (seg.type === 'phone') return <Text key={si} style={{ color: '#34C759', textDecorationLine: 'underline' }} onPress={() => handlePhonePress(seg.content)}>{seg.content}</Text>;
     if (seg.type === 'link') return <Text key={si} style={{ color: '#007AFF', textDecorationLine: 'underline' }} onPress={() => handleLinkPress(seg.url || seg.content)}>{seg.content}</Text>;
     return <Text key={si}>{seg.content}</Text>;
@@ -600,8 +600,6 @@ export const MessageItem = memo(function MessageItem({
   const [viewerIndex, setViewerIndex] = useState(0);
   const [sourcesModalVisible, setSourcesModalVisible] = useState(false);
   const [sourcesData, setSourcesData] = useState<Source[]>([]);
-  const [inlineSourcesVisible, setInlineSourcesVisible] = useState(false);
-  const [inlineSources, setInlineSources] = useState<Source[]>([]);
 
   // CRITICAL: Safe content — never undefined/null, prevents crash during streaming
   const safeContent: string = (() => {
@@ -906,30 +904,22 @@ export const MessageItem = memo(function MessageItem({
 
             if (block.type === 'bullet') {
               return (
-                <View key={`b-${bi}`} style={{ flexDirection: 'row', marginVertical: 3, paddingLeft: 4, alignItems: 'flex-start' }}>
-                  <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.5)', marginTop: 9, marginRight: 10, flexShrink: 0 }} />
+                <View key={`b-${bi}`} style={{ flexDirection: 'row', marginVertical: 2, paddingLeft: 4 }}>
+                  <Text style={{ color: colors.text, fontSize: 16, marginRight: 8, marginTop: 1, lineHeight: 24 }}>{'\u2022'}</Text>
                   <View style={{ flex: 1 }}>
-                    <Text selectable selectionColor={colors.primary + '55'} style={{ fontSize: 16, color: colors.text, lineHeight: 25 }}>
-                      {renderInlineSegments(block.content || '', handlePhonePress, handleLinkPress, isDark)}
-                    </Text>
+                    <InlineText text={block.content} textStyle={{ fontSize: 16, color: colors.text, lineHeight: 24 }} onPhonePress={handlePhonePress} onLinkPress={handleLinkPress} />
                   </View>
                 </View>
               );
             }
 
             if (block.type === 'numbered') {
-              let num = 1;
-              for (let ni = bi - 1; ni >= 0; ni--) {
-                if (blocks[ni].type === 'numbered') num++;
-                else break;
-              }
+              const num = blocks.slice(0, bi).filter(b => b.type === 'numbered').length + 1;
               return (
-                <View key={`b-${bi}`} style={{ flexDirection: 'row', marginVertical: 3, paddingLeft: 4, alignItems: 'flex-start' }}>
-                  <Text style={{ color: isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.45)', fontSize: 15, fontWeight: '600', minWidth: 26, lineHeight: 25, textAlign: 'right', marginRight: 8 }}>{num}.</Text>
+                <View key={`b-${bi}`} style={{ flexDirection: 'row', marginVertical: 2, paddingLeft: 4 }}>
+                  <Text style={{ color: colors.primary, fontSize: 16, marginRight: 8, fontWeight: '700', minWidth: 22, lineHeight: 24 }}>{num}.</Text>
                   <View style={{ flex: 1 }}>
-                    <Text selectable selectionColor={colors.primary + '55'} style={{ fontSize: 16, color: colors.text, lineHeight: 25 }}>
-                      {renderInlineSegments(block.content || '', handlePhonePress, handleLinkPress, isDark)}
-                    </Text>
+                    <InlineText text={block.content} textStyle={{ fontSize: 16, color: colors.text, lineHeight: 24 }} onPhonePress={handlePhonePress} onLinkPress={handleLinkPress} />
                   </View>
                 </View>
               );
@@ -959,7 +949,7 @@ export const MessageItem = memo(function MessageItem({
               return (
                 <View key={`b-${bi}`} style={{ marginVertical: 3 }}>
                   <Text selectable selectionColor={colors.primary + '55'} style={{ fontSize: 16, color: colors.text, lineHeight: 25 }}>
-                    {renderInlineSegments(block.content || '', handlePhonePress, handleLinkPress, isDark)}
+                    {renderInlineSegments(block.content || '', handlePhonePress, handleLinkPress)}
                   </Text>
                 </View>
               );
@@ -977,30 +967,6 @@ export const MessageItem = memo(function MessageItem({
               <Image source={{ uri: message.imageUrl }} style={{ width: '100%', height: 240, borderRadius: 16 }} contentFit="cover" transition={200} />
             </TouchableOpacity>
           ) : null}
-
-          {/* InlineSourcesPill — shown below message when structured sources exist */}
-          {(() => {
-            const srcBlock = blocks.find(b => b.type === 'sources' && b.sources && b.sources.length > 0);
-            if (!srcBlock || !srcBlock.sources) return null;
-            const parsed: Source[] = (() => {
-              const result: Source[] = [];
-              for (const s of srcBlock.sources) {
-                const t = s.trim();
-                if (t.startsWith('{')) { try { result.push(JSON.parse(t)); } catch {} }
-                else if (t.startsWith('[')) { try { const a = JSON.parse(t); if (Array.isArray(a)) result.push(...a); } catch {} }
-                else { result.push({ title: t.startsWith('http') ? getDomainFromSource(t) : t, url: t.startsWith('http') ? t : `https://www.google.com/search?q=${encodeURIComponent(t)}` }); }
-              }
-              return result;
-            })();
-            if (parsed.length === 0) return null;
-            return (
-              <InlineSourcesPill
-                sources={parsed}
-                isDark={isDark}
-                onPress={() => { setInlineSources(parsed); setInlineSourcesVisible(true); }}
-              />
-            );
-          })()}
 
           {/* Action row — only shown after streaming completes */}
           {!isGenerating && !streaming && safeContent ? (() => {
@@ -1043,6 +1009,7 @@ export const MessageItem = memo(function MessageItem({
                         const converted: Source[] = (sourcesBlock.sources || []).map(s => ({
                           title: s.startsWith('http') ? getDomainFromSource(s) : s,
                           url: s.startsWith('http') ? s : `https://www.google.com/search?q=${encodeURIComponent(s)}`,
+                          domain: getDomainFromSource(s),
                         }));
                         setSourcesData(converted);
                         setSourcesModalVisible(true);
@@ -1078,10 +1045,8 @@ export const MessageItem = memo(function MessageItem({
         </View>
       </Modal>
 
-      {/* Sources modal — URL-only sources */}
+      {/* Sources modal — all domain links open in-app */}
       <SourcesModal visible={sourcesModalVisible} sources={sourcesData} onClose={() => setSourcesModalVisible(false)} />
-      {/* Inline sources modal — structured JSON sources from web search */}
-      <SourcesModal visible={inlineSourcesVisible} sources={inlineSources} onClose={() => setInlineSourcesVisible(false)} />
     </>
   );
 });
