@@ -4090,4 +4090,3 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-please ai fix top right icon clock and the gorip icon create person make the background blur and dont separe yo make one background for 2 ki fe yon seul.
