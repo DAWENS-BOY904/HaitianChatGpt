@@ -2962,41 +2962,58 @@ export default function HomeScreen() {
                     {groupChatMode ? groupName : (temporaryChatMode ? 'Temporary chat' : (currentConversation?.title || 'Dawinix'))}
                   </Text>
                   <View style={styles.headerChatRight}>
-                    {Platform.OS === 'ios' ? (
-                      <TouchableOpacity onPress={handleNewChat} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                        <BlurView intensity={55} tint={isDark ? 'dark' : 'light'} style={{ width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)' }}>
-                          <Ionicons name="create-outline" size={17} color={colors.text} />
-                        </BlurView>
-                      </TouchableOpacity>
-                    ) : (
-                      <TouchableOpacity onPress={handleNewChat} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                        <View style={{ width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: isDark ? 'rgba(44,44,46,0.85)' : 'rgba(242,242,247,0.85)', borderWidth: StyleSheet.hairlineWidth, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)' }}>
-                          <Ionicons name="create-outline" size={17} color={colors.text} />
-                        </View>
-                      </TouchableOpacity>
-                    )}
                     {groupChatMode ? (
-                      <TouchableOpacity hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} onPress={() => setGroupChatActionsVisible(true)}>
-                        {userProfilePhoto ? (
-                          <ExpoImage source={{ uri: userProfilePhoto }} style={{ width: 36, height: 36, borderRadius: 18 }} contentFit="cover" />
-                        ) : (
-                          <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: isDark ? 'rgba(44,44,46,0.85)' : 'rgba(242,242,247,0.85)', alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)' }}>
-                            <Ionicons name="person" size={18} color={colors.text} />
-                          </View>
-                        )}
-                      </TouchableOpacity>
-                    ) : Platform.OS === 'ios' ? (
-                      <TouchableOpacity hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} onPress={() => setConversationMenuVisible(true)}>
-                        <BlurView intensity={55} tint={isDark ? 'dark' : 'light'} style={{ width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)' }}>
-                          <Ionicons name="ellipsis-horizontal" size={19} color={colors.text} />
+                      /* Group chat: new-chat + profile avatar in shared pill */
+                      Platform.OS === 'ios' ? (
+                        <BlurView intensity={55} tint={isDark ? 'dark' : 'light'} style={headerIconGroupStyles.glassWrap}>
+                          <TouchableOpacity style={headerIconGroupStyles.iconBtn} onPress={handleNewChat}>
+                            <Ionicons name="create-outline" size={17} color={colors.text} />
+                          </TouchableOpacity>
+                          <View style={[headerIconGroupStyles.divider, { backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)' }]} />
+                          <TouchableOpacity style={headerIconGroupStyles.iconBtn} onPress={() => setGroupChatActionsVisible(true)}>
+                            {userProfilePhoto ? (
+                              <ExpoImage source={{ uri: userProfilePhoto }} style={{ width: 26, height: 26, borderRadius: 13 }} contentFit="cover" />
+                            ) : (
+                              <Ionicons name="person" size={18} color={colors.text} />
+                            )}
+                          </TouchableOpacity>
                         </BlurView>
-                      </TouchableOpacity>
-                    ) : (
-                      <TouchableOpacity hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} onPress={() => setConversationMenuVisible(true)}>
-                        <View style={{ width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: isDark ? 'rgba(44,44,46,0.85)' : 'rgba(242,242,247,0.85)', borderWidth: StyleSheet.hairlineWidth, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)' }}>
-                          <Ionicons name="ellipsis-horizontal" size={19} color={colors.text} />
+                      ) : (
+                        <View style={[headerIconGroupStyles.glassWrap, { backgroundColor: isDark ? 'rgba(44,44,46,0.85)' : 'rgba(242,242,247,0.85)', borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)' }]}>
+                          <TouchableOpacity style={headerIconGroupStyles.iconBtn} onPress={handleNewChat}>
+                            <Ionicons name="create-outline" size={17} color={colors.text} />
+                          </TouchableOpacity>
+                          <View style={[headerIconGroupStyles.divider, { backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)' }]} />
+                          <TouchableOpacity style={headerIconGroupStyles.iconBtn} onPress={() => setGroupChatActionsVisible(true)}>
+                            {userProfilePhoto ? (
+                              <ExpoImage source={{ uri: userProfilePhoto }} style={{ width: 26, height: 26, borderRadius: 13 }} contentFit="cover" />
+                            ) : (
+                              <Ionicons name="person" size={18} color={colors.text} />
+                            )}
+                          </TouchableOpacity>
                         </View>
-                      </TouchableOpacity>
+                      )
+                    ) : Platform.OS === 'ios' ? (
+                      /* Normal chat: new-chat + ellipsis in shared pill */
+                      <BlurView intensity={55} tint={isDark ? 'dark' : 'light'} style={headerIconGroupStyles.glassWrap}>
+                        <TouchableOpacity style={headerIconGroupStyles.iconBtn} onPress={handleNewChat}>
+                          <Ionicons name="create-outline" size={17} color={colors.text} />
+                        </TouchableOpacity>
+                        <View style={[headerIconGroupStyles.divider, { backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)' }]} />
+                        <TouchableOpacity style={headerIconGroupStyles.iconBtn} onPress={() => setConversationMenuVisible(true)}>
+                          <Ionicons name="ellipsis-horizontal" size={19} color={colors.text} />
+                        </TouchableOpacity>
+                      </BlurView>
+                    ) : (
+                      <View style={[headerIconGroupStyles.glassWrap, { backgroundColor: isDark ? 'rgba(44,44,46,0.85)' : 'rgba(242,242,247,0.85)', borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)' }]}>
+                        <TouchableOpacity style={headerIconGroupStyles.iconBtn} onPress={handleNewChat}>
+                          <Ionicons name="create-outline" size={17} color={colors.text} />
+                        </TouchableOpacity>
+                        <View style={[headerIconGroupStyles.divider, { backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)' }]} />
+                        <TouchableOpacity style={headerIconGroupStyles.iconBtn} onPress={() => setConversationMenuVisible(true)}>
+                          <Ionicons name="ellipsis-horizontal" size={19} color={colors.text} />
+                        </TouchableOpacity>
+                      </View>
                     )}
                   </View>
                 </View>
@@ -4090,4 +4107,3 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-please ai in the top right the 2 icon before tex the ... and the button for new chat please fix background blur lan make one bsckground for both dont separate the blur both in same background also the clock icon and the person icon for the group make them both.
