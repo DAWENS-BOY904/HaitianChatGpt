@@ -87,7 +87,7 @@ export function ConversationMenuModal({
             {items.map((item, i) => (
               <TouchableOpacity
                 key={item.key}
-                style={[styles.menuItem, i > 0 && styles.menuItemBorder]}
+                style={[styles.menuItem]}
                 activeOpacity={0.6}
                 onPress={(e) => {
                   e.stopPropagation();
@@ -101,7 +101,7 @@ export function ConversationMenuModal({
                 <Ionicons
                   name={item.icon as any}
                   size={20}
-                  color={item.destructive ? '#FF453A' : (isDark ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.75)')} // The missing ')' was here
+                  color={item.destructive ? '#FF453A' : (isDark ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.75)')}
                 />
               </TouchableOpacity>
             ))}
@@ -149,10 +149,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 14,
-  },
-  menuItemBorder: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(255,255,255,0.08)',
   },
   menuLabel: { fontSize: 16, fontWeight: '400' },
   destructiveLabel: { color: '#FF453A' },
