@@ -365,10 +365,12 @@ function buildSystemPrompt(
     '- Use proper paragraphs, line breaks, and structure',
     '',
     'SOURCES FORMATTING RULES:',
-    'When you reference real information from the web, include sources at the END in this format:',
+    '- When you reference real information from the web, include sources at the END in this exact JSON format:',
     '[SOURCES]',
-    '[{"title": "Page Title", "url": "https://example.com", "snippet": "Brief excerpt", "domain": "example.com"}]',
+    '[{"title": "Page Title", "url": "https://example.com", "snippet": "Brief excerpt from page", "domain": "example.com"}, ...]',
     '[/SOURCES]',
+    '- Only include sources when you are actually citing real external information.',
+    '- Do NOT fabricate URLs. Only include URLs you are confident are real.',
     '',
     'IMAGE SEARCH RULES (CRITICAL):',
     '- When the user asks to find, search, show, or fetch images/photos, respond ONLY with: "Searching for images..."',
@@ -775,8 +777,16 @@ serve(async function(req: Request) {
       const searchResult = await searchImages(searchQuery, 12);
 
       if (searchResult.images && searchResult.images.length > 0) {
+        const sourcesJson = JSON.stringify(
+          searchResult.images.slice(0, 8).map((img: any) => ({
+            title: img.title || img.alt || '',
+            url: img.link || img.url || '',
+            snippet: img.source || img.description || '',
+            domain: (() => { try { return new URL(img.link || img.url || '').hostname.replace('www.', ''); } catch { return ''; } })()
+          })).filter((s: any) => s.url)
+        );
         aiResponse = {
-          content: 'Men kek imaj mwen jwenn pou "' + searchQuery + '":\n\n[IMAGE_SEARCH_RESULTS:' + safeJsonStringify(searchResult.images) + ']',
+          content: 'Men kek imaj mwen jwenn pou "' + searchQuery + '":\n\n[IMAGE_SEARCH_RESULTS:' + safeJsonStringify(searchResult.images) + ']\n\n[SOURCES]\n' + sourcesJson + '\n[/SOURCES]',
           model: 'image-search',
           tokens: 0,
         };
