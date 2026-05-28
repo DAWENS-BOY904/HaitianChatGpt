@@ -294,18 +294,9 @@ const mentionStyles = StyleSheet.create({
   name: { fontSize: 15, fontWeight: '500' },
 });
 
-const MUSIC_KEYWORDS_SPOTIFY=['play music','play song','play track','spotify music','recommend music','listen music','best songs','top songs','music mix','playlist','i need song','party music','find songs','search songs','get me music','trending songs','latest songs'];
-
-const SUPPORTED_AI_MODELS = {
-  gemini: 'Gemini',
-  openai: 'OpenAI',
-  claude: 'Claude',
-  llama: 'Llama',
-  'gemini-2.0-flash-exp': 'Gemini 2.0 Flash',
-  'onspace-ai': 'OnSpace AI'
-} as const;
-
-type AIModelKey = keyof typeof SUPPORTED_AI_MODELS;
+  const MUSIC_KEYWORDS_SPOTIFY=['play music','play song','play track','spotify music','recommend music','listen music','best songs','top songs','music mix','playlist','i need song','party music','find songs','search songs','get me music','trending songs','latest songs'];
+  const SUPPORTED_AI_MODELS={gemini:'Gemini',openai:'OpenAI',claude:'Claude',llama:'Llama','gemini-2.0-flash-exp':'Gemini 2.0 Flash','onspace-ai':'OnSpace AI'} as const;
+  type AIModelKey=keyof typeof SUPPORTED_AI_MODELS;
 
 const ctxStyles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', alignItems: 'center' },
@@ -1175,8 +1166,9 @@ export default function HomeScreen() {
   const [msgMenuVisible, setMsgMenuVisible] = useState(false);
   const [msgMenuMsg, setMsgMenuMsg] = useState<any>(null);
   const [msgMenuPageY, setMsgMenuPageY] = useState(0);
-  const [msgActionsVisible, setMsgActionsVisible] = useState(false);
-  const [msgActionsMsg, setMsgActionsMsg] = useState<any>(null);
+  const [msgActionsVisible,setMsgActionsVisible]=useState(false);
+  const [msgActionsMsg,setMsgActionsMsg]=useState<any>(null);
+  const [unreadCount,setUnreadCount]=useState(0);
 
   // ── Spotify state ────────────────────────────────────────────────────────
   const [spotifyConnected, setSpotifyConnected] = useState(false);
@@ -1404,21 +1396,21 @@ export default function HomeScreen() {
     } catch (_e) {}
   }, [user?.id, supabase]);
 
+  useEffect(()=>{if(isAtBottom)setUnreadCount(0);},[isAtBottom]);
+  useEffect(()=>{if(sideMenuVisible)setUnreadCount(0);},[sideMenuVisible]);
   useEffect(() => {
-    const isGeneratingNow = generating || sending;
-    if (wasGeneratingRef.current && !isGeneratingNow) {
-      if (appStateForNotifRef.current !== 'active') {
-        const msgs = messages || [];
-        const lastAI = [...msgs].reverse().find(m => m.role === 'assistant');
-        if (lastAI) {
-          const preview = lastAI.content.replace(/[#*`]/g, '').slice(0, 60);
-          const ttl = currentConversation?.title || 'Dawinix';
-          sendLocalNotification(ttl, preview + (lastAI.content.length > 60 ? '...' : ''));
-        }
+    const gen = generating||sending;
+    if (wasGeneratingRef.current&&!gen) {
+      const last=[...(messages||[])].reverse().find(m=>m.role==='assistant');
+      if (last&&!isMuted) {
+        const p=last.content.replace(/[#*`]/g,'').slice(0,60);
+        const t=currentConversation?.title||'Dawinix';
+        if (appStateForNotifRef.current!=='active') sendLocalNotification(t,p+(last.content.length>60?'...':''));
+        else if (!isAtBottom) setUnreadCount(n=>n+1);
       }
     }
-    wasGeneratingRef.current = isGeneratingNow;
-  }, [generating, sending, messages, currentConversation]);
+    wasGeneratingRef.current=gen;
+  },[generating,sending,messages,currentConversation,isMuted,isAtBottom]);
 
   useEffect(() => {
     if (showMentionPopup && groupChatMode) {
@@ -1442,15 +1434,7 @@ export default function HomeScreen() {
     } catch (e) { setSmartSuggestions(fallback); }
   };
 
-  const computeTimeUntilMidnight = useCallback(() => {
-    const now = new Date();
-    const midnight = new Date();
-    midnight.setHours(24, 0, 0, 0);
-    const diff = midnight.getTime() - now.getTime();
-    const hours = Math.floor(diff / (1000 * 60 * 60));
-    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-    setTimeUntilMidnight(`${hours}h ${minutes}m`);
-  }, []);
+  const computeTimeUntilMidnight=useCallback(()=>{const now=new Date();const m=new Date();m.setHours(24,0,0,0);const d=m.getTime()-now.getTime();setTimeUntilMidnight(`${Math.floor(d/3600000)}h ${Math.floor((d%3600000)/60000)}m`);},[]);
 
   useEffect(() => {
     computeTimeUntilMidnight();
@@ -1534,13 +1518,7 @@ export default function HomeScreen() {
     }, [])
   );
 
-  const handleScrollEvent = useCallback((event: any) => {
-    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
-    const distanceFromBottom = contentSize.height - layoutMeasurement.height - contentOffset.y;
-    const atBottom = distanceFromBottom < 80;
-    setIsAtBottom(atBottom);
-    setShowScrollToBottom(!atBottom);
-  }, []);
+  const handleScrollEvent=useCallback((event:any)=>{const{contentOffset,contentSize,layoutMeasurement}=event.nativeEvent;const d=contentSize.height-layoutMeasurement.height-contentOffset.y;const atB=d<80;setIsAtBottom(atB);setShowScrollToBottom(!atB);},[]);
 
   useEffect(() => {
     if ((messages||[]).length>0&&!isSearchMode&&isAtBottom){const t=setTimeout(()=>{flatListRef.current?.scrollToEnd({animated:true});},80);return()=>clearTimeout(t);}
@@ -1737,12 +1715,8 @@ export default function HomeScreen() {
     // processing: user can cancel via the X button
   }, [recordingState]);
 
-  const BAD_WORDS = ['fuck', 'shit', 'bitch', 'asshole', 'bastard', 'cunt', 'damn', 'dick', 'pussy', 'cock', 'nigger', 'nigga', 'faggot', 'whore', 'slut', 'ass', 'motherfucker', 'fucker', 'piss', 'retard', 'kaka', 'manman', 'degage'];
-
-  const checkBadWord = useCallback((text: string): boolean => {
-    const lowerText = text.toLowerCase();
-    return BAD_WORDS.some(w => new RegExp(`\\b${w}\\b`, 'i').test(lowerText));
-  }, []);
+  const BAD_WORDS=['fuck','shit','bitch','asshole','bastard','cunt','damn','dick','pussy','cock','nigger','nigga','faggot','whore','slut','ass','motherfucker','fucker','piss','retard','kaka','manman','degage'];
+  const checkBadWord=useCallback((text:string):boolean=>{const l=text.toLowerCase();return BAD_WORDS.some(w=>new RegExp(`\\b${w}\\b`,'i').test(l));},[]);
 
   const handleBadWordViolation = useCallback(async (text: string) => {
     badWordViolationsRef.current += 1;
@@ -2281,18 +2255,7 @@ export default function HomeScreen() {
 
   const handleCancelGeneration = useCallback(() => { setGenerating(false); }, []);
 
-  const generateQuizQuestions = (_topic: string): QuizQuestion[] => [
-    { question: 'What is the capital of France?', options: ['Berlin', 'Madrid', 'Rome', 'Paris'], answer: 3, explanation: 'Paris is the capital and largest city of France.' },
-    { question: 'Chemical symbol for Gold?', options: ['Go', 'Gd', 'Au', 'Ag'], answer: 2, explanation: 'Au comes from the Latin word Aurum.' },
-    { question: 'How many continents are there?', options: ['5', '6', '7', '8'], answer: 2, explanation: 'There are 7 continents on Earth.' },
-    { question: 'Closest planet to the Sun?', options: ['Venus', 'Mercury', 'Earth', 'Mars'], answer: 1, explanation: 'Mercury is the closest planet to the Sun.' },
-    { question: 'What is 5 x 6?', options: ['25', '30', '35', '36'], answer: 1, explanation: 'Basic multiplication: 5 times 6 equals 30.' },
-    { question: 'Who wrote Romeo and Juliet?', options: ['Dickens', 'Hemingway', 'Tolkien', 'Shakespeare'], answer: 3, explanation: 'William Shakespeare wrote this famous play.' },
-    { question: 'What gas do plants absorb?', options: ['Oxygen', 'Nitrogen', 'Carbon dioxide', 'Hydrogen'], answer: 2, explanation: 'Plants absorb CO2 during photosynthesis.' },
-    { question: 'Largest ocean?', options: ['Atlantic', 'Indian', 'Arctic', 'Pacific'], answer: 3, explanation: 'The Pacific Ocean is the largest and deepest.' },
-    { question: 'Boiling point of water (celsius)?', options: ['90C', '95C', '100C', '110C'], answer: 2, explanation: 'Water boils at 100C at sea level.' },
-    { question: 'Fastest land animal?', options: ['Lion', 'Cheetah', 'Horse', 'Leopard'], answer: 1, explanation: 'The cheetah can run up to 120 km/h.' },
-  ];
+  const generateQuizQuestions=(_t:string):QuizQuestion[]=>[{question:'Capital of France?',options:['Berlin','Madrid','Rome','Paris'],answer:3,explanation:'Paris is capital of France.'},{question:'Symbol for Gold?',options:['Go','Gd','Au','Ag'],answer:2,explanation:'Au from Latin Aurum.'},{question:'Continents on Earth?',options:['5','6','7','8'],answer:2,explanation:'7 continents.'},{question:'Closest planet to Sun?',options:['Venus','Mercury','Earth','Mars'],answer:1,explanation:'Mercury.'},{question:'5 x 6?',options:['25','30','35','36'],answer:1,explanation:'30.'},{question:'Who wrote Romeo and Juliet?',options:['Dickens','Hemingway','Tolkien','Shakespeare'],answer:3,explanation:'Shakespeare.'},{question:'Gas plants absorb?',options:['Oxygen','Nitrogen','Carbon dioxide','Hydrogen'],answer:2,explanation:'CO2.'},{question:'Largest ocean?',options:['Atlantic','Indian','Arctic','Pacific'],answer:3,explanation:'Pacific.'},{question:'Boiling point water?',options:['90C','95C','100C','110C'],answer:2,explanation:'100C.'},{question:'Fastest land animal?',options:['Lion','Cheetah','Horse','Leopard'],answer:1,explanation:'Cheetah 120 km/h.'}];
 
   const fetchQuizHistory = useCallback(async () => {
     if (!user?.id) return;
@@ -2888,8 +2851,9 @@ export default function HomeScreen() {
               {!hasMessages ? (
                 <View style={styles.headerEmpty}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                    <TouchableOpacity onPress={() => setSideMenuVisible(true)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                      <Ionicons name="menu" size={24} color={colors.text} />
+                    <TouchableOpacity onPress={()=>{setSideMenuVisible(true);setUnreadCount(0);}} hitSlop={{top:10,bottom:10,left:10,right:10}} style={{position:'relative'}}>
+                      <Ionicons name="menu" size={24} color={colors.text}/>
+                      {unreadCount>0?<View style={{position:'absolute',top:-5,right:-6,minWidth:16,height:16,borderRadius:8,backgroundColor:'#FF3B30',alignItems:'center',justifyContent:'center',paddingHorizontal:3,borderWidth:1.5,borderColor:colors.background}}><Text style={{color:'#FFF',fontSize:9,fontWeight:'800'}}>{unreadCount>99?'99+':String(unreadCount)}</Text></View>:null}
                     </TouchableOpacity>
                     {!isGuest && !isPro ? (
                       Platform.OS === 'ios' ? (
@@ -4101,4 +4065,3 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-hello ai if you see this error dont delete the message withou make change Implement a local notification badge counter on the menu button (≡) that shows the number of unread messages when the user is scrolled up or away from the latest message in group chats and also in the side menu the main chat id  and add push notification if you left the app and someone tex in the group auto send notification via expo push in phone system and if you click mute dont send notification.
