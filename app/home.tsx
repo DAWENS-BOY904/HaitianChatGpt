@@ -690,6 +690,41 @@ function WaveformAnimation({ isRecording }: { isRecording: boolean }) {
   );
 }
 
+function TypingDots({ isDark, label }: { isDark: boolean; label: string }) {
+  const dots = useRef([new Animated.Value(0.3), new Animated.Value(0.3), new Animated.Value(0.3)]).current;
+  useEffect(() => {
+    const anims = dots.map((dot, i) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(i * 140),
+          Animated.timing(dot, { toValue: 1, duration: 300, useNativeDriver: true }),
+          Animated.timing(dot, { toValue: 0.3, duration: 300, useNativeDriver: true }),
+          Animated.delay((2 - i) * 140),
+        ])
+      )
+    );
+    anims.forEach(a => a.start());
+    return () => anims.forEach(a => a.stop());
+  }, []);
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 6, gap: 8 }}>
+      <View style={{ flexDirection: 'row', gap: 4, alignItems: 'center' }}>
+        {dots.map((dot, i) => (
+          <Animated.View
+            key={i}
+            style={{
+              width: 5, height: 5, borderRadius: 2.5,
+              backgroundColor: isDark ? 'rgba(255,255,255,0.8)' : 'rgba(0,0,0,0.6)',
+              opacity: dot,
+            }}
+          />
+        ))}
+      </View>
+      <Text style={{ color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.45)', fontSize: 13, fontStyle: 'italic' }}>{label}</Text>
+    </View>
+  );
+}
+
 function NotificationPermissionModal({ visible, onAllow, onSkip }: { visible: boolean; onAllow: () => void; onSkip: () => void }) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.85)).current;
@@ -3256,14 +3291,7 @@ export default function HomeScreen() {
 
               {/* Typing indicator bubble */}
               {otherTypingLabel && groupChatMode ? (
-                <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 6, gap: 8 }}>
-                  <View style={{ flexDirection: 'row', gap: 3, alignItems: 'center' }}>
-                    {[0,1,2].map(i => (
-                      <View key={i} style={{ width: 5, height: 5, borderRadius: 2.5, backgroundColor: isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.35)' }} />
-                    ))}
-                  </View>
-                  <Text style={{ color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.45)', fontSize: 13, fontStyle: 'italic' }}>{otherTypingLabel}</Text>
-                </View>
+                <TypingDots isDark={isDark} label={otherTypingLabel} />
               ) : null}
 
               {replyingTo ? (
