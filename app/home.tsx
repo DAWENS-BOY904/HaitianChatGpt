@@ -1154,6 +1154,7 @@ export default function HomeScreen() {
   const [groupRespondAuto, setGroupRespondAuto] = useState(true);
   const [groupMembers, setGroupMembers] = useState<GroupMember[]>([]);
   const [groupName, setGroupName] = useState('New group chat');
+  const [isMuted, setIsMuted] = useState(false);
   const [groupChatActionsVisible, setGroupChatActionsVisible] = useState(false);
   const [renameGroupVisible, setRenameGroupVisible] = useState(false);
   const [peopleModalVisible, setPeopleModalVisible] = useState(false);
@@ -1542,11 +1543,8 @@ export default function HomeScreen() {
   }, []);
 
   useEffect(() => {
-    if ((messages || []).length > 0 && !isSearchMode && isAtBottom) {
-      const timer = setTimeout(() => { flatListRef.current?.scrollToEnd({ animated: true }); }, 100);
-      return () => clearTimeout(timer);
-    }
-  }, [messages, isSearchMode, isAtBottom]);
+    if ((messages||[]).length>0&&!isSearchMode&&isAtBottom){const t=setTimeout(()=>{flatListRef.current?.scrollToEnd({animated:true});},80);return()=>clearTimeout(t);}
+  }, [(messages||[]).length, isSearchMode, isAtBottom]);
 
   useEffect(() => {
     if (searchQuery.trim()) {
@@ -2479,33 +2477,28 @@ export default function HomeScreen() {
 
   const handleAddPeople = useCallback(async () => {
     setConversationMenuVisible(false);
-    showAlert('Adding people...', 'Setting up group chat...');
-    await new Promise(r => setTimeout(r, 1200));
-    setGroupChatMode(true);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-  }, [showAlert]);
+    if (!groupChatMode) {
+      const n = currentConversation?.title || 'New group chat';
+      setGroupName(n);
+      setGroupChatMode(true);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+    router.push('/group-link' as any);
+  }, [groupChatMode, currentConversation, router]);
 
   const handleStartGroupChat = useCallback(async () => {
     setGroupStartModalVisible(false);
-    setGroupChatLoading(true);
-    groupChatLoadingAnim.setValue(0);
-    Animated.timing(groupChatLoadingAnim, { toValue: 1, duration: 300, useNativeDriver: true }).start();
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    // Allow 5 seconds for all group functions to initialize
-    await new Promise(r => setTimeout(r, 5000));
-    const newGroupName = 'New group chat';
-    setGroupName(newGroupName);
+    const n = currentConversation?.title || 'New group chat';
+    setGroupName(n);
     try {
-      const convId = await createConversation();
-      if (convId) { await updateConversationTitle(convId, newGroupName); selectConversation(convId); }
-    } catch (e) { console.log('[GroupChat] Failed to create conversation:', e); }
+      let convId = currentConversation?.id;
+      if (!convId) { convId = await createConversation(); if (convId) { await updateConversationTitle(convId, n); selectConversation(convId); } }
+    } catch (e) {}
     setInputText(''); setSelectedMedia([]); setEditingMessageId(null);
-    setTemporaryChatMode(false);
-    Animated.timing(groupChatLoadingAnim, { toValue: 0, duration: 250, useNativeDriver: true }).start(() => {
-      setGroupChatLoading(false);
-      setGroupChatMode(true);
-    });
-  }, [createConversation, updateConversationTitle, selectConversation, groupChatLoadingAnim]);
+    setTemporaryChatMode(false); setGroupChatMode(true);
+    router.push('/group-link' as any);
+  }, [currentConversation, createConversation, updateConversationTitle, selectConversation, router]);
 
   const handleSaveGroupName = useCallback(async (newName: string) => {
     if (!newName.trim()) { setRenameGroupVisible(false); return; }
@@ -2513,6 +2506,7 @@ export default function HomeScreen() {
     setRenameGroupVisible(false);
     if (currentConversation?.id) await updateConversationTitle(currentConversation.id, newName.trim());
   }, [currentConversation, updateConversationTitle]);
+  const currentGroupNameForRename = groupName || currentConversation?.title || 'New group chat';
 
   const handleDeleteGroup = useCallback(() => { setDeleteGroupConfirm(true); }, []);
 
@@ -3732,14 +3726,14 @@ export default function HomeScreen() {
               </View>
             </Modal>
             <ProfileEditModal visible={profileEditModalVisible} user={user} profilePhotoUrl={userProfilePhoto} onClose={() => setProfileEditModalVisible(false)} isDark={isDark} onSave={(name, username, photo) => { if (photo) setUserProfilePhoto(photo); }} />
-            <GroupChatActionsMenu visible={groupChatActionsVisible} onClose={() => setGroupChatActionsVisible(false)} onPeople={() => setPeopleModalVisible(true)} onAddPeople={handleAddPeople} onManageLink={() => setInviteLinkVisible(true)} onRenameGroup={() => setRenameGroupVisible(true)} onCustomize={() => setCustomizeAIVisible(true)} onMute={() => showAlert('Muted', 'Notifications muted for this group')} onReport={() => setReportGroupVisible(true)} onDeleteGroup={handleDeleteGroup} isDark={isDark} />
+            <GroupChatActionsMenu visible={groupChatActionsVisible} onClose={() => setGroupChatActionsVisible(false)} onPeople={() => setPeopleModalVisible(true)} onAddPeople={handleAddPeople} onManageLink={() => router.push('/group-link' as any)} onRenameGroup={() => setRenameGroupVisible(true)} onCustomize={() => setCustomizeAIVisible(true)} onMute={() => { setIsMuted(p => !p); showAlert(!isMuted ? 'Muted' : 'Unmuted', !isMuted ? 'Muted' : 'Unmuted'); }} onReport={() => setReportGroupVisible(true)} onDeleteGroup={() => { setGroupChatActionsVisible(false); showAlert('Leave?', 'Leave this group?', [{ text: 'Cancel', style: 'cancel' }, { text: 'Leave', style: 'destructive', onPress: () => { setGroupChatMode(false); handleNewChat(); } }]); }} isDark={isDark} />
             <PeopleModal visible={peopleModalVisible} onClose={() => setPeopleModalVisible(false)} groupName={groupName} userName={userName} profilePhotoUrl={userProfilePhoto} isDark={isDark} isAdmin={isAdmin} />
             <ReportGroupModal visible={reportGroupVisible} onClose={() => setReportGroupVisible(false)} isDark={isDark} />
 
             <Modal visible={renameGroupVisible} transparent animationType="fade" onRequestClose={() => setRenameGroupVisible(false)}>
               <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.45)' }}>
                 {Platform.OS === 'ios' ? <BlurView intensity={60} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} /> : null}
-                <RenameGroupBox isDark={isDark} currentName={groupName} onSave={handleSaveGroupName} onCancel={() => setRenameGroupVisible(false)} />
+                <RenameGroupBox isDark={isDark} currentName={currentGroupNameForRename} onSave={handleSaveGroupName} onCancel={() => setRenameGroupVisible(false)} />
               </View>
             </Modal>
 
