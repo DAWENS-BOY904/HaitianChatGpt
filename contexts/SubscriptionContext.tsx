@@ -1,1 +1,1 @@
-MAKE THIS WITH NEW FEATURE ONLY In app/home.tsx, replace the static three-dot row in the typing indicator bubble with an animated version using Animated.Value — each dot pulses opacity from 0.3 to 1 in sequence with 140ms delays, matching the ChatGPT-style typing animation.
+PLEASE MAKE THIS WITH NEW FEATURE ONLY In app/home.tsx, replace the static three-dot row in the typing indicator bubble with an animated version using Animated.Value — each dot pulses opacity from 0.3 to 1 in sequence with 140ms delays, matching the ChatGPT-style typing animation.
