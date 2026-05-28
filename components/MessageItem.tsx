@@ -1011,38 +1011,43 @@ export const MessageItem = memo(function MessageItem({
                   <TouchableOpacity onPress={() => onOpenActions?.(message)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} style={assistantStyles.actionBtn}>
                     <Ionicons name="ellipsis-horizontal" size={18} color={colors.textSecondary} />
                   </TouchableOpacity>
-                  {/* Inline Sources button — ChatGPT style */}
-                  {sourcesBlock ? (
-                    <TouchableOpacity
-                      onPress={() => {
-                        try {
-                          let converted: Source[] = [];
-                          // Try to parse JSON sources first
-                          const raw = (sourcesBlock.sources || []).join('\n');
-                          const jsonMatch = raw.match(/\[\{[\s\S]*?\}\]/);
-                          if (jsonMatch) {
-                            try { converted = JSON.parse(jsonMatch[0]); } catch {}
-                          }
-                          if (converted.length === 0) {
-                            converted = (sourcesBlock.sources || []).map(s => ({
-                              title: s.startsWith('http') ? getDomainFromSource(s) : s,
-                              url: s.startsWith('http') ? s : `https://www.google.com/search?q=${encodeURIComponent(s)}`,
-                            }));
-                          }
-                          setSourcesData(converted);
-                          setSourcesModalVisible(true);
-                        } catch {}
-                      }}
-                      hitSlop={{ top: 10, bottom: 10, left: 6, right: 10 }}
-                      style={assistantStyles.sourcesBtn}
-                      activeOpacity={0.7}
-                    >
-                      <View style={[assistantStyles.sourcesCircle, { backgroundColor: '#10A37F' }]}>
-                        <View style={{ width: 9, height: 9, borderRadius: 4.5, backgroundColor: '#fff' }} />
-                      </View>
-                      <Text style={[assistantStyles.sourcesLabel, { color: colors.textSecondary }]}>Sources</Text>
-                    </TouchableOpacity>
-                  ) : null}
+                  {/* Inline Sources button — ChatGPT style with favicon */}
+                  {sourcesBlock ? (() => {
+                    let converted: Source[] = [];
+                    try {
+                      const raw = (sourcesBlock.sources || []).join('\n');
+                      const jsonMatch = raw.match(/\[\{[\s\S]*?\}\]/);
+                      if (jsonMatch) { try { converted = JSON.parse(jsonMatch[0]); } catch {} }
+                      if (converted.length === 0) {
+                        converted = (sourcesBlock.sources || []).map(s => ({
+                          title: s.startsWith('http') ? getDomainFromSource(s) : s,
+                          url: s.startsWith('http') ? s : `https://www.google.com/search?q=${encodeURIComponent(s)}`,
+                        }));
+                      }
+                    } catch {}
+                    const firstFavicon = converted.length > 0
+                      ? (() => { try { return `https://www.google.com/s2/favicons?domain=${new URL(converted[0].url).hostname}&sz=32`; } catch { return ''; } })()
+                      : '';
+                    return (
+                      <TouchableOpacity
+                        onPress={() => { setSourcesData(converted); setSourcesModalVisible(true); }}
+                        hitSlop={{ top: 10, bottom: 10, left: 6, right: 10 }}
+                        style={assistantStyles.sourcesBtn}
+                        activeOpacity={0.7}
+                      >
+                        <View style={assistantStyles.sourcesCircle}>
+                          {firstFavicon ? (
+                            <Image source={{ uri: firstFavicon }} style={{ width: 20, height: 20, borderRadius: 10 }} contentFit="contain" cachePolicy="memory-disk" />
+                          ) : (
+                            <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: '#10A37F', alignItems: 'center', justifyContent: 'center' }}>
+                              <View style={{ width: 9, height: 9, borderRadius: 4.5, backgroundColor: '#fff' }} />
+                            </View>
+                          )}
+                        </View>
+                        <Text style={[assistantStyles.sourcesLabel, { color: colors.textSecondary }]}>Sources</Text>
+                      </TouchableOpacity>
+                    );
+                  })() : null}
                 </View>
               </>
             );
@@ -1093,7 +1098,6 @@ const assistantStyles = StyleSheet.create({
   actionRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10, gap: 4, flexWrap: 'nowrap' },
   actionBtn: { padding: 7, borderRadius: 10 },
   sourcesBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 7, paddingHorizontal: 6 },
-  sourcesCircle: { width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  sourcesCircle: { width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   sourcesLabel: { fontSize: 14, fontWeight: '500' },
 });
-please ai instead of ● Sources show the favicon and Sources remove the dot replace by favicon.
