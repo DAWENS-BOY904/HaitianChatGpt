@@ -1,1 +1,10 @@
-RECREATE THIS WITH GO PLAN AND PLUS PLAN IN APP/SUBSCRIPTION REMOVE OTHER FUNCTION ALSO EDIT CONTEX.
+import { useContext } from 'react';
+import { SubscriptionContext } from '../contexts/SubscriptionContext';
+
+export function useSubscription() {
+  const context = useContext(SubscriptionContext);
+  if (!context) {
+    throw new Error('useSubscription must be used within a SubscriptionProvider');
+  }
+  return context;
+}
