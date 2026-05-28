@@ -50,7 +50,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    const MAX_SIZE = 25 * 1024 * 1024; // 25 MB (Whisper limit)
+    const MAX_SIZE = 25 * 1024 * 1024; // 25 MB
     if (audioBuffer.length > MAX_SIZE) {
       return new Response(
         JSON.stringify({ error: 'Audio file too large. Maximum 25MB allowed.' }),
@@ -68,16 +68,14 @@ Deno.serve(async (req) => {
     let detectedLanguage = language || 'auto';
     let provider = '';
 
-    // ── Provider 1: OpenAI Whisper (most accurate, fastest) ──────────────────
+    // ── Provider 1: OpenAI Whisper ─────────────────────────────────────────
     if (OPENAI_API_KEY && !transcribedText) {
       try {
         console.log('[Transcribe] Trying OpenAI Whisper...');
 
-        // Build multipart form data manually
         const boundary = `----FormBoundary${Math.random().toString(36).slice(2)}`;
         const CRLF = '\r\n';
 
-        // File part
         const fileHeader = `--${boundary}${CRLF}Content-Disposition: form-data; name="file"; filename="audio.m4a"${CRLF}Content-Type: audio/mp4${CRLF}${CRLF}`;
         const modelPart = `${CRLF}--${boundary}${CRLF}Content-Disposition: form-data; name="model"${CRLF}${CRLF}whisper-1${CRLF}`;
         const responsePart = `--${boundary}${CRLF}Content-Disposition: form-data; name="response_format"${CRLF}${CRLF}json${CRLF}`;
@@ -124,7 +122,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ── Provider 2: OnSpace AI (Gemini multimodal fallback) ──────────────────
+    // ── Provider 2: OnSpace AI (Gemini multimodal) ─────────────────────────
     if (!transcribedText && ONSPACE_AI_API_KEY && ONSPACE_AI_BASE_URL) {
       console.log('[Transcribe] Trying OnSpace AI (Gemini multimodal)...');
 
@@ -159,7 +157,7 @@ Deno.serve(async (req) => {
                   role: 'user',
                   content: [
                     { type: 'text', text: 'Transcribe this audio. Return ONLY the spoken text:' },
-                    { type: 'image_url', image_url: { url: `data:audio/m4a;base64,${audio}` } },
+                    { type: 'input_audio', input_audio: { data: audio, format: 'm4a' } },
                   ],
                 },
               ],
