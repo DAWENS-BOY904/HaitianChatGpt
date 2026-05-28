@@ -1096,3 +1096,4 @@ const assistantStyles = StyleSheet.create({
   sourcesCircle: { width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   sourcesLabel: { fontSize: 14, fontWeight: '500' },
 });
+please ai instead of ● Sources show the favicon and Sources remove the dot replace by favicon.
