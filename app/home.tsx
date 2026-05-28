@@ -56,8 +56,6 @@ import { useFocusEffect } from '@react-navigation/native';
 import { BlurView } from 'expo-blur';
 import * as FileSystem from 'expo-file-system';
 import { SideMenu } from '../components/SideMenu';
-import { GroupChatActionsMenu } from '../components/GroupChatActionsMenu';
-import { ReportGroupModal } from '../components/ReportGroupModal';
 import { ChatHistoryModal } from '../components/ChatHistoryModal';
 import { ImageSearchResults } from '../components/ImageSearchResults';
 import { AIMode } from '../components/AIModeSelectorModal';
@@ -504,7 +502,63 @@ function GroupStartModal({ visible, user, profilePhotoUrl, onClose, onStartGroup
   );
 }
 
-
+function GroupChatActionsMenu({ visible, onClose, onPeople, onAddPeople, onManageLink, onRenameGroup, onCustomize, onMute, onReport, onDeleteGroup, isDark }: {
+  visible: boolean; onClose: () => void; onPeople: () => void; onAddPeople: () => void;
+  onManageLink: () => void; onRenameGroup: () => void; onCustomize: () => void;
+  onMute: () => void; onReport: () => void; onDeleteGroup: () => void; isDark: boolean;
+}) {
+  const textC = isDark ? '#FFF' : '#000';
+  const subC = isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.4)';
+  const borderC = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)';
+  const items = [
+    { sub: true, label: 'New group chat' },
+    { icon: 'people-outline', label: 'People', onPress: () => { onClose(); onPeople(); } },
+    { icon: 'person-add-outline', label: 'Add people', onPress: () => { onClose(); onAddPeople(); } },
+    { icon: 'link-outline', label: 'Manage group link', onPress: () => { onClose(); onManageLink(); } },
+    { icon: 'pencil-outline', label: 'Rename group', onPress: () => { onClose(); onRenameGroup(); } },
+    { icon: 'settings-outline', label: 'Customize Dawinix', onPress: () => { onClose(); onCustomize(); } },
+    { icon: 'notifications-off-outline', label: 'Mute notifications', onPress: () => { onClose(); onMute(); } },
+    { icon: 'flag-outline', label: 'Report', onPress: () => { onClose(); onReport(); }, destructive: true },
+    { icon: 'exit-outline', label: 'Leave group chat', onPress: () => { onClose(); onDeleteGroup(); }, destructive: true },
+  ];
+  if (!visible) return null;
+  const bgCard = isDark ? 'rgba(40,40,44,0.97)' : 'rgba(255,255,255,0.97)';
+  return (
+    <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
+      <Pressable style={{ flex: 1 }} onPress={onClose}>
+        <View style={{ position: 'absolute', top: 80, right: 16, width: 250, borderRadius: 18, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 20, elevation: 20 }}>
+          {Platform.OS === 'ios' ? (
+            <BlurView intensity={isDark ? 80 : 70} tint={isDark ? 'dark' : 'extraLight'} style={{ borderRadius: 18, overflow: 'hidden', paddingVertical: 4 }}>
+              {items.map((item: any, i) => (
+                item.sub ? (
+                  <Text key={`sub-${i}`} style={{ color: subC, fontSize: 12, fontWeight: '600', paddingHorizontal: 16, paddingTop: 10, paddingBottom: 4 }}>{item.label}</Text>
+                ) : (
+                  <TouchableOpacity key={item.label} style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13, gap: 12, borderTopWidth: i > 1 ? StyleSheet.hairlineWidth : 0, borderTopColor: borderC }} onPress={item.onPress} activeOpacity={0.7}>
+                    <Ionicons name={item.icon} size={20} color={item.destructive ? '#FF453A' : textC} />
+                    <Text style={{ color: item.destructive ? '#FF453A' : textC, fontSize: 16 }}>{item.label}</Text>
+                  </TouchableOpacity>
+                )
+              ))}
+            </BlurView>
+          ) : (
+            <View style={{ backgroundColor: bgCard, borderRadius: 18, paddingVertical: 4 }}>
+              {items.map((item: any, i) => (
+                item.sub ? (
+                  <Text key={`sub-${i}`} style={{ color: subC, fontSize: 12, fontWeight: '600', paddingHorizontal: 16, paddingTop: 10, paddingBottom: 4 }}>{item.label}</Text>
+                ) : (
+                  <TouchableOpacity key={item.label} style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13, gap: 12, borderTopWidth: i > 1 ? StyleSheet.hairlineWidth : 0, borderTopColor: borderC }} onPress={item.onPress} activeOpacity={0.7}>
+                    <Ionicons name={item.icon} size={20} color={item.destructive ? '#FF453A' : textC} />
+                    <Text style={{ color: item.destructive ? '#FF453A' : textC, fontSize: 16 }}>{item.label}</Text>
+                  </TouchableOpacity>
+                )
+              ))}
+            </View>
+          )}
+        </View>
+      </Pressable>
+    </Modal>
+  );
+}
 
 function PeopleModal({ visible, onClose, groupName, userName, profilePhotoUrl, isDark, isAdmin }: {
   visible: boolean; onClose: () => void; groupName: string; userName: string;
@@ -543,7 +597,85 @@ function PeopleModal({ visible, onClose, groupName, userName, profilePhotoUrl, i
   );
 }
 
+const GROUP_REPORT_CATEGORIES = [
+  { label: 'Violence & self-harm', subs: ['Threats or incitement to violence', 'Weapons', 'Suicide & self-harm', 'Human trafficking', 'Terrorism'] },
+  { label: 'Sexual exploitation & abuse', subs: ['Non-consensual intimate images', 'Sexual extortion'] },
+  { label: 'Bullying & harassment', subs: ['Targeted harassment', 'Hate speech', 'Doxxing'] },
+  { label: 'Spam, fraud & deception', subs: ['Phishing', 'Scams', 'Misinformation'] },
+  { label: 'Privacy violation', subs: ['Sharing personal info', 'Non-consensual recording'] },
+  { label: 'Something else', subs: ['Other concern'] },  
+];
 
+function ReportGroupModal({ visible, onClose, isDark }: { visible: boolean; onClose: () => void; isDark: boolean }) {
+  const [step, setStep] = useState<'main' | 'sub' | 'detail'>('main');
+  const [selCategory, setSelCategory] = useState<typeof GROUP_REPORT_CATEGORIES[0] | null>(null);
+  const [selSub, setSelSub] = useState('');
+  const [detail, setDetail] = useState('');
+  useEffect(() => { if (!visible) { setStep('main'); setSelCategory(null); setSelSub(''); setDetail(''); } }, [visible]);
+  const bg = isDark ? '#111113' : '#F2F2F7';
+  const cardBg = isDark ? '#1C1C1E' : '#FFFFFF';
+  const textC = isDark ? '#FFF' : '#000';
+  const subC = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.45)';
+  const borderC = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)';
+  if (!visible) return null;
+  return (
+    <Modal visible={visible} transparent={false} animationType="slide" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: bg }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', paddingTop: Platform.OS === 'ios' ? 56 : 28, paddingHorizontal: 16, paddingBottom: 16 }}>
+          {step !== 'main' ? (
+            <TouchableOpacity onPress={() => setStep(step === 'detail' ? 'sub' : 'main')} style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+              <Ionicons name="chevron-back" size={20} color={textC} />
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity onPress={onClose} style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)', borderRadius: 18, paddingHorizontal: 14, paddingVertical: 8, marginRight: 12 }}>
+              <Text style={{ color: textC, fontSize: 15, fontWeight: '500' }}>Cancel</Text>
+            </TouchableOpacity>
+          )}
+          <Text style={{ flex: 1, fontSize: 17, fontWeight: '700', color: textC, textAlign: 'center', marginRight: step === 'detail' ? 0 : 48 }}>Report conversation</Text>
+          {step === 'detail' ? (
+            <TouchableOpacity onPress={() => onClose()} style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)', borderRadius: 18, paddingHorizontal: 14, paddingVertical: 8 }}>
+              <Text style={{ color: textC, fontSize: 15, fontWeight: '600' }}>Submit</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+        {step === 'main' && (
+          <>
+            <Text style={{ color: subC, fontSize: 15, textAlign: 'center', marginBottom: 24, paddingHorizontal: 24 }}>Why are you reporting this conversation?</Text>
+            <View style={{ marginHorizontal: 16, borderRadius: 18, overflow: 'hidden', backgroundColor: cardBg }}>
+              {GROUP_REPORT_CATEGORIES.map((cat, i) => (
+                <TouchableOpacity key={cat.label} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingVertical: 16, borderTopWidth: i > 0 ? StyleSheet.hairlineWidth : 0, borderTopColor: borderC }} onPress={() => { setSelCategory(cat); setStep('sub'); }}>
+                  <Text style={{ color: textC, fontSize: 16 }}>{cat.label}</Text>
+                  <Ionicons name="chevron-forward" size={18} color={subC} />
+                </TouchableOpacity>
+              ))}
+            </View>
+          </>
+        )}
+        {step === 'sub' && selCategory && (
+          <>
+            <Text style={{ color: textC, fontSize: 17, fontWeight: '600', textAlign: 'center', marginBottom: 20 }}>{selCategory.label}</Text>
+            <View style={{ marginHorizontal: 16, borderRadius: 18, overflow: 'hidden', backgroundColor: cardBg }}>
+              {selCategory.subs.map((sub, i) => (
+                <TouchableOpacity key={sub} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingVertical: 16, borderTopWidth: i > 0 ? StyleSheet.hairlineWidth : 0, borderTopColor: borderC }} onPress={() => { setSelSub(sub); setStep('detail'); }}>
+                  <Text style={{ color: textC, fontSize: 16 }}>{sub}</Text>
+                  <Ionicons name="chevron-forward" size={18} color={subC} />
+                </TouchableOpacity>
+              ))}
+            </View>
+          </>
+        )}
+        {step === 'detail' && (
+          <>
+            <Text style={{ color: textC, fontSize: 17, fontWeight: '600', textAlign: 'center', marginBottom: 20, paddingHorizontal: 24 }}>{selSub}</Text>
+            <View style={{ marginHorizontal: 16, borderRadius: 18, overflow: 'hidden', backgroundColor: cardBg, padding: 16 }}>
+              <TextInput style={{ color: textC, fontSize: 16, minHeight: 120, textAlignVertical: 'top' }} placeholder="Please provide more details" placeholderTextColor={subC} value={detail} onChangeText={setDetail} multiline autoFocus />
+            </View>
+          </>
+        )}
+      </View>
+    </Modal>
+  );
+}
 
 function RenameGroupBox({ isDark, currentName, onSave, onCancel }: { isDark: boolean; currentName: string; onSave: (n: string) => void; onCancel: () => void }) {
   const [text, setText] = useState(currentName);
@@ -1037,7 +1169,6 @@ export default function HomeScreen() {
   const [msgActionsVisible,setMsgActionsVisible]=useState(false);
   const [msgActionsMsg,setMsgActionsMsg]=useState<any>(null);
   const [unreadCount,setUnreadCount]=useState(0);
-  const lastProcessedMsgRef = useRef<string | null>(null);
 
   // ── Spotify state ────────────────────────────────────────────────────────
   const [spotifyConnected, setSpotifyConnected] = useState(false);
@@ -1267,31 +1398,6 @@ export default function HomeScreen() {
 
   useEffect(()=>{if(isAtBottom)setUnreadCount(0);},[isAtBottom]);
   useEffect(()=>{if(sideMenuVisible)setUnreadCount(0);},[sideMenuVisible]);
-
-  // ── Group chat polling ──────────────────────────────────────────────────
-  useEffect(() => {
-    if (!groupChatMode || !currentConversation?.id) return;
-    const interval = setInterval(() => {
-      selectConversation(currentConversation.id).catch(() => {});
-    }, 10000);
-    return () => clearInterval(interval);
-  }, [groupChatMode, currentConversation?.id]);
-
-  // ── Voice message push notification ────────────────────────────────────
-  useEffect(() => {
-    if (!groupChatMode || !messages || messages.length === 0) return;
-    const last = messages[messages.length - 1];
-    if (!last || last.id === lastProcessedMsgRef.current) return;
-    lastProcessedMsgRef.current = last.id;
-    const isVoiceMsg = last.role !== 'user' && (
-      (last as any).media_type?.includes('audio') ||
-      (last.content || '').includes('[Voice message]') ||
-      (last.content || '').includes('[Audio message]')
-    );
-    if (isVoiceMsg && !isMuted && appStateForNotifRef.current !== 'active') {
-      sendLocalNotification(groupName || 'Group Chat', 'sent a voice message');
-    }
-  }, [messages, groupChatMode, isMuted, groupName]);
   useEffect(() => {
     const gen = generating||sending;
     if (wasGeneratingRef.current&&!gen) {
@@ -2798,18 +2904,16 @@ export default function HomeScreen() {
               ) : (
                 <View style={styles.headerChat}>
                   {Platform.OS === 'ios' ? (
-                    <TouchableOpacity style={[styles.headerChatLeft, {position:'relative'}]} onPress={() => { setSideMenuVisible(true); setUnreadCount(0); }}>
+                    <TouchableOpacity style={styles.headerChatLeft} onPress={() => setSideMenuVisible(true)}>
                       <BlurView intensity={55} tint={isDark ? 'dark' : 'light'} style={{ width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)' }}>
                         <Ionicons name="menu" size={22} color={colors.text} />
                       </BlurView>
-                      {unreadCount>0?<View style={{position:'absolute',top:-4,right:-4,minWidth:16,height:16,borderRadius:8,backgroundColor:'#FF3B30',alignItems:'center',justifyContent:'center',paddingHorizontal:3,borderWidth:1.5,borderColor:colors.background}}><Text style={{color:'#FFF',fontSize:9,fontWeight:'800'}}>{unreadCount>99?'99+':String(unreadCount)}</Text></View>:null}
                     </TouchableOpacity>
                   ) : (
-                    <TouchableOpacity style={[styles.headerChatLeft, {position:'relative'}]} onPress={() => { setSideMenuVisible(true); setUnreadCount(0); }}>
+                    <TouchableOpacity style={styles.headerChatLeft} onPress={() => setSideMenuVisible(true)}>
                       <View style={{ width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: isDark ? 'rgba(44,44,46,0.85)' : 'rgba(242,242,247,0.85)', borderWidth: StyleSheet.hairlineWidth, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)' }}>
                         <Ionicons name="menu" size={22} color={colors.text} />
                       </View>
-                      {unreadCount>0?<View style={{position:'absolute',top:-4,right:-4,minWidth:16,height:16,borderRadius:8,backgroundColor:'#FF3B30',alignItems:'center',justifyContent:'center',paddingHorizontal:3,borderWidth:1.5,borderColor:colors.background}}><Text style={{color:'#FFF',fontSize:9,fontWeight:'800'}}>{unreadCount>99?'99+':String(unreadCount)}</Text></View>:null}
                     </TouchableOpacity>
                   )}
                   <Text style={styles.headerChatTitle} numberOfLines={1}>
@@ -3586,7 +3690,7 @@ export default function HomeScreen() {
               </View>
             </Modal>
             <ProfileEditModal visible={profileEditModalVisible} user={user} profilePhotoUrl={userProfilePhoto} onClose={() => setProfileEditModalVisible(false)} isDark={isDark} onSave={(name, username, photo) => { if (photo) setUserProfilePhoto(photo); }} />
-            <GroupChatActionsMenu visible={groupChatActionsVisible} onClose={() => setGroupChatActionsVisible(false)} onPeople={() => setPeopleModalVisible(true)} onAddPeople={handleAddPeople} onManageLink={() => router.push('/group-link' as any)} onRenameGroup={() => setRenameGroupVisible(true)} onCustomize={() => setCustomizeAIVisible(true)} onMute={() => { setIsMuted(p => !p); showAlert(!isMuted ? 'Muted' : 'Unmuted', !isMuted ? 'Muted' : 'Unmuted'); }} onReport={() => setReportGroupVisible(true)} onDeleteGroup={() => { setGroupChatActionsVisible(false); showAlert('Leave?', 'Leave this group?', [{ text: 'Cancel', style: 'cancel' }, { text: 'Leave', style: 'destructive', onPress: () => { setGroupChatMode(false); handleNewChat(); } }]); }} isDark={isDark} isMuted={isMuted} />
+            <GroupChatActionsMenu visible={groupChatActionsVisible} onClose={() => setGroupChatActionsVisible(false)} onPeople={() => setPeopleModalVisible(true)} onAddPeople={handleAddPeople} onManageLink={() => router.push('/group-link' as any)} onRenameGroup={() => setRenameGroupVisible(true)} onCustomize={() => setCustomizeAIVisible(true)} onMute={() => { setIsMuted(p => !p); showAlert(!isMuted ? 'Muted' : 'Unmuted', !isMuted ? 'Muted' : 'Unmuted'); }} onReport={() => setReportGroupVisible(true)} onDeleteGroup={() => { setGroupChatActionsVisible(false); showAlert('Leave?', 'Leave this group?', [{ text: 'Cancel', style: 'cancel' }, { text: 'Leave', style: 'destructive', onPress: () => { setGroupChatMode(false); handleNewChat(); } }]); }} isDark={isDark} />
             <PeopleModal visible={peopleModalVisible} onClose={() => setPeopleModalVisible(false)} groupName={groupName} userName={userName} profilePhotoUrl={userProfilePhoto} isDark={isDark} isAdmin={isAdmin} />
             <ReportGroupModal visible={reportGroupVisible} onClose={() => setReportGroupVisible(false)} isDark={isDark} />
 
