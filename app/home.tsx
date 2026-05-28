@@ -1038,10 +1038,6 @@ export default function HomeScreen() {
   const [msgActionsMsg,setMsgActionsMsg]=useState<any>(null);
   const [unreadCount,setUnreadCount]=useState(0);
   const lastProcessedMsgRef = useRef<string | null>(null);
-  // ── Typing indicator state ────────────────────────────────────────────
-  const [otherTypingLabel, setOtherTypingLabel] = useState<string | null>(null);
-  const typingClearTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const typingWriteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Spotify state ────────────────────────────────────────────────────────
   const [spotifyConnected, setSpotifyConnected] = useState(false);
@@ -1271,84 +1267,6 @@ export default function HomeScreen() {
 
   useEffect(()=>{if(isAtBottom)setUnreadCount(0);},[isAtBottom]);
   useEffect(()=>{if(sideMenuVisible)setUnreadCount(0);},[sideMenuVisible]);
-
-  // ── Persist isMuted per conversation ─────────────────────────────────
-  useEffect(() => {
-    if (!currentConversation?.id) return;
-    AsyncStorage.getItem(`muted_conv_${currentConversation.id}`).then(val => {
-      setIsMuted(val === 'true');
-    }).catch(() => {});
-  }, [currentConversation?.id]);
-
-  useEffect(() => {
-    if (!currentConversation?.id) return;
-    AsyncStorage.setItem(`muted_conv_${currentConversation.id}`, isMuted ? 'true' : 'false').catch(() => {});
-  }, [isMuted, currentConversation?.id]);
-
-  // ── Typing indicator: write presence when user types in group chat ────
-  useEffect(() => {
-    if (!groupChatMode || !currentConversation?.id || !user?.id) return;
-    if (inputText.length > 0) {
-      // Debounce writes: write at most every 3 seconds
-      if (!typingWriteTimer.current) {
-        typingWriteTimer.current = setTimeout(async () => {
-          typingWriteTimer.current = null;
-          try {
-            await supabase.from('typing_indicators').upsert({
-              user_id: user.id,
-              conversation_id: currentConversation.id,
-              username: user.email?.split('@')[0] || 'Someone',
-              updated_at: new Date().toISOString(),
-            }, { onConflict: 'user_id,conversation_id' });
-          } catch (_e) {}
-        }, 300);
-      }
-    } else {
-      // Clear own typing indicator when input is emptied
-      if (typingWriteTimer.current) { clearTimeout(typingWriteTimer.current); typingWriteTimer.current = null; }
-      supabase.from('typing_indicators').delete()
-        .eq('user_id', user.id)
-        .eq('conversation_id', currentConversation.id)
-        .then(() => {}).catch(() => {});
-    }
-    return () => {
-      if (typingWriteTimer.current) { clearTimeout(typingWriteTimer.current); typingWriteTimer.current = null; }
-    };
-  }, [inputText, groupChatMode, currentConversation?.id, user?.id]);
-
-  // ── Typing indicator: poll for others typing every 3s ─────────────────
-  useEffect(() => {
-    if (!groupChatMode || !currentConversation?.id || !user?.id) {
-      setOtherTypingLabel(null);
-      return;
-    }
-    const poll = async () => {
-      try {
-        const cutoff = new Date(Date.now() - 5000).toISOString();
-        const { data } = await supabase
-          .from('typing_indicators')
-          .select('user_id, username, updated_at')
-          .eq('conversation_id', currentConversation.id)
-          .neq('user_id', user.id)
-          .gt('updated_at', cutoff);
-        if (data && data.length > 0) {
-          const names = data.map((r: any) => r.username || 'Someone');
-          const label = names.length === 1 ? `${names[0]} is typing...` : `${names.slice(0,-1).join(', ')} and ${names[names.length-1]} are typing...`;
-          setOtherTypingLabel(label);
-          if (typingClearTimer.current) clearTimeout(typingClearTimer.current);
-          typingClearTimer.current = setTimeout(() => setOtherTypingLabel(null), 5000);
-        } else {
-          setOtherTypingLabel(null);
-        }
-      } catch (_e) {}
-    };
-    poll();
-    const interval = setInterval(poll, 3000);
-    return () => {
-      clearInterval(interval);
-      if (typingClearTimer.current) clearTimeout(typingClearTimer.current);
-    };
-  }, [groupChatMode, currentConversation?.id, user?.id]);
 
   // ── Group chat polling ──────────────────────────────────────────────────
   useEffect(() => {
@@ -3252,18 +3170,6 @@ export default function HomeScreen() {
                     </TouchableOpacity>
                   ))}
                 </ScrollView>
-              ) : null}
-
-              {/* Typing indicator bubble */}
-              {otherTypingLabel && groupChatMode ? (
-                <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 6, gap: 8 }}>
-                  <View style={{ flexDirection: 'row', gap: 3, alignItems: 'center' }}>
-                    {[0,1,2].map(i => (
-                      <View key={i} style={{ width: 5, height: 5, borderRadius: 2.5, backgroundColor: isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.35)' }} />
-                    ))}
-                  </View>
-                  <Text style={{ color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.45)', fontSize: 13, fontStyle: 'italic' }}>{otherTypingLabel}</Text>
-                </View>
               ) : null}
 
               {replyingTo ? (

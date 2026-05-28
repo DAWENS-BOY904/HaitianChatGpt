@@ -38,7 +38,6 @@ import { BorderRadius } from '../constants/theme';
 import { useRouter } from 'expo-router';
 import { useProfile } from '../contexts/ProfileContext';
 import * as Haptics from 'expo-haptics';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -418,7 +417,6 @@ export function SideMenu({
   const [chatPreviewMessages, setChatPreviewMessages] = useState<Array<{ role: string; content: string }>>([]);
   const [renameVisible, setRenameVisible] = useState(false);
   const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set());
-  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
 
   useEffect(() => {
     if (globalPhotoUrl) setProfilePhotoUrl(globalPhotoUrl);
@@ -437,42 +435,6 @@ export function SideMenu({
         if (data) setPinnedIds(new Set(data.map((c: any) => c.id)));
       });
   }, [user?.id, visible]);
-
-  // ── Unread badge counts ────────────────────────────────────────────────
-  useEffect(() => {
-    if (!visible || !conversations.length) return;
-    (async () => {
-      try {
-        const counts: Record<string, number> = {};
-        await Promise.all(
-          conversations.slice(0, 50).map(async (conv) => {
-            try {
-              const lastReadKey = `last_read_${conv.id}`;
-              const lastRead = await AsyncStorage.getItem(lastReadKey);
-              if (!lastRead) { counts[conv.id] = 0; return; }
-              const { data } = await supabase
-                .from('messages')
-                .select('id', { count: 'exact' })
-                .eq('conversation_id', conv.id)
-                .eq('role', 'assistant')
-                .gt('created_at', lastRead)
-                .limit(99);
-              counts[conv.id] = (data as any)?.length ?? 0;
-            } catch { counts[conv.id] = 0; }
-          })
-        );
-        setUnreadCounts(counts);
-      } catch (_e) {}
-    })();
-  }, [visible, conversations.length]);
-
-  // Mark conversation as read when user taps it
-  const markConvAsRead = async (convId: string) => {
-    try {
-      await AsyncStorage.setItem(`last_read_${convId}`, new Date().toISOString());
-      setUnreadCounts(prev => ({ ...prev, [convId]: 0 }));
-    } catch (_e) {}
-  };
 
   const accentColor = settings.accentColor || '#10A37F';
 
@@ -563,7 +525,6 @@ export function SideMenu({
 
   const handleConvTap = (conv: { id: string; title: string }) => {
     selectConversation(conv.id);
-    markConvAsRead(conv.id);
     onClose();
   };
 
@@ -879,25 +840,15 @@ export function SideMenu({
                       {isPinned && <Ionicons name="pin" size={12} color={accentColor} />}
                       {renderConvTitle(conv.title || 'New conversation')}
                     </View>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                      {/* Unread badge */}
-                      {(unreadCounts[conv.id] ?? 0) > 0 ? (
-                        <View style={{ minWidth: 18, height: 18, borderRadius: 9, backgroundColor: '#FF3B30', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 }}>
-                          <Text style={{ color: '#FFF', fontSize: 10, fontWeight: '800' }}>
-                            {unreadCounts[conv.id] > 99 ? '99+' : String(unreadCounts[conv.id])}
-                          </Text>
+                    {((conv.title || '').toLowerCase().includes('group') || (conv as any).is_group) ? (
+                      profilePhotoUrl ? (
+                        <Image source={{ uri: profilePhotoUrl }} style={{ width: 28, height: 28, borderRadius: 14, marginLeft: 8 }} contentFit="cover" />
+                      ) : (
+                        <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: isDark ? '#3A3A3C' : '#E5E5EA', alignItems: 'center', justifyContent: 'center', marginLeft: 8 }}>
+                          <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 11, fontWeight: '700' }}>{getUserInitials()[0]}</Text>
                         </View>
-                      ) : null}
-                      {((conv.title || '').toLowerCase().includes('group') || (conv as any).is_group) ? (
-                        profilePhotoUrl ? (
-                          <Image source={{ uri: profilePhotoUrl }} style={{ width: 28, height: 28, borderRadius: 14 }} contentFit="cover" />
-                        ) : (
-                          <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: isDark ? '#3A3A3C' : '#E5E5EA', alignItems: 'center', justifyContent: 'center' }}>
-                            <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 11, fontWeight: '700' }}>{getUserInitials()[0]}</Text>
-                          </View>
-                        )
-                      ) : null}
-                    </View>
+                      )
+                    ) : null}
                   </TouchableOpacity>
                 );
               })
