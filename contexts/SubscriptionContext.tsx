@@ -2,13 +2,12 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { getSupabaseClient } from '@/template';
 import { useAuth } from '@/template';
 
-export type SubscriptionTier = 'free' | 'pro' | 'plus';
+export type SubscriptionTier = 'free' | 'go' | 'plus';
 
 export interface SubscriptionContextType {
   tier: SubscriptionTier;
-  isPro: boolean;
+  isGo: boolean;
   isPlus: boolean;
-  isUnlimited: boolean;
   expiresAt: string | null;
   loading: boolean;
   refresh: () => Promise<void>;
@@ -43,7 +42,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         const expiry = data.subscription_expires_at ? new Date(data.subscription_expires_at) : null;
         const isActive = data.is_lifetime_member || !expiry || expiry > now;
 
-        if (isActive && (data.subscription_tier === 'plus' || data.subscription_tier === 'pro')) {
+        if (isActive && (data.subscription_tier === 'go' || data.subscription_tier === 'plus')) {
           setTier(data.subscription_tier as SubscriptionTier);
         } else {
           setTier('free');
@@ -61,17 +60,15 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     fetchSubscription();
   }, [user?.id]);
 
-  const isPro = tier === 'pro' || tier === 'plus';
+  const isGo = tier === 'go' || tier === 'plus';
   const isPlus = tier === 'plus';
-  const isUnlimited = tier === 'pro' || tier === 'plus';
 
   return (
     <SubscriptionContext.Provider
       value={{
         tier,
-        isPro,
+        isGo,
         isPlus,
-        isUnlimited,
         expiresAt,
         loading,
         refresh: fetchSubscription,
