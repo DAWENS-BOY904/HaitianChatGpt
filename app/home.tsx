@@ -4101,4 +4101,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-
+hello ai if you see this error dont delete the message withou make change Implement a local notification badge counter on the menu button (≡) that shows the number of unread messages when the user is scrolled up or away from the latest message in group chats and also in the side menu the main chat id  and add push notification if you left the app and someone tex in the group auto send notification via expo push in phone system and if you click mute dont send notification.
