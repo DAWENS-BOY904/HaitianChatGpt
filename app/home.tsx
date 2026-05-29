@@ -3747,4 +3747,3 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-please ai when messageaction modal open fix home chat remove blur in home chat and Apply BlurView glassmorphism background to the user long-press message menu (copy/edit floating popup) and the MessageActionsModal sheet in home, replacing the current plain solid background and fix home page when you enter auto open keyboard to tex fix micro icon tro kole ak voice controle icon and micron micon tro piti se voic controle icon must be piti and all must be  Frosted Glass Blur  Apply a stronger chromeMaterial BlurView to the entire bottom input bar container (the area holding the + button, text input, mic, and send button) so it floats above the chat with a unified frosted-glass look on both iOS and Android.

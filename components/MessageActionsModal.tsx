@@ -205,8 +205,12 @@ export function MessageActionsModal({
         onRequestClose={handleClose}
       >
         <View style={styles.overlay}>
-          {/* Dim overlay only — no full-screen blur (avoids blurring the home chat) */}
-          <View style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? 'rgba(0,0,0,0.45)' : 'rgba(0,0,0,0.28)' }]} />
+          {/* Full-screen BlurView background */}
+          <BlurView
+            intensity={Platform.OS === 'ios' ? 60 : 80}
+            tint={isDark ? 'dark' : 'light'}
+            style={StyleSheet.absoluteFill}
+          />
 
           {/* Tap outside to dismiss */}
           <TouchableOpacity style={styles.dismissArea} activeOpacity={1} onPress={handleClose} />
@@ -214,15 +218,13 @@ export function MessageActionsModal({
           {/* Sheet */}
           <Animated.View
             entering={FadeInDown.duration(280).springify()}
-            style={[styles.container, { borderColor: isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.12)' }]}
+            style={[styles.container, { borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)' }]}
           >
             <BlurView
-              intensity={Platform.OS === 'ios' ? 92 : 88}
-              tint={isDark ? 'chromeMaterialDark' : 'chromeMaterial'}
+              intensity={Platform.OS === 'ios' ? 90 : 95}
+              tint={isDark ? 'dark' : 'light'}
               style={styles.sheetBlur}
             >
-              {/* Extra glass layer for depth */}
-              <View style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? 'rgba(18,18,22,0.55)' : 'rgba(255,255,255,0.55)', borderTopLeftRadius: 24, borderTopRightRadius: 24 }]} pointerEvents="none" />
               <View style={[styles.handleBar, { backgroundColor: isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.18)' }]} />
 
               <ScrollView style={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
