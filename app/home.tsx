@@ -1580,9 +1580,12 @@ export default function HomeScreen() {
         const now = Date.now();
         const isNewWindow = photoUploadResetTime === 0 || now - photoUploadResetTime > 60 * 60 * 1000;
         const currentCount = isNewWindow ? 0 : photoUploadCount;
-                const resetMs = (isNewWindow ? Date.now() : photoUploadResetTime) + 60 * 60 * 1000;
-        setPhotoLimitResetAtMs(resetMs);
-        setPhotoLimitModalVisible(true); return; }
+        const resetMs = (isNewWindow ? Date.now() : photoUploadResetTime) + 60 * 60 * 1000;
+        if (currentCount >= 5) {
+          setPhotoLimitResetAtMs(resetMs);
+          setPhotoLimitModalVisible(true);
+          return;
+        }
         if (isNewWindow) setPhotoUploadResetTime(now);
         setPhotoUploadCount(currentCount + imageFiles.length);
       }
