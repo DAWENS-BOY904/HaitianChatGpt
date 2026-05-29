@@ -2,7 +2,7 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet,
   Platform, Share, StatusBar, Modal, Switch, Animated,
-  ActivityIndicator, Linking,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -11,6 +11,7 @@ import { BlurView } from 'expo-blur';
 import { Image as ExpoImage } from 'expo-image';
 import { useTheme } from '../hooks/useTheme';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as WebBrowser from 'expo-web-browser'; // ← ADD THIS
 
 const SHAZAM_BLUE = '#0D72EA';
 const SHAZAM_BLUE_DARK = '#0A5CC8';
@@ -22,15 +23,12 @@ function ShazamLogo({ size = 80 }: { size?: number }) {
       width: size, height: size, borderRadius: size / 2,
       overflow: 'hidden',
     }}>
-      {/* Blue gradient circle */}
       <View style={{
         width: size, height: size, borderRadius: size / 2,
         backgroundColor: SHAZAM_BLUE,
         alignItems: 'center', justifyContent: 'center',
       }}>
-        {/* "S" wave mark */}
         <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-          {/* Top arc */}
           <View style={{
             width: size * 0.54, height: size * 0.54,
             borderRadius: size * 0.27,
@@ -41,7 +39,6 @@ function ShazamLogo({ size = 80 }: { size?: number }) {
             transform: [{ rotate: '-45deg' }],
             marginBottom: -size * 0.1,
           }} />
-          {/* Bottom arc */}
           <View style={{
             width: size * 0.54, height: size * 0.54,
             borderRadius: size * 0.27,
@@ -129,7 +126,6 @@ function ShazamConnectModal({
             </View>
           </TouchableOpacity>
 
-          {/* Logo pair */}
           <View style={cmStyles.logoPair}>
             <DawinixLogo size={54} />
             <View style={cmStyles.logoDots}>
@@ -271,9 +267,17 @@ export default function ShazamConnectScreen() {
     }).catch(() => {});
   };
 
-  const handleOpenLink = async (url: string) => {
-    try { await Linking.openURL(url); } catch (_e) {}
-  };
+  // ── UPDATED: Open links in-app via Expo WebBrowser ─────────────────────────
+  const handleOpenLink = useCallback(async (url: string) => {
+    try {
+      await WebBrowser.openBrowserAsync(url, {
+        dismissButtonStyle: 'close',
+        toolbarColor: isDark ? '#000000' : '#FFFFFF',
+        controlsColor: isDark ? '#FFFFFF' : '#000000',
+        enableBarCollapsing: true,
+      });
+    } catch (_e) {}
+  }, [isDark]);
 
   const bg = isDark ? '#000' : '#F2F2F7';
   const cardBg = isDark ? '#111113' : '#FFF';
@@ -336,7 +340,6 @@ export default function ShazamConnectScreen() {
               <TouchableOpacity
                 style={[spStyles.actionBtn, { backgroundColor: SHAZAM_BLUE }]}
                 onPress={() => {
-                  // Navigate to home and activate Shazam
                   router.replace('/home');
                 }}
               >
@@ -359,9 +362,8 @@ export default function ShazamConnectScreen() {
           )}
         </View>
 
-        {/* Preview card — shows chat bubble demo */}
+        {/* Preview card */}
         <View style={[spStyles.previewCard, { backgroundColor: isDark ? '#111113' : '#EEF4FF', marginHorizontal: 16, marginBottom: 24 }]}>
-          {/* Background gradient-like */}
           <View style={{
             position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
             borderRadius: 20,
@@ -370,7 +372,6 @@ export default function ShazamConnectScreen() {
               : 'rgba(13,114,234,0.08)',
           }} />
 
-          {/* Chat bubble */}
           <View style={spStyles.chatBubble}>
             <Text style={spStyles.chatBubbleText}>
               <Text style={{ color: SHAZAM_BLUE, fontWeight: '700' }}>@Shazam</Text>
@@ -378,7 +379,6 @@ export default function ShazamConnectScreen() {
             </Text>
           </View>
 
-          {/* Music card */}
           <View style={[spStyles.musicCard, { backgroundColor: isDark ? '#1C1C1E' : '#FFF' }]}>
             <ExpoImage
               source={{ uri: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=300&q=80' }}
