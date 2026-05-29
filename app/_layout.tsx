@@ -83,6 +83,7 @@ export default function RootLayout() {
                     <Stack.Screen name="orders" />  
                     <Stack.Screen name="archived-chats" />
                     <Stack.Screen name="new-project" />
+                    <Stack.Screen name="new-device-verify" />
                     <Stack.Screen name="model-selector" />
                     <Stack.Screen name="gpts" />
                     <Stack.Screen name="security" />
