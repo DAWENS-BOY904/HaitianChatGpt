@@ -252,155 +252,9 @@ function extractUrls(text: string): string[] {
 }
 
 /**
- * Detect platform from URL
- */
-function detectPlatform(url: string): 'tiktok' | 'youtube' | 'twitter' | 'instagram' | 'facebook' | 'web' {
-  try {
-    const host = new URL(url).hostname.toLowerCase();
-    if (host.includes('tiktok.com') || host.includes('vm.tiktok.com')) return 'tiktok';
-    if (host.includes('youtube.com') || host.includes('youtu.be')) return 'youtube';
-    if (host.includes('twitter.com') || host.includes('x.com')) return 'twitter';
-    if (host.includes('instagram.com')) return 'instagram';
-    if (host.includes('facebook.com') || host.includes('fb.com') || host.includes('fb.watch')) return 'facebook';
-  } catch (_e) {}
-  return 'web';
-}
-
-/**
- * Fetch TikTok metadata using oEmbed API
- */
-async function fetchTikTokOEmbed(url: string): Promise<{ url: string; title: string; content: string; error?: string }> {
-  try {
-    const oembedUrl = `https://www.tiktok.com/oembed?url=${encodeURIComponent(url)}`;
-    const res = await fetch(oembedUrl, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; DawinixBot/1.0)' },
-      signal: AbortSignal.timeout(8000),
-    });
-    if (!res.ok) throw new Error(`TikTok oEmbed ${res.status}`);
-    const data = await res.json();
-    const title = data.title || 'TikTok Video';
-    const author = data.author_name || data.author_url || '';
-    const thumbnailUrl = data.thumbnail_url || '';
-    const content = [
-      `Platform: TikTok`,
-      `Title: ${title}`,
-      `Creator: ${author}`,
-      ...(thumbnailUrl ? [`Thumbnail: ${thumbnailUrl}`] : []),
-      `URL: ${url}`,
-      `Description: This is a TikTok video titled "${title}" by ${author}. The video was shared at the provided URL.`,
-    ].join('\n');
-    return { url, title, content };
-  } catch (err: any) {
-    console.log('[TikTok oEmbed] Failed:', err.message);
-    return { url, title: 'TikTok Video', content: `A TikTok video shared at ${url}. Unable to fetch metadata.`, error: err.message };
-  }
-}
-
-/**
- * Fetch YouTube metadata using oEmbed API
- */
-async function fetchYouTubeOEmbed(url: string): Promise<{ url: string; title: string; content: string; error?: string }> {
-  try {
-    const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`;
-    const res = await fetch(oembedUrl, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; DawinixBot/1.0)' },
-      signal: AbortSignal.timeout(8000),
-    });
-    if (!res.ok) throw new Error(`YouTube oEmbed ${res.status}`);
-    const data = await res.json();
-    const title = data.title || 'YouTube Video';
-    const author = data.author_name || '';
-    const thumbnailUrl = data.thumbnail_url || '';
-    const content = [
-      `Platform: YouTube`,
-      `Title: ${title}`,
-      `Channel: ${author}`,
-      ...(thumbnailUrl ? [`Thumbnail: ${thumbnailUrl}`] : []),
-      `URL: ${url}`,
-      `Description: YouTube video titled "${title}" from channel "${author}".`,
-    ].join('\n');
-    return { url, title, content };
-  } catch (err: any) {
-    console.log('[YouTube oEmbed] Failed:', err.message);
-    return { url, title: 'YouTube Video', content: `A YouTube video at ${url}. Unable to fetch metadata.`, error: err.message };
-  }
-}
-
-/**
- * Fetch Twitter/X metadata using oEmbed API
- */
-async function fetchTwitterOEmbed(url: string): Promise<{ url: string; title: string; content: string; error?: string }> {
-  try {
-    const oembedUrl = `https://publish.twitter.com/oembed?url=${encodeURIComponent(url)}&omit_script=true`;
-    const res = await fetch(oembedUrl, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; DawinixBot/1.0)' },
-      signal: AbortSignal.timeout(8000),
-    });
-    if (!res.ok) throw new Error(`Twitter oEmbed ${res.status}`);
-    const data = await res.json();
-    const rawHtml = data.html || '';
-    // Strip HTML to get text content
-    const textContent = rawHtml
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
-      .replace(/\s+/g, ' ').trim().slice(0, 1500);
-    const author = data.author_name || '';
-    const title = `Tweet by ${author}`;
-    const content = [
-      `Platform: Twitter/X`,
-      `Author: ${author}`,
-      `Content: ${textContent}`,
-      `URL: ${url}`,
-    ].join('\n');
-    return { url, title, content };
-  } catch (err: any) {
-    console.log('[Twitter oEmbed] Failed:', err.message);
-    return { url, title: 'Tweet', content: `A tweet/post at ${url}. Unable to fetch metadata.`, error: err.message };
-  }
-}
-
-/**
- * Fetch the readable content of a URL for AI analysis (with platform detection)
+ * Fetch the readable content of a URL for AI analysis
  */
 async function fetchUrlContent(url: string): Promise<{ url: string; title: string; content: string; error?: string }> {
-  const platform = detectPlatform(url);
-
-  // Platform-specific oEmbed/API handlers
-  if (platform === 'tiktok') return fetchTikTokOEmbed(url);
-  if (platform === 'youtube') return fetchYouTubeOEmbed(url);
-  if (platform === 'twitter') return fetchTwitterOEmbed(url);
-
-  // For Instagram, Facebook — use generic scraping (they block bots, but try OpenGraph)
-  if (platform === 'instagram' || platform === 'facebook') {
-    try {
-      const res = await fetch(url, {
-        headers: {
-          'User-Agent': 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)',
-          'Accept': 'text/html,*/*',
-        },
-        signal: AbortSignal.timeout(7000),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const html = await res.text();
-      const ogTitle = html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i)?.[1] || '';
-      const ogDesc = html.match(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i)?.[1] || '';
-      const ogImage = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)?.[1] || '';
-      const ogSiteName = html.match(/<meta[^>]+property=["']og:site_name["'][^>]+content=["']([^"']+)["']/i)?.[1] || platform;
-      const title = ogTitle || `${platform.charAt(0).toUpperCase() + platform.slice(1)} Post`;
-      const content = [
-        `Platform: ${ogSiteName || platform}`,
-        `Title: ${title}`,
-        ...(ogDesc ? [`Description: ${ogDesc}`] : []),
-        ...(ogImage ? [`Thumbnail: ${ogImage}`] : []),
-        `URL: ${url}`,
-      ].join('\n');
-      return { url, title, content };
-    } catch (err: any) {
-      return { url, title: `${platform} Post`, content: `A ${platform} post at ${url}. Unable to access content directly.`, error: err.message };
-    }
-  }
-
-  // Generic web scraping with OpenGraph + full text extraction
   try {
     const response = await fetch(url, {
       headers: {
@@ -412,7 +266,7 @@ async function fetchUrlContent(url: string): Promise<{ url: string; title: strin
     });
 
     if (!response.ok) {
-      return { url, title: '', content: `Unable to access this link (HTTP ${response.status}).`, error: `HTTP ${response.status}` };
+      return { url, title: '', content: '', error: `HTTP ${response.status}` };
     }
 
     const contentType = response.headers.get('content-type') || '';
@@ -422,29 +276,19 @@ async function fetchUrlContent(url: string): Promise<{ url: string; title: strin
     }
 
     if (!contentType.includes('text/html') && !contentType.includes('text/plain')) {
-      // Non-HTML: return basic info
-      return { url, title: '', content: `[File: ${contentType} at ${url}]` };
+      return { url, title: '', content: `[Binary content: ${contentType}]` };
     }
 
     const html = await response.text();
 
-    // Extract OpenGraph metadata first (richest)
-    const ogTitle = html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i)?.[1] || '';
-    const ogDesc = html.match(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i)?.[1] || '';
-    const ogSiteName = html.match(/<meta[^>]+property=["']og:site_name["'][^>]+content=["']([^"']+)["']/i)?.[1] || '';
-    const ogImage = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)?.[1] || '';
-
-    // Fallback: HTML <title>
-    const htmlTitle = html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1]?.trim() || '';
-    const title = ogTitle || htmlTitle || url;
+    // Extract title
+    const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+    const title = titleMatch ? titleMatch[1].trim() : '';
 
     // Strip HTML tags and extract readable text
-    const bodyText = html
+    const cleaned = html
       .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, ' ')
       .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, ' ')
-      .replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, ' ')
-      .replace(/<header[^>]*>[\s\S]*?<\/header>/gi, ' ')
-      .replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, ' ')
       .replace(/<[^>]+>/g, ' ')
       .replace(/&nbsp;/g, ' ')
       .replace(/&amp;/g, '&')
@@ -453,23 +297,11 @@ async function fetchUrlContent(url: string): Promise<{ url: string; title: strin
       .replace(/&quot;/g, '"')
       .replace(/\s+/g, ' ')
       .trim()
-      .slice(0, 8000);
+      .slice(0, 10000);
 
-    // Build rich content block
-    const parts = [
-      ...(ogSiteName ? [`Site: ${ogSiteName}`] : []),
-      `Title: ${title}`,
-      ...(ogDesc ? [`Summary: ${ogDesc}`] : []),
-      ...(ogImage ? [`Image: ${ogImage}`] : []),
-      `URL: ${url}`,
-      '',
-      'Page content:',
-      bodyText,
-    ];
-
-    return { url, title, content: parts.join('\n') };
+    return { url, title, content: cleaned };
   } catch (err: any) {
-    return { url, title: '', content: `Unable to access this link right now. (${err.message})`, error: err.message };
+    return { url, title: '', content: '', error: err.message };
   }
 }
 
@@ -477,25 +309,19 @@ async function fetchUrlContent(url: string): Promise<{ url: string; title: strin
  * Build URL context to inject into system prompt
  */
 function buildUrlContext(results: Array<{ url: string; title: string; content: string; error?: string }>): string {
-  const valid = results.filter(r => r.content && r.content.length > 10);
+  const valid = results.filter(r => r.content && !r.error);
   if (valid.length === 0) return '';
   const lines = valid.map(r =>
-    `[URL: ${r.url}]\n${r.error ? '(Partial metadata only — direct access was restricted)' : ''}\n${r.content}`
+    `[URL: ${r.url}]\nTitle: ${r.title}\nContent:\n${r.content}`
   ).join('\n\n---\n\n');
   return [
     '',
     '==============================',
-    'REAL URL CONTENT FETCHED (use this to answer the user):',
+    'FETCHED URL CONTENT (analyze and answer based on this):',
     '==============================',
     lines,
     '==============================',
-    'CRITICAL INSTRUCTIONS:',
-    '- Use the above content to give a specific, intelligent answer about what is at this URL.',
-    '- For TikTok/YouTube/Instagram/Twitter: describe the video/post, its creator, title, topic.',
-    '- For websites/articles: summarize the main content, key points, and purpose of the page.',
-    '- NEVER say "I cannot access this link" if you have content above.',
-    '- NEVER generate a demo/example response. Use only the actual fetched data.',
-    '- If access was partially restricted, say so briefly then describe what metadata you did get.',
+    'INSTRUCTIONS: Use the above URL content to answer the user accurately. Reference the actual content.',
     '==============================',
   ].join('\n');
 }
@@ -778,11 +604,6 @@ function buildSystemPrompt(
     '- Avoid excessive emojis',
     '- Keep answers clear, structured, and easy to understand',
     '- Create message for people in card message and also help user with school works real no demo always give real things code message other etc and create beatifull photo real code clear',
-    '- When a user sends a URL (TikTok, YouTube, Instagram, Twitter/X, website, article, PDF): analyze the fetched content from the system context and give a real intelligent response. NEVER say you cannot access links when content is provided. NEVER generate fallback demo cards.',
-    '- For TikTok links with real metadata: you MAY include a [TIKTOK_CARD] block with the actual data. Format: [TIKTOK_CARD]{"title":"...","author":"...","thumbnail":"...","videoUrl":"..."}[/TIKTOK_CARD]',
-    '- For YouTube: summarize the video title, channel, and what the video is about.',
-    '- For Twitter/X: quote or summarize the tweet content and author.',
-    '- For any link: always explain what the page/content is about based on the fetched data.',
     '- You must be sweet to users because they like that',
     '',
     'Personality:',
