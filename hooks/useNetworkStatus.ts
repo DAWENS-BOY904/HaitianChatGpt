@@ -1,5 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Platform } from 'react-native';
+
+export type NetworkQuality = 'none' | 'slow' | 'good';
 
 interface NetworkStatus {
   isConnected: boolean;
@@ -8,6 +10,7 @@ interface NetworkStatus {
 
 export function useNetworkStatus(): NetworkStatus {
   const [isConnected, setIsConnected] = useState(true);
+  const [quality, setQuality] = useState<NetworkQuality>('good');
   const [isChecking, setIsChecking] = useState(false);
   const mountedRef = useRef(true);
 
@@ -34,6 +37,20 @@ export function useNetworkStatus(): NetworkStatus {
       }
     };
 
+    // Add inside useEffect, before the interval:
+const handleOnline = () => setIsConnected(true);
+const handleOffline = () => {
+  setIsConnected(false);
+  setQuality('none');
+};
+
+window.addEventListener('online', handleOnline);
+window.addEventListener('offline', handleOffline);
+
+// In cleanup:
+window.removeEventListener('online', handleOnline);
+window.removeEventListener('offline', handleOffline);
+
     check();
     const interval = setInterval(check, 10000);
 
@@ -43,5 +60,5 @@ export function useNetworkStatus(): NetworkStatus {
     };
   }, []);
 
-  return { isConnected, isChecking };
+  return { isConnected, quality, isChecking };
 }
