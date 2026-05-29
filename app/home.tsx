@@ -2507,8 +2507,18 @@ export default function HomeScreen() {
                 <View style={styles.headerEmpty}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                     <TouchableOpacity onPress={()=>{setSideMenuVisible(true);setUnreadCount(0);}} hitSlop={{top:10,bottom:10,left:10,right:10}} style={{position:'relative'}}>
-                      <Ionicons name="menu" size={24} color={colors.text}/>
-                      {unreadCount>0?<View style={{position:'absolute',top:-5,right:-6,minWidth:16,height:16,borderRadius:8,backgroundColor:'#FF3B30',alignItems:'center',justifyContent:'center',paddingHorizontal:3,borderWidth:1.5,borderColor:colors.background}}><Text style={{color:'#FFF',fontSize:9,fontWeight:'800'}}>{unreadCount>99?'99+':String(unreadCount)}</Text></View>:null}
+                      {Platform.OS === 'ios' ? (
+                        <BlurView intensity={isDark ? 72 : 58} tint={isDark ? 'chromeMaterialDark' : 'chromeMaterial'} style={{ width: 42, height: 42, borderRadius: 21, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.09)' }}>
+                          <View style={{ width: 42, height: 42, alignItems: 'center', justifyContent: 'center', backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.03)' }}>
+                            <Ionicons name="menu" size={22} color={colors.text}/>
+                          </View>
+                        </BlurView>
+                      ) : (
+                        <View style={{ width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center', backgroundColor: isDark ? 'rgba(52,52,58,0.88)' : 'rgba(230,230,236,0.88)', borderWidth: StyleSheet.hairlineWidth, borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.09)' }}>
+                          <Ionicons name="menu" size={22} color={colors.text}/>
+                        </View>
+                      )}
+                      {unreadCount>0?<View style={{position:'absolute',top:-4,right:-4,minWidth:16,height:16,borderRadius:8,backgroundColor:'#FF3B30',alignItems:'center',justifyContent:'center',paddingHorizontal:3,borderWidth:1.5,borderColor:colors.background}}><Text style={{color:'#FFF',fontSize:9,fontWeight:'800'}}>{unreadCount>99?'99+':String(unreadCount)}</Text></View>:null}
                     </TouchableOpacity>
                     {!isGuest && !isPro ? (
                       Platform.OS === 'ios' ? (
@@ -2986,7 +2996,7 @@ export default function HomeScreen() {
                         <Ionicons name="add" size={22} color={colors.text} />
                       </BlurView>
                     ) : (
-                      <View style={[styles.addBtnCircle, { backgroundColor: isDark ? 'rgba(60,60,68,0.92)' : 'rgba(240,240,248,0.92)', borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.09)' }]}>
+                      <View style={[styles.addBtnCircle, { backgroundColor: isDark ? 'rgba(52,52,60,0.94)' : 'rgba(232,232,240,0.94)', borderColor: isDark ? 'rgba(255,255,255,0.16)' : 'rgba(0,0,0,0.11)' }]}>
                         <Ionicons name="add" size={22} color={colors.text} />
                       </View>
                     )}
@@ -2994,13 +3004,13 @@ export default function HomeScreen() {
                 ) : null}
 
                 <Pressable
-                  style={[styles.inputWrapper, { backgroundColor: Platform.OS === 'ios' ? 'transparent' : (isDark ? 'rgba(44,44,46,0.95)' : 'rgba(235,235,235,0.95)'), borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.11)' }]}
+                  style={[styles.inputWrapper, { backgroundColor: Platform.OS === 'ios' ? 'transparent' : (isDark ? 'rgba(38,38,42,0.97)' : 'rgba(242,242,246,0.97)'), borderColor: isDark ? 'rgba(255,255,255,0.13)' : 'rgba(0,0,0,0.1)' }]}
                   onPress={() => inputRef.current?.focus()}
                 >
                   {Platform.OS === 'ios' ? (
                     <BlurView
-                      intensity={isDark ? 95 : 82}
-                      tint={isDark ? 'dark' : 'extraLight'}
+                      intensity={isDark ? 92 : 80}
+                      tint={isDark ? 'chromeMaterialDark' : 'chromeMaterial'}
                       style={StyleSheet.absoluteFill}
                       pointerEvents="none"
                     />
@@ -3072,11 +3082,13 @@ export default function HomeScreen() {
                       {!keyboardVisible && !editingMessageId ? (
                         <TouchableOpacity onPress={() => setToolsVisible(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ marginRight: 4 }}>
                           {Platform.OS === 'ios' ? (
-                            <BlurView intensity={isDark ? 65 : 50} tint={isDark ? 'dark' : 'light'} style={{ width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: isDark ? 'rgba(255,255,255,0.16)' : 'rgba(0,0,0,0.1)' }}>
-                              <Ionicons name="add" size={20} color={colors.text} />
+                            <BlurView intensity={isDark ? 80 : 64} tint={isDark ? 'chromeMaterialDark' : 'chromeMaterial'} style={{ width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.1)' }}>
+                              <View style={{ width: 34, height: 34, alignItems: 'center', justifyContent: 'center', backgroundColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.04)' }}>
+                                <Ionicons name="add" size={20} color={colors.text} />
+                              </View>
                             </BlurView>
                           ) : (
-                            <View style={{ width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: isDark ? 'rgba(60,60,68,0.88)' : 'rgba(240,240,248,0.88)', borderWidth: StyleSheet.hairlineWidth, borderColor: isDark ? 'rgba(255,255,255,0.13)' : 'rgba(0,0,0,0.09)' }}>
+                            <View style={{ width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: isDark ? 'rgba(52,52,60,0.9)' : 'rgba(225,225,232,0.9)', borderWidth: StyleSheet.hairlineWidth, borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.09)' }}>
                               <Ionicons name="add" size={20} color={colors.text} />
                             </View>
                           )}
@@ -3096,8 +3108,8 @@ export default function HomeScreen() {
                         scrollEnabled
                         textAlignVertical="center"
                       />
-                      <TouchableOpacity onPress={toggleRecording} hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }} style={{ opacity: isProcessing ? 0.5 : 1, paddingHorizontal: 4 }}>
-                        <Ionicons name={isRecording ? 'stop-circle' : isProcessing ? 'hourglass-outline' : 'mic-outline'} size={21} color={isRecording ? '#FF3B30' : colors.textSecondary} />
+                      <TouchableOpacity onPress={toggleRecording} hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }} style={{ opacity: isProcessing ? 0.5 : 1, paddingHorizontal: 2 }}>
+                        <Ionicons name={isRecording ? 'stop-circle' : isProcessing ? 'hourglass-outline' : 'mic-outline'} size={18} color={isRecording ? '#FF3B30' : colors.textSecondary} />
                       </TouchableOpacity>
                       {sending ? (
                         <TouchableOpacity style={[styles.sendButton, { backgroundColor: isDark ? '#3A3A3C' : '#DCDCDC' }]} onPress={handleStopGeneration}>
@@ -3108,8 +3120,8 @@ export default function HomeScreen() {
                           <Ionicons name="arrow-up" size={18} color="#FFFFFF" />
                         </TouchableOpacity>
                       ) : (
-                        <TouchableOpacity style={[styles.voiceOrbBtn, { backgroundColor: accentColor }]} onPress={() => router.push('/voice-control')}>
-                          <Ionicons name="pulse" size={17} color="#FFFFFF" />
+                        <TouchableOpacity style={[styles.voiceOrbBtn, { backgroundColor: accentColor, width: 32, height: 32, borderRadius: 16 }]} onPress={() => router.push('/voice-control')}>
+                          <Ionicons name="pulse" size={15} color="#FFFFFF" />
                         </TouchableOpacity>
                       )}
                     </View>
