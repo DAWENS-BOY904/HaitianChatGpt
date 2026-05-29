@@ -1,10 +1,11 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
 
 export type NetworkQuality = 'none' | 'slow' | 'good';
 
 interface NetworkStatus {
   isConnected: boolean;
+  quality: NetworkQuality;
   isChecking: boolean;
 }
 
@@ -20,6 +21,8 @@ export function useNetworkStatus(): NetworkStatus {
     const check = async () => {
       if (!mountedRef.current) return;
       setIsChecking(true);
+      
+      const startTime = Date.now();
       try {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 5000);
@@ -29,28 +32,50 @@ export function useNetworkStatus(): NetworkStatus {
           signal: controller.signal,
         });
         clearTimeout(timeout);
-        if (mountedRef.current) setIsConnected(res.status < 500);
+        
+        const latency = Date.now() - startTime;
+        
+        if (mountedRef.current) {
+          setIsConnected(res.status < 500);
+          // Determine quality based on latency
+          setQuality(latency > 2000 ? 'slow' : 'good');
+        }
       } catch {
-        if (mountedRef.current) setIsConnected(false);
+        if (mountedRef.current) {
+          setIsConnected(false);
+          setQuality('none');
+        }
       } finally {
         if (mountedRef.current) setIsChecking(false);
       }
     };
 
-    // Add inside useEffect, before the interval:
-const handleOnline = () => setIsConnected(true);
-const handleOffline = () => {
-  setIsConnected(false);
-  setQuality('none');
-};
+    // Only add web event listeners on web platform
+    if (Platform.OS === 'web') {
+      const handleOnline = () => {
+        setIsConnected(true);
+        // Don't assume quality, let next check determine it
+      };
+      const handleOffline = () => {
+        setIsConnected(false);
+        setQuality('none');
+      };
 
-window.addEventListener('online', handleOnline);
-window.addEventListener('offline', handleOffline);
+      window.addEventListener('online', handleOnline);
+      window.addEventListener('offline', handleOffline);
 
-// In cleanup:
-window.removeEventListener('online', handleOnline);
-window.removeEventListener('offline', handleOffline);
+      check();
+      const interval = setInterval(check, 10000);
 
+      return () => {
+        mountedRef.current = false;
+        clearInterval(interval);
+        window.removeEventListener('online', handleOnline);
+        window.removeEventListener('offline', handleOffline);
+      };
+    }
+
+    // For native platforms, just use polling
     check();
     const interval = setInterval(check, 10000);
 
