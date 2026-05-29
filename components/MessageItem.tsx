@@ -1134,3 +1134,4 @@ const assistantStyles = StyleSheet.create({
   sourcesCircle: { width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   sourcesLabel: { fontSize: 14, fontWeight: '500' },
 });
+please ai never past code in home page past it in codeblock and fix guest mode enable real calling edg chat with real response.
