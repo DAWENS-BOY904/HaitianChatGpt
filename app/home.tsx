@@ -289,8 +289,8 @@ const mentionStyles = StyleSheet.create({
   name: { fontSize: 15, fontWeight: '500' },
 });
 
-  const MUSIC_KEYWORDS_SPOTIFY=['play music','play song','play track','spotify music','recommend music','listen music','best songs','top songs','music mix','playlist','party music','find songs','trending songs'];
-  const SUPPORTED_AI_MODELS={gemini:'Gemini',openai:'OpenAI',claude:'Claude',llama:'Llama','gemini-2.0-flash-exp':'Gemini 2.0','onspace-ai':'OnSpace AI'} as const;
+  const MUSIC_KEYWORDS_SPOTIFY=['play music','play song','play track','spotify music','recommend music','listen music','best songs','top songs','music mix','playlist','i need song','party music','find songs','search songs','get me music','trending songs','latest songs'];
+  const SUPPORTED_AI_MODELS={gemini:'Gemini',openai:'OpenAI',claude:'Claude',llama:'Llama','gemini-2.0-flash-exp':'Gemini 2.0 Flash','onspace-ai':'OnSpace AI'} as const;
   type AIModelKey=keyof typeof SUPPORTED_AI_MODELS;
 
 const ctxStyles = StyleSheet.create({
@@ -930,6 +930,7 @@ export default function HomeScreen() {
   const ADMIN_EMAILS = ['berryxoe@gmail.com', 'newdawens@gmail.com', 'kontgithub@gmail.com'];
   const isAdminEmail = user?.email ? ADMIN_EMAILS.includes(user.email.toLowerCase()) : false;
   const isAdmin = rawIsAdmin || isAdminEmail;
+  const { isPro } = useSubscription();
   const {
     conversations, messages, currentConversation,
     sendMessage, updateMessageAndRegenerate, createConversation, deleteConversation,
@@ -967,10 +968,7 @@ export default function HomeScreen() {
   const GUEST_PHOTO_BLOCK_MS = 20 * 60 * 60 * 1000; // 20 hours
   const [guestMessageLimitReached, setGuestMessageLimitReached] = useState(false);
   const [guestMessageLimitTime, setGuestMessageLimitTime] = useState<number>(0);
-  const GUEST_LOCK_DURATION_MS = 24 * 60 * 60 * 1000;
-  const [photoLimitModalVisible, setPhotoLimitModalVisible] = useState(false);
-  const [photoLimitResetBase, setPhotoLimitResetBase] = useState(0);
-  const [totalMessagesSent, setTotalMessagesSent] = useState(0);
+  const GUEST_LOCK_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
   const [currentAIMode, setCurrentAIMode] = useState<AIMode>('instant');
   const [photoUploadCount, setPhotoUploadCount] = useState(0);
   const [photoUploadResetTime, setPhotoUploadResetTime] = useState<number>(0);

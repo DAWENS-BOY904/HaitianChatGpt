@@ -12,7 +12,6 @@ import {
   Dimensions,
   ActivityIndicator,
   Animated,
-  Share,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
@@ -26,15 +25,6 @@ import { BlurView } from 'expo-blur';
 import { StreamingCodeBlock } from './StreamingCodeBlock';
 import { SourcesModal, Source, InlineSourcesPill } from './SourcesModal';
 import * as Clipboard from 'expo-clipboard';
-import * as MediaLibrary from 'expo-media-library';
-import * as MediaLibrary from 'expo-media-library';
-// expo-video — used for real-time video playback
-let VideoComponent: any = null;
-let VideoResizeMode: any = { CONTAIN: 'contain' };
-try {
-  const ev = require('expo-video');
-  VideoComponent = ev.VideoView || ev.Video || null;
-} catch (_e) {}
 
 // ── Types ────────────────────────────────────────────────────────────────────
 interface Message {
@@ -679,121 +669,36 @@ export const MessageItem = memo(function MessageItem({
     setImageViewerVisible(true);
   }, []);
 
-  // ── Video preview card — full real-time playback ─────────────────────────────
-function VideoPreviewCard({ name, uri, isDark, colors }: { name: string; uri?: string; isDark: boolean; colors: any }) {
-  const [playerVisible, setPlayerVisible] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-
-  const handleSaveVideo = async () => {
-    if (!uri || saving) return;
-    setSaving(true);
-    try {
-      const { status } = await MediaLibrary.requestPermissionsAsync();
-      if (status !== 'granted') { setSaving(false); return; }
-      await MediaLibrary.saveToLibraryAsync(uri);
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2500);
-    } catch (_e) {}
-    finally { setSaving(false); }
-  };
-
+  // ── Video preview card (for user-attached videos) ────────────────────────────
+function VideoPreviewCard({ name, isDark, colors }: { name: string; isDark: boolean; colors: any }) {
   return (
-    <>
-      <TouchableOpacity
-        onPress={() => setPlayerVisible(true)}
-        activeOpacity={0.88}
-        style={{
-          borderRadius: 16, overflow: 'hidden', maxWidth: 260, alignSelf: 'flex-end',
-          backgroundColor: isDark ? '#1C1C1E' : '#E5E5EA',
-          borderWidth: StyleSheet.hairlineWidth,
-          borderColor: isDark ? 'rgba(255,107,53,0.35)' : 'rgba(255,107,53,0.25)',
-        }}
-      >
-        {/* Thumbnail area */}
-        <View style={{ width: 260, height: 160, backgroundColor: '#111', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
-          <View style={{ width: 52, height: 52, borderRadius: 26, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' }}>
-            <Ionicons name="play" size={24} color="#FFF" style={{ marginLeft: 3 }} />
-          </View>
-        </View>
-        {/* Footer */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 9, gap: 8 }}>
-          <Ionicons name="videocam" size={16} color="#FF6B35" />
-          <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 12, fontWeight: '600', flex: 1 }} numberOfLines={1}>{name || 'Video'}</Text>
-          {/* Save button */}
-          <TouchableOpacity
-            onPress={handleSaveVideo}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            disabled={saving || saved}
-            activeOpacity={0.7}
-          >
-            {saving ? (
-              <ActivityIndicator size="small" color="#FF6B35" />
-            ) : (
-              <Ionicons name={saved ? 'checkmark-circle' : 'download-outline'} size={18} color={saved ? '#34C759' : '#FF6B35'} />
-            )}
-          </TouchableOpacity>
-        </View>
-      </TouchableOpacity>
-
-      {/* Full-screen video player modal */}
-      {playerVisible ? (
-        <Modal visible={playerVisible} transparent={false} animationType="slide" onRequestClose={() => setPlayerVisible(false)} statusBarTranslucent>
-          <View style={{ flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' }}>
-            {/* Header */}
-            <View style={{ position: 'absolute', top: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 56, paddingHorizontal: 16, paddingBottom: 12, zIndex: 10 }}>
-              <TouchableOpacity
-                onPress={() => setPlayerVisible(false)}
-                style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' }}
-              >
-                <Ionicons name="close" size={20} color="#FFF" />
-              </TouchableOpacity>
-              <Text style={{ color: '#FFF', fontSize: 15, fontWeight: '600' }} numberOfLines={1}>{name || 'Video'}</Text>
-              {/* Save button top right */}
-              <TouchableOpacity
-                onPress={handleSaveVideo}
-                disabled={saving || saved}
-                activeOpacity={0.8}
-              >
-                {Platform.OS === 'ios' ? (
-                  <BlurView intensity={60} tint="dark" style={{ width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-                    {saving ? <ActivityIndicator size="small" color="#FFF" /> : <Ionicons name={saved ? 'checkmark-circle' : 'arrow-down-circle-outline'} size={22} color={saved ? '#34C759' : '#FFF'} />}
-                  </BlurView>
-                ) : (
-                  <View style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' }}>
-                    {saving ? <ActivityIndicator size="small" color="#FFF" /> : <Ionicons name={saved ? 'checkmark-circle' : 'arrow-down-circle-outline'} size={22} color={saved ? '#34C759' : '#FFF'} />}
-                  </View>
-                )}
-              </TouchableOpacity>
-            </View>
-
-            {/* Video player */}
-            {uri && VideoComponent ? (
-              <VideoComponent
-                source={{ uri }}
-                style={{ width: Dimensions.get('window').width, height: Dimensions.get('window').height * 0.6 }}
-                resizeMode="contain"
-                useNativeControls
-                isLooping={false}
-              />
-            ) : (
-              <View style={{ alignItems: 'center', gap: 16 }}>
-                <Ionicons name="videocam-off-outline" size={56} color="rgba(255,255,255,0.4)" />
-                <Text style={{ color: 'rgba(255,255,255,0.55)', fontSize: 15 }}>Video preview not available</Text>
-                {uri ? (
-                  <TouchableOpacity
-                    style={{ backgroundColor: '#FF6B35', borderRadius: 28, paddingHorizontal: 28, paddingVertical: 13, marginTop: 8 }}
-                    onPress={() => Linking.openURL(uri).catch(() => {})}
-                  >
-                    <Text style={{ color: '#FFF', fontWeight: '700', fontSize: 15 }}>Open in external player</Text>
-                  </TouchableOpacity>
-                ) : null}
-              </View>
-            )}
-          </View>
-        </Modal>
-      ) : null}
-    </>
+    <View style={{
+      flexDirection: 'row', alignItems: 'center',
+      backgroundColor: isDark ? 'rgba(255,107,53,0.12)' : 'rgba(255,107,53,0.08)',
+      borderRadius: 14, paddingHorizontal: 12, paddingVertical: 10,
+      gap: 10, maxWidth: 240, alignSelf: 'flex-end',
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: isDark ? 'rgba(255,107,53,0.35)' : 'rgba(255,107,53,0.25)',
+    }}>
+      {/* Play button circle */}
+      <View style={{
+        width: 44, height: 44, borderRadius: 22,
+        backgroundColor: '#FF6B35', alignItems: 'center', justifyContent: 'center',
+        shadowColor: '#FF6B35', shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.45, shadowRadius: 6, elevation: 4,
+      }}>
+        <Ionicons name="play" size={20} color="#FFF" style={{ marginLeft: 2 }} />
+      </View>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 13, fontWeight: '700' }} numberOfLines={1}>
+          {name || 'Video'}
+        </Text>
+        <Text style={{ color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.45)', fontSize: 11, marginTop: 2 }}>
+          Video file
+        </Text>
+      </View>
+      <Ionicons name="videocam" size={18} color="#FF6B35" />
+    </View>
   );
 }
 
@@ -841,62 +746,16 @@ function VideoPreviewCard({ name, uri, isDark, colors }: { name: string; uri?: s
             <View style={{ alignSelf: 'flex-end', marginHorizontal: 16, marginBottom: cleanUserContent ? 6 : 0 }}>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }} style={{ maxHeight: 180 }}>
                 {multiImages.map((uri, idx) => (
-                  <View key={`user-img-${idx}`} style={{ position: 'relative' }}>
-                    <TouchableOpacity onPress={() => handleImagePress(uri, multiImages, idx)} activeOpacity={0.88}>
-                      <Image source={{ uri }} style={{ width: 150, height: 150, borderRadius: 14 }} contentFit="cover" transition={200} />
-                    </TouchableOpacity>
-                    {/* Save button top-right */}
-                    <TouchableOpacity
-                      onPress={async () => {
-                        try {
-                          const { status } = await MediaLibrary.requestPermissionsAsync();
-                          if (status === 'granted') await MediaLibrary.saveToLibraryAsync(uri);
-                        } catch (_e) {}
-                      }}
-                      style={{ position: 'absolute', top: 6, right: 6, zIndex: 5 }}
-                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                    >
-                      {Platform.OS === 'ios' ? (
-                        <BlurView intensity={60} tint="dark" style={{ width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-                          <Ionicons name="arrow-down" size={14} color="#FFF" />
-                        </BlurView>
-                      ) : (
-                        <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' }}>
-                          <Ionicons name="arrow-down" size={14} color="#FFF" />
-                        </View>
-                      )}
-                    </TouchableOpacity>
-                  </View>
+                  <TouchableOpacity key={`user-img-${idx}`} onPress={() => handleImagePress(uri, multiImages, idx)} activeOpacity={0.88}>
+                    <Image source={{ uri }} style={{ width: 150, height: 150, borderRadius: 14 }} contentFit="cover" transition={200} />
+                  </TouchableOpacity>
                 ))}
               </ScrollView>
             </View>
           ) : hasValidImage ? (
-            <View style={{ alignSelf: 'flex-end', marginHorizontal: 16, marginBottom: cleanUserContent ? 6 : 0, position: 'relative' }}>
-              <TouchableOpacity onPress={() => handleImagePress(multiImages[0], multiImages, 0)} activeOpacity={0.88}>
-                <Image source={{ uri: multiImages[0] }} style={{ width: 220, height: 220, borderRadius: 18 }} contentFit="cover" transition={200} />
-              </TouchableOpacity>
-              {/* Save to camera roll — top-right blur icon */}
-              <TouchableOpacity
-                onPress={async () => {
-                  try {
-                    const { status } = await MediaLibrary.requestPermissionsAsync();
-                    if (status === 'granted') await MediaLibrary.saveToLibraryAsync(multiImages[0]);
-                  } catch (_e) {}
-                }}
-                style={{ position: 'absolute', top: 8, right: 8, zIndex: 5 }}
-                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-              >
-                {Platform.OS === 'ios' ? (
-                  <BlurView intensity={65} tint="dark" style={{ width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-                    <Ionicons name="arrow-down-circle-outline" size={18} color="#FFF" />
-                  </BlurView>
-                ) : (
-                  <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' }}>
-                    <Ionicons name="arrow-down-circle-outline" size={18} color="#FFF" />
-                  </View>
-                )}
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity onPress={() => handleImagePress(multiImages[0], multiImages, 0)} activeOpacity={0.88} style={{ alignSelf: 'flex-end', marginHorizontal: 16, marginBottom: cleanUserContent ? 6 : 0 }}>
+              <Image source={{ uri: multiImages[0] }} style={{ width: 220, height: 220, borderRadius: 18 }} contentFit="cover" transition={200} />
+            </TouchableOpacity>
           ) : null}
 
           {fileAttachments.length > 0 ? (
@@ -908,7 +767,7 @@ function VideoPreviewCard({ name, uri, isDark, colors }: { name: string; uri?: s
                 const isSheet = fa.mimeType.includes('sheet') || fa.mimeType.includes('excel') || fa.mimeType.includes('csv');
                 // Video gets a special preview card
                 if (isVideo) {
-                  return <VideoPreviewCard key={`fa-${fi}`} name={fa.name} isDark={isDark} colors={colors} uri={undefined} />;
+                  return <VideoPreviewCard key={`fa-${fi}`} name={fa.name} isDark={isDark} colors={colors} />;
                 }
                 const iconName: any = isPdf ? 'document-text' : isDoc ? 'document-text' : isSheet ? 'grid' : 'attach';
                 const iconColor = isPdf ? '#FF3B30' : isDoc ? '#007AFF' : isSheet ? '#34C759' : colors.primary;
