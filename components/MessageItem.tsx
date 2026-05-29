@@ -27,7 +27,6 @@ import { StreamingCodeBlock } from './StreamingCodeBlock';
 import { SourcesModal, Source, InlineSourcesPill } from './SourcesModal';
 import * as Clipboard from 'expo-clipboard';
 import * as MediaLibrary from 'expo-media-library';
-import * as MediaLibrary from 'expo-media-library';
 // expo-video — used for real-time video playback
 let VideoComponent: any = null;
 let VideoResizeMode: any = { CONTAIN: 'contain' };
