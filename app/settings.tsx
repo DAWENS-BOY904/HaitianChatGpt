@@ -32,6 +32,7 @@ import { Image as ExpoImageBadge } from 'expo-image';
 import * as WebBrowser from '../utils/web-browser';
 import { WebView } from 'react-native-webview';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
+import { BlurView } from 'expo-blur';
 
 const PERSONA_LINK = 'https://perso.na/s/rKzyfH-XZ9663D';
 const AGE_VERIFIED_KEY = 'age_verification_completed';
@@ -958,11 +959,23 @@ export default function SettingsScreen() {
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingTop: insets.top + 16, paddingBottom: 16, paddingHorizontal: 20 }}>
         <Text style={{ fontSize: 17, fontWeight: '700', color: primaryText }}>Settings</Text>
         <TouchableOpacity
-          style={{ position: 'absolute', right: 16, top: insets.top + 8, width: 36, height: 36, borderRadius: 18, backgroundColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.08)', alignItems: 'center', justifyContent: 'center' }}
+          style={{ position: 'absolute', right: 16, top: insets.top + 8, width: 36, height: 36, borderRadius: 18, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' }}
           onPress={() => router.back()}
           activeOpacity={0.7}
         >
-          <Ionicons name="close" size={17} color={primaryText} />
+          {Platform.OS === 'ios' ? (
+            <BlurView
+              intensity={isDark ? 70 : 55}
+              tint={isDark ? 'dark' : 'light'}
+              style={{ ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' }}
+            >
+              <Ionicons name="close" size={17} color={primaryText} />
+            </BlurView>
+          ) : (
+            <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.08)', alignItems: 'center', justifyContent: 'center' }}>
+              <Ionicons name="close" size={17} color={primaryText} />
+            </View>
+          )}
         </TouchableOpacity>
       </View>
 
@@ -1259,4 +1272,3 @@ export default function SettingsScreen() {
     </View>
   );
 }
-hello ai can you please the top right x icon the background must be blur expo.
