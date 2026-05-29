@@ -13,7 +13,6 @@ import {
   ActivityIndicator,
   Animated,
   Share,
-  TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
@@ -69,265 +68,6 @@ interface MessageItemProps {
   onUnlike?: (messageId: string) => void;
   onOpenActions?: (message: Message) => void;
 }
-
-// ── TikTok Card Parser ───────────────────────────────────────────────────────
-interface TikTokCardData {
-  title: string;
-  author: string;
-  thumbnail: string;
-  videoUrl: string;
-}
-
-function parseTikTokCard(content: string): { cleanContent: string; card: TikTokCardData | null } {
-  const match = content.match(/\[TIKTOK_CARD\]([\s\S]*?)\[\/TIKTOK_CARD\]/);
-  if (!match) return { cleanContent: content, card: null };
-  try {
-    const card: TikTokCardData = JSON.parse(match[1]);
-    const cleanContent = content.replace(/\[TIKTOK_CARD\][\s\S]*?\[\/TIKTOK_CARD\]/, '').trim();
-    return { cleanContent, card };
-  } catch {
-    return { cleanContent: content, card: null };
-  }
-}
-
-// ── TikTok Preview Card Component ────────────────────────────────────────────
-const TikTokPreviewCard = memo(function TikTokPreviewCard({
-  card, isDark, colors,
-}: { card: TikTokCardData; isDark: boolean; colors: any }) {
-  const [imgError, setImgError] = useState(false);
-  const borderColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)';
-  const cardBg = isDark ? '#1C1C1E' : '#F8F8FA';
-  return (
-    <TouchableOpacity
-      onPress={() => openInApp(card.videoUrl)}
-      activeOpacity={0.88}
-      style={{
-        borderRadius: 18,
-        overflow: 'hidden',
-        borderWidth: StyleSheet.hairlineWidth,
-        borderColor,
-        backgroundColor: cardBg,
-        marginVertical: 8,
-        maxWidth: 320,
-      }}
-    >
-      {/* Thumbnail */}
-      <View style={{ width: '100%', height: 180, backgroundColor: '#000', position: 'relative' }}>
-        {card.thumbnail && !imgError ? (
-          <Image
-            source={{ uri: card.thumbnail }}
-            style={{ width: '100%', height: 180 }}
-            contentFit="cover"
-            transition={200}
-            onError={() => setImgError(true)}
-          />
-        ) : (
-          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#111' }}>
-            <Ionicons name="logo-tiktok" size={48} color="rgba(255,255,255,0.35)" />
-          </View>
-        )}
-        {/* Play overlay */}
-        <View
-          style={{
-            position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-            alignItems: 'center', justifyContent: 'center',
-          }}
-        >
-          <View style={{
-            width: 52, height: 52, borderRadius: 26,
-            backgroundColor: 'rgba(0,0,0,0.55)',
-            alignItems: 'center', justifyContent: 'center',
-          }}>
-            <Ionicons name="play" size={24} color="#FFF" style={{ marginLeft: 3 }} />
-          </View>
-        </View>
-        {/* TikTok badge */}
-        <View style={{
-          position: 'absolute', top: 10, left: 10,
-          flexDirection: 'row', alignItems: 'center', gap: 5,
-          backgroundColor: 'rgba(0,0,0,0.65)',
-          borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5,
-        }}>
-          <Ionicons name="logo-tiktok" size={13} color="#FFF" />
-          <Text style={{ color: '#FFF', fontSize: 12, fontWeight: '700' }}>TikTok</Text>
-        </View>
-      </View>
-      {/* Info row */}
-      <View style={{ padding: 12, gap: 4 }}>
-        {card.title ? (
-          <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 14, fontWeight: '600', lineHeight: 20 }} numberOfLines={2}>
-            {card.title}
-          </Text>
-        ) : null}
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          <Ionicons name="person-circle-outline" size={14} color={colors.textSecondary} />
-          <Text style={{ color: colors.textSecondary, fontSize: 12 }}>@{card.author}</Text>
-          <View style={{ flex: 1 }} />
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-            <Ionicons name="open-outline" size={13} color={colors.textSecondary} />
-            <Text style={{ color: colors.textSecondary, fontSize: 11 }}>Open in TikTok</Text>
-          </View>
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
-});
-
-// ── Text Selection Overlay for AI messages ───────────────────────────────────
-interface TextSelectionOverlayProps {
-  visible: boolean;
-  content: string;
-  onClose: () => void;
-  isDark: boolean;
-  colors: any;
-  accentColor?: string;
-}
-
-const TextSelectionOverlay = memo(function TextSelectionOverlay({
-  visible, content, onClose, isDark, colors, accentColor = '#10A37F',
-}: TextSelectionOverlayProps) {
-  const [selectedText, setSelectedText] = useState('');
-  const [copied, setCopied] = useState(false);
-  const slideAnim = useRef(new Animated.Value(300)).current;
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    if (visible) {
-      setSelectedText('');
-      setCopied(false);
-      Animated.parallel([
-        Animated.timing(fadeAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
-        Animated.spring(slideAnim, { toValue: 0, tension: 200, friction: 22, useNativeDriver: true }),
-      ]).start();
-    } else {
-      Animated.parallel([
-        Animated.timing(fadeAnim, { toValue: 0, duration: 180, useNativeDriver: true }),
-        Animated.timing(slideAnim, { toValue: 300, duration: 180, useNativeDriver: true }),
-      ]).start();
-    }
-  }, [visible]);
-
-  const handleCopySelected = useCallback(async () => {
-    if (!selectedText.trim()) return;
-    await Clipboard.setStringAsync(selectedText.trim());
-    setCopied(true);
-    setTimeout(() => { setCopied(false); onClose(); }, 800);
-  }, [selectedText, onClose]);
-
-  const handleCopyAll = useCallback(async () => {
-    const cleanText = content.replace(/[#*`>]/g, '').replace(/\[SOURCES\][\s\S]*?\[\/SOURCES\]/gi, '').trim();
-    await Clipboard.setStringAsync(cleanText);
-    setCopied(true);
-    setTimeout(() => { setCopied(false); onClose(); }, 800);
-  }, [content, onClose]);
-
-  if (!visible) return null;
-
-  const cardBg = isDark ? 'rgba(28,28,32,0.98)' : 'rgba(255,255,255,0.98)';
-  const textC = isDark ? '#FFFFFF' : '#000000';
-  const subC = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.45)';
-  const borderC = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)';
-
-  return (
-    <Modal visible={visible} transparent animationType="none" onRequestClose={onClose} statusBarTranslucent>
-      <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.45)', opacity: fadeAnim }]}>
-        <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onClose} />
-      </Animated.View>
-      <Animated.View
-        style={[{
-          position: 'absolute', bottom: 0, left: 0, right: 0,
-          borderTopLeftRadius: 28, borderTopRightRadius: 28,
-          backgroundColor: cardBg,
-          paddingBottom: Platform.OS === 'ios' ? 36 : 24,
-          shadowColor: '#000', shadowOffset: { width: 0, height: -4 },
-          shadowOpacity: 0.25, shadowRadius: 20, elevation: 20,
-          transform: [{ translateY: slideAnim }],
-        }]}
-      >
-        {/* Handle */}
-        <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.15)', alignSelf: 'center', marginTop: 12, marginBottom: 16 }} />
-        {/* Header */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, marginBottom: 12 }}>
-          <Ionicons name="text-outline" size={18} color={subC} />
-          <Text style={{ color: textC, fontSize: 16, fontWeight: '700', marginLeft: 8, flex: 1 }}>Select Text to Copy</Text>
-          <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <Ionicons name="close" size={20} color={subC} />
-          </TouchableOpacity>
-        </View>
-        {/* Hint */}
-        <Text style={{ color: subC, fontSize: 13, paddingHorizontal: 20, marginBottom: 10, lineHeight: 19 }}>
-          Long-press and drag to select text, then tap Copy Selected
-        </Text>
-        {/* Selectable text area */}
-        <View style={{
-          marginHorizontal: 16, borderRadius: 16,
-          backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
-          borderWidth: 1, borderColor: borderC,
-          maxHeight: 240, overflow: 'hidden',
-        }}>
-          <TextInput
-            style={{
-              padding: 14, fontSize: 15, color: textC, lineHeight: 23,
-              maxHeight: 240, textAlignVertical: 'top',
-            }}
-            value={content.replace(/[#*`]/g, '').replace(/\[SOURCES\][\s\S]*?\[\/SOURCES\]/gi, '').replace(/\[TIKTOK_CARD\][\s\S]*?\[\/TIKTOK_CARD\]/gi, '').trim()}
-            editable={false}
-            multiline
-            scrollEnabled
-            selectTextOnFocus
-            onSelectionChange={(e) => {
-              const { start, end } = e.nativeEvent.selection;
-              if (start !== end) {
-                const cleanContent = content.replace(/[#*`]/g, '').replace(/\[SOURCES\][\s\S]*?\[\/SOURCES\]/gi, '').replace(/\[TIKTOK_CARD\][\s\S]*?\[\/TIKTOK_CARD\]/gi, '').trim();
-                setSelectedText(cleanContent.slice(start, end));
-              } else {
-                setSelectedText('');
-              }
-            }}
-            selectionColor={accentColor + '55'}
-          />
-        </View>
-        {/* Action buttons */}
-        <View style={{ flexDirection: 'row', paddingHorizontal: 16, paddingTop: 16, gap: 10 }}>
-          <TouchableOpacity
-            style={[{
-              flex: 1, borderRadius: 50, paddingVertical: 14, alignItems: 'center',
-              flexDirection: 'row', justifyContent: 'center', gap: 7,
-              borderWidth: 1, borderColor: selectedText.trim() ? accentColor + '60' : borderC,
-              backgroundColor: selectedText.trim() ? accentColor + '14' : (isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)'),
-            }]}
-            onPress={handleCopySelected}
-            disabled={!selectedText.trim()}
-            activeOpacity={0.7}
-          >
-            <Ionicons
-              name={copied && selectedText ? 'checkmark' : 'copy-outline'}
-              size={16}
-              color={selectedText.trim() ? accentColor : subC}
-            />
-            <Text style={{ fontSize: 15, fontWeight: '600', color: selectedText.trim() ? accentColor : subC }}>
-              {copied && selectedText ? 'Copied!' : 'Copy Selected'}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[{
-              flex: 1, borderRadius: 50, paddingVertical: 14, alignItems: 'center',
-              flexDirection: 'row', justifyContent: 'center', gap: 7,
-              backgroundColor: copied && !selectedText ? '#34C759' : accentColor,
-            }]}
-            onPress={handleCopyAll}
-            activeOpacity={0.8}
-          >
-            <Ionicons name={copied && !selectedText ? 'checkmark' : 'documents-outline'} size={16} color="#FFF" />
-            <Text style={{ fontSize: 15, fontWeight: '700', color: '#FFF' }}>
-              {copied && !selectedText ? 'Copied!' : 'Copy All'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </Animated.View>
-    </Modal>
-  );
-});
 
 // ── Safety keywords ──────────────────────────────────────────────────────────
 const SELF_HARM_KEYWORDS = [
@@ -834,8 +574,6 @@ export const MessageItem = memo(function MessageItem({
   const [sourcesData, setSourcesData] = useState<Source[]>([]);
   const [inlineSourcesVisible, setInlineSourcesVisible] = useState(false);
   const [inlineSources, setInlineSources] = useState<Source[]>([]);
-  const [textSelectOverlayVisible, setTextSelectOverlayVisible] = useState(false);
-  const { settings: messageSettings } = useSettings();
 
   // CRITICAL: Safe content — never undefined/null, prevents crash during streaming
   const safeContent: string = (() => {
@@ -1216,16 +954,13 @@ function VideoPreviewCard({ name, uri, isDark, colors }: { name: string; uri?: s
   // ── Assistant message ─────────────────────────────────────────────────────
   const isCurrentlyStreaming = !!(isGenerating || streaming);
 
-  // Extract TikTok card before parsing blocks
-  const { cleanContent: contentWithoutTiktok, card: tiktokCardData } = parseTikTokCard(safeContent);
-
   // SAFE parse — wrap entire parseMarkdownBlocks in try/catch to prevent crashes
   let blocks: Block[] = [];
   try {
-    blocks = parseMarkdownBlocks(contentWithoutTiktok, isCurrentlyStreaming);
+    blocks = parseMarkdownBlocks(safeContent, isCurrentlyStreaming);
   } catch (_e) {
     // If parsing throws during streaming, show raw text as paragraph
-    blocks = contentWithoutTiktok ? [{ type: 'paragraph', content: contentWithoutTiktok }] : [];
+    blocks = safeContent ? [{ type: 'paragraph', content: safeContent }] : [];
   }
 
   const allImageUrls = embeddedImages.map(im => im.url);
@@ -1361,11 +1096,6 @@ function VideoPreviewCard({ name, uri, isDark, colors }: { name: string; uri?: s
             <ImageGrid images={embeddedImages} onPress={(url, idx) => handleImagePress(url, allImageUrls, idx)} onSendToChat={handleSendImageToChat} />
           ) : null}
 
-          {/* TikTok preview card */}
-          {tiktokCardData ? (
-            <TikTokPreviewCard card={tiktokCardData} isDark={isDark} colors={colors} />
-          ) : null}
-
           {message.imageUrl && !isUser ? (
             <TouchableOpacity onPress={() => handleImagePress(message.imageUrl!, [message.imageUrl!], 0)} activeOpacity={0.88} style={{ marginTop: 10 }}>
               <Image source={{ uri: message.imageUrl }} style={{ width: '100%', height: 240, borderRadius: 16 }} contentFit="cover" transition={200} />
@@ -1399,13 +1129,7 @@ function VideoPreviewCard({ name, uri, isDark, colors }: { name: string; uri?: s
             return (
               <>
                 <View style={assistantStyles.actionRow}>
-                  <TouchableOpacity
-                    onPress={() => setTextSelectOverlayVisible(true)}
-                    onLongPress={onCopy}
-                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                    style={assistantStyles.actionBtn}
-                    delayLongPress={600}
-                  >
+                  <TouchableOpacity onPress={onCopy} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} style={assistantStyles.actionBtn}>
                     <Ionicons name="copy-outline" size={18} color={colors.textSecondary} />
                   </TouchableOpacity>
                   <TouchableOpacity
@@ -1483,15 +1207,6 @@ function VideoPreviewCard({ name, uri, isDark, colors }: { name: string; uri?: s
       <SourcesModal visible={sourcesModalVisible} sources={sourcesData} onClose={() => setSourcesModalVisible(false)} />
       {/* Inline sources modal — structured JSON sources from web search */}
       <SourcesModal visible={inlineSourcesVisible} sources={inlineSources} onClose={() => setInlineSourcesVisible(false)} />
-      {/* Text selection overlay */}
-      <TextSelectionOverlay
-        visible={textSelectOverlayVisible}
-        content={safeContent}
-        onClose={() => setTextSelectOverlayVisible(false)}
-        isDark={isDark}
-        colors={colors}
-        accentColor={(messageSettings as any)?.accentColor || '#10A37F'}
-      />
     </>
   );
 });
