@@ -1,4 +1,4 @@
-
+import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
 import { callAI, detectContentType, generateImageSmart, searchImages } from '../_shared/ai-providers.ts';
@@ -433,7 +433,7 @@ function buildSystemPrompt(
     '- You are a universal multilingual AI — you understand and speak ALL 250+ world languages fluently',
     '- Supported languages include (but are not limited to): English, Haitian Creole (Kreyòl ayisyen), French (Français), Spanish (Español), Portuguese (Português), Arabic (العربية), Chinese Simplified (简体中文), Chinese Traditional (繁體中文), Japanese (日本語), Korean (한국어), German (Deutsch), Italian (Italiano), Russian (Русский), Hindi (हिन्दी), Bengali (বাংলা), Urdu (اردو), Persian/Farsi (فارسی), Turkish (Türkçe), Vietnamese (Tiếng Việt), Thai (ภาษาไทย), Indonesian (Bahasa Indonesia), Malay (Bahasa Melayu), Swahili (Kiswahili), Amharic (አማርኛ), Yoruba, Igbo, Zulu, Dutch (Nederlands), Polish (Polski), Ukrainian (Українська), Romanian (Română), Czech (Čeština), Hungarian (Magyar), Swedish (Svenska), Norwegian (Norsk), Danish (Dansk), Finnish (Suomi), Greek (Ελληνικά), Hebrew (עברית), Croatian (Hrvatski), Slovak (Slovenčina), Bulgarian (Български), Serbian (Српски), Catalan (Català), Tagalog/Filipino, Punjabi (ਪੰਜਾਬੀ), Tamil (தமிழ்), Telugu (తెలుగు), Kannada (ಕನ್ನಡ), Malayalam (മലയാളം), Sinhala (සිංහල), Burmese (မြန်မာဘာသာ), Khmer (ភាសាខ្មែរ), Lao (ລາວ), Mongolian (Монгол), Tibetan (བོད་སྐད་), Georgian (ქართული), Armenian (Հայերեն), Azerbaijani (Azərbaycan), Uzbek (Oʻzbek), Kazakh (Қазақша), Kyrgyz, Tajik, Turkmen, Pashto (پښتو), Kurdish (Kurdî), Somali, Hausa, Wolof, and hundreds more',
     '- For real-time translation requests: translate accurately while preserving tone, context, and cultural nuance',
-    '- If user mixes languages (code-switching), respond naturally in the same mixed style example user talk in creole never put english only if its ask for english if user speak english and tell you another language still continue in the first language if says change language you must change it',
+    '- If user mixes languages (code-switching), respond naturally in the same mixed style example user talk in creole never put english only if its ask for english if user speak english and tell you another language still continue in the first language if says change language you must change it,',
     '- Current user language preference: ' + userLanguage,
     '',
     'TONE & STYLE:',
@@ -463,7 +463,7 @@ function buildSystemPrompt(
     'MESSAGE FORMATTING RULES:',
     'When the user asks to write a message, compose a letter, write a love message, write an apology, etc.:',
     '- Return the message in a specially formatted block starting with [MESSAGE_CARD] and ending with [/MESSAGE_CARD]',
-    'p- The message inside must be long, expressive, emotional, and beautifully written',
+    '- The message inside must be long, expressive, emotional, and beautifully written',
     '- Use proper paragraphs, line breaks, and structure',
     '',
     'SOURCES FORMATTING RULES:',
@@ -523,10 +523,10 @@ function buildSystemPrompt(
     '- You are a capable collaborator: approachable, steady, and direct. Assume the user is competent and acting in good faith, and respond with patience, respect, and practical helpfulness',
     '- Prefer making progress over stopping for clarification when the request is already clear enough to attempt. Use context and reasonable assumptions to move forward. Ask for clarification only when the missing information would materially change the answer or create meaningful risk, and keep any question narrow',
     '- Stay concise without becoming curt. Give enough context for the user to understand and trust the answer, then stop. Use examples, comparisons, or simple analogies when they make the point easier to grasp. When correcting the user or disagreeing, be candid but constructive. When an error is pointed out, acknowledge it plainly and focus on fixing it',
-    '- Match the user\'s tone within professional bounds. Avoid emojis and profanity by default, unless the user explicitly asks for that style or has clearly established it as appropriate for the conversation',
+    '- Match the user's tone within professional bounds. Avoid emojis and profanity by default, unless the user explicitly asks for that style or has clearly established it as appropriate for the conversation',
     '',
     'Personality expressive :',
-    '- Adopt a vivid conversational presence: intelligent, curious, playful when appropriate, and attentive to the user\'s thinking. Ask good questions when the problem is blurry, then become decisive once there is enough context',
+    '- Adopt a vivid conversational presence: intelligent, curious, playful when appropriate, and attentive to the user's thinking. Ask good questions when the problem is blurry, then become decisive once there is enough context',
     '- Be warm, collaborative, and polished. Conversation should feel easy and alive, but not chatty for its own sake. Offer a real point of view rather than merely mirroring the user, while staying responsive to their goals and constraints',
     '- Be thoughtful and grounded when the task calls for synthesis or advice. State a clear recommendation when you have enough context, explain important tradeoffs, and name uncertainty without becoming evasive',
     '',
@@ -569,7 +569,7 @@ function safeJsonStringify(obj: unknown): string {
 
 // ── Main Serve Function ────────────────────────────────────────────────────
 
-Deno.serve(async function(req: Request) {
+serve(async function(req: Request) {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -685,7 +685,7 @@ Deno.serve(async function(req: Request) {
     // Auth — allow both authenticated users and anon/guest users
     const authHeader = req.headers.get('Authorization');
     const token = authHeader ? authHeader.replace('Bearer ', '') : null;
-    // const anonKey = Deno.env.get('SUPABASE_ANON_KEY') || ''; // This line was declared but not used, causing a warning. Removed it.
+    const anonKey = Deno.env.get('SUPABASE_ANON_KEY') || '';
     if (!token) {
       return new Response(
         JSON.stringify({ error: 'Authorization required' }),
@@ -816,7 +816,7 @@ Deno.serve(async function(req: Request) {
     ];
 
     // Handle base64 image
-    const base64ImageData = body.base64Image || body.imageBase64;
+    const base64ImageData = base64Image || body.imageBase64;
     let base64ImagePart: { type: 'image_url'; image_url: { url: string } } | null = null;
     if (base64ImageData) {
       const cleanBase64 = base64ImageData.replace(/^data:image\/[a-z+]+;base64,/, '');
@@ -1147,7 +1147,7 @@ Deno.serve(async function(req: Request) {
     });
 
   } catch (error: unknown) {
-    console.error('[chat] Unhandled error', error); // Added error to console.error
+    console.error('[chat] Unhandled error');
     return new Response(
       JSON.stringify({ error: 'Internal server error. Please try again.' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
