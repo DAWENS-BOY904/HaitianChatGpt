@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useDeviceVerification } from '../hooks/useDeviceVerification';
 import {
   View,
   Text,
@@ -382,8 +384,10 @@ export default function RootScreen() {
     });
   }, []);
 
-  // After login completes, redirect to home
-  // After onboarding check, redirect to onboarding if needed
+  // New device verification — fires on web/desktop logins
+  useDeviceVerification({ userId: user?.id, userEmail: user?.email, skipOnNative: true });
+
+  // Redirect to home once authenticated
   useEffect(() => {
     if (loading || checkingOnboarding) return;
     if (user) {

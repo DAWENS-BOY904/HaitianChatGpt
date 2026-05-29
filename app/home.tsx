@@ -63,6 +63,14 @@ import { ReportGroupModal } from '../components/ReportGroupModal';
 import { ChatHistoryModal } from '../components/ChatHistoryModal';
 import { ImageSearchResults } from '../components/ImageSearchResults';
 import { CalculatorModal, CalculatorCard, detectMathExpression } from '../components/CalculatorModal';
+import { AppRatingModal } from '../components/AppRatingModal';
+import { PhotoLimitModal } from '../components/PhotoLimitModal';
+import {
+  RenameModal, ArchiveConfirmModal, ProfileEditModal,
+  GroupStartModal, PeopleModal, RenameGroupBox,
+  CustomizeAIModal, InviteLinkModal, GroupMemberProfileContent,
+} from '../components/HomeModals';
+import type { GroupMember } from '../components/HomeModals';
 import { SpotifyMusicCard, SpotifyLoadingOverlay, SpotifyTrack } from '../components/SpotifyMusicCard';
 import { ConnectedAppsModal, ConnectedApp } from '../components/ConnectedAppsModal';
 import { WebView } from 'react-native-webview';
@@ -218,64 +226,25 @@ interface Message {
   reactions?: string[];
 }
 
-interface GroupMember {
-  id: string;
-  username: string;
-  profile_photo_url?: string;
-  accent_color?: string;
-}
+// ── Modal components extracted to components/HomeModals.tsx ───────────────
+import {
+  RenameModal, ArchiveConfirmModal, ProfileEditModal,
+  GroupStartModal, PeopleModal, RenameGroupBox,
+  CustomizeAIModal, InviteLinkModal, GroupMemberProfileContent,
+} from '../components/HomeModals';
+import type { GroupMember } from '../components/HomeModals';
+import { AppRatingModal } from '../components/AppRatingModal';
+import { PhotoLimitModal } from '../components/PhotoLimitModal';
 
-const MAX_RECORDING_DURATION = 60;
-const SHAKE_THRESHOLD = 3.0;
-const SHAKE_COOLDOWN = 1000;
+  const MUSIC_KEYWORDS_SPOTIFY=['play music','play song','play track','spotify music','recommend music','listen music','best songs','top songs','music mix','playlist','party music','find songs','trending songs'];
+  const SUPPORTED_AI_MODELS={gemini:'Gemini',openai:'OpenAI',claude:'Claude',llama:'Llama','gemini-2.0-flash-exp':'Gemini 2.0','onspace-ai':'OnSpace AI'} as const;
+  type AIModelKey=keyof typeof SUPPORTED_AI_MODELS;
 
-function MentionPopup({ members, onSelect, onClose }: {
-  members: GroupMember[];
-  onSelect: (member: GroupMember) => void;
-  onClose: () => void;
-}) {
-  const { colors, isDark } = useTheme();
-  if (members.length === 0) return null;
-  return (
-    <View style={[
-      mentionStyles.container,
-      { backgroundColor: isDark ? '#2C2C2E' : '#FFFFFF', borderColor: isDark ? '#3A3A3C' : '#E0E0E5' }
-    ]}>
-      <ScrollView keyboardShouldPersistTaps="always" showsVerticalScrollIndicator={false} style={{ maxHeight: 220 }}>
-        {members.map((m, i) => (
-          <TouchableOpacity
-            key={m.id}
-            style={[
-              mentionStyles.row,
-              i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: isDark ? '#3A3A3C' : '#E5E5EA' }
-            ]}
-            onPress={() => { onSelect(m); onClose(); }}
-            activeOpacity={0.7}
-          >
-            {m.profile_photo_url ? (
-              <Image source={{ uri: m.profile_photo_url }} style={mentionStyles.avatar} />
-            ) : (
-              <View style={[mentionStyles.avatarFallback, { backgroundColor: m.accent_color || '#888' }]}>
-                <Text style={mentionStyles.avatarLetter}>{(m.username?.[0] || '?').toUpperCase()}</Text>
-              </View>
-            )}
-            <Text style={[mentionStyles.name, { color: colors.text }]}>@{m.username}</Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-    </View>
-  );
-}
+const ctxStyles = StyleSheet.create({ backdrop: {}, menuWrap: {}, blurBox: {}, titleRow: {}, titleText: {}, menuItem: {}, menuItemBorder: {}, menuItemLabel: {}, destructiveLabel: {} });
+// ── All inline modal components moved to components/HomeModals.tsx ──
 
 const headerIconGroupStyles = StyleSheet.create({
-  glassWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 22,
-    overflow: 'hidden',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.12)',
-  },
+  glassWrap: { flexDirection: 'row', alignItems: 'center', borderRadius: 22, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.12)' },
   iconBtn: { width: 38, height: 36, alignItems: 'center', justifyContent: 'center' },
   divider: { width: StyleSheet.hairlineWidth, height: 18 },
 });
@@ -289,23 +258,7 @@ const mentionStyles = StyleSheet.create({
   name: { fontSize: 15, fontWeight: '500' },
 });
 
-  const MUSIC_KEYWORDS_SPOTIFY=['play music','play song','play track','spotify music','recommend music','listen music','best songs','top songs','music mix','playlist','party music','find songs','trending songs'];
-  const SUPPORTED_AI_MODELS={gemini:'Gemini',openai:'OpenAI',claude:'Claude',llama:'Llama','gemini-2.0-flash-exp':'Gemini 2.0','onspace-ai':'OnSpace AI'} as const;
-  type AIModelKey=keyof typeof SUPPORTED_AI_MODELS;
 
-const ctxStyles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', alignItems: 'center' },
-  menuWrap: { width: 260, borderRadius: 16, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.4, shadowRadius: 20, elevation: 20 },
-  blurBox: { borderRadius: 16, overflow: 'hidden' },
-  titleRow: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(255,255,255,0.12)' },
-  titleText: { fontSize: 13, color: 'rgba(255,255,255,0.5)', textAlign: 'center', fontWeight: '500' },
-  menuItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14 },
-  menuItemBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.1)' },
-  menuItemLabel: { fontSize: 17, color: 'rgba(255,255,255,0.92)', fontWeight: '400' },
-  destructiveLabel: { color: '#FF453A' },
-});
-
-function RenameModal({ visible, currentTitle, onConfirm, onCancel }: {
   visible: boolean; currentTitle: string; onConfirm: (title: string) => void; onCancel: () => void;
 }) {
   const [text, setText] = useState(currentTitle);
@@ -361,7 +314,11 @@ const renameStyles = StyleSheet.create({
   btnDivider: { width: 1 },
 });
 
-function ArchiveConfirmModal({ visible, onConfirm, onCancel }: { visible: boolean; onConfirm: () => void; onCancel: () => void }) {
+// ArchiveConfirmModal, ProfileEditModal, GroupStartModal, PeopleModal,
+// RenameGroupBox, CustomizeAIModal, InviteLinkModal, GroupMemberProfileContent
+// have all been moved to components/HomeModals.tsx
+
+const shazamCardStyles = StyleSheet.create({
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
       <View style={archStyles.backdrop}>
@@ -388,7 +345,11 @@ const archStyles = StyleSheet.create({
   archBtnText: { color: '#FF453A', fontSize: 17, fontWeight: '600' },
 });
 
-function ProfileEditModal({ visible, user, profilePhotoUrl, onClose, onSave, isDark }: {
+// ProfileEditModal, GroupStartModal, PeopleModal, RenameGroupBox,
+// CustomizeAIModal, InviteLinkModal, GroupMemberProfileContent
+// are all imported from components/HomeModals.tsx
+
+const shazamCardStyles = StyleSheet.create({
   visible: boolean; user: any; profilePhotoUrl: string | null; onClose: () => void;
   onSave: (name: string, username: string, photo?: string) => void; isDark: boolean;
 }) {
@@ -453,7 +414,10 @@ function ProfileEditModal({ visible, user, profilePhotoUrl, onClose, onSave, isD
   );
 }
 
-function GroupStartModal({ visible, user, profilePhotoUrl, onClose, onStartGroup, isDark, onSetupProfile }: {
+// GroupStartModal, PeopleModal, RenameGroupBox, CustomizeAIModal, InviteLinkModal
+// are all imported from components/HomeModals.tsx
+
+const shazamCardStyles = StyleSheet.create({
   visible: boolean; user: any; profilePhotoUrl: string | null; onClose: () => void; onStartGroup: () => void;
   isDark?: boolean; onSetupProfile?: () => void;
 }) {
@@ -832,43 +796,7 @@ const imgOverlayStyles = StyleSheet.create({
 });
 
 // ── Shazam Card Styles ──────────────────────────────────────────────────────────────────────────
-const shazamCardStyles = StyleSheet.create({
-  tapCard: {
-    borderRadius: 20, padding: 28, alignItems: 'center', justifyContent: 'center',
-    minHeight: 200,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12, shadowRadius: 12, elevation: 6,
-  },
-  shazamCircle: {
-    width: 100, height: 100, borderRadius: 50,
-    backgroundColor: '#0D72EA', alignItems: 'center', justifyContent: 'center',
-  },
-  resultCard: {
-    borderRadius: 20, overflow: 'hidden',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12, shadowRadius: 12, elevation: 6,
-  },
-  albumArt: {
-    width: '100%', height: 220,
-  },
-  songInfo: {
-    padding: 16,
-  },
-  saveBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 8, backgroundColor: '#0D72EA',
-    borderRadius: 50, paddingVertical: 13, marginTop: 12,
-  },
-  playBtn: {
-    position: 'absolute', bottom: 16, right: 16,
-    width: 44, height: 44, borderRadius: 22,
-    backgroundColor: '#FFF', alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15, shadowRadius: 6, elevation: 4,
-  },
-});
-
-function GroupMemberProfileContent({ member, isOwner, isAdmin, isDark, isSilenced, onClose, onRemove, onSilence, onReport, colors }: {
+// shazamCardStyles (duplicate removed)
   member: GroupMember | null;
   isOwner: boolean;
   isAdmin: boolean;
@@ -970,6 +898,8 @@ export default function HomeScreen() {
   const GUEST_LOCK_DURATION_MS = 24 * 60 * 60 * 1000;
   const [photoLimitModalVisible, setPhotoLimitModalVisible] = useState(false);
   const [photoLimitResetBase, setPhotoLimitResetBase] = useState(0);
+// photoLimitResetAtMs tracks when the hourly photo limit resets (used by PhotoLimitModal)
+  const [photoLimitResetAtMs, setPhotoLimitResetAtMs] = useState(0);
   const [totalMessagesSent, setTotalMessagesSent] = useState(0);
   const [currentAIMode, setCurrentAIMode] = useState<AIMode>('instant');
   const [photoUploadCount, setPhotoUploadCount] = useState(0);
@@ -2018,7 +1948,9 @@ export default function HomeScreen() {
         const now = Date.now();
         const isNewWindow = photoUploadResetTime === 0 || now - photoUploadResetTime > 60 * 60 * 1000;
         const currentCount = isNewWindow ? 0 : photoUploadCount;
-        if (currentCount + imageFiles.length > 4) { showAlert('Hourly Photo Limit', 'Free plan allows 4 photos per hour. Upgrade to Pro for 10/session.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Get Plus', onPress: () => router.push('/subscription') }]); return; }
+                const resetMs = (isNewWindow ? Date.now() : photoUploadResetTime) + 60 * 60 * 1000;
+        setPhotoLimitResetAtMs(resetMs);
+        setPhotoLimitModalVisible(true); return; }
         if (isNewWindow) setPhotoUploadResetTime(now);
         setPhotoUploadCount(currentCount + imageFiles.length);
       }
@@ -2214,9 +2146,8 @@ export default function HomeScreen() {
       // Pass firstImageUri as local preview for the user message bubble
       const imagePayload = base64Image ? base64Image : undefined;
       await sendMessage(prefixedText, filePayloadArr.length > 0 ? filePayloadArr : undefined, imagePayload, false, currentAIModel);
+      setTotalMessagesSent(prev => prev + 1);
       setShowCompletionStatus(true);
-      setTimeout(() => setShowCompletionStatus(false), 2000);
-      // Shazam: show card when connected and query detected
       if (!shazamActive && shazamConnected && isShazamQuery(currentText)) {
         setShazamActive(true);
         setShazamCardVisible(true);
@@ -4108,6 +4039,13 @@ export default function HomeScreen() {
             />
 
             <GuestWelcomeModal visible={guestWelcomeVisible} onDismiss={handleGuestWelcomeDismiss} messageLimit={GUEST_MESSAGE_LIMIT} />
+            <AppRatingModal messageCount={totalMessagesSent} />
+            <PhotoLimitModal
+              visible={photoLimitModalVisible}
+              onClose={() => setPhotoLimitModalVisible(false)}
+              resetAtMs={photoLimitResetAtMs}
+              modelName="DNX-5.5"
+            />
             {imageAnalyzingOverlay ? (
               <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.78)', zIndex: 9998, alignItems: 'center', justifyContent: 'center' }}>
                 <BlurView intensity={70} tint="dark" style={StyleSheet.absoluteFill} />
