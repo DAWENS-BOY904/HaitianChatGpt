@@ -22,7 +22,7 @@ import { Audio } from 'expo-av';
 import * as Speech from 'expo-speech';
 import * as WebBrowser from '../utils/web-browser';
 import { BlurView } from 'expo-blur';
-import { CodeBlock } from './CodeBlock';
+import { StreamingCodeBlock } from './StreamingCodeBlock';
 import { SourcesModal, Source, InlineSourcesPill } from './SourcesModal';
 import * as Clipboard from 'expo-clipboard';
 
@@ -117,59 +117,7 @@ function StreamingDots({ isDark }: { isDark?: boolean }) {
   return <ThemeDot isDark={isDark ?? false} />;
 }
 
-// ── Streaming code block placeholder (shown while fence is open) ──────────────
-function StreamingCodePlaceholder({ language, code, isDark }: { language: string; code: string; isDark: boolean }) {
-  const pulse = useRef(new Animated.Value(0.6)).current;
-  useEffect(() => {
-    const anim = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, { toValue: 1, duration: 700, useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 0.6, duration: 700, useNativeDriver: true }),
-      ])
-    );
-    anim.start();
-    return () => anim.stop();
-  }, []);
 
-  const bg = isDark ? '#1A1B1E' : '#F8F8F8';
-  const headerBg = isDark ? '#212225' : '#ECECEC';
-  const borderColor = isDark ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.09)';
-  const codeColor = isDark ? '#E4E4E4' : '#24292E';
-  const lineCount = (code || '').split('\n').length;
-
-  return (
-    <View style={{ borderRadius: 14, borderWidth: StyleSheet.hairlineWidth, borderColor, overflow: 'hidden', marginVertical: 6 }}>
-      {/* Header */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: headerBg, paddingHorizontal: 12, paddingVertical: 9, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: borderColor }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          <Animated.View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#10A37F', opacity: pulse }} />
-          <Text style={{ color: isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.5)', fontSize: 12, fontWeight: '600', fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' }}>
-            {(language || 'code').toUpperCase()}
-          </Text>
-          <View style={{ backgroundColor: isDark ? 'rgba(16,163,127,0.15)' : 'rgba(16,163,127,0.1)', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2, marginLeft: 4 }}>
-            <Text style={{ color: '#10A37F', fontSize: 10, fontWeight: '700' }}>● STREAMING</Text>
-          </View>
-        </View>
-        <ActivityIndicator size="small" color="#10A37F" />
-      </View>
-      {/* Code preview — show what's been streamed so far */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={{ backgroundColor: bg, maxHeight: 200 }}
-        contentContainerStyle={{ padding: 12 }}
-      >
-        <Text style={{ fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', fontSize: 13, lineHeight: 20, color: codeColor }}>
-          {code || ''}
-        </Text>
-      </ScrollView>
-      {/* Footer pulse bar */}
-      <View style={{ height: 2, backgroundColor: headerBg }}>
-        <Animated.View style={{ height: 2, backgroundColor: '#10A37F', opacity: pulse, width: '60%' }} />
-      </View>
-    </View>
-  );
-}
 
 // ── Horizontal scrollable image grid ─────────────────────────────────────────
 const ImageGrid = memo(function ImageGrid({ images, onPress, onSendToChat }: {
@@ -276,7 +224,7 @@ function DownloadLinkCard({ url, label }: { url: string; label?: string }) {
   );
 }
 
-// ── Sources inline pill ───────────────────────────────────────────────────────
+// ── Sources helpers ───────────────────────────────────────────────────────────
 const FAVICON_BASE = 'https://www.google.com/s2/favicons?domain=';
 
 function getDomainFromSource(src: string): string {
@@ -285,27 +233,43 @@ function getDomainFromSource(src: string): string {
   return src.replace(/^https?:\/\//, '').split('/')[0];
 }
 
-function SourcesBadge({ sources, onPress }: { sources: string[]; onPress: () => void }) {
-  const { colors, isDark } = useTheme();
-  const shown = (sources || []).slice(0, 3);
+function FaviconBubble({ domain, index, isDark }: { domain: string; index: number; isDark: boolean }) {
+  const [loaded, setLoaded] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const faviconUri = `${FAVICON_BASE}${domain}&sz=64`;
+  const borderColor = isDark ? '#1C1C1E' : '#FFF';
   return (
-    <TouchableOpacity onPress={onPress} activeOpacity={0.75} style={{ flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', backgroundColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.05)', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 6, gap: 6, marginTop: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.09)' }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-        {shown.map((src, i) => {
-          const domain = getDomainFromSource(src);
-          const faviconUri = `${FAVICON_BASE}${domain}&sz=64`;
-          return (
-            <View key={i} style={{ width: 20, height: 20, borderRadius: 10, overflow: 'hidden', borderWidth: 1.5, borderColor: isDark ? '#1C1C1E' : '#FFF', backgroundColor: isDark ? '#3A3A3C' : '#E5E5EA', marginLeft: i === 0 ? 0 : -7, zIndex: 3 - i, alignItems: 'center', justifyContent: 'center' }}>
-              <Image source={{ uri: faviconUri }} style={{ width: 14, height: 14 }} contentFit="contain" cachePolicy="memory-disk" />
-            </View>
-          );
-        })}
-      </View>
-      <Text style={{ color: colors.textSecondary, fontSize: 13, fontWeight: '500' }}>
-        {sources.length} Source{sources.length !== 1 ? 's' : ''}
-      </Text>
-      <Ionicons name="chevron-forward" size={12} color={colors.textSecondary} />
-    </TouchableOpacity>
+    <View style={{
+      width: 22, height: 22, borderRadius: 11,
+      borderWidth: 1.5, borderColor,
+      backgroundColor: isDark ? '#3A3A3C' : '#E5E5EA',
+      marginLeft: index === 0 ? 0 : -8,
+      zIndex: 4 - index,
+      alignItems: 'center', justifyContent: 'center',
+      overflow: 'hidden',
+    }}>
+      {!failed && domain ? (
+        <Image
+          source={{ uri: faviconUri }}
+          style={{ width: 16, height: 16 }}
+          contentFit="contain"
+          cachePolicy="memory-disk"
+          onLoad={() => setLoaded(true)}
+          onError={() => setFailed(true)}
+        />
+      ) : (
+        // Fallback: first letter of domain in colored circle
+        <View style={{
+          width: 14, height: 14, borderRadius: 7,
+          backgroundColor: `hsl(${(domain.charCodeAt(0) || 0) * 37 % 360}, 65%, 50%)`,
+          alignItems: 'center', justifyContent: 'center',
+        }}>
+          <Text style={{ color: '#FFF', fontSize: 8, fontWeight: '800' }}>
+            {(domain[0] || '?').toUpperCase()}
+          </Text>
+        </View>
+      )}
+    </View>
   );
 }
 
@@ -875,25 +839,12 @@ function VideoPreviewCard({ name, isDark, colors }: { name: string; isDark: bool
           {blocks.map((block, bi) => {
             // Code block — streaming flag handled by StreamingCodePlaceholder
             if (block.type === 'code') {
-              if (block.streaming) {
-                // Show live streaming code placeholder with animation
-                return (
-                  <View key={`b-${bi}`} style={{ marginVertical: 6 }}>
-                    <StreamingCodePlaceholder
-                      language={block.language || 'code'}
-                      code={block.content || ''}
-                      isDark={isDark}
-                    />
-                  </View>
-                );
-              }
-              // Completed code block
               return (
                 <View key={`b-${bi}`} style={{ marginVertical: 6 }}>
-                  <CodeBlock
+                  <StreamingCodeBlock
                     code={block.content || ''}
                     language={block.language || 'plaintext'}
-                    isStreaming={false}
+                    isStreaming={!!block.streaming}
                     isAdmin={isAdmin}
                   />
                 </View>
@@ -1016,6 +967,25 @@ function VideoPreviewCard({ name, isDark, colors }: { name: string; isDark: bool
           {/* Action row — only shown after streaming completes */}
           {!isGenerating && !streaming && safeContent ? (() => {
             const sourcesBlock = blocks.find(b => b.type === 'sources' && b.sources && b.sources.length > 0);
+            // Parse sources to Source[] objects
+            let parsedSources: Source[] = [];
+            if (sourcesBlock) {
+              try {
+                const raw = (sourcesBlock.sources || []).join('\n');
+                const jsonMatch = raw.match(/\[\{[\s\S]*?\}\]/);
+                if (jsonMatch) { try { parsedSources = JSON.parse(jsonMatch[0]); } catch {} }
+                if (parsedSources.length === 0) {
+                  parsedSources = (sourcesBlock.sources || []).map(s => ({
+                    title: s.startsWith('http') ? getDomainFromSource(s) : s,
+                    url: s.startsWith('http') ? s : `https://www.google.com/search?q=${encodeURIComponent(s)}`,
+                  }));
+                }
+              } catch {}
+            }
+            const shownFavicons = parsedSources.slice(0, 3).map(s => {
+              try { return new URL(s.url).hostname.replace('www.', ''); } catch { return ''; }
+            }).filter(Boolean);
+
             return (
               <>
                 <View style={assistantStyles.actionRow}>
@@ -1044,43 +1014,26 @@ function VideoPreviewCard({ name, isDark, colors }: { name: string; isDark: bool
                   <TouchableOpacity onPress={() => onOpenActions?.(message)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} style={assistantStyles.actionBtn}>
                     <Ionicons name="ellipsis-horizontal" size={18} color={colors.textSecondary} />
                   </TouchableOpacity>
-                  {/* Inline Sources button — ChatGPT style with favicon */}
-                  {sourcesBlock ? (() => {
-                    let converted: Source[] = [];
-                    try {
-                      const raw = (sourcesBlock.sources || []).join('\n');
-                      const jsonMatch = raw.match(/\[\{[\s\S]*?\}\]/);
-                      if (jsonMatch) { try { converted = JSON.parse(jsonMatch[0]); } catch {} }
-                      if (converted.length === 0) {
-                        converted = (sourcesBlock.sources || []).map(s => ({
-                          title: s.startsWith('http') ? getDomainFromSource(s) : s,
-                          url: s.startsWith('http') ? s : `https://www.google.com/search?q=${encodeURIComponent(s)}`,
-                        }));
-                      }
-                    } catch {}
-                    const firstFavicon = converted.length > 0
-                      ? (() => { try { return `https://www.google.com/s2/favicons?domain=${new URL(converted[0].url).hostname}&sz=32`; } catch { return ''; } })()
-                      : '';
-                    return (
-                      <TouchableOpacity
-                        onPress={() => { setSourcesData(converted); setSourcesModalVisible(true); }}
-                        hitSlop={{ top: 10, bottom: 10, left: 6, right: 10 }}
-                        style={assistantStyles.sourcesBtn}
-                        activeOpacity={0.7}
-                      >
-                        <View style={assistantStyles.sourcesCircle}>
-                          {firstFavicon ? (
-                            <Image source={{ uri: firstFavicon }} style={{ width: 20, height: 20, borderRadius: 10 }} contentFit="contain" cachePolicy="memory-disk" />
-                          ) : (
-                            <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: '#10A37F', alignItems: 'center', justifyContent: 'center' }}>
-                              <View style={{ width: 9, height: 9, borderRadius: 4.5, backgroundColor: '#fff' }} />
-                            </View>
-                          )}
-                        </View>
-                        <Text style={[assistantStyles.sourcesLabel, { color: colors.textSecondary }]}>Sources</Text>
-                      </TouchableOpacity>
-                    );
-                  })() : null}
+                  {/* Sources button — stacked favicons */}
+                  {parsedSources.length > 0 ? (
+                    <TouchableOpacity
+                      onPress={() => { setSourcesData(parsedSources); setSourcesModalVisible(true); }}
+                      hitSlop={{ top: 10, bottom: 10, left: 6, right: 10 }}
+                      style={assistantStyles.sourcesBtn}
+                      activeOpacity={0.7}
+                    >
+                      {/* Stacked favicons (up to 3) */}
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: 2 }}>
+                        {shownFavicons.map((domain, idx) => (
+                          <FaviconBubble key={`fav-${idx}-${domain}`} domain={domain} index={idx} isDark={isDark} />
+                        ))}
+                      </View>
+                      <Text style={[assistantStyles.sourcesLabel, { color: colors.textSecondary }]}>
+                        {parsedSources.length} Source{parsedSources.length !== 1 ? 's' : ''}
+                      </Text>
+                      <Ionicons name="chevron-forward" size={12} color={colors.textSecondary} />
+                    </TouchableOpacity>
+                  ) : null}
                 </View>
               </>
             );
@@ -1131,6 +1084,5 @@ const assistantStyles = StyleSheet.create({
   actionRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10, gap: 4, flexWrap: 'nowrap' },
   actionBtn: { padding: 7, borderRadius: 10 },
   sourcesBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 7, paddingHorizontal: 6 },
-  sourcesCircle: { width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  sourcesLabel: { fontSize: 14, fontWeight: '500' },
+  sourcesLabel: { fontSize: 13, fontWeight: '500' },
 });
