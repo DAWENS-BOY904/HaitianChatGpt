@@ -44,6 +44,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { QuizModal, QuizView, QuizQuestion, QuizHistoryEntry } from '../components/QuizModal';
 import { PresetsModal, loadBehaviorPresets } from '../components/PresetsModal';
 import { MessageActionsModal } from '../components/MessageActionsModal';
+import { AIMessageActions } from '../components/AIMessageActions';
 import { StreamingText } from '../components/StreamingText';
 import { ConversationMenuModal } from '../components/ConversationMenuModal';
 import { MessageItem } from '../components/MessageItem';
@@ -628,6 +629,12 @@ export default function HomeScreen() {
   const [msgMenuPageY, setMsgMenuPageY] = useState(0);
   const [msgActionsVisible,setMsgActionsVisible]=useState(false);
   const [msgActionsMsg,setMsgActionsMsg]=useState<any>(null);
+  // ── New modern AI message action bar ──────────────────────────────────
+  const [aiActionVisible, setAiActionVisible] = useState(false);
+  const [aiActionMsg, setAiActionMsg] = useState<any>(null);
+  const [aiActionIsUser, setAiActionIsUser] = useState(false);
+  // ── Link search state ─────────────────────────────────────────────────
+  const [linkSearchUrl, setLinkSearchUrl] = useState<string | null>(null);
   const [guestWelcomeVisible, setGuestWelcomeVisible] = useState(false);
   const guestWelcomeDismissedRef = useRef(false);
   const [unreadCount,setUnreadCount]=useState(0);
@@ -660,8 +667,16 @@ export default function HomeScreen() {
   const [atMentionQuery, setAtMentionQuery] = useState('');
 
   const handleOpenMessageActions = useCallback((msg: any) => {
-    setMsgActionsMsg(msg);
-    setMsgActionsVisible(true);
+    // Use new modern action bar for all messages
+    setAiActionMsg(msg);
+    setAiActionIsUser(msg?.role === 'user');
+    setAiActionVisible(true);
+  }, []);
+
+  // Detect URL in user message for "Searching for..." UI
+  const detectLinkUrl = useCallback((text: string): string | null => {
+    const urlMatch = text.match(/https?:\/\/[^\s<>"']+/i);
+    return urlMatch ? urlMatch[0] : null;
   }, []);
 
   const wasGeneratingRef = useRef(false);
@@ -1690,6 +1705,10 @@ export default function HomeScreen() {
     const lowerText = (currentText || '').toLowerCase();
     const isImageIntent = ['create a logo', 'create logo', 'generate logo', 'make a logo', 'design a logo', 'generate a logo', 'make me a logo', 'create an image', 'create image', 'generate image', 'make an image', 'generate a photo', 'create a photo', 'make a photo', 'generate a picture', 'make a picture', 'create a picture', 'draw me a', 'draw me an', 'create art', 'generate art', 'make art', 'kreye logo', 'fe logo', 'fe imaj', 'kreye yon imaj', 'kreye imaj', 'fè logo', 'fè yon logo', 'fè imaj', 'fè yon imaj', 'créer un logo', 'générer une image', 'créer une image', 'crear un logo', 'generar una imagen'].some(kw => lowerText.includes(kw));
     const hasDocOrVideo = currentMedia.some(m => m.type === 'document' || m.type === 'video');
+    // Detect if message is a URL — for "Searching for..." UI
+    const detectedUrl = detectLinkUrl(currentText);
+    if (detectedUrl) setLinkSearchUrl(detectedUrl);
+    else setLinkSearchUrl(null);
     setThinkingMode(isImageIntent ? 'creating_image' : hasDocOrVideo ? 'analyzing' : 'thinking');
     setSending(true);
     setGenerating(true);
@@ -2186,7 +2205,12 @@ export default function HomeScreen() {
       <View>
         <Pressable
           onPress={isUserMsg && !groupChatMode ? (e: any) => handleUserMsgPress(item, e.nativeEvent.pageY) : undefined}
-          onLongPress={!isUserMsg ? () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); Clipboard.setStringAsync(item.content || ''); showAlert('Copied', 'Message copied'); } : undefined}
+          onLongPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            setAiActionMsg(item);
+            setAiActionIsUser(item.role === 'user');
+            setAiActionVisible(true);
+          }}
           delayLongPress={450}
         >
           <MessageItem
@@ -3591,6 +3615,27 @@ export default function HomeScreen() {
               handleUnlikeMessage={handleUnlikeMessage}
               isLiked={msgActionsMsg ? messageLikes[msgActionsMsg.id] === 'like' : false}
               isUnliked={msgActionsMsg ? messageLikes[msgActionsMsg.id] === 'dislike' : false}
+            />
+
+            {/* Modern floating action bar — replaces old long-press behavior */}
+            <AIMessageActions
+              visible={aiActionVisible}
+              onClose={() => setAiActionVisible(false)}
+              message={aiActionMsg || { id: '', role: 'assistant', content: '', created_at: new Date().toISOString() }}
+              isUserMessage={aiActionIsUser}
+              onAskAI={(text) => {
+                // Pre-fill the input with context about the message
+                const askText = aiActionIsUser
+                  ? text
+                  : `Regarding what you said: "${text.slice(0, 120)}${text.length > 120 ? '...' : ''}" — can you elaborate?`;
+                setInputText(askText);
+                setTimeout(() => inputRef.current?.focus(), 150);
+              }}
+              onEdit={(msgId, content) => {
+                setEditingMessageId(msgId);
+                setInputText(content);
+                setTimeout(() => inputRef.current?.focus(), 150);
+              }}
             />
 
             {thinkingMode === 'creating_image' && (generating || sending) ? <ImageCreatingOverlay /> : null}
