@@ -440,4 +440,3 @@ const styles = StyleSheet.create({
   translateActionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 14, paddingVertical: 13, borderWidth: 1 },
   translateActionText: { color: 'rgba(255,255,255,0.85)', fontSize: 15, fontWeight: '600' },
 });
-please ai when this page open fix home chat remove blur in home chat and Apply BlurView glassmorphism background to the user long-press message menu (copy/edit floating popup) and the MessageActionsModal sheet in home, replacing the current plain solid background.
