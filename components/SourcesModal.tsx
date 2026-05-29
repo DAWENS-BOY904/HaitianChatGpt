@@ -7,19 +7,20 @@ import {
   StyleSheet,
   Platform,
   ScrollView,
-  Linking,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../hooks/useTheme';
+import * as WebBrowser from 'expo-web-browser';
 
 export interface Source {
   title: string;
   url: string;
   snippet?: string;
   domain?: string;
+  date?: string;
 }
 
 interface SourcesModalProps {
@@ -31,7 +32,7 @@ interface SourcesModalProps {
 function getFaviconUrl(url: string): string {
   try {
     const { hostname } = new URL(url);
-    return `https://www.google.com/s2/favicons?domain=${hostname}&sz=32`;
+    return `https://www.google.com/s2/favicons?domain=${hostname}&sz=64`;
   } catch {
     return '';
   }
@@ -45,16 +46,37 @@ function getDomain(url: string): string {
   }
 }
 
+function getSiteName(url: string): string {
+  try {
+    const hostname = new URL(url).hostname.replace(/^www\./, '');
+    const parts = hostname.split('.');
+    if (parts.length >= 2) {
+      const name = parts[parts.length - 2];
+      return name.charAt(0).toUpperCase() + name.slice(1);
+    }
+    return hostname;
+  } catch {
+    return '';
+  }
+}
+
 export function SourcesModal({ visible, onClose, sources }: SourcesModalProps) {
   const { isDark } = useTheme();
   const insets = useSafeAreaInsets();
 
   const textC = isDark ? '#FFFFFF' : '#000000';
   const subC = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.45)';
+  const borderC = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
 
-  const handleOpen = (url: string) => {
-    Linking.openURL(url).catch(() => {});
-    onClose();
+  const handleOpen = async (url: string) => {
+    try {
+      await WebBrowser.openBrowserAsync(url, {
+        dismissButtonStyle: 'close',
+        toolbarColor: isDark ? '#000000' : '#FFFFFF',
+        controlsColor: isDark ? '#FFFFFF' : '#000000',
+        enableBarCollapsing: true,
+      });
+    } catch (_e) {}
   };
 
   return (
@@ -87,6 +109,7 @@ export function SourcesModal({ visible, onClose, sources }: SourcesModalProps) {
                 sources={sources}
                 textC={textC}
                 subC={subC}
+                borderC={borderC}
                 isDark={isDark}
                 onOpen={handleOpen}
                 onClose={onClose}
@@ -98,6 +121,7 @@ export function SourcesModal({ visible, onClose, sources }: SourcesModalProps) {
                 sources={sources}
                 textC={textC}
                 subC={subC}
+                borderC={borderC}
                 isDark={isDark}
                 onOpen={handleOpen}
                 onClose={onClose}
@@ -114,11 +138,12 @@ export function SourcesModal({ visible, onClose, sources }: SourcesModalProps) {
 export { SourcesModal as SourcesListModal };
 
 function SheetContent({
-  sources, textC, subC, isDark, onOpen, onClose,
+  sources, textC, subC, borderC, isDark, onOpen, onClose,
 }: {
   sources: Source[];
   textC: string;
   subC: string;
+  borderC: string;
   isDark: boolean;
   onOpen: (url: string) => void;
   onClose: () => void;
@@ -149,23 +174,26 @@ function SheetContent({
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.listContent}
-          style={{ maxHeight: 440 }}
+          style={{ maxHeight: 520 }}
         >
           {sources.map((source, i) => {
             const faviconUrl = getFaviconUrl(source.url);
             const domain = source.domain || getDomain(source.url);
+            const siteName = getSiteName(source.url);
+
             return (
               <TouchableOpacity
                 key={`source-${i}`}
                 style={[
                   styles.sourceRow,
-                  { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' },
+                  { borderBottomColor: borderC },
+                  i === sources.length - 1 && { borderBottomWidth: 0 },
                 ]}
                 onPress={() => onOpen(source.url)}
                 activeOpacity={0.72}
               >
-                {/* Favicon */}
-                <View style={[styles.faviconWrap, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.07)' }]}>
+                {/* Favicon + Domain row */}
+                <View style={styles.sourceMetaRow}>
                   {faviconUrl ? (
                     <Image
                       source={{ uri: faviconUrl }}
@@ -174,26 +202,31 @@ function SheetContent({
                       transition={120}
                     />
                   ) : (
-                    <Ionicons name="globe-outline" size={16} color={isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.4)'} />
+                    <Ionicons name="globe-outline" size={14} color={subC} />
                   )}
-                </View>
-
-                {/* Text */}
-                <View style={styles.sourceTextWrap}>
-                  <Text style={[styles.sourceTitle, { color: textC }]} numberOfLines={2}>
-                    {source.title || domain}
-                  </Text>
                   <Text style={[styles.sourceDomain, { color: subC }]} numberOfLines={1}>
                     {domain}
                   </Text>
-                  {source.snippet ? (
-                    <Text style={[styles.sourceSnippet, { color: subC }]} numberOfLines={2}>
-                      {source.snippet}
-                    </Text>
-                  ) : null}
                 </View>
 
-                <Ionicons name="open-outline" size={16} color={subC} style={{ marginLeft: 4 }} />
+                {/* Title */}
+                <Text style={[styles.sourceTitle, { color: textC }]} numberOfLines={2}>
+                  {source.title || siteName}
+                </Text>
+
+                {/* Snippet */}
+                {source.snippet ? (
+                  <Text style={[styles.sourceSnippet, { color: subC }]} numberOfLines={2}>
+                    {source.snippet}
+                  </Text>
+                ) : null}
+
+                {/* Date */}
+                {source.date ? (
+                  <Text style={[styles.sourceDate, { color: subC }]} numberOfLines={1}>
+                    {source.date}
+                  </Text>
+                ) : null}
               </TouchableOpacity>
             );
           })}
@@ -297,48 +330,42 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   listContent: {
-    paddingHorizontal: 14,
+    paddingHorizontal: 20,
     paddingBottom: 8,
-    gap: 8,
   },
   sourceRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    borderRadius: 16,
-    padding: 14,
-    gap: 12,
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  faviconWrap: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
+  sourceMetaRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-    overflow: 'hidden',
+    gap: 8,
+    marginBottom: 6,
   },
   favicon: {
-    width: 22,
-    height: 22,
+    width: 16,
+    height: 16,
     borderRadius: 4,
   },
-  sourceTextWrap: {
-    flex: 1,
-    gap: 2,
-  },
-  sourceTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    lineHeight: 20,
-  },
   sourceDomain: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '400',
   },
+  sourceTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    lineHeight: 22,
+    marginBottom: 4,
+  },
   sourceSnippet: {
-    fontSize: 12,
-    lineHeight: 17,
-    marginTop: 2,
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 4,
+  },
+  sourceDate: {
+    fontSize: 13,
+    fontWeight: '400',
   },
   emptyState: {
     alignItems: 'center',
