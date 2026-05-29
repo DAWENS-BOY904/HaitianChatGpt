@@ -1,6 +1,6 @@
 /**
  * PhotoLimitModal — shown when a free user exceeds the photo upload limit.
- * Displays real-time countdown to when the limit resets.
+ * Free plan: 5 photos per hour. Displays real-time countdown to exact reset.
  */
 import React, { useState, useEffect, useRef } from 'react';
 import {
@@ -16,55 +16,79 @@ import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
 import { useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
+// ─── Config ───────────────────────────────────────────────────────────────────
+export const FREE_PHOTO_LIMIT = 5;          // max photos per window
+export const PHOTO_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour
+const STORAGE_KEY = 'photo_upload_log';     // list of upload timestamps (ms)
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+/** Returns the current photo log (timestamps within the last hour). */
+async function getPhotoLog(): Promise<number[]> {
+  try {
+    const raw = await AsyncStorage.getItem(STORAGE_KEY);
+    const all: number[] = raw ? JSON.parse(raw) : [];
+    const cutoff = Date.now() - PHOTO_LIMIT_WINDOW_MS;
+    return all.filter(ts => ts > cutoff);
+  } catch {
+    return [];
+  }
+}
+
+/** Record a new photo upload; returns updated count within the window. */
+export async function recordPhotoUpload(): Promise<number> {
+  const log = await getPhotoLog();
+  log.push(Date.now());
+  await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(log));
+  return log.length;
+}
+
+/**
+ * Check if the user is within the free limit.
+ * Returns `{ allowed: true }` or `{ allowed: false, resetAtMs: number }`.
+ */
+export async function checkPhotoLimit(isPaidPlan: boolean): Promise<
+  { allowed: true } | { allowed: false; resetAtMs: number; used: number }
+> {
+  if (isPaidPlan) return { allowed: true };
+  const log = await getPhotoLog();
+  if (log.length < FREE_PHOTO_LIMIT) return { allowed: true };
+  // Oldest upload within the window determines when the slot frees up
+  const oldest = Math.min(...log);
+  const resetAtMs = oldest + PHOTO_LIMIT_WINDOW_MS;
+  return { allowed: false, resetAtMs, used: log.length };
+}
+
+// ─── Formatting ──────────────────────────────────────────────────────────────
+function formatCountdown(ms: number): string {
+  if (ms <= 0) return 'now';
+  const totalSecs = Math.ceil(ms / 1000);
+  const h = Math.floor(totalSecs / 3600);
+  const m = Math.floor((totalSecs % 3600) / 60);
+  const s = totalSecs % 60;
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m} min${m !== 1 ? 's' : ''} ${s}s`;
+  return `${s}s`;
+}
+
+function formatClockTime(ms: number): string {
+  if (ms <= 0) return 'now';
+  const d = new Date(ms);
+  const h = d.getHours();
+  const m = d.getMinutes().toString().padStart(2, '0');
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  return `${h % 12 || 12}:${m} ${ampm}`;
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
 interface PhotoLimitModalProps {
   visible: boolean;
   onClose: () => void;
-  /** Unix timestamp (ms) when the limit resets */
+  /** Unix timestamp (ms) when the oldest upload in the window expires */
   resetAtMs: number;
-  /** Current AI model name, shown in the message */
+  /** Model name shown in the modal title */
   modelName?: string;
-}
-
-function formatTimeRemaining(ms: number): { label: string; detail: string } {
-  if (ms <= 0) return { label: 'now', detail: '' };
-
-  const totalSeconds = Math.floor(ms / 1000);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-
-  if (hours >= 24) {
-    const days = Math.floor(hours / 24);
-    return { label: `${days} day${days !== 1 ? 's' : ''}`, detail: '' };
-  }
-  if (hours > 0) {
-    return {
-      label: `${hours}h ${minutes}m`,
-      detail: minutes === 0 ? '' : `${minutes} min left`,
-    };
-  }
-  if (minutes > 0) {
-    return {
-      label: `${minutes} min`,
-      detail: `${minutes} min left`,
-    };
-  }
-  return {
-    label: `${seconds}s`,
-    detail: 'less than a minute',
-  };
-}
-
-function formatResetTime(ms: number): string {
-  if (ms <= 0) return 'now';
-  const resetDate = new Date(Date.now() + ms);
-  const hours = resetDate.getHours();
-  const minutes = resetDate.getMinutes();
-  const ampm = hours >= 12 ? 'PM' : 'AM';
-  const h = hours % 12 || 12;
-  const m = minutes.toString().padStart(2, '0');
-  return `${h}:${m} ${ampm}`;
 }
 
 export function PhotoLimitModal({
@@ -78,16 +102,15 @@ export function PhotoLimitModal({
   const scaleAnim = useRef(new Animated.Value(0.92)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
 
-  // Real-time remaining ms
   const [remainingMs, setRemainingMs] = useState(() => Math.max(0, resetAtMs - Date.now()));
 
+  // Tick every second so the countdown stays accurate
   useEffect(() => {
     if (!visible) return;
-    // Update every 30 seconds for live countdown
-    const update = () => setRemainingMs(Math.max(0, resetAtMs - Date.now()));
-    update();
-    const interval = setInterval(update, 30_000);
-    return () => clearInterval(interval);
+    const tick = () => setRemainingMs(Math.max(0, resetAtMs - Date.now()));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
   }, [visible, resetAtMs]);
 
   useEffect(() => {
@@ -101,13 +124,13 @@ export function PhotoLimitModal({
     }
   }, [visible]);
 
-  const { label: timeLabel, detail: timeDetail } = formatTimeRemaining(remainingMs);
-  const resetTimeStr = formatResetTime(remainingMs);
+  const countdown = formatCountdown(remainingMs);
+  const clockTime = formatClockTime(resetAtMs);
 
   const cardBg = isDark ? 'rgba(28,28,32,0.98)' : 'rgba(255,255,255,0.98)';
-  const textC = isDark ? '#FFFFFF' : '#000000';
-  const subC = isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.5)';
-  const divC = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)';
+  const textC  = isDark ? '#FFFFFF' : '#000000';
+  const subC   = isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.5)';
+  const divC   = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)';
 
   return (
     <Modal
@@ -118,11 +141,11 @@ export function PhotoLimitModal({
       statusBarTranslucent
     >
       <View style={styles.backdrop}>
-        {Platform.OS === 'ios' ? (
-          <BlurView intensity={isDark ? 55 : 42} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
-        ) : (
-          <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.52)' }]} />
-        )}
+        <BlurView
+          intensity={isDark ? 55 : 42}
+          tint={isDark ? 'dark' : 'light'}
+          style={StyleSheet.absoluteFill}
+        />
 
         <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onClose} />
 
@@ -132,8 +155,11 @@ export function PhotoLimitModal({
             { backgroundColor: cardBg, opacity: opacityAnim, transform: [{ scale: scaleAnim }] },
           ]}
         >
-          {/* Close button */}
-          <TouchableOpacity style={[styles.closeBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)' }]} onPress={onClose}>
+          {/* Close */}
+          <TouchableOpacity
+            style={[styles.closeBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)' }]}
+            onPress={onClose}
+          >
             <Ionicons name="close" size={16} color={textC} />
           </TouchableOpacity>
 
@@ -144,32 +170,47 @@ export function PhotoLimitModal({
 
           {/* Title */}
           <Text style={[styles.title, { color: textC }]}>
-            Attachments are not available
+            {`Attachments aren't available with this model`}
           </Text>
 
-          {/* Subtitle */}
+          {/* Body */}
           <Text style={[styles.subtitle, { color: subC }]}>
-            {`Please try again after your ${modelName} limit resets after `}
-            <Text style={{ color: textC, fontWeight: '700' }}>{resetTimeStr}</Text>
-            {timeDetail ? (
-              <Text style={{ color: '#FF9500', fontWeight: '600' }}>{` (${timeDetail})`}</Text>
+            {`Please try again after your ${modelName} photo limit resets at `}
+            <Text style={{ color: textC, fontWeight: '700' }}>{clockTime}</Text>
+            {remainingMs > 0 ? (
+              <Text style={{ color: '#FF9500', fontWeight: '600' }}>
+                {`  (${countdown} left)`}
+              </Text>
             ) : null}
           </Text>
 
-          {/* Countdown pill */}
+          {/* Live countdown pill */}
           {remainingMs > 0 ? (
             <View style={[styles.countdownPill, { backgroundColor: isDark ? 'rgba(255,149,0,0.12)' : 'rgba(255,149,0,0.08)', borderColor: 'rgba(255,149,0,0.3)' }]}>
               <Ionicons name="time-outline" size={14} color="#FF9500" />
               <Text style={{ color: '#FF9500', fontSize: 13, fontWeight: '600' }}>
-                {`Resets in ${timeLabel}`}
+                {`Resets in ${countdown}`}
               </Text>
             </View>
-          ) : null}
+          ) : (
+            <View style={[styles.countdownPill, { backgroundColor: isDark ? 'rgba(52,199,89,0.12)' : 'rgba(52,199,89,0.08)', borderColor: 'rgba(52,199,89,0.3)' }]}>
+              <Ionicons name="checkmark-circle-outline" size={14} color="#34C759" />
+              <Text style={{ color: '#34C759', fontSize: 13, fontWeight: '600' }}>Limit reset — try again!</Text>
+            </View>
+          )}
+
+          {/* Free plan info */}
+          <View style={[styles.infoBox, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)', borderColor: divC }]}>
+            <Ionicons name="information-circle-outline" size={14} color={subC} />
+            <Text style={{ color: subC, fontSize: 12, lineHeight: 17, flex: 1 }}>
+              {`Free plan: ${FREE_PHOTO_LIMIT} photo uploads per hour. Upgrade to Plus for unlimited uploads.`}
+            </Text>
+          </View>
 
           {/* Divider */}
           <View style={[styles.divider, { backgroundColor: divC }]} />
 
-          {/* Get Plus CTA */}
+          {/* CTA */}
           <TouchableOpacity
             style={styles.plusBtn}
             onPress={() => { onClose(); router.push('/subscription'); }}
@@ -179,7 +220,6 @@ export function PhotoLimitModal({
             <Text style={styles.plusBtnText}>Get Plus — Unlimited uploads</Text>
           </TouchableOpacity>
 
-          {/* Dismiss link */}
           <TouchableOpacity onPress={onClose} style={styles.dismissBtn} activeOpacity={0.7}>
             <Text style={[styles.dismissText, { color: subC }]}>Not now</Text>
           </TouchableOpacity>
@@ -247,7 +287,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     paddingHorizontal: 14,
     paddingVertical: 7,
-    marginBottom: 20,
+    marginBottom: 14,
+  },
+  infoBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 16,
+    width: '100%',
   },
   divider: {
     width: '100%',
@@ -282,3 +333,4 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
 });
+After the photo limit resets (1 hour after the oldest upload), trigger a local push notification that says 'Your photo upload limit has reset — you can now upload 5 more photos.
