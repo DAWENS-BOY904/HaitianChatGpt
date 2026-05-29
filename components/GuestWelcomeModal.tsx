@@ -1,11 +1,17 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useRef, useEffect } from 'react';
 import {
-  View, Text, TouchableOpacity, Modal, StyleSheet,
-  Platform, Animated,
+  View,
+  Text,
+  TouchableOpacity,
+  Modal,
+  Platform,
+  Animated,
+  Easing,
+  StyleSheet,
+  Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useTheme } from '../hooks/useTheme';
 
@@ -15,68 +21,39 @@ interface GuestWelcomeModalProps {
   messageLimit?: number;
 }
 
-const FEATURES = [
-  {
-    icon: 'chatbubble-ellipses-outline',
-    label: '20 free messages',
-    sub: 'No account needed to start',
-    color: '#10A37F',
-  },
-  {
-    icon: 'image-outline',
-    label: 'Image analysis',
-    sub: 'Up to 3 photos per session as guest',
-    color: '#5AC8FA',
-  },
-  {
-    icon: 'person-outline',
-    label: 'Unlimited history + features',
-    sub: 'Create a free account to unlock all',
-    color: '#BF5AF2',
-  },
-] as const;
-
 export function GuestWelcomeModal({
   visible,
   onDismiss,
   messageLimit = 20,
 }: GuestWelcomeModalProps) {
   const { isDark } = useTheme();
-  const insets = useSafeAreaInsets();
   const router = useRouter();
-
-  const slideAnim = useRef(new Animated.Value(80)).current;
+  const slideAnim = useRef(new Animated.Value(60)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (visible) {
       Animated.parallel([
-        Animated.timing(opacityAnim, { toValue: 1, duration: 260, useNativeDriver: true }),
-        Animated.spring(slideAnim, {
-          toValue: 0, tension: 180, friction: 22, useNativeDriver: true,
-        }),
+        Animated.timing(opacityAnim, { toValue: 1, duration: 280, useNativeDriver: true }),
+        Animated.timing(slideAnim, { toValue: 0, duration: 320, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
       ]).start();
     } else {
-      slideAnim.setValue(80);
       opacityAnim.setValue(0);
+      slideAnim.setValue(60);
     }
   }, [visible]);
 
-  const handleSignUp = () => {
-    onDismiss();
-    setTimeout(() => router.push('/signup'), 260);
-  };
+  const textColor = isDark ? '#FFFFFF' : '#000000';
+  const subColor = isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.5)';
+  const cardBg = isDark ? 'rgba(28,28,32,0.98)' : 'rgba(255,255,255,0.98)';
+  const divColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)';
 
-  const handleLogIn = () => {
-    onDismiss();
-    setTimeout(() => router.push('/login'), 260);
-  };
-
-  const bg = isDark ? '#111114' : '#FFFFFF';
-  const textC = isDark ? '#FFFFFF' : '#000000';
-  const subC = isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.5)';
-  const cardBg = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)';
-  const divC = isDark ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.07)';
+  const features = [
+    { icon: 'chatbubble-ellipses-outline', label: `${messageLimit} free messages to try` },
+    { icon: 'image-outline', label: 'Upload & analyze images' },
+    { icon: 'search-outline', label: 'Live web search results' },
+    { icon: 'code-slash-outline', label: 'Code in any language' },
+  ];
 
   return (
     <Modal
@@ -86,131 +63,85 @@ export function GuestWelcomeModal({
       onRequestClose={onDismiss}
       statusBarTranslucent
     >
-      <View style={s.backdrop}>
+      <View style={styles.backdrop}>
         {Platform.OS === 'ios' ? (
-          <BlurView
-            intensity={isDark ? 55 : 42}
-            tint={isDark ? 'dark' : 'light'}
-            style={StyleSheet.absoluteFill}
-          />
+          <BlurView intensity={isDark ? 55 : 45} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
         ) : (
-          <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.62)' }]} />
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.52)' }]} />
         )}
 
         <Animated.View
           style={[
-            s.sheet,
-            {
-              backgroundColor: bg,
-              paddingBottom: insets.bottom + 28,
-              opacity: opacityAnim,
-              transform: [{ translateY: slideAnim }],
-            },
+            styles.sheet,
+            { backgroundColor: cardBg, opacity: opacityAnim, transform: [{ translateY: slideAnim }] },
           ]}
         >
-          {/* Handle bar */}
-          <View style={[s.handle, { backgroundColor: divC }]} />
+          {/* Handle */}
+          <View style={[styles.handle, { backgroundColor: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.18)' }]} />
 
-          {/* App icon */}
-          <View style={s.iconWrap}>
-            <View style={s.iconCircle}>
-              <Ionicons name="sparkles" size={28} color="#FFF" />
-            </View>
+          {/* Logo / icon */}
+          <View style={[styles.iconWrap, { backgroundColor: '#10A37F' }]}>
+            <Ionicons name="sparkles" size={28} color="#FFFFFF" />
           </View>
 
-          <Text style={[s.title, { color: textC }]}>Welcome to Dawinix</Text>
-          <Text style={[s.subtitle, { color: subC }]}>
-            Your AI assistant for everything — no sign‑up needed to get started.
+          {/* Title */}
+          <Text style={[styles.title, { color: textColor }]}>Welcome to Dawinix</Text>
+          <Text style={[styles.subtitle, { color: subColor }]}>
+            Your AI assistant, available for free. No account required to get started.
           </Text>
 
           {/* Feature list */}
-          <View
-            style={[
-              s.featureCard,
-              { backgroundColor: cardBg, borderColor: divC },
-            ]}
-          >
-            {FEATURES.map((item, i) => (
+          <View style={[styles.featureBox, { borderColor: divColor, backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)' }]}>
+            {features.map((f, i) => (
               <View
-                key={i}
+                key={f.label}
                 style={[
-                  s.featureRow,
-                  i > 0 && {
-                    borderTopWidth: StyleSheet.hairlineWidth,
-                    borderTopColor: divC,
-                  },
+                  styles.featureRow,
+                  i < features.length - 1 && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: divColor },
                 ]}
               >
-                <View
-                  style={[
-                    s.featureIconWrap,
-                    { backgroundColor: item.color + '22' },
-                  ]}
-                >
-                  <Ionicons
-                    name={item.icon as any}
-                    size={17}
-                    color={item.color}
-                  />
+                <View style={[styles.featureIconWrap, { backgroundColor: '#10A37F22' }]}>
+                  <Ionicons name={f.icon as any} size={16} color="#10A37F" />
                 </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[s.featureLabel, { color: textC }]}>
-                    {item.label}
-                  </Text>
-                  <Text style={[s.featureSub, { color: subC }]}>
-                    {item.sub}
-                  </Text>
-                </View>
+                <Text style={[styles.featureLabel, { color: isDark ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.8)' }]}>
+                  {f.label}
+                </Text>
               </View>
             ))}
           </View>
 
-          {/* Limit warning */}
-          <View
-            style={[
-              s.limitRow,
-              {
-                backgroundColor: isDark
-                  ? 'rgba(255,159,10,0.10)'
-                  : 'rgba(255,159,10,0.08)',
-                borderColor: 'rgba(255,159,10,0.30)',
-              },
-            ]}
-          >
-            <Ionicons name="time-outline" size={15} color="#FF9F0A" />
-            <Text style={s.limitText}>
-              Guest limit of{' '}
-              <Text style={{ fontWeight: '700' }}>{messageLimit} messages</Text>{' '}
-              resets every 24 hours after being reached.
+          {/* Limit note */}
+          <View style={[styles.limitNote, { backgroundColor: isDark ? 'rgba(255,159,10,0.1)' : 'rgba(255,159,10,0.08)', borderColor: 'rgba(255,159,10,0.3)' }]}>
+            <Ionicons name="information-circle-outline" size={15} color="#FF9F0A" style={{ marginTop: 1 }} />
+            <Text style={[styles.limitNoteText, { color: isDark ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.65)' }]}>
+              Guest mode includes <Text style={{ color: '#FF9F0A', fontWeight: '700' }}>{messageLimit} free messages</Text>. Sign up for unlimited access and to save your chats.
             </Text>
           </View>
 
-          {/* Primary CTA */}
+          {/* CTAs */}
           <TouchableOpacity
-            style={s.primaryBtn}
-            onPress={handleSignUp}
-            activeOpacity={0.85}
+            style={[styles.primaryBtn, { backgroundColor: '#10A37F' }]}
+            onPress={() => { onDismiss(); router.push('/login'); }}
+            activeOpacity={0.82}
           >
-            <Text style={s.primaryBtnText}>Create a free account</Text>
+            <Text style={styles.primaryBtnText}>Create free account</Text>
           </TouchableOpacity>
 
-          {/* Secondary CTA */}
           <TouchableOpacity
-            style={[s.secondaryBtn, { borderColor: divC }]}
-            onPress={handleLogIn}
-            activeOpacity={0.8}
+            style={[styles.secondaryBtn, { borderColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)', backgroundColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.04)' }]}
+            onPress={() => { onDismiss(); router.push('/login'); }}
+            activeOpacity={0.75}
           >
-            <Text style={[s.secondaryBtnText, { color: textC }]}>Log in</Text>
+            <Text style={[styles.secondaryBtnText, { color: textColor }]}>Log in</Text>
           </TouchableOpacity>
 
-          {/* Dismiss */}
-          <TouchableOpacity
-            style={s.dismissBtn}
-            onPress={onDismiss}
-            activeOpacity={0.7}
-          >
-            <Text style={[s.dismissBtnText, { color: subC }]}>
+          {/* Continue as guest */}
+          <TouchableOpacity onPress={onDismiss} style={styles.guestBtn} activeOpacity={0.7}>
+            <Text style={[styles.guestBtnText, { color: subColor }]}>
               Continue as guest
+            </Text>
+            <Text style={[styles.guestBtnSub, { color: isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)' }]}>
+              {messageLimit} messages · no account needed
             </Text>
           </TouchableOpacity>
         </Animated.View>
@@ -219,62 +150,133 @@ export function GuestWelcomeModal({
   );
 }
 
-const s = StyleSheet.create({
-  backdrop: { flex: 1, justifyContent: 'flex-end' },
+const styles = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
   sheet: {
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
     paddingHorizontal: 24,
     paddingTop: 12,
+    paddingBottom: 40,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 20,
+    elevation: 20,
   },
   handle: {
-    width: 38, height: 4, borderRadius: 2,
-    alignSelf: 'center', marginBottom: 24,
+    width: 38,
+    height: 4,
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginBottom: 20,
   },
-  iconWrap: { alignItems: 'center', marginBottom: 16 },
-  iconCircle: {
-    width: 68, height: 68, borderRadius: 22,
-    backgroundColor: '#10A37F',
-    alignItems: 'center', justifyContent: 'center',
+  iconWrap: {
+    width: 62,
+    height: 62,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
+    marginBottom: 16,
     shadowColor: '#10A37F',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35, shadowRadius: 14, elevation: 8,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    elevation: 6,
   },
-  title: { fontSize: 24, fontWeight: '800', textAlign: 'center', marginBottom: 8 },
+  title: {
+    fontSize: 22,
+    fontWeight: '800',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
   subtitle: {
-    fontSize: 15, textAlign: 'center', lineHeight: 22, marginBottom: 20,
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 21,
+    marginBottom: 20,
   },
-  featureCard: {
-    borderRadius: 18, borderWidth: StyleSheet.hairlineWidth,
-    overflow: 'hidden', marginBottom: 14,
+  featureBox: {
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: 'hidden',
+    marginBottom: 14,
   },
   featureRow: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 16, paddingVertical: 13, gap: 13,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    gap: 12,
   },
   featureIconWrap: {
-    width: 36, height: 36, borderRadius: 10,
-    alignItems: 'center', justifyContent: 'center',
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  featureLabel: { fontSize: 14, fontWeight: '600' },
-  featureSub: { fontSize: 12, marginTop: 1 },
-  limitRow: {
-    flexDirection: 'row', alignItems: 'flex-start', gap: 8,
-    borderRadius: 12, borderWidth: 1,
-    paddingHorizontal: 13, paddingVertical: 11, marginBottom: 22,
+  featureLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    flex: 1,
   },
-  limitText: { color: '#FF9F0A', fontSize: 13, flex: 1, lineHeight: 19 },
+  limitNote: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 20,
+  },
+  limitNoteText: {
+    fontSize: 13,
+    lineHeight: 19,
+    flex: 1,
+  },
   primaryBtn: {
-    borderRadius: 50, paddingVertical: 16,
-    alignItems: 'center', marginBottom: 10,
-    backgroundColor: '#10A37F',
+    borderRadius: 50,
+    paddingVertical: 15,
+    alignItems: 'center',
+    marginBottom: 10,
+    shadowColor: '#10A37F',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  primaryBtnText: { color: '#FFF', fontSize: 16, fontWeight: '700' },
+  primaryBtnText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+  },
   secondaryBtn: {
-    borderRadius: 50, paddingVertical: 15,
-    alignItems: 'center', marginBottom: 8, borderWidth: 1.5,
+    borderRadius: 50,
+    paddingVertical: 15,
+    alignItems: 'center',
+    borderWidth: 1,
+    marginBottom: 16,
   },
-  secondaryBtnText: { fontSize: 16, fontWeight: '600' },
-  dismissBtn: { paddingVertical: 12, alignItems: 'center' },
-  dismissBtnText: { fontSize: 15 },
+  secondaryBtnText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  guestBtn: {
+    alignItems: 'center',
+    paddingVertical: 6,
+    gap: 3,
+  },
+  guestBtnText: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  guestBtnSub: {
+    fontSize: 12,
+  },
 });
