@@ -239,93 +239,6 @@ function buildDateTimeContext(): string {
 
 // ── Brave Web Search ───────────────────────────────────────────────────────
 
-// ── URL Content Fetcher ───────────────────────────────────────────────────────
-
-/**
- * Detect URLs in the user message
- */
-function extractUrls(text: string): string[] {
-  const urlRegex = /https?:\/\/[^\s<>"']+/gi;
-  const matches = text.match(urlRegex) || [];
-  // Filter out image URLs (those are handled separately)
-  return matches.filter(u => !/\.(jpg|jpeg|png|gif|webp|svg)(\?|$)/i.test(u)).slice(0, 3);
-}
-
-/**
- * Fetch the readable content of a URL for AI analysis
- */
-async function fetchUrlContent(url: string): Promise<{ url: string; title: string; content: string; error?: string }> {
-  try {
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; DawinixBot/1.0; +https://dawinix.com)',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.9',
-      },
-      signal: AbortSignal.timeout(8000),
-    });
-
-    if (!response.ok) {
-      return { url, title: '', content: '', error: `HTTP ${response.status}` };
-    }
-
-    const contentType = response.headers.get('content-type') || '';
-    if (contentType.includes('application/json')) {
-      const json = await response.json();
-      return { url, title: 'JSON Response', content: JSON.stringify(json).slice(0, 8000) };
-    }
-
-    if (!contentType.includes('text/html') && !contentType.includes('text/plain')) {
-      return { url, title: '', content: `[Binary content: ${contentType}]` };
-    }
-
-    const html = await response.text();
-
-    // Extract title
-    const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
-    const title = titleMatch ? titleMatch[1].trim() : '';
-
-    // Strip HTML tags and extract readable text
-    const cleaned = html
-      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, ' ')
-      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, ' ')
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/&nbsp;/g, ' ')
-      .replace(/&amp;/g, '&')
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&quot;/g, '"')
-      .replace(/\s+/g, ' ')
-      .trim()
-      .slice(0, 10000);
-
-    return { url, title, content: cleaned };
-  } catch (err: any) {
-    return { url, title: '', content: '', error: err.message };
-  }
-}
-
-/**
- * Build URL context to inject into system prompt
- */
-function buildUrlContext(results: Array<{ url: string; title: string; content: string; error?: string }>): string {
-  const valid = results.filter(r => r.content && !r.error);
-  if (valid.length === 0) return '';
-  const lines = valid.map(r =>
-    `[URL: ${r.url}]\nTitle: ${r.title}\nContent:\n${r.content}`
-  ).join('\n\n---\n\n');
-  return [
-    '',
-    '==============================',
-    'FETCHED URL CONTENT (analyze and answer based on this):',
-    '==============================',
-    lines,
-    '==============================',
-    'INSTRUCTIONS: Use the above URL content to answer the user accurately. Reference the actual content.',
-    '==============================',
-  ].join('\n');
-}
-
 /**
  * Detect if the query needs live web search
  */
@@ -878,23 +791,12 @@ Deno.serve(async function(req: Request) {
       userLanguage, baseTone, customInstructions, nickname, occupation, interests, apiVersionContext
     );
 
-    // ── URL Content Fetching ──────────────────────────────────────────────────
-    let urlContext = '';
-    const urlsInMessage = extractUrls(lastUserContent);
-    if (urlsInMessage.length > 0 && detectionResult.type === 'text') {
-      console.log('[chat] URL(s) detected, fetching content:', urlsInMessage);
-      const urlResults = await Promise.all(urlsInMessage.map(fetchUrlContent));
-      urlContext = buildUrlContext(urlResults);
-      if (urlContext) console.log('[chat] URL content fetched for', urlResults.filter(r => !r.error).length, 'URL(s)');
-    }
-
     // ── Live Web Search ──────────────────────────────────────────────────────
     let webSearchResults: WebSearchResult[] = [];
     let searchContext = '';
     if (
       detectionResult.type === 'text' &&
       !detectionResult.isImageTask &&
-      urlsInMessage.length === 0 && // skip web search when URLs were already fetched
       needsWebSearch(lastUserContent)
     ) {
       console.log('[chat] Web search triggered:', lastUserContent.slice(0, 80));
@@ -903,10 +805,8 @@ Deno.serve(async function(req: Request) {
       searchContext = buildSearchContext(webSearchResults);
     }
 
-    // Effective system prompt (URL context takes priority over search context)
-    const effectiveSystemPrompt = urlContext
-      ? fullSystemPrompt + urlContext
-      : searchContext
+    // Effective system prompt (with optional search context injected)
+    const effectiveSystemPrompt = searchContext
       ? fullSystemPrompt + searchContext
       : fullSystemPrompt;
 

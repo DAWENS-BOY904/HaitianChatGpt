@@ -2963,9 +2963,9 @@ export default function HomeScreen() {
 
               {editingMessageId ? (
                 <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingBottom: 6 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: isDark ? '#0D1A30' : '#E8F0FF', borderRadius: 50, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: isDark ? 'rgba(0,122,255,0.35)' : 'rgba(0,122,255,0.25)' }}>
-                    <Ionicons name="pencil" size={13} color="#007AFF" />
-                    <Text style={{ color: '#007AFF', fontSize: 13, fontWeight: '700' }}>Editing message</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? '#1A2030' : '#E8F0FE', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 9, gap: 7, alignSelf: 'flex-start', borderWidth: 1, borderColor: isDark ? 'rgba(0,122,255,0.3)' : 'rgba(0,122,255,0.2)' }}>
+                    <Ionicons name="pencil" size={15} color="#007AFF" />
+                    <Text style={{ color: '#007AFF', fontSize: 14, fontWeight: '700' }}>Edit</Text>
                     <TouchableOpacity onPress={handleCancelEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                       <Ionicons name="close" size={15} color={isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.4)'} />
                     </TouchableOpacity>
@@ -3443,30 +3443,35 @@ export default function HomeScreen() {
               const msgHasMedia = !!(msgMenuMsg.imageUrl || msgMenuMsg.image_url || msgMenuMsg.file_url ||
                 (msgMenuMsg.content && (msgMenuMsg.content.includes('[Attached file:') || msgMenuMsg.content.includes('[Video attached:'))));
               return (
-                <Modal visible={msgMenuVisible} transparent animationType="fade" onRequestClose={() => setMsgMenuVisible(false)}>
-                  {/* Transparent backdrop — no blur so chat stays visible */}
-                  <Pressable style={{ flex: 1, backgroundColor: 'transparent' }} onPress={() => setMsgMenuVisible(false)} />
-                  <View style={{ position: 'absolute', right: 14, top: (() => { const SCREEN_H = Dimensions.get('window').height; const menuH = 130; return (msgMenuPageY + menuH > SCREEN_H - 60) ? Math.max(80, msgMenuPageY - menuH - 16) : Math.max(80, msgMenuPageY + 12); })(), width: 220, borderRadius: 18, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: isDark ? 0.55 : 0.18, shadowRadius: 20, elevation: 20 }}>
+                <Modal visible={msgMenuVisible} transparent animationType="none" onRequestClose={() => setMsgMenuVisible(false)}>
+                  <Pressable style={{ flex: 1 }} onPress={() => setMsgMenuVisible(false)}>
+                    {Platform.OS === 'ios' ? (
+                      <BlurView intensity={isDark ? 16 : 10} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
+                    ) : (
+                      <View style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? 'rgba(0,0,0,0.22)' : 'rgba(0,0,0,0.1)' }]} />
+                    )}
+                  </Pressable>
+                  <View style={{ position: 'absolute', right: 14, top: menuTop, width: 218, borderRadius: 18, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: isDark ? 0.5 : 0.2, shadowRadius: 22, elevation: 22 }}>
                     {Platform.OS === 'ios' ? (
                       <BlurView intensity={isDark ? 88 : 78} tint={isDark ? 'dark' : 'extraLight'} style={{ borderRadius: 18, overflow: 'hidden' }}>
-                        <View style={{ paddingHorizontal: 16, paddingTop: 11, paddingBottom: 8 }}>
+                        <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: divC }}>
                           <Text style={{ color: menuSubC, fontSize: 12, fontWeight: '500' }}>{dateLabel}</Text>
                         </View>
-                        {/* Copy */}
+                        {/* Copy — always available */}
                         <TouchableOpacity
-                          style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13, gap: 12 }}
-                          onPress={async () => { setMsgMenuVisible(false); await Clipboard.setStringAsync(msgMenuMsg.content || ''); }}
-                          activeOpacity={0.6}
+                          style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, gap: 12, borderBottomWidth: msgHasMedia ? 0 : StyleSheet.hairlineWidth, borderBottomColor: divC }}
+                          onPress={async () => { setMsgMenuVisible(false); await Clipboard.setStringAsync(msgMenuMsg.content || ''); showAlert('Copied', 'Message copied to clipboard'); }}
+                          activeOpacity={0.65}
                         >
                           <Ionicons name="copy-outline" size={20} color={menuTextC} />
                           <Text style={{ fontSize: 17, color: menuTextC }}>Copy</Text>
                         </TouchableOpacity>
-                        {/* Edit */}
+                        {/* Edit — only for plain text messages */}
                         {!msgHasMedia ? (
                           <TouchableOpacity
-                            style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13, gap: 12 }}
-                            onPress={() => { setMsgMenuVisible(false); setTimeout(() => { handleEditMessage(msgMenuMsg.id, msgMenuMsg.content || ''); setTimeout(() => inputRef.current?.focus(), 80); }, 50); }}
-                            activeOpacity={0.6}
+                            style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, gap: 12 }}
+                            onPress={() => { setMsgMenuVisible(false); setTimeout(() => { handleEditMessage(msgMenuMsg.id, msgMenuMsg.content || ''); setTimeout(() => inputRef.current?.focus(), 100); }, 60); }}
+                            activeOpacity={0.65}
                           >
                             <Ionicons name="pencil-outline" size={20} color={menuTextC} />
                             <Text style={{ fontSize: 17, color: menuTextC }}>Edit</Text>
@@ -3474,25 +3479,25 @@ export default function HomeScreen() {
                         ) : null}
                       </BlurView>
                     ) : (
-                      <View style={{ backgroundColor: isDark ? 'rgba(36,36,40,0.98)' : 'rgba(255,255,255,0.98)', borderRadius: 18 }}>
-                        <View style={{ paddingHorizontal: 16, paddingTop: 11, paddingBottom: 8 }}>
+                      <View style={{ backgroundColor: menuBg, borderRadius: 18 }}>
+                        <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: divC }}>
                           <Text style={{ color: menuSubC, fontSize: 12, fontWeight: '500' }}>{dateLabel}</Text>
                         </View>
-                        {/* Copy */}
+                        {/* Copy — always available */}
                         <TouchableOpacity
-                          style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13, gap: 12 }}
-                          onPress={async () => { setMsgMenuVisible(false); await Clipboard.setStringAsync(msgMenuMsg.content || ''); }}
-                          activeOpacity={0.6}
+                          style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, gap: 12, borderBottomWidth: msgHasMedia ? 0 : StyleSheet.hairlineWidth, borderBottomColor: divC }}
+                          onPress={async () => { setMsgMenuVisible(false); await Clipboard.setStringAsync(msgMenuMsg.content || ''); showAlert('Copied', 'Message copied to clipboard'); }}
+                          activeOpacity={0.65}
                         >
                           <Ionicons name="copy-outline" size={20} color={menuTextC} />
                           <Text style={{ fontSize: 17, color: menuTextC }}>Copy</Text>
                         </TouchableOpacity>
-                        {/* Edit */}
+                        {/* Edit — only for plain text messages */}
                         {!msgHasMedia ? (
                           <TouchableOpacity
-                            style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13, gap: 12 }}
-                            onPress={() => { setMsgMenuVisible(false); setTimeout(() => { handleEditMessage(msgMenuMsg.id, msgMenuMsg.content || ''); setTimeout(() => inputRef.current?.focus(), 80); }, 50); }}
-                            activeOpacity={0.6}
+                            style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, gap: 12 }}
+                            onPress={() => { setMsgMenuVisible(false); setTimeout(() => { handleEditMessage(msgMenuMsg.id, msgMenuMsg.content || ''); setTimeout(() => inputRef.current?.focus(), 100); }, 60); }}
+                            activeOpacity={0.65}
                           >
                             <Ionicons name="pencil-outline" size={20} color={menuTextC} />
                             <Text style={{ fontSize: 17, color: menuTextC }}>Edit</Text>
@@ -3699,7 +3704,7 @@ export default function HomeScreen() {
               </View>
             ) : null}
 
-            {showBlurOverlay && !msgMenuVisible ? (
+            {showBlurOverlay ? (
               <Animated.View style={[styles.blurOverlayContainer, { opacity: fadeAnim }]}>
                 <BlurView intensity={80} tint={isDark ? 'dark' : 'light'} style={styles.blurView}>
                   <View style={styles.blurContent}>
