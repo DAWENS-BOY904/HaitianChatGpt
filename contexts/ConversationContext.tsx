@@ -456,6 +456,10 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
       setMessages(prev => [...prev, placeholderAIMessage]);
       setStreamingMessageId(aiMessageId);
 
+      // Set up abort controller for guest streaming (allows cancel)
+      const guestAbort = new AbortController();
+      abortControllerRef.current = guestAbort;
+
       try {
         const contextMessages = [...messages, tempUserMessage].map(m => ({
           role: m.role,
@@ -472,7 +476,6 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
           try {
             if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
           } catch (_e) {}
-          // Fallback UUID v4 generator
           return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
             const r = Math.random() * 16 | 0;
             return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
@@ -490,19 +493,32 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
           guestBody.base64Image = cleanB64;
         }
 
-        const response = await fetch(edgeFunctionUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${anonKey}`,
-            'apikey': anonKey,
-          },
-          body: JSON.stringify(guestBody),
-        });
-
         let streamedContent = '';
 
-        if (response.ok) {
+        // Retry up to 3 times for transient errors
+        let response: Response | null = null;
+        for (let attempt = 0; attempt <= 2; attempt++) {
+          try {
+            response = await fetch(edgeFunctionUrl, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${anonKey}`,
+                'apikey': anonKey,
+              },
+              body: JSON.stringify(guestBody),
+              signal: guestAbort.signal,
+            });
+            if (response.status < 500) break; // success or client error — don't retry
+            if (attempt < 2) await new Promise(r => setTimeout(r, 800 * (attempt + 1)));
+          } catch (fetchErr: any) {
+            if (fetchErr?.name === 'AbortError') throw fetchErr;
+            if (attempt === 2) throw fetchErr;
+            await new Promise(r => setTimeout(r, 800 * (attempt + 1)));
+          }
+        }
+
+        if (response && response.ok) {
           const reader = response.body?.getReader();
           if (reader) {
             const decoder = new TextDecoder();
@@ -546,15 +562,22 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
               if (!line.trim().startsWith('data:')) continue;
               try {
                 const parsed = JSON.parse(line.trim().slice(5).trim());
-                streamedContent += parsed.content ?? parsed.token ?? '';
+                const chunk = parsed.content ?? parsed.token ?? '';
+                if (chunk) streamedContent += chunk;
               } catch (_e) {}
             }
             if (streamedContent) {
               setMessages(prev => prev.map(m => m.id === aiMessageId ? { ...m, content: streamedContent } : m));
             }
           }
+        } else if (response && !response.ok) {
+          // Non-200: try to read body for a useful error, then fall back gracefully
+          const errText = await response.text().catch(() => '');
+          console.log('[ConversationContext] Guest chat error', response.status, errText.slice(0, 120));
+          streamedContent = 'I am here to help! Please sign in for the full experience, or try again in a moment.';
+          setMessages(prev => prev.map(m => m.id === aiMessageId ? { ...m, content: streamedContent } : m));
         } else {
-          streamedContent = 'I am here to help! Please sign in for the full experience.';
+          streamedContent = 'Could not reach AI. Please check your connection.';
           setMessages(prev => prev.map(m => m.id === aiMessageId ? { ...m, content: streamedContent } : m));
         }
 
