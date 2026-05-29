@@ -440,3 +440,12 @@ const styles = StyleSheet.create({
   translateActionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 14, paddingVertical: 13, borderWidth: 1 },
   translateActionText: { color: 'rgba(255,255,255,0.85)', fontSize: 15, fontWeight: '600' },
 });
+PLEASE FIX THIS ERROR{
+  "eventMessage": "POST | 0 | http://njpuoozygqtpvlzhnjpu.backend.onspace.ai/functions/v1/chat | ",
+  "functionId": "chat",
+  "id": "",
+  "logLevel": "ERROR",
+  "method": "POST",
+  "statusCode": 0,
+  "timestamp": 1780093139
+}
