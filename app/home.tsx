@@ -1922,6 +1922,56 @@ export default function HomeScreen() {
       }
     }
 
+    // ── Omni-moderation: check uploaded images via OpenAI omni-moderation-latest ──
+    if (imageFiles.length > 0 && user) {
+      for (const imgFile of imageFiles) {
+        try {
+          const { data: modData } = await supabase.functions.invoke('moderate-content', {
+            body: { imageUrl: imgFile.uri, type: 'image' },
+          });
+          if (modData?.blocked) {
+            setSending(true); setGenerating(true); setThinkingMode('thinking');
+            setInputText(''); setSelectedMedia([]); clearDraft();
+            try {
+              await sendMessage(
+                '[SYSTEM: Respond only with this exact text]\n\n' +
+                'This image has been flagged by our content moderation system as it appears to contain inappropriate or harmful content. It has been blocked to keep our platform safe. If you believe this is an error, please contact support.',
+                undefined, undefined, false, currentAIModel
+              );
+            } catch (_e) {}
+            finally { setSending(false); setGenerating(false); }
+            return;
+          }
+        } catch (_modErr) {
+          // Non-blocking: moderation error should not prevent upload
+        }
+      }
+    }
+
+    // ── Text moderation (text-moderation-latest) ──
+    if (currentText && currentText.trim().length > 10 && user) {
+      try {
+        const { data: textModData } = await supabase.functions.invoke('moderate-content', {
+          body: { text: currentText.trim(), type: 'text' },
+        });
+        if (textModData?.blocked) {
+          setSending(true); setGenerating(true); setThinkingMode('thinking');
+          setInputText(''); setSelectedMedia([]); clearDraft();
+          try {
+            await sendMessage(
+              '[SYSTEM: Respond only with this exact text]\n\n' +
+              "I'm sorry, but this message has been flagged by our content moderation system. It appears to contain content that violates our usage guidelines. Please rephrase your message in a respectful way. I'm here to help with a wide range of topics.",
+              undefined, undefined, false, currentAIModel
+            );
+          } catch (_e) {}
+          finally { setSending(false); setGenerating(false); }
+          return;
+        }
+      } catch (_textModErr) {
+        // Non-blocking
+      }
+    }
+
     // Content moderation: check uploaded image filenames for suspicious patterns
     // Note: actual image content is NOT blocked — AI can analyze real images.
     // Only block if the filename itself is clearly labelled as explicit content.

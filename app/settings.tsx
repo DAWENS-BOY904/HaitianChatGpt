@@ -31,6 +31,7 @@ import { useProfile } from '../contexts/ProfileContext';
 import { Image as ExpoImageBadge } from 'expo-image';
 import * as WebBrowser from '../utils/web-browser';
 import { WebView } from 'react-native-webview';
+import { useNetworkStatus } from '../hooks/useNetworkStatus';
 
 const PERSONA_LINK = 'https://perso.na/s/rKzyfH-XZ9663D';
 const AGE_VERIFIED_KEY = 'age_verification_completed';
@@ -560,6 +561,7 @@ export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const supabase = getSupabaseClient();
   const { setProfilePhotoUrl: setGlobalPhoto, setDisplayName: setGlobalName, setUsername: setGlobalUsername } = useProfile();
+  const { isConnected } = useNetworkStatus();
 
   const [isAdmin, setIsAdmin] = useState(false);
   const [profilePhoto, setProfilePhoto] = useState('');
@@ -687,6 +689,19 @@ export default function SettingsScreen() {
 
   const loadProfile = async () => {
     if (!user) return;
+    // Load from cache first (offline fallback)
+    try {
+      const cached = await AsyncStorage.getItem(PROFILE_CACHE_KEY);
+      if (cached) {
+        const d = JSON.parse(cached);
+        if (d.username) setUsername(d.username);
+        if (d.full_name) setFullName(d.full_name);
+        if (d.profile_photo_url) { setProfilePhoto(d.profile_photo_url); setGlobalPhoto(d.profile_photo_url); }
+        setGlobalName(d.full_name || d.username || ''); setGlobalUsername(d.username || '');
+      }
+    } catch (_e) {}
+    // Only load fresh data when connected
+    if (!isConnected) return;
     try {
       const { data } = await supabase.from('user_profiles').select('username, profile_photo_url, full_name, username_last_changed').eq('id', user.id).single();
       if (data) {
@@ -855,12 +870,21 @@ export default function SettingsScreen() {
   const SwitchRow = ({ icon, label, value, onChange, isLast }: {
     icon: string; label: string; value: boolean; onChange: (v: boolean) => void; isLast?: boolean;
   }) => (
-    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, paddingHorizontal: 16, borderBottomWidth: isLast ? 0 : StyleSheet.hairlineWidth, borderBottomColor: divider }}>
+    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, paddingHorizontal: 16, borderBottomWidth: isLast ? 0 : StyleSheet.hairlineWidth, borderBottomColor: divider, opacity: isConnected ? 1 : 0.45 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
         <Ionicons name={icon as any} size={20} color={secondaryText} />
         <Text style={{ fontSize: 16, color: primaryText, fontWeight: '400' }}>{label}</Text>
       </View>
-      <Switch value={value} onValueChange={onChange} trackColor={{ true: switchTrackTrue, false: switchTrackFalse }} thumbColor={Platform.OS === 'ios' ? undefined : '#FFFFFF'} />
+      <Switch
+        value={value}
+        onValueChange={(v) => {
+          if (!isConnected) { showAlert('No Internet', 'An internet connection is required to change settings.'); return; }
+          onChange(v);
+        }}
+        trackColor={{ true: switchTrackTrue, false: switchTrackFalse }}
+        thumbColor={Platform.OS === 'ios' ? undefined : '#FFFFFF'}
+        disabled={!isConnected}
+      />
     </View>
   );
 
@@ -943,17 +967,27 @@ export default function SettingsScreen() {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}>
-        {/* PROFILE */}
+        {/* OFFLINE BANNER */}
+        {!isConnected ? (
+          <View style={{ backgroundColor: '#FF9500', marginHorizontal: 16, marginTop: 8, marginBottom: 4, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Ionicons name="cloud-offline-outline" size={16} color="#FFF" />
+            <Text style={{ color: '#FFF', fontSize: 13, fontWeight: '600', flex: 1 }}>No internet — settings are read-only</Text>
+          </View>
+        ) : null}
+
+        {/* PROFILE */}}
         <View style={{ alignItems: 'center', paddingVertical: 20 }}>
           <View style={{ width: 84, height: 84, borderRadius: 42, overflow: 'hidden', backgroundColor: isDark ? '#3A3A3C' : '#E5E5EA', alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
-            {profilePhoto ? (
+            {profilePhoto && isConnected ? (
               <Image source={{ uri: profilePhoto }} style={{ width: 84, height: 84 }} contentFit="cover" />
+            ) : !isConnected ? (
+              <Ionicons name="person-circle-outline" size={60} color={secondaryText} />
             ) : (
               <Text style={{ fontSize: 34, fontWeight: '700', color: primaryText }}>{initials}</Text>
             )}
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-            <Text style={{ fontSize: 22, fontWeight: '700', color: primaryText }}>{displayName}</Text>
+            <Text style={{ fontSize: 22, fontWeight: '700', color: primaryText }}>{isConnected ? displayName : 'Profile (offline)'}</Text>
             <VerifiedBadge
               tier={isAdminUser ? 'plus' : tier === 'plus' ? 'plus' : tier === 'go' ? 'go' : null}
               onPress={() => setVerifiedBadgeModalVisible(true)}
@@ -961,8 +995,11 @@ export default function SettingsScreen() {
           </View>
           {displayUsername ? <Text style={{ fontSize: 15, color: secondaryText, marginBottom: 14 }}>{displayUsername}</Text> : null}
           <TouchableOpacity
-            style={{ paddingHorizontal: 22, paddingVertical: 9, borderRadius: 20, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)', backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)' }}
-            onPress={openEditModal}
+            style={{ paddingHorizontal: 22, paddingVertical: 9, borderRadius: 20, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)', backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)', opacity: isConnected ? 1 : 0.4 }}
+            onPress={() => {
+              if (!isConnected) { showAlert('No Internet', 'An internet connection is required to edit your profile.'); return; }
+              openEditModal();
+            }}
           >
             <Text style={{ fontSize: 15, color: primaryText, fontWeight: '500' }}>Edit profile</Text>
           </TouchableOpacity>
@@ -982,8 +1019,14 @@ export default function SettingsScreen() {
           <Row icon="document-lock-outline" label="Data controls" onPress={() => router.push('/data-controls')} />
           <Row icon="megaphone-outline" label="Ads controls" onPress={() => router.push('/ads-controls')} />
           <Row icon="apps-outline" label="Apps & connectors" onPress={() => router.push('/app-connect')} />
-          <Row icon="archive-outline" label="Archived chats" onPress={() => router.push('/archived-chats')} />
-          <Row icon="lock-closed-outline" label="Security" onPress={() => router.push('/security')} />
+          <Row icon="archive-outline" label="Archived chats" onPress={() => {
+            if (!isConnected) { showAlert('No Internet', 'An internet connection is required to view archived chats.'); return; }
+            router.push('/archived-chats');
+          }} />
+          <Row icon="lock-closed-outline" label="Security" onPress={() => {
+            if (!isConnected) { showAlert('No Internet', 'An internet connection is required to access security settings.'); return; }
+            router.push('/security');
+          }} />
           {!isAgeVerified ? (
             <Row icon="shield-checkmark-outline" label="Age verification" onPress={() => setAgeVerifiedModalVisible(true)} isLast />
           ) : null}
