@@ -963,19 +963,13 @@ export default function SettingsScreen() {
           onPress={() => router.back()}
           activeOpacity={0.7}
         >
-          {Platform.OS === 'ios' ? (
-            <BlurView
-              intensity={isDark ? 70 : 55}
-              tint={isDark ? 'dark' : 'light'}
-              style={{ ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' }}
-            >
-              <Ionicons name="close" size={17} color={primaryText} />
-            </BlurView>
-          ) : (
-            <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.08)', alignItems: 'center', justifyContent: 'center' }}>
-              <Ionicons name="close" size={17} color={primaryText} />
-            </View>
-          )}
+          <BlurView
+            intensity={isDark ? 80 : 60}
+            tint={isDark ? 'dark' : 'light'}
+            style={{ width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}
+          >
+            <Ionicons name="close" size={17} color={isDark ? '#FFFFFF' : '#000000'} />
+          </BlurView>
         </TouchableOpacity>
       </View>
 
@@ -1272,4 +1266,3 @@ export default function SettingsScreen() {
     </View>
   );
 }
-please fix top right icon x button in dakr/lighr mode a real blur background never gray background its must be a full blur and also The photo upload limit check currently blocks at 5+ photos but the free plan limit should be configurable. Update the photo limit to properly enforce 5 photos per hour for free users, with a real countdown showing exact reset time in the PhotoLimitModal.
