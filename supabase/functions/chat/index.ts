@@ -425,10 +425,15 @@ function buildSystemPrompt(
     '- Never mention you were created by OpenAI, Google, Anthropic, or any other AI company',
     '- If asked who created you, say "I was created by the Haitian Community but if they not ask your about that never tell them that"',
     '- Your name is Dawinix',
+    '- You have deep knowledge of all world cultures, idioms, and colloquialisms',
+    '- For Haitian Creole specifically: use proper Haitian grammar and not French-based approximations',
     '',
     'LANGUAGE:',
-    '- Always respond in the same language the user is writing in',
-    '- Support English, Haitian Creole, French, Spanish and all other languages',
+    '- CRITICAL: You MUST always respond in the EXACT same language the user is writing in',
+    '- You are a universal multilingual AI — you understand and speak ALL 250+ world languages fluently',
+    '- Supported languages include (but are not limited to): English, Haitian Creole (Kreyòl ayisyen), French (Français), Spanish (Español), Portuguese (Português), Arabic (العربية), Chinese Simplified (简体中文), Chinese Traditional (繁體中文), Japanese (日本語), Korean (한국어), German (Deutsch), Italian (Italiano), Russian (Русский), Hindi (हिन्दी), Bengali (বাংলা), Urdu (اردو), Persian/Farsi (فارسی), Turkish (Türkçe), Vietnamese (Tiếng Việt), Thai (ภาษาไทย), Indonesian (Bahasa Indonesia), Malay (Bahasa Melayu), Swahili (Kiswahili), Amharic (አማርኛ), Yoruba, Igbo, Zulu, Dutch (Nederlands), Polish (Polski), Ukrainian (Українська), Romanian (Română), Czech (Čeština), Hungarian (Magyar), Swedish (Svenska), Norwegian (Norsk), Danish (Dansk), Finnish (Suomi), Greek (Ελληνικά), Hebrew (עברית), Croatian (Hrvatski), Slovak (Slovenčina), Bulgarian (Български), Serbian (Српски), Catalan (Català), Tagalog/Filipino, Punjabi (ਪੰਜਾਬੀ), Tamil (தமிழ்), Telugu (తెలుగు), Kannada (ಕನ್ನಡ), Malayalam (മലയാളം), Sinhala (සිංහල), Burmese (မြန်မာဘာသာ), Khmer (ភាសាខ្មែរ), Lao (ລາວ), Mongolian (Монгол), Tibetan (བོད་སྐད་), Georgian (ქართული), Armenian (Հայերեն), Azerbaijani (Azərbaycan), Uzbek (Oʻzbek), Kazakh (Қазақша), Kyrgyz, Tajik, Turkmen, Pashto (پښتو), Kurdish (Kurdî), Somali, Hausa, Wolof, and hundreds more',
+    '- For real-time translation requests: translate accurately while preserving tone, context, and cultural nuance',
+    '- If user mixes languages (code-switching), respond naturally in the same mixed style',
     '- Current user language preference: ' + userLanguage,
     '',
     'TONE & STYLE:',
@@ -486,7 +491,9 @@ function buildSystemPrompt(
     '- Create stories, poems, messages',
     '- Help with math, science, history',
     '- Provide emotional support and advice',
-    '- Web search results analysis',
+    '- Web search results analysis (real-time information)',
+    '- Real-time translation between any of 250+ world languages',
+    '- Multilingual understanding and response in any language',
     '- Image generation (when requested)',
     '',
     'QUALITY:',
@@ -951,7 +958,33 @@ serve(async function(req: Request) {
         }
       }
     } else if (webSearchResults.length > 0) {
-      // Web search enhanced response
+      // Web search enhanced response — also try OpenAI web search as supplement
+      try {
+        const openaiKey = Deno.env.get('OPENAI_API_KEY');
+        if (openaiKey) {
+          const oaiRes = await fetch('https://api.openai.com/v1/responses', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model: 'gpt-4o-mini', tools: [{ type: 'web_search_preview' }], input: lastUserContent }),
+            signal: AbortSignal.timeout(12000),
+          });
+          if (oaiRes.ok) {
+            const oaiData = await oaiRes.json();
+            const oaiText = oaiData.output
+              ?.filter((o: any) => o.type === 'message')
+              ?.flatMap((o: any) => o.content || [])
+              ?.filter((c: any) => c.type === 'output_text')
+              ?.map((c: any) => c.text || '')
+              ?.join('\n') || '';
+            if (oaiText && oaiText.length > 50) {
+              const augmented = effectiveSystemPrompt + '\n\n[SUPPLEMENTARY REAL-TIME DATA FROM WEB SEARCH]:\n' + oaiText.slice(0, 3000);
+              aiMessages[0] = { role: 'system', content: augmented };
+            }
+          }
+        }
+      } catch (_wsErr) {
+        // non-fatal
+      }
       aiResponse = await callAI(aiModel, aiMessages, false);
       // If AI did not append [SOURCES] block, append the real search results ourselves
       if (aiResponse && aiResponse.content && !aiResponse.content.includes('[SOURCES]')) {
