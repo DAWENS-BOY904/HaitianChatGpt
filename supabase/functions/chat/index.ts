@@ -671,9 +671,10 @@ serve(async function(req: Request) {
       );
     }
 
-    // Auth
+    // Auth — allow both authenticated users and anon/guest users
     const authHeader = req.headers.get('Authorization');
     const token = authHeader ? authHeader.replace('Bearer ', '') : null;
+    const anonKey = Deno.env.get('SUPABASE_ANON_KEY') || '';
     if (!token) {
       return new Response(
         JSON.stringify({ error: 'Authorization required' }),
@@ -697,18 +698,23 @@ serve(async function(req: Request) {
       global: { headers: { Authorization: 'Bearer ' + token } }
     });
 
-    const authResult = await supabaseClient.auth.getUser(token);
-    if (authResult.error || !authResult.data.user) {
-      console.error('[chat] Auth failed');
-      return new Response(
-        JSON.stringify({ error: 'Invalid or expired token' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    // Try authenticated user — if token is just the anon key (guest mode), skip user fetch
+    const isGuestToken = token === supabaseAnonKey;
+    let user: any = null;
+    if (!isGuestToken) {
+      const authResult = await supabaseClient.auth.getUser(token);
+      if (authResult.error || !authResult.data.user) {
+        console.error('[chat] Auth failed');
+        return new Response(
+          JSON.stringify({ error: 'Invalid or expired token' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      user = authResult.data.user;
     }
-    const user = authResult.data.user;
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey);
 
-    // Fetch user settings (non-fatal)
+    // Fetch user settings (non-fatal, skip for guests)
     let userLanguage = 'English';
     let baseTone = 'balanced';
     let customInstructions = '';
@@ -716,23 +722,25 @@ serve(async function(req: Request) {
     let occupation = '';
     let interests: string[] = [];
 
-    try {
-      const settingsResult = await supabaseClient
-        .from('user_settings')
-        .select('app_language, base_tone, custom_instructions, nickname, occupation, interests, preferred_ai_model')
-        .eq('user_id', user.id)
-        .single();
-      if (!settingsResult.error && settingsResult.data) {
-        const d = settingsResult.data;
-        userLanguage = sanitizeString(d.app_language) || 'English';
-        baseTone = sanitizeString(d.base_tone) || 'balanced';
-        customInstructions = sanitizeString(d.custom_instructions) || '';
-        nickname = sanitizeString(d.nickname) || '';
-        occupation = sanitizeString(d.occupation) || '';
-        interests = Array.isArray(d.interests) ? d.interests.map((i: any) => sanitizeString(i)).filter(Boolean) : [];
+    if (user) {
+      try {
+        const settingsResult = await supabaseClient
+          .from('user_settings')
+          .select('app_language, base_tone, custom_instructions, nickname, occupation, interests, preferred_ai_model')
+          .eq('user_id', user.id)
+          .single();
+        if (!settingsResult.error && settingsResult.data) {
+          const d = settingsResult.data;
+          userLanguage = sanitizeString(d.app_language) || 'English';
+          baseTone = sanitizeString(d.base_tone) || 'balanced';
+          customInstructions = sanitizeString(d.custom_instructions) || '';
+          nickname = sanitizeString(d.nickname) || '';
+          occupation = sanitizeString(d.occupation) || '';
+          interests = Array.isArray(d.interests) ? d.interests.map((i: any) => sanitizeString(i)).filter(Boolean) : [];
+        }
+      } catch (_settingsErr) {
+        console.log('[chat] Settings fetch error (non-fatal)');
       }
-    } catch (_settingsErr) {
-      console.log('[chat] Settings fetch error (non-fatal)');
     }
 
     // Extract last user content
@@ -1053,18 +1061,20 @@ serve(async function(req: Request) {
       responseCache.set(cacheKey, cleanMessage, query);
     }
 
-    // Update conversation timestamp (non-fatal)
+    // Update conversation timestamp (non-fatal, skip for guests)
     try {
-      await supabaseAdmin
-        .from('conversations')
-        .update({ updated_at: new Date().toISOString() })
-        .eq('id', conversationId);
+      if (user) {
+        await supabaseAdmin
+          .from('conversations')
+          .update({ updated_at: new Date().toISOString() })
+          .eq('id', conversationId);
+      }
     } catch (_e) {
       console.log('[chat] Conversation update error (non-fatal)');
     }
 
-    // Auto-save AI-generated image URLs to media_files
-    if (imageUrl && user.id) {
+    // Auto-save AI-generated image URLs to media_files (skip for guests)
+    if (imageUrl && user && user.id) {
       try {
         await supabaseAdmin.from('media_files').insert({
           user_id: user.id,
@@ -1079,9 +1089,9 @@ serve(async function(req: Request) {
       }
     }
 
-    // Push notification for long requests (>5s)
+    // Push notification for long requests (>5s) — skip for guests
     const requestDurationMs = Date.now() - requestStartTime;
-    if (requestDurationMs > 5000) {
+    if (requestDurationMs > 5000 && user && user.id) {
       try {
         const profileResult = await supabaseAdmin
           .from('user_profiles')
