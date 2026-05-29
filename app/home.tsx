@@ -58,7 +58,6 @@ import * as FileSystem from 'expo-file-system';
 import { SideMenu } from '../components/SideMenu';
 import { ThinkingIndicator } from '../components/ThinkingIndicator';
 import { GroupChatActionsMenu } from '../components/GroupChatActionsMenu';
-import { GuestWelcomeModal } from '../components/GuestWelcomeModal';
 import { ReportGroupModal } from '../components/ReportGroupModal';
 import { ChatHistoryModal } from '../components/ChatHistoryModal';
 import { ImageSearchResults } from '../components/ImageSearchResults';
@@ -127,9 +126,17 @@ function isValidBase64(str: string): boolean {
   } catch (_e) { return false; }
 }
 
-  // ── Content moderation ──────────────────────────────────────────────────
-  // Block inappropriate text prompts (not when image is attached)
-  const TEXT_INAPPROPRIATE_KEYWORDS = ['porn','porno','pornographic','sex girl','sex woman','sexual content','xxx','nsfw','explicit nudity','erotic','hentai','nude girl','nude woman','nude man','nude boy','naked girl','naked woman','naked man','create sex','generate sex','make sex','sex photo','sex image','sex picture','nude photo','nude image','create nude','generate nude','make nude','draw nude','draw sex'];
+// ── Content moderation ─────────────────────────────────────────────────────
+// These words are only blocked in TEXT messages. If user uploads an actual
+// explicit image, we let AI describe what it sees (image-only path).
+const TEXT_INAPPROPRIATE_KEYWORDS = [
+  'porn', 'porno', 'pornographic', 'sex girl', 'sex woman',
+  'sexual content', 'xxx', 'nsfw', 'explicit nudity', 'erotic', 'hentai',
+  'nude girl', 'nude woman', 'nude man', 'nude boy', 'naked girl',
+  'naked woman', 'naked man', 'create sex', 'generate sex', 'make sex',
+  'sex photo', 'sex image', 'sex picture', 'nude photo', 'nude image',
+  'create nude', 'generate nude', 'make nude', 'draw nude', 'draw sex',
+];
 // Only blocks pure text messages (not messages that come with an image upload)
 function isInappropriatePrompt(text: string, hasImageAttachment: boolean): boolean {
   if (hasImageAttachment) return false; // let image path handle it
@@ -1064,8 +1071,6 @@ export default function HomeScreen() {
   const [msgMenuPageY, setMsgMenuPageY] = useState(0);
   const [msgActionsVisible,setMsgActionsVisible]=useState(false);
   const [msgActionsMsg,setMsgActionsMsg]=useState<any>(null);
-  const [guestWelcomeVisible, setGuestWelcomeVisible] = useState(false);
-  const guestWelcomeDismissedRef = useRef(false);
   const [unreadCount,setUnreadCount]=useState(0);
   const lastProcessedMsgRef = useRef<string | null>(null);
   // ── Typing indicator state ────────────────────────────────────────────
@@ -1269,43 +1274,25 @@ export default function HomeScreen() {
   }, [pendingNotifConvId, conversations]);
 
   useEffect(() => {
-    if (!user?.id) return;
-    const token = pushTokenRef.current;
-    if (token) {
-      supabase.from('user_profiles').update({ push_token: token } as any).eq('id', user.id).catch(() => {});
-    }
-  }, [user?.id]);
-
-  useEffect(() => {
-    registerForPushNotifications().then(async token => {
-      pushTokenRef.current = token;
-      if (token && user?.id) {
-        supabase.from('user_profiles').update({ push_token: token } as any).eq('id', user.id).catch(() => {});
-      }
-    });
+    registerForPushNotifications().then(token => { pushTokenRef.current = token; });
     const sub = AppState.addEventListener('change', s => { appStateForNotifRef.current = s; });
     return () => sub.remove();
   }, []);
 
   useEffect(() => {
     if (Platform.OS === 'web') return;
-    Notifications.getPermissionsAsync().then(({ status }) => {
-      if (status === 'undetermined') setTimeout(() => setNotifPermModalVisible(true), 2000);
-    }).catch(() => {});
+    const checkAndShowNotifModal = async () => {
+      try {
+        const { status } = await Notifications.getPermissionsAsync();
+        if (status === 'undetermined') {
+          const timer = setTimeout(() => setNotifPermModalVisible(true), 2000);
+          return () => clearTimeout(timer);
+        }
+      } catch (_e) {}
+    };
+    checkAndShowNotifModal();
   }, []);
 
-  useEffect(() => {
-    if (user || guestWelcomeDismissedRef.current) return;
-    AsyncStorage.getItem('guest_welcome_v1').then(val => {
-      if (!val) setTimeout(() => { if (!guestWelcomeDismissedRef.current) setGuestWelcomeVisible(true); }, 600);
-    }).catch(() => {});
-  }, [user]);
-
-  const handleGuestWelcomeDismiss = useCallback(() => {
-    guestWelcomeDismissedRef.current = true;
-    setGuestWelcomeVisible(false);
-    AsyncStorage.setItem('guest_welcome_v1', 'shown').catch(() => {});
-  }, []);
   const handleAllowNotifications = useCallback(async () => {
     setNotifPermModalVisible(false);
     try {
@@ -4105,7 +4092,6 @@ export default function HomeScreen() {
               }}
             />
 
-            <GuestWelcomeModal visible={guestWelcomeVisible} onDismiss={handleGuestWelcomeDismiss} messageLimit={GUEST_MESSAGE_LIMIT} />
             {imageAnalyzingOverlay ? (
               <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.78)', zIndex: 9998, alignItems: 'center', justifyContent: 'center' }}>
                 <BlurView intensity={70} tint="dark" style={StyleSheet.absoluteFill} />
