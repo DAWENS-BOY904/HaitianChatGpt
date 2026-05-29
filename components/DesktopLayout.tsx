@@ -1540,3 +1540,4 @@ const dls = StyleSheet.create({
   },
   mfaBtn: { marginTop: 12, borderWidth: 1, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8, alignSelf: 'flex-start' },
 });
+in desktop version add account delete function real if you delete the account eben if you in movile its must delete and add paswword change and all function in home page must match in desktop function connect them create real call chat edg function in desktop.
