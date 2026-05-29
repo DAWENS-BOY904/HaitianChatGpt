@@ -959,25 +959,17 @@ export default function SettingsScreen() {
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingTop: insets.top + 16, paddingBottom: 16, paddingHorizontal: 20 }}>
         <Text style={{ fontSize: 17, fontWeight: '700', color: primaryText }}>Settings</Text>
         <TouchableOpacity
-          style={{ position: 'absolute', right: 16, top: insets.top + 8, width: 40, height: 40, borderRadius: 20, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' }}
+          style={{ position: 'absolute', right: 16, top: insets.top + 8, width: 36, height: 36, borderRadius: 18, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' }}
           onPress={() => router.back()}
-          activeOpacity={0.75}
+          activeOpacity={0.7}
         >
-          {Platform.OS === 'ios' ? (
-            <BlurView
-              intensity={isDark ? 88 : 72}
-              tint={isDark ? 'chromeMaterialDark' : 'chromeMaterial'}
-              style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}
-            >
-              <View style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center', backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)' }}>
-                <Ionicons name="close" size={17} color={isDark ? '#FFFFFF' : '#000000'} />
-              </View>
-            </BlurView>
-          ) : (
-            <View style={{ width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: isDark ? 'rgba(80,80,88,0.82)' : 'rgba(220,220,228,0.82)', borderWidth: StyleSheet.hairlineWidth, borderColor: isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.12)' }}>
-              <Ionicons name="close" size={17} color={isDark ? '#FFFFFF' : '#000000'} />
-            </View>
-          )}
+          <BlurView
+            intensity={isDark ? 80 : 60}
+            tint={isDark ? 'dark' : 'light'}
+            style={{ width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}
+          >
+            <Ionicons name="close" size={17} color={isDark ? '#FFFFFF' : '#000000'} />
+          </BlurView>
         </TouchableOpacity>
       </View>
 
@@ -1141,15 +1133,10 @@ export default function SettingsScreen() {
 
       {/* EDIT PROFILE MODAL */}
       <Modal visible={editModalVisible} transparent animationType="slide" onRequestClose={() => setEditModalVisible(false)}>
-        <View style={{ flex: 1, backgroundColor: 'transparent' }}>
-          {Platform.OS === 'ios' ? (
-            <BlurView intensity={isDark ? 55 : 40} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
-          ) : (
-            <View style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.35)' }]} />
-          )}
+        <View style={{ flex: 1, backgroundColor: isDark ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.3)' }}>
           <TouchableOpacity style={{ flex: 0.25 }} activeOpacity={1} onPress={() => setEditModalVisible(false)} />
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 0.75, maxHeight: 560 }}>
-            <View style={{ flex: 1, borderTopLeftRadius: 28, borderTopRightRadius: 28, overflow: 'hidden', backgroundColor: isDark ? 'rgba(28,28,32,0.98)' : 'rgba(248,248,252,0.98)', borderWidth: StyleSheet.hairlineWidth, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)', shadowColor: '#000', shadowOffset: { width: 0, height: -8 }, shadowOpacity: isDark ? 0.5 : 0.15, shadowRadius: 24, elevation: 24 }}>
+            <View style={{ flex: 1, borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: 'hidden', backgroundColor: isDark ? '#1C1C1E' : '#F2F2F7' }}>
               <EditModalContent
                 isDark={isDark}
                 editPhoto={editPhoto}
@@ -1194,10 +1181,7 @@ export default function SettingsScreen() {
         <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: isDark ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.3)' }}>
           <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setPhotoPickerVisible(false)} />
           <View style={{ paddingHorizontal: 12, paddingBottom: insets.bottom + 8 }}>
-            <View style={{ borderRadius: 20, overflow: 'hidden', marginBottom: 10, backgroundColor: Platform.OS === 'ios' ? 'transparent' : cardBg }}>
-              {Platform.OS === 'ios' ? (
-                <BlurView intensity={isDark ? 85 : 72} tint={isDark ? 'chromeMaterialDark' : 'chromeMaterial'} style={StyleSheet.absoluteFill} />
-              ) : null}
+            <View style={{ borderRadius: 16, overflow: 'hidden', marginBottom: 10, backgroundColor: cardBg }}>
               <TouchableOpacity
                 style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 18, gap: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: divider }}
                 onPress={pickFromCamera} activeOpacity={0.7}
@@ -1214,12 +1198,9 @@ export default function SettingsScreen() {
               </TouchableOpacity>
             </View>
             <TouchableOpacity
-              style={{ borderRadius: 20, overflow: 'hidden', paddingVertical: 18, alignItems: 'center', backgroundColor: Platform.OS === 'ios' ? 'transparent' : cardBg }}
+              style={{ borderRadius: 16, overflow: 'hidden', backgroundColor: cardBg, paddingVertical: 18, alignItems: 'center' }}
               onPress={() => setPhotoPickerVisible(false)} activeOpacity={0.8}
             >
-              {Platform.OS === 'ios' ? (
-                <BlurView intensity={isDark ? 85 : 72} tint={isDark ? 'chromeMaterialDark' : 'chromeMaterial'} style={StyleSheet.absoluteFill} />
-              ) : null}
               <Text style={{ fontSize: 17, fontWeight: '600', color: primaryText }}>Cancel</Text>
             </TouchableOpacity>
           </View>
