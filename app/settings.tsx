@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+  import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -1272,3 +1272,4 @@ export default function SettingsScreen() {
     </View>
   );
 }
+please fix top right icon x button in dakr/lighr mode a real blur background never gray background its must be a full blur and also The photo upload limit check currently blocks at 5+ photos but the free plan limit should be configurable. Update the photo limit to properly enforce 5 photos per hour for free users, with a real countdown showing exact reset time in the PhotoLimitModal.
