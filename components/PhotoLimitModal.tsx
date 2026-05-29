@@ -333,4 +333,3 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
 });
-After the photo limit resets (1 hour after the oldest upload), trigger a local push notification that says 'Your photo upload limit has reset — you can now upload 5 more photos.
