@@ -871,8 +871,6 @@ serve(async function(req: Request) {
         return `File: ${sanitizeString(f.name)}\nType: ${sanitizeString(f.type)}\nContent:\n${content}`;
       }).join('\n\n---\n\n');
       aiMessages.push({ role: 'user', content: 'Here are the uploaded files for analysis:\n\n' + fileContext });
-      // Set thinkingMode to analyzing when files are present
-      console.log('[chat] File context added for', fileContents.length, 'file(s)');
     }
 
     // Handle different request types

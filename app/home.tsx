@@ -56,7 +56,6 @@ import { useFocusEffect } from '@react-navigation/native';
 import { BlurView } from 'expo-blur';
 import * as FileSystem from 'expo-file-system';
 import { SideMenu } from '../components/SideMenu';
-import { ThinkingIndicator } from '../components/ThinkingIndicator';
 import { GroupChatActionsMenu } from '../components/GroupChatActionsMenu';
 import { ReportGroupModal } from '../components/ReportGroupModal';
 import { ChatHistoryModal } from '../components/ChatHistoryModal';
@@ -88,7 +87,7 @@ import * as Haptics from 'expo-haptics';
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// ThinkingIndicator is now imported from components/ThinkingIndicator.tsx
+function ThinkingIndicator({completed,mode,onCancel,isGroupMode}:{userMessage?:string;completed:boolean;mode:'thinking'|'creating_image'|'analyzing'|'editing_image';onCancel?:()=>void;isGroupMode?:boolean}){const d0=useRef(new Animated.Value(0.3)).current,d1=useRef(new Animated.Value(0.3)).current,d2=useRef(new Animated.Value(0.3)).current;useEffect(()=>{const mk=(d:Animated.Value,delay:number)=>Animated.loop(Animated.sequence([Animated.delay(delay),Animated.timing(d,{toValue:1,duration:350,useNativeDriver:true}),Animated.timing(d,{toValue:0.3,duration:350,useNativeDriver:true})]));const a0=mk(d0,0),a1=mk(d1,180),a2=mk(d2,360);a0.start();a1.start();a2.start();return()=>{a0.stop();a1.stop();a2.stop();};},[]);const lbl=mode==='creating_image'?'Creating image':mode==='analyzing'?'Analyzing':mode==='editing_image'?'Editing image':isGroupMode?'Responding':'Thinking';if(completed)return<View style={{flexDirection:'row',alignItems:'center',paddingHorizontal:16,paddingVertical:8,gap:6}}><Ionicons name="checkmark-circle" size={16} color="#34C759"/><Text style={{color:'#34C759',fontSize:14,fontWeight:'500'}}>Done</Text></View>;return<View style={{flexDirection:'row',alignItems:'center',paddingHorizontal:16,paddingVertical:12,gap:10}}><View style={{flexDirection:'row',gap:4}}>{[d0,d1,d2].map((d,i)=><Animated.View key={i} style={{width:7,height:7,borderRadius:3.5,backgroundColor:'#10A37F',opacity:d}}/>)}</View><Text style={{color:'rgba(128,128,128,0.85)',fontSize:14}}>{lbl}...</Text>{onCancel?<TouchableOpacity onPress={onCancel} hitSlop={{top:8,bottom:8,left:8,right:8}}><View style={{width:24,height:24,borderRadius:12,backgroundColor:'rgba(128,128,128,0.12)',alignItems:'center',justifyContent:'center'}}><Ionicons name="stop" size={10} color="rgba(128,128,128,0.75)"/></View></TouchableOpacity>:null}</View>;}
 
 // ── Deep Researchs Progress Card  ──────────────────────────────────────────────
 const DeepResearchCard = memo(function DeepResearchCard({ step, label, done, colors }: { step: number; label: string; done: boolean; colors: any }) {
@@ -2107,8 +2106,7 @@ export default function HomeScreen() {
 
     const lowerText = (currentText || '').toLowerCase();
     const isImageIntent = ['create a logo', 'create logo', 'generate logo', 'make a logo', 'design a logo', 'generate a logo', 'make me a logo', 'create an image', 'create image', 'generate image', 'make an image', 'generate a photo', 'create a photo', 'make a photo', 'generate a picture', 'make a picture', 'create a picture', 'draw me a', 'draw me an', 'create art', 'generate art', 'make art', 'kreye logo', 'fe logo', 'fe imaj', 'kreye yon imaj', 'kreye imaj', 'fè logo', 'fè yon logo', 'fè imaj', 'fè yon imaj', 'créer un logo', 'générer une image', 'créer une image', 'crear un logo', 'generar una imagen'].some(kw => lowerText.includes(kw));
-    const hasDocOrVideo = currentMedia.some(m => m.type === 'document' || m.type === 'video');
-    setThinkingMode(isImageIntent ? 'creating_image' : hasDocOrVideo ? 'analyzing' : 'thinking');
+    setThinkingMode(isImageIntent ? 'creating_image' : 'thinking');
     setSending(true);
     setGenerating(true);
 
@@ -2155,18 +2153,6 @@ export default function HomeScreen() {
             fileContextStr += `\n\n[FILE ATTACHED: ${media.name || 'document'} (binary/unreadable)]`;
           }
         } else if (media.type === 'video') {
-          // Video: read as base64 so edge function can do frame-level analysis
-          try {
-            const videoBase64 = await FileSystem.readAsStringAsync(media.uri, { encoding: FileSystem.EncodingType.Base64 });
-            const preview = videoBase64.slice(0, 50000); // First 50KB of video data
-            filePayloadArr.push({
-              name: media.name || 'video.mp4',
-              type: media.mimeType || 'video/mp4',
-              content: preview,
-            });
-          } catch (_videoErr) {
-            filePayloadArr.push({ name: media.name || 'video.mp4', type: media.mimeType || 'video/mp4', content: '' });
-          }
           fileContextStr += `\n\n[VIDEO ATTACHED: ${media.name || 'video.mp4'}]`;
         }
       }

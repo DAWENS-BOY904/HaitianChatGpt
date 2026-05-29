@@ -88,33 +88,34 @@ async function openInApp(url: string): Promise<void> {
   }
 }
 
-// ── Theme-aware single dot indicator ─────────────────────────────────────────
-function ThemeDot({ isDark }: { isDark: boolean }) {
-  const pulse = useRef(new Animated.Value(0.65)).current;
+// ── Streaming dots indicator ──────────────────────────────────────────────────
+function StreamingDots() {
+  const dots = [
+    useRef(new Animated.Value(0.4)).current,
+    useRef(new Animated.Value(0.4)).current,
+    useRef(new Animated.Value(0.4)).current,
+  ];
   useEffect(() => {
-    const anim = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, { toValue: 1, duration: 600, useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 0.65, duration: 600, useNativeDriver: true }),
-      ])
+    const anims = dots.map((d, i) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(i * 140),
+          Animated.timing(d, { toValue: 1, duration: 280, useNativeDriver: true }),
+          Animated.timing(d, { toValue: 0.4, duration: 280, useNativeDriver: true }),
+          Animated.delay(400),
+        ])
+      )
     );
-    anim.start();
-    return () => anim.stop();
+    anims.forEach(a => a.start());
+    return () => anims.forEach(a => a.stop());
   }, []);
   return (
-    <Animated.View
-      style={{
-        width: 8, height: 8, borderRadius: 4,
-        backgroundColor: isDark ? '#FFFFFF' : '#000000',
-        opacity: pulse,
-      }}
-    />
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 6, paddingHorizontal: 2 }}>
+      {dots.map((d, i) => (
+        <Animated.View key={i} style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: '#999', opacity: d }} />
+      ))}
+    </View>
   );
-}
-
-// ── Streaming dots indicator (kept for legacy use) ─────────────────────────────
-function StreamingDots({ isDark }: { isDark?: boolean }) {
-  return <ThemeDot isDark={isDark ?? false} />;
 }
 
 // ── Streaming code block placeholder (shown while fence is open) ──────────────
@@ -705,40 +706,7 @@ export const MessageItem = memo(function MessageItem({
     setImageViewerVisible(true);
   }, []);
 
-  // ── Video preview card (for user-attached videos) ────────────────────────────
-function VideoPreviewCard({ name, isDark, colors }: { name: string; isDark: boolean; colors: any }) {
-  return (
-    <View style={{
-      flexDirection: 'row', alignItems: 'center',
-      backgroundColor: isDark ? 'rgba(255,107,53,0.12)' : 'rgba(255,107,53,0.08)',
-      borderRadius: 14, paddingHorizontal: 12, paddingVertical: 10,
-      gap: 10, maxWidth: 240, alignSelf: 'flex-end',
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: isDark ? 'rgba(255,107,53,0.35)' : 'rgba(255,107,53,0.25)',
-    }}>
-      {/* Play button circle */}
-      <View style={{
-        width: 44, height: 44, borderRadius: 22,
-        backgroundColor: '#FF6B35', alignItems: 'center', justifyContent: 'center',
-        shadowColor: '#FF6B35', shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.45, shadowRadius: 6, elevation: 4,
-      }}>
-        <Ionicons name="play" size={20} color="#FFF" style={{ marginLeft: 2 }} />
-      </View>
-      <View style={{ flex: 1, minWidth: 0 }}>
-        <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 13, fontWeight: '700' }} numberOfLines={1}>
-          {name || 'Video'}
-        </Text>
-        <Text style={{ color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.45)', fontSize: 11, marginTop: 2 }}>
-          Video file
-        </Text>
-      </View>
-      <Ionicons name="videocam" size={18} color="#FF6B35" />
-    </View>
-  );
-}
-
-// ── User message ──────────────────────────────────────────────────────────
+  // ── User message ──────────────────────────────────────────────────────────
   if (isUser) {
     if (containsSelfHarm(safeContent)) return <SafetyResponse />;
 
@@ -795,18 +763,14 @@ function VideoPreviewCard({ name, isDark, colors }: { name: string; isDark: bool
           ) : null}
 
           {fileAttachments.length > 0 ? (
-            <View style={{ alignSelf: 'flex-end', marginHorizontal: 16, marginBottom: cleanUserContent ? 6 : 0, gap: 6 }}>
+            <View style={{ alignSelf: 'flex-end', marginHorizontal: 16, marginBottom: cleanUserContent ? 6 : 0, gap: 5 }}>
               {fileAttachments.map((fa, fi) => {
-                const isVideo = fa.mimeType.includes('video') || fa.mimeType === 'video';
+                const isVideo = fa.mimeType.includes('video');
                 const isPdf = fa.mimeType.includes('pdf');
                 const isDoc = fa.mimeType.includes('doc') || fa.mimeType.includes('word');
                 const isSheet = fa.mimeType.includes('sheet') || fa.mimeType.includes('excel') || fa.mimeType.includes('csv');
-                // Video gets a special preview card
-                if (isVideo) {
-                  return <VideoPreviewCard key={`fa-${fi}`} name={fa.name} isDark={isDark} colors={colors} />;
-                }
-                const iconName: any = isPdf ? 'document-text' : isDoc ? 'document-text' : isSheet ? 'grid' : 'attach';
-                const iconColor = isPdf ? '#FF3B30' : isDoc ? '#007AFF' : isSheet ? '#34C759' : colors.primary;
+                const iconName: any = isVideo ? 'videocam' : isPdf ? 'document-text' : isDoc ? 'document-text' : isSheet ? 'grid' : 'attach';
+                const iconColor = isVideo ? '#FF6B35' : isPdf ? '#FF3B30' : isDoc ? '#007AFF' : isSheet ? '#34C759' : colors.primary;
                 const extRaw = fa.mimeType.split('/').pop() || 'file';
                 const ext = extRaw.replace('vnd.', '').slice(0, 8).toUpperCase();
                 return (
@@ -865,10 +829,13 @@ function VideoPreviewCard({ name, isDark, colors }: { name: string; isDark: bool
     <>
       <View style={assistantStyles.container}>
         <View style={assistantStyles.inner}>
-          {/* Thinking dot — shown only when generating with no content yet */}
+          {/* Show thinking dots only when generating with no content yet */}
           {isGenerating && !safeContent ? (
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8, gap: 8, paddingVertical: 4 }}>
-              <ThemeDot isDark={isDark} />
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8, gap: 8 }}>
+              <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: isDark ? '#FFFFFF' : '#000000', alignItems: 'center', justifyContent: 'center' }}>
+                <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: isDark ? '#000000' : '#FFFFFF' }} />
+              </View>
+              <StreamingDots />
             </View>
           ) : null}
 
