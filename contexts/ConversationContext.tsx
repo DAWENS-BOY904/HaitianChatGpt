@@ -467,21 +467,9 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
         const supabaseUrlEnv = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
         const edgeFunctionUrl = `${supabaseUrlEnv}/functions/v1/chat`;
 
-        // Generate a proper UUID v4 for the guest session so the edge function accepts it
-        const guestConvUUID = (() => {
-          try {
-            if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
-          } catch (_e) {}
-          // Fallback UUID v4 generator
-          return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-            const r = Math.random() * 16 | 0;
-            return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
-          });
-        })();
-
         const guestBody: any = {
           messages: contextMessages,
-          conversationId: guestConvUUID,
+          conversationId: `guest-${Date.now()}`,
           aiModel: aiModel || 'google-gemini',
         };
         // Pass base64 image for AI vision even in guest mode
