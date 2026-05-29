@@ -1,41 +1,47 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { Platform } from 'react-native';
 
-export type NetworkQuality = 'none' | 'slow' | 'good';
+interface NetworkStatus {
+  isConnected: boolean;
+  isChecking: boolean;
+}
 
-export function useNetworkStatus() {
+export function useNetworkStatus(): NetworkStatus {
   const [isConnected, setIsConnected] = useState(true);
-  const [quality, setQuality] = useState<NetworkQuality>('good');
-
-  const checkConnection = useCallback(async () => {
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 4000);
-      const start = Date.now();
-      const res = await fetch('https://www.google.com/generate_204', {
-        method: 'HEAD',
-        cache: 'no-cache',
-        signal: controller.signal,
-      });
-      clearTimeout(timeout);
-      const rtt = Date.now() - start;
-      if (res.status < 500) {
-        setIsConnected(true);
-        setQuality(rtt > 2000 ? 'slow' : 'good');
-      } else {
-        setIsConnected(false);
-        setQuality('none');
-      }
-    } catch {
-      setIsConnected(false);
-      setQuality('none');
-    }
-  }, []);
+  const [isChecking, setIsChecking] = useState(false);
+  const mountedRef = useRef(true);
 
   useEffect(() => {
-    checkConnection();
-    const interval = setInterval(checkConnection, 8000);
-    return () => clearInterval(interval);
-  }, [checkConnection]);
+    mountedRef.current = true;
 
-  return { isConnected, quality, checkConnection };
+    const check = async () => {
+      if (!mountedRef.current) return;
+      setIsChecking(true);
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 5000);
+        const res = await fetch('https://www.google.com/generate_204', {
+          method: 'HEAD',
+          cache: 'no-cache',
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
+        if (mountedRef.current) setIsConnected(res.status < 500);
+      } catch {
+        if (mountedRef.current) setIsConnected(false);
+      } finally {
+        if (mountedRef.current) setIsChecking(false);
+      }
+    };
+
+    check();
+    const interval = setInterval(check, 10000);
+
+    return () => {
+      mountedRef.current = false;
+      clearInterval(interval);
+    };
+  }, []);
+
+  return { isConnected, isChecking };
 }
