@@ -1,73 +1,133 @@
-// Powered by OnSpace.AI
 import { Tabs } from 'expo-router';
+import { Platform, Dimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Platform, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTheme } from '@/hooks/useTheme';
+import { useSettings } from '@/hooks/useSettings';
+import { useState, useEffect } from 'react';
 
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  const { isDark } = useTheme();
+  const { settings } = useSettings();
 
-  // Breakpoints
+  const [width, setWidth] = useState(Dimensions.get('window').width);
+  useEffect(() => {
+    const sub = Dimensions.addEventListener('change', ({ window }) => setWidth(window.width));
+    return () => sub.remove();
+  }, []);
+
   const isDesktop = width >= 1024;
-  const isTablet = width >= 768 && width < 1024;
+  const accentColor = settings?.accentColor || '#10A37F';
 
-  // Fixed width for desktop (centered), full width for tablet/mobile
-  const containerWidth = isDesktop ? 1024 : width;
+  const tabBarBg = isDark ? '#0a0a0a' : '#FFFFFF';
+  const borderColor = isDark ? '#1a1a1a' : '#E5E5EA';
+  const inactiveColor = isDark ? '#666666' : '#999999';
 
-  const tabBarStyle = {
-    position: isDesktop ? ('absolute' as const) : undefined,
-    width: containerWidth,
-    alignSelf: isDesktop ? 'center' as const : undefined,
-    height: Platform.select({
-      ios: insets.bottom + 60,
-      android: insets.bottom + 60,
-      default: 70,
-    }),
-    paddingTop: 8,
-    paddingBottom: Platform.select({
-      ios: insets.bottom + 8,
-      android: insets.bottom + 8,
-      default: 8,
-    }),
-    paddingHorizontal: isDesktop ? 32 : isTablet ? 24 : 16,
-    backgroundColor: '#0a0a0a',
-    borderTopWidth: 1,
-    borderTopColor: '#1a1a1a',
-    // iPad-specific: slightly larger touch targets
-    ...(isTablet && {
-      height: insets.bottom + 70,
-      paddingBottom: insets.bottom + 12,
-    }),
-  };
+  const tabBarHeight = Platform.select({
+    ios: insets.bottom + 56,
+    android: insets.bottom + 56,
+    default: 64,
+  });
 
-  // Adjust icon size for different form factors
-  const iconSize = isDesktop ? 26 : isTablet ? 24 : 22;
+  const tabBarPaddingBottom = Platform.select({
+    ios: insets.bottom + 4,
+    android: insets.bottom + 4,
+    default: 8,
+  });
+
+  if (isDesktop) {
+    return (
+      <Tabs
+        screenOptions={{
+          headerShown: false,
+          tabBarStyle: { display: 'none' },
+        }}
+      >
+        <Tabs.Screen name="index" options={{ title: 'Chat' }} />
+      </Tabs>
+    );
+  }
 
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarStyle,
-        tabBarActiveTintColor: '#10A37F',
-        tabBarInactiveTintColor: '#666',
-        tabBarLabelStyle: {
-          fontSize: isDesktop ? 13 : isTablet ? 12.5 : 12,
-          fontWeight: '500',
+        tabBarActiveTintColor: accentColor,
+        tabBarInactiveTintColor: inactiveColor,
+        tabBarStyle: {
+          backgroundColor: tabBarBg,
+          borderTopWidth: 1,
+          borderTopColor: borderColor,
+          height: tabBarHeight,
+          paddingTop: 6,
+          paddingBottom: tabBarPaddingBottom,
+          paddingHorizontal: 8,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: -2 },
+          shadowOpacity: isDark ? 0.3 : 0.06,
+          shadowRadius: 8,
+          elevation: 8,
         },
-        // iPad/desktop: show labels beside icons instead of below
-        tabBarLabelPosition: isTablet || isDesktop ? ('beside-icon' as const) : undefined,
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: '500',
+          marginTop: 2,
+          ...(Platform.OS === 'android' && { includeFontPadding: false }),
+        },
+        tabBarIconStyle: {
+          marginBottom: -2,
+        },
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Gallery',
+          title: 'Chat',
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons 
-              name={focused ? 'images' : 'images-outline'} 
-              size={iconSize} 
-              color={color} 
+            <Ionicons
+              name={focused ? 'chatbubble-ellipses' : 'chatbubble-ellipses-outline'}
+              size={24}
+              color={color}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="images-tab"
+        options={{
+          title: 'Images',
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons
+              name={focused ? 'images' : 'images-outline'}
+              size={24}
+              color={color}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="projects-tab"
+        options={{
+          title: 'Projects',
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons
+              name={focused ? 'folder' : 'folder-outline'}
+              size={24}
+              color={color}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="profile-tab"
+        options={{
+          title: 'Profile',
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons
+              name={focused ? 'person-circle' : 'person-circle-outline'}
+              size={24}
+              color={color}
             />
           ),
         }}
