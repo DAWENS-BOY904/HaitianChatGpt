@@ -1,2 +1,5 @@
+import { Redirect } from 'expo-router';
 
-fix this page
+export default function TabsLayout() {
+  return <Redirect href="/home" />;
+}
