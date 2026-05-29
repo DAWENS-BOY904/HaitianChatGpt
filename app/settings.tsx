@@ -1259,3 +1259,4 @@ export default function SettingsScreen() {
     </View>
   );
 }
+hello ai can you please the top right x icon the background must be blur expo.
