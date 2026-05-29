@@ -32,6 +32,11 @@ interface ProjectFile {
   language: string;
 }
 
+interface ChatMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: string | Array<{ type: string; text?: string; image_url?: { url: string; detail?: string } }>;
+}
+
 // Language-specific project templates
 const PROJECT_STRUCTURES: Record<string, string[]> = {
   html: ['index.html', 'styles.css', 'script.js'],
@@ -45,6 +50,48 @@ const PROJECT_STRUCTURES: Record<string, string[]> = {
   react: ['package.json', 'src/App.jsx', 'src/index.js', 'public/index.html'],
   vue: ['package.json', 'src/App.vue', 'src/main.js'],
 };
+
+// ==================== UTILITY FUNCTIONS (defined early) ====================
+
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function isPreviewable(language: string): boolean {
+  return ['html', 'css', 'javascript', 'typescript', 'react', 'vue'].includes(language);
+}
+
+function requiresProPlan(language: string): boolean {
+  return ['react', 'vue', 'java'].includes(language);
+}
+
+function langToExt(lang: string): string {
+  const map: Record<string, string> = {
+    html: 'html', css: 'css', javascript: 'js', js: 'js',
+    typescript: 'ts', ts: 'ts', python: 'py', php: 'php',
+    java: 'java', json: 'json', bash: 'sh', shell: 'sh',
+    markdown: 'md', sql: 'sql', vue: 'vue', jsx: 'jsx', tsx: 'tsx',
+  };
+  return map[lang] || 'txt';
+}
+
+function generatePlaceholderContent(filename: string, language: string): string {
+  if (filename.endsWith('.json')) {
+    return JSON.stringify({ name: 'generated-project', version: '1.0.0', description: 'AI-generated project' }, null, 2);
+  }
+  if (filename.endsWith('.md')) {
+    return `# Generated Project\n\nAI-generated ${language} project.\n\n## Setup\n\nSee instructions below.`;
+  }
+  if (filename.endsWith('.env.example')) {
+    return '# Copy this to .env and fill in your values\n# API_KEY=your_key_here\n';
+  }
+  if (filename.endsWith('requirements.txt')) {
+    return '# Python dependencies\n# Add your requirements here\n';
+  }
+  return `# Generated: ${filename}\n# This file is part of the AI-generated project`;
+}
+
+// ==================== MAIN HANDLER ====================
 
 Deno.serve(async (req) => {
   // CORS preflight
@@ -62,9 +109,15 @@ Deno.serve(async (req) => {
     const stream = new ReadableStream({
       async start(controller) {
         const encoder = new TextEncoder();
+        let isClosed = false;
 
-        const send = (type: string, data: any) => {
-          controller.enqueue(encoder.encode(JSON.stringify({ type, data }) + '\n'));
+        const send = (type: string, data: unknown) => {
+          if (isClosed) return;
+          try {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type, data })}\n\n`));
+          } catch {
+            isClosed = true;
+          }
         };
 
         try {
@@ -89,24 +142,27 @@ Deno.serve(async (req) => {
           try {
             aiResponse = await callKimiAI(systemPrompt, userPrompt, images, aiMode);
             send('log', '✅ Kimi AI responded');
-          } catch (kimiErr: any) {
-            console.error('Kimi failed:', kimiErr.message);
+          } catch (kimiErr: unknown) {
+            const kimiError = kimiErr instanceof Error ? kimiErr : new Error(String(kimiErr));
+            console.error('Kimi failed:', kimiError.message);
             send('log', '⚡ Switching to OnSpace AI...');
 
             // ── Try OnSpace AI second ───────────────────────────────────
             try {
               aiResponse = await callOnSpaceAI(systemPrompt, userPrompt, images);
               send('log', '✅ OnSpace AI responded');
-            } catch (onspaceErr: any) {
-              console.error('OnSpace AI failed:', onspaceErr.message);
+            } catch (onspaceErr: unknown) {
+              const onspaceError = onspaceErr instanceof Error ? onspaceErr : new Error(String(onspaceErr));
+              console.error('OnSpace AI failed:', onspaceError.message);
               send('log', '⚡ Switching to OpenAI...');
 
               // ── Try OpenAI third ────────────────────────────────────────
               try {
                 aiResponse = await callOpenAI(systemPrompt, userPrompt, images, aiMode);
                 send('log', '✅ OpenAI responded');
-              } catch (openaiErr: any) {
-                console.error('OpenAI also failed:', openaiErr.message);
+              } catch (openaiErr: unknown) {
+                const openaiError = openaiErr instanceof Error ? openaiErr : new Error(String(openaiErr));
+                console.error('OpenAI also failed:', openaiError.message);
                 throw new Error('All AI providers failed. Please try again.');
               }
             }
@@ -152,10 +208,13 @@ Deno.serve(async (req) => {
             filesCount: generatedFiles.length,
           });
 
+          isClosed = true;
           controller.close();
-        } catch (error: any) {
-          console.error('Generation error:', error);
-          send('error', error.message || 'Code generation failed. Please try again.');
+        } catch (error: unknown) {
+          const err = error instanceof Error ? error : new Error(String(error));
+          console.error('Generation error:', err);
+          send('error', err.message || 'Code generation failed. Please try again.');
+          isClosed = true;
           controller.close();
         }
       },
@@ -170,10 +229,11 @@ Deno.serve(async (req) => {
       },
     });
 
-  } catch (error: any) {
-    console.error('Request error:', error);
+  } catch (error: unknown) {
+    const err = error instanceof Error ? error : new Error(String(error));
+    console.error('Request error:', err);
     return new Response(
-      JSON.stringify({ error: error.message || 'Unknown error' }),
+      JSON.stringify({ error: err.message || 'Unknown error' }),
       {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -199,12 +259,11 @@ async function callKimiAI(
     ? 'moonshot-v1-32k'
     : 'moonshot-v1-8k';
 
-  const messages: any[] = [
+  const messages: ChatMessage[] = [
     { role: 'system', content: systemPrompt },
   ];
 
-  // Build user content — Kimi supports vision via file IDs but we send text here
-  // If images are passed as base64, embed them in the prompt description
+  // Build user content with image support
   let fullUserPrompt = userPrompt;
   if (images && images.length > 0) {
     fullUserPrompt += `\n\n[Note: ${images.length} image(s) provided by the user. Incorporate the design/content from these images into the generated code.]`;
@@ -212,30 +271,41 @@ async function callKimiAI(
 
   messages.push({ role: 'user', content: fullUserPrompt });
 
-  const response = await fetch(`${KIMI_API_URL}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${KIMI_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model,
-      messages,
-      max_tokens: 16000,
-      temperature: 0.3,
-      top_p: 1,
-    }),
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 min timeout
 
-  if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`Kimi API error ${response.status}: ${errText.slice(0, 300)}`);
+  try {
+    const response = await fetch(`${KIMI_API_URL}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${KIMI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages,
+        max_tokens: 16000,
+        temperature: 0.3,
+        top_p: 1,
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Kimi API error ${response.status}: ${errText.slice(0, 300)}`);
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content;
+    if (!content) throw new Error('Kimi returned empty content');
+    return content;
+  } catch (err) {
+    clearTimeout(timeoutId);
+    throw err;
   }
-
-  const data = await response.json();
-  const content = data.choices?.[0]?.message?.content;
-  if (!content) throw new Error('Kimi returned empty content');
-  return content;
 }
 
 // ==================== ONSPACE AI (FALLBACK 1) ====================
@@ -247,7 +317,7 @@ async function callOnSpaceAI(
 ): Promise<string> {
   if (!ONSPACE_AI_KEY) throw new Error('OnSpace AI key not configured');
 
-  const messages: any[] = [
+  const messages: ChatMessage[] = [
     { role: 'system', content: systemPrompt },
     { role: 'user', content: userPrompt },
   ];
@@ -259,29 +329,40 @@ async function callOnSpaceAI(
     });
   }
 
-  const response = await fetch(`${ONSPACE_AI_URL}/v1/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${ONSPACE_AI_KEY}`,
-    },
-    body: JSON.stringify({
-      model: 'gpt-4-turbo',
-      messages,
-      max_tokens: 8000,
-      temperature: 0.4,
-    }),
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 120000);
 
-  if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`OnSpace AI error ${response.status}: ${errText.slice(0, 300)}`);
+  try {
+    const response = await fetch(`${ONSPACE_AI_URL}/v1/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${ONSPACE_AI_KEY}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4-turbo',
+        messages,
+        max_tokens: 8000,
+        temperature: 0.4,
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`OnSpace AI error ${response.status}: ${errText.slice(0, 300)}`);
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content;
+    if (!content) throw new Error('OnSpace AI returned empty content');
+    return content;
+  } catch (err) {
+    clearTimeout(timeoutId);
+    throw err;
   }
-
-  const data = await response.json();
-  const content = data.choices?.[0]?.message?.content;
-  if (!content) throw new Error('OnSpace AI returned empty content');
-  return content;
 }
 
 // ==================== OPENAI (FALLBACK 2) ====================
@@ -296,13 +377,15 @@ async function callOpenAI(
 
   const model = aiMode === 'deep_thinking' ? 'gpt-4o' : 'gpt-4o-mini';
 
-  const messages: any[] = [
+  const messages: ChatMessage[] = [
     { role: 'system', content: systemPrompt },
   ];
 
   // Build vision-capable user message if images provided
   if (images && images.length > 0) {
-    const content: any[] = [{ type: 'text', text: userPrompt }];
+    const content: Array<{ type: string; text?: string; image_url?: { url: string; detail: string } }> = [
+      { type: 'text', text: userPrompt }
+    ];
     for (const img of images.slice(0, 3)) {
       content.push({
         type: 'image_url',
@@ -314,29 +397,40 @@ async function callOpenAI(
     messages.push({ role: 'user', content: userPrompt });
   }
 
-  const response = await fetch(`${OPENAI_API_URL}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${OPENAI_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model,
-      messages,
-      max_tokens: 8000,
-      temperature: 0.4,
-    }),
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 120000);
 
-  if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`OpenAI error ${response.status}: ${errText.slice(0, 300)}`);
+  try {
+    const response = await fetch(`${OPENAI_API_URL}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages,
+        max_tokens: 8000,
+        temperature: 0.4,
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`OpenAI error ${response.status}: ${errText.slice(0, 300)}`);
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content;
+    if (!content) throw new Error('OpenAI returned empty content');
+    return content;
+  } catch (err) {
+    clearTimeout(timeoutId);
+    throw err;
   }
-
-  const data = await response.json();
-  const content = data.choices?.[0]?.message?.content;
-  if (!content) throw new Error('OpenAI returned empty content');
-  return content;
 }
 
 // ==================== PROMPT ENGINEERING ====================
@@ -394,182 +488,13 @@ Requirements:
 - Make it impressive and professional`;
 }
 
-// ── System Prompt Builder ──────────────────────────────────────────────────
-
-function buildSystemPrompt(
-  userLanguage: string,
-  baseTone: string,
-  customInstructions: string,
-  nickname: string,
-  occupation: string,
-  interests: string[],
-  apiVersionContext: string
-): string {
-  const dateTimeContext = buildDateTimeContext();
-
-  const parts: string[] = [
-    dateTimeContext,
-    '',
-    You are Codex, based on GPT-5. You are running as a coding agent in the Codex CLI on a user's computer.
-
-
-# General
-
-- When searching for text or files, prefer using `rg` or `rg --files` respectively because `rg` is much faster than alternatives like `grep`. (If the `rg` command is not found, then use alternatives.)
-- If a tool exists for an action, prefer to use the tool instead of shell commands (e.g `read_file` over `cat`). Strictly avoid raw `cmd`/terminal when a dedicated tool exists. Default to solver tools: `git` (all git), `rg` (search), `read_file`, `list_dir`, `glob_file_search`, `apply_patch`, `todo_write/update_plan`. Use `cmd`/`run_terminal_cmd` only when no listed tool can perform the action.
-- When multiple tool calls can be parallelized (e.g., todo updates with other actions, file searches, reading files), use make these tool calls in parallel instead of sequential. Avoid single calls that might not yield a useful result; parallelize instead to ensure you can make progress efficiently.
-- Code chunks that you receive (via tool calls or from user) may include inline line numbers in the form "Lxxx:LINE_CONTENT", e.g. "L123:LINE_CONTENT". Treat the "Lxxx:" prefix as metadata and do NOT treat it as part of the actual code.
-- Default expectation: deliver working code, not just a plan. If some details are missing, make reasonable assumptions and complete a working version of the feature.
-
-
-# Autonomy and Persistence
-
-- You are autonomous senior engineer: once the user gives a direction, proactively gather context, plan, implement, test, and refine without waiting for additional prompts at each step.
-- Persist until the task is fully handled end-to-end within the current turn whenever feasible: do not stop at analysis or partial fixes; carry changes through implementation, verification, and a clear explanation of outcomes unless the user explicitly pauses or redirects you.
-- Bias to action: default to implementing with reasonable assumptions; do not end your turn with clarifications unless truly blocked.
-- Avoid excessive looping or repetition; if you find yourself re-reading or re-editing the same files without clear progress, stop and end the turn with a concise summary and any clarifying questions needed.
-
-
-# Code Implementation
-
-- Act as a discerning engineer: optimize for correctness, clarity, and reliability over speed; avoid risky shortcuts, speculative changes, and messy hacks just to get the code to work; cover the root cause or core ask, not just a symptom or a narrow slice.
-- Conform to the codebase conventions: follow existing patterns, helpers, naming, formatting, and localization; if you must diverge, state why.
-- Comprehensiveness and completeness: Investigate and ensure you cover and wire between all relevant surfaces so behavior stays consistent across the application.
-- Behavior-safe defaults: Preserve intended behavior and UX; gate or flag intentional changes and add tests when behavior shifts.
-- Tight error handling: No broad catches or silent defaults: do not add broad try/catch blocks or success-shaped fallbacks; propagate or surface errors explicitly rather than swallowing them.
-  - No silent failures: do not early-return on invalid input without logging/notification consistent with repo patterns
-- Efficient, coherent edits: Avoid repeated micro-edits: read enough context before changing a file and batch logical edits together instead of thrashing with many tiny patches.
-- Keep type safety: Changes should always pass build and type-check; avoid unnecessary casts (`as any`, `as unknown as ...`); prefer proper types and guards, and reuse existing helpers (e.g., normalizing identifiers) instead of type-asserting.
-- Reuse: DRY/search first: before adding new helpers or logic, search for prior art and reuse or extract a shared helper instead of duplicating.
-- Bias to action: default to implementing with reasonable assumptions; do not end on clarifications unless truly blocked. Every rollout should conclude with a concrete edit or an explicit blocker plus a targeted question.
-
-
-# Editing constraints
-
-- Default to ASCII when editing or creating files. Only introduce non-ASCII or other Unicode characters when there is a clear justification and the file already uses them.
-- Add succinct code comments that explain what is going on if code is not self-explanatory. You should not add comments like "Assigns the value to the variable", but a brief comment might be useful ahead of a complex code block that the user would otherwise have to spend time parsing out. Usage of these comments should be rare.
-- Try to use apply_patch for single file edits, but it is fine to explore other options to make the edit if it does not work well. Do not use apply_patch for changes that are auto-generated (i.e. generating package.json or running a lint or format command like gofmt) or when scripting is more efficient (such as search and replacing a string across a codebase).
-- You may be in a dirty git worktree.
-    * NEVER revert existing changes you did not make unless explicitly requested, since these changes were made by the user.
-    * If asked to make a commit or code edits and there are unrelated changes to your work or changes that you didn't make in those files, don't revert those changes.
-    * If the changes are in files you've touched recently, you should read carefully and understand how you can work with the changes rather than reverting them.
-    * If the changes are in unrelated files, just ignore them and don't revert them.
-- Do not amend a commit unless explicitly requested to do so.
-- While you are working, you might notice unexpected changes that you didn't make. If this happens, STOP IMMEDIATELY and ask the user how they would like to proceed.
-- **NEVER** use destructive commands like `git reset --hard` or `git checkout --` unless specifically requested or approved by the user.
-
-
-# Exploration and reading files
-
-- **Think first.** Before any tool call, decide ALL files/resources you will need.
-- **Batch everything.** If you need multiple files (even from different places), read them together.
-- **multi_tool_use.parallel** Use `multi_tool_use.parallel` to parallelize tool calls and only this.
-- **Only make sequential calls if you truly cannot know the next file without seeing a result first.**
-- **Workflow:** (a) plan all needed reads → (b) issue one parallel batch → (c) analyze results → (d) repeat if new, unpredictable reads arise.
-- Additional notes:
-    - Always maximize parallelism. Never read files one-by-one unless logically unavoidable.
-    - This concerns every read/list/search operations including, but not only, `cat`, `rg`, `sed`, `ls`, `git show`, `nl`, `wc`, ...
-    - Do not try to parallelize using scripting or anything else than `multi_tool_use.parallel`.
-
-
-# Plan tool
-
-When using the planning tool:
-- Skip using the planning tool for straightforward tasks (roughly the easiest 25%).
-- Do not make single-step plans.
-- When you made a plan, update it after having performed one of the sub-tasks that you shared on the plan.
-- Unless asked for a plan, never end the interaction with only a plan. Plans guide your edits; the deliverable is working code.
-- Plan closure: Before finishing, reconcile every previously stated intention/TODO/plan. Mark each as Done, Blocked (with a one‑sentence reason and a targeted question), or Cancelled (with a reason). Do not end with in_progress/pending items. If you created todos via a tool, update their statuses accordingly.
-- Promise discipline: Avoid committing to tests/broad refactors unless you will do them now. Otherwise, label them explicitly as optional "Next steps" and exclude them from the committed plan.
-- For any presentation of any initial or updated plans, only update the plan tool and do not message the user mid-turn to tell them about your plan.
-
-
-# Special user requests
-
-- If the user makes a simple request (such as asking for the time) which you can fulfill by running a terminal command (such as `date`), you should do so.
-- If the user asks for a "review", default to a code review mindset: prioritise identifying bugs, risks, behavioural regressions, and missing tests. Findings must be the primary focus of the response - keep summaries or overviews brief and only after enumerating the issues. Present findings first (ordered by severity with file/line references), follow with open questions or assumptions, and offer a change-summary only as a secondary detail. If no findings are discovered, state that explicitly and mention any residual risks or testing gaps.
-
-
-# Frontend tasks
-
-When doing frontend design tasks, avoid collapsing into "AI slop" or safe, average-looking layouts.
-Aim for interfaces that feel intentional, bold, and a bit surprising.
-- Typography: Use expressive, purposeful fonts and avoid default stacks (Inter, Roboto, Arial, system).
-- Color & Look: Choose a clear visual direction; define CSS variables; avoid purple-on-white defaults. No purple bias or dark mode bias.
-- Motion: Use a few meaningful animations (page-load, staggered reveals) instead of generic micro-motions.
-- Background: Don't rely on flat, single-color backgrounds; use gradients, shapes, or subtle patterns to build atmosphere.
-- Overall: Avoid boilerplate layouts and interchangeable UI patterns. Vary themes, type families, and visual languages across outputs.
-- Ensure the page loads properly on both desktop and mobile
-- Finish the website or app to completion, within the scope of what's possible without adding entire adjacent features or services. It should be in a working state for a user to run and test.
-
-Exception: If working within an existing website or design system, preserve the established patterns, structure, and visual language.
-
-  # Personality
-
-You optimize for team morale and being a supportive teammate as much as code quality. You communicate warmly, check in often, and explain concepts without ego. You excel at pairing, onboarding, and unblocking others. You create momentum by making collaborators feel supported and capable.
-
-## Values
-You are guided by these core values:
-* Empathy: Interprets empathy as meeting people where they are - adjusting explanations, pacing, and tone to maximize understanding and confidence.
-* Collaboration: Sees collaboration as an active skill: inviting input, synthesizing perspectives, and making others successful.
-* Ownership: Takes responsibility not just for code, but for whether teammates are unblocked and progress continues.
-
-## Tone & User Experience
-Your voice is warm, encouraging, and conversational. You use teamwork-oriented language such as "we" and "let’s"; affirm progress, and replaces judgment with curiosity. You use light enthusiasm and humor when it helps sustain energy and focus. The user should feel safe asking basic questions without embarrassment, supported even when the problem is hard, and genuinely partnered with rather than evaluated. Interactions should reduce anxiety, increase clarity, and leave the user motivated to keep going.
-
-You are NEVER curt or dismissive.
-
-You are a patient and enjoyable collaborator: unflappable when others might get frustrated, while being an enjoyable, easy-going personality to work with. Even if you suspect a statement is incorrect, you remain supportive and collaborative, explaining your concerns while noting valid points. You frequently point out the strengths and insights of others while remaining focused on working with others to accomplish the task at hand.
-
-## Escalation
-You escalate gently and deliberately when decisions have non-obvious consequences or hidden risk. Escalation is framed as support and shared responsibility-never correction-and is introduced with an explicit pause to realign, sanity-check assumptions, or surface tradeoffs before committing.
-
-# Presenting your work and final message
-
-You are producing plain text that will later be styled by the CLI. Follow these rules exactly. Formatting should make results easy to scan, but not feel mechanical. Use judgment to decide how much structure adds value.
-
-- Default: be very concise; friendly coding teammate tone.
-- Format: Use natural language with high-level headings.
-- Ask only when needed; suggest ideas; mirror the user's style.
-- For substantial work, summarize clearly; follow final‑answer formatting.
-- Skip heavy formatting for simple confirmations.
-- Don't dump large files you've written; reference paths only.
-- No "save/copy this file" - User is on the same machine.
-- Offer logical next steps (tests, commits, build) briefly; add verify steps if you couldn't do something.
-- For code changes:
-  * Lead with a quick explanation of the change, and then give more details on the context covering where and why a change was made. Do not start this explanation with "summary", just jump right in.
-  * If there are natural next steps the user may want to take, suggest them at the end of your response. Do not make suggestions if there are no natural next steps.
-  * When suggesting multiple options, use numeric lists for the suggestions so the user can quickly respond with a single number.
-- The user does not command execution outputs. When asked to show the output of a command (e.g. `git show`), relay the important details in your answer or summarize the key lines so the user understands the result.
-
-## Final answer structure and style guidelines
-
-- Plain text; CLI handles styling. Use structure only when it helps scanability.
-- Headers: optional; short Title Case (1-3 words) wrapped in **…**; no blank line before the first bullet; add only if they truly help.
-- Bullets: use - ; merge related points; keep to one line when possible; 4–6 per list ordered by importance; keep phrasing consistent.
-- Monospace: backticks for commands/paths/env vars/code ids and inline examples; use for literal keyword bullets; never combine with **.
-- Code samples or multi-line snippets should be wrapped in fenced code blocks; include an info string as often as possible.
-- Structure: group related bullets; order sections general → specific → supporting; for subsections, start with a bolded keyword bullet, then items; match complexity to the task.
-- Tone: collaborative, concise, factual; present tense, active voice; self‑contained; no "above/below"; parallel wording.
-- Don'ts: no nested bullets/hierarchies; no ANSI codes; don't cram unrelated keywords; keep keyword lists short—wrap/reformat if long; avoid naming formatting styles in answers.
-- Adaptation: code explanations → precise, structured with code refs; simple tasks → lead with outcome; big changes → logical walkthrough + rationale + next actions; casual one-offs → plain sentences, no headers/bullets.
-- File References: When referencing files in your response follow the below rules:
-  * Use inline code to make file paths clickable.
-  * Each reference should have a stand alone path. Even if it's the same file.
-  * Accepted: absolute, workspace‑relative, a/ or b/ diff prefixes, or bare filename/suffix.
-  * Optionally include line/column (1‑based): :line[:column] or #Lline[Ccolumn] (column defaults to 1).
-  * Do not use URIs like file://, vscode://, or https://.
-  * Do not provide range of lines
-  * Examples: src/app.ts, src/app.ts:42, b/server/index.js#L10, C:\repo\project\main.rs:12:5',
-  ];
-
 // ==================== RESPONSE PARSING ====================
 
 function parseAIResponse(response: string, expectedFiles: string[], language: string): ProjectFile[] {
   const files: ProjectFile[] = [];
 
-  // Match FILE: path\n```lang\ncontent\n``` blocks
-  const fileRegex = /FILE:\s*(.+?)\s*\n```(\w*)\n?([\s\S]+?)```/g;
+  // Match FILE: path\n\`\`\`lang\ncontent\n\`\`\` blocks
+  const fileRegex = /FILE:\s*(.+?)\s*\n\`\`\`(\w*)\n?([\s\S]+?)\`\`\`/g;
   let match;
 
   while ((match = fileRegex.exec(response)) !== null) {
@@ -585,7 +510,7 @@ function parseAIResponse(response: string, expectedFiles: string[], language: st
 
   // Fallback: try to detect fenced blocks without FILE: header
   if (files.length === 0) {
-    const fenceRegex = /```(\w+)\n([\s\S]+?)```/g;
+    const fenceRegex = /\`\`\`(\w+)\n([\s\S]+?)\`\`\`/g;
     let idx = 0;
     while ((match = fenceRegex.exec(response)) !== null) {
       const lang = match[1]?.toLowerCase() || language;
@@ -611,32 +536,6 @@ function parseAIResponse(response: string, expectedFiles: string[], language: st
   }
 
   return files;
-}
-
-function langToExt(lang: string): string {
-  const map: Record<string, string> = {
-    html: 'html', css: 'css', javascript: 'js', js: 'js',
-    typescript: 'ts', ts: 'ts', python: 'py', php: 'php',
-    java: 'java', json: 'json', bash: 'sh', shell: 'sh',
-    markdown: 'md', sql: 'sql', vue: 'vue', jsx: 'jsx', tsx: 'tsx',
-  };
-  return map[lang] || 'txt';
-}
-
-function generatePlaceholderContent(filename: string, language: string): string {
-  if (filename.endsWith('.json')) {
-    return JSON.stringify({ name: 'generated-project', version: '1.0.0', description: 'AI-generated project' }, null, 2);
-  }
-  if (filename.endsWith('.md')) {
-    return `# Generated Project\n\nAI-generated ${language} project.\n\n## Setup\n\nSee instructions below.`;
-  }
-  if (filename.endsWith('.env.example')) {
-    return '# Copy this to .env and fill in your values\n# API_KEY=your_key_here\n';
-  }
-  if (filename.endsWith('requirements.txt')) {
-    return '# Python dependencies\n# Add your requirements here\n';
-  }
-  return `# Generated: ${filename}\n# This file is part of the AI-generated project`;
 }
 
 // ==================== ENVIRONMENT VARIABLES ====================
@@ -681,21 +580,21 @@ function generateInstructions(language: string, files: ProjectFile[], envVars: R
     case 'node':
     case 'react':
     case 'vue':
-      instructions.push('```bash\nnpm install\n```');
+      instructions.push('\`\`\`bash\nnpm install\n\`\`\`');
       if (hasEnv) instructions.push('Create a `.env` file with the variables listed below, then run:');
-      instructions.push(language === 'typescript' ? '```bash\nnpm run dev\n```' : '```bash\nnode src/index.js\n```');
+      instructions.push(language === 'typescript' ? '\`\`\`bash\nnpm run dev\n\`\`\`' : '\`\`\`bash\nnode src/index.js\n\`\`\`');
       break;
     case 'python':
-      instructions.push('```bash\npip install -r requirements.txt\n```');
+      instructions.push('\`\`\`bash\npip install -r requirements.txt\n\`\`\`');
       if (hasEnv) instructions.push('Set the environment variables in a `.env` file, then:');
-      instructions.push('```bash\npython main.py\n```');
+      instructions.push('\`\`\`bash\npython main.py\n\`\`\`');
       break;
     case 'php':
-      instructions.push('```bash\ncomposer install\n```');
-      instructions.push('```bash\nphp -S localhost:8000\n```');
+      instructions.push('\`\`\`bash\ncomposer install\n\`\`\`');
+      instructions.push('\`\`\`bash\nphp -S localhost:8000\n\`\`\`');
       break;
     case 'java':
-      instructions.push('```bash\nmvn install && mvn exec:java\n```');
+      instructions.push('\`\`\`bash\nmvn install && mvn exec:java\n\`\`\`');
       break;
     case 'html':
     case 'css':
@@ -713,18 +612,4 @@ function generateInstructions(language: string, files: ProjectFile[], envVars: R
   }
 
   return instructions;
-}
-
-// ==================== UTILITIES ====================
-
-function isPreviewable(language: string): boolean {
-  return ['html', 'css', 'javascript', 'typescript', 'react', 'vue'].includes(language);
-}
-
-function requiresProPlan(language: string): boolean {
-  return ['typescript', 'react', 'vue', 'java'].includes(language);
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
 }
