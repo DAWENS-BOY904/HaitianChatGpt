@@ -1,3 +1,4 @@
+
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
 import { callAI, detectContentType, generateImageSmart, searchImages } from '../_shared/ai-providers.ts';
@@ -209,190 +210,6 @@ function generateCrisisResponse(): string {
   ].join('\n');
 }
 
-// ── Language Detector ──────────────────────────────────────────────────────
-
-/**
- * Detect the primary language of a text string using character/word pattern matching.
- * Returns a human-readable label (e.g. "Haitian Creole", "French", "Spanish").
- */
-function detectLanguage(text: string): string {
-  if (!text || text.trim().length < 2) return 'English';
-  const t = text.toLowerCase().trim();
-
-  // ── Script-based detection (unambiguous) ──────────────────────────────
-  if (/[\u4e00-\u9fff\u3400-\u4dbf]/.test(text)) return 'Chinese';
-  if (/[\u3040-\u309f\u30a0-\u30ff]/.test(text)) return 'Japanese';
-  if (/[\uac00-\ud7af]/.test(text)) return 'Korean';
-  if (/[\u0600-\u06ff]/.test(text)) return 'Arabic';
-  if (/[\u0900-\u097f]/.test(text)) return 'Hindi';
-  if (/[\u0400-\u04ff]/.test(text)) return 'Russian';
-  if (/[\u0370-\u03ff]/.test(text)) return 'Greek';
-  if (/[\u0590-\u05ff]/.test(text)) return 'Hebrew';
-  if (/[\u0e00-\u0e7f]/.test(text)) return 'Thai';
-  if (/[\u0980-\u09ff]/.test(text)) return 'Bengali';
-  if (/[\u0c00-\u0c7f]/.test(text)) return 'Telugu';
-  if (/[\u0c80-\u0cff]/.test(text)) return 'Kannada';
-  if (/[\u0d00-\u0d7f]/.test(text)) return 'Malayalam';
-  if (/[\u0b80-\u0bff]/.test(text)) return 'Tamil';
-  if (/[\u1000-\u109f]/.test(text)) return 'Burmese';
-  if (/[\u1780-\u17ff]/.test(text)) return 'Khmer';
-  if (/[\u10a0-\u10ff]/.test(text)) return 'Georgian';
-  if (/[\u0530-\u058f]/.test(text)) return 'Armenian';
-
-  // ── Haitian Creole — check first, highest priority ──────────────────
-  const kreolWords = [
-    'mwen','nou','ou','ap','pou','nan','se','ki','sa','pa','lè','gen',
-    'fè','fe','ban','banm','kijan','kouman','kote','wè','kreyòl','ayiti',
-    'bonjou','bonswa','mersi','souple','toujou','pran','vini','peyi',
-    'alò','pitit','frè','sè','manman','papa','monchè','tchè','chèf',
-    'grenn','piti','rele','rele','konnen','pwen','twò','anpil','menm',
-    'jodi','demen','yè','kounye','depi','jouk','sou','avèk','epi','oswa',
-    'ditès','poukisa','kisa','kilès','konbyen','ki kote','ki lè',
-  ];
-  const kreolScore = kreolWords.filter(w => {
-    const re = new RegExp('\\b' + w + '\\b', 'i');
-    return re.test(t);
-  }).length;
-  if (kreolScore >= 2) return 'Haitian Creole';
-
-  // ── French ────────────────────────────────────────────────────────────
-  const frWords = [
-    'je','tu','il','elle','nous','vous','ils','elles','un','une','le','la',
-    'les','de','du','des','est','sont','avec','pour','dans','que','qui',
-    'au','aux','ce','cette','ces','mon','ton','son','ma','ta','sa',
-    'bonjour','merci','oui','non','comment','quand','pourquoi','parce',
-    'très','aussi','mais','donc','alors','comme','plus','moins','tout',
-    'faire','avoir','être','aller','venir','voir','savoir','pouvoir',
-    'vouloir','devoir','prendre','donner','parler','écrire','lire',
-  ];
-  const frScore = frWords.filter(w => new RegExp('\\b' + w + '\\b', 'i').test(t)).length;
-
-  // ── Spanish ───────────────────────────────────────────────────────────
-  const esWords = [
-    'yo','tu','el','ella','nosotros','ellos','un','una','el','la','los',
-    'las','de','del','en','con','por','para','que','no','si','como',
-    'muy','bien','hola','gracias','sí','bueno','cuando','dónde','cómo',
-    'quién','también','pero','esta','este','eso','puede','hacer','tener',
-    'ser','estar','ir','venir','ver','saber','poder','querer','dar',
-    'hablar','escribir','leer','decir','llevar','poner','salir','volver',
-  ];
-  const esScore = esWords.filter(w => new RegExp('\\b' + w + '\\b', 'i').test(t)).length;
-
-  // ── Portuguese ────────────────────────────────────────────────────────
-  const ptWords = [
-    'eu','você','ele','ela','nós','eles','um','uma','o','a','os','as',
-    'de','do','da','não','para','com','por','que','é','em','se',
-    'obrigado','oi','olá','sim','como','também','muito','bom','dia',
-    'fazer','ter','ser','estar','ir','vir','ver','saber','poder','querer',
-  ];
-  const ptScore = ptWords.filter(w => new RegExp('\\b' + w + '\\b', 'i').test(t)).length;
-
-  // ── German ────────────────────────────────────────────────────────────
-  const deWords = [
-    'ich','du','er','sie','wir','ihr','ein','eine','der','die','das',
-    'den','dem','und','oder','auch','nicht','ist','sind','haben','was',
-    'wie','wo','danke','bitte','hallo','guten','ja','nein','kann','will',
-    'muss','mit','von','zu','auf','für','aus','nach','bei','über','unter',
-  ];
-  const deScore = deWords.filter(w => new RegExp('\\b' + w + '\\b', 'i').test(t)).length;
-
-  // ── Italian ───────────────────────────────────────────────────────────
-  const itWords = [
-    'io','tu','lui','lei','noi','loro','un','una','il','la','i','le',
-    'del','della','non','con','per','che','ciao','grazie','prego','sì',
-    'no','come','dove','quando','anche','tanto','fare','avere','essere',
-  ];
-  const itScore = itWords.filter(w => new RegExp('\\b' + w + '\\b', 'i').test(t)).length;
-
-  // ── Turkish ───────────────────────────────────────────────────────────
-  const trWords = [
-    'ben','sen','o','biz','siz','onlar','ve','de','da','bu','var',
-    'yok','gibi','için','ile','merhaba','teşekkür','evet','hayır','nasıl',
-  ];
-  const trScore = trWords.filter(w => new RegExp('\\b' + w + '\\b', 'i').test(t)).length;
-
-  // ── Indonesian / Malay ────────────────────────────────────────────────
-  const idWords = [
-    'saya','kamu','dia','kami','kita','mereka','dan','atau','tidak',
-    'yang','ini','itu','di','ke','dari','untuk','dengan','halo','ya',
-  ];
-  const idScore = idWords.filter(w => new RegExp('\\b' + w + '\\b', 'i').test(t)).length;
-
-  // ── Vietnamese ────────────────────────────────────────────────────────
-  const viWords = [
-    'tôi','bạn','anh','chị','chúng','và','hoặc','không','của','là',
-    'có','trong','cho','với','xin','chào','cảm','ơn','vâng',
-  ];
-  const viScore = viWords.filter(w => new RegExp('\\b' + w + '\\b', 'i').test(t)).length;
-
-  // ── Dutch ─────────────────────────────────────────────────────────────
-  const nlWords = [
-    'ik','jij','hij','zij','wij','jullie','een','de','het','van',
-    'en','of','niet','met','voor','in','op','aan','bij','tot',
-    'hallo','dank','ja','nee','hoe','wat','waar','wanneer',
-  ];
-  const nlScore = nlWords.filter(w => new RegExp('\\b' + w + '\\b', 'i').test(t)).length;
-
-  // ── Polish ────────────────────────────────────────────────────────────
-  const plWords = [
-    'ja','ty','on','ona','my','wy','oni','i','nie','tak','jest','są',
-    'czy','jak','co','gdzie','kiedy','dzień','dobry','dziękuję','proszę',
-  ];
-  const plScore = plWords.filter(w => new RegExp('\\b' + w + '\\b', 'i').test(t)).length;
-
-  // ── Pick the winner ───────────────────────────────────────────────────
-  const scores: Array<[number, string]> = [
-    [kreolScore, 'Haitian Creole'],
-    [frScore,    'French'],
-    [esScore,    'Spanish'],
-    [ptScore,    'Portuguese'],
-    [deScore,    'German'],
-    [itScore,    'Italian'],
-    [trScore,    'Turkish'],
-    [idScore,    'Indonesian'],
-    [viScore,    'Vietnamese'],
-    [nlScore,    'Dutch'],
-    [plScore,    'Polish'],
-  ];
-  scores.sort((a, b) => b[0] - a[0]);
-  const [topScore, topLang] = scores[0];
-
-  // Need at least 2 matching words to be confident
-  if (topScore >= 2) return topLang;
-
-  // Default: English
-  return 'English';
-}
-
-/**
- * Build an absolute language-enforcement block placed at the very TOP
- * of the system prompt so the model reads it before everything else.
- */
-function buildLanguageEnforcement(lang: string): string {
-  return [
-    '╔══════════════════════════════════════════════════════╗',
-    '║     ABSOLUTE LANGUAGE RULE — HIGHEST PRIORITY         ║',
-    '╚══════════════════════════════════════════════════════╝',
-    '',
-    'DETECTED USER LANGUAGE THIS TURN: ' + lang,
-    '',
-    'YOU MUST RESPOND EXCLUSIVELY IN: ' + lang.toUpperCase(),
-    '',
-    'RULES (NON-NEGOTIABLE):',
-    '1. Match the EXACT language of the user message above.',
-    '2. NEVER switch to English or any other language unless the user explicitly asks.',
-    '3. Haitian Creole user -> respond 100% in Haitian Creole (Kreyol).',
-    '4. French user -> respond 100% in French.',
-    '5. Spanish user -> respond 100% in Spanish.',
-    '6. Any other language -> respond in that same language.',
-    '7. This rule overrides ALL other instructions, NO exceptions.',
-    '',
-    'YOUR ENTIRE RESPONSE MUST BE IN: ' + lang.toUpperCase(),
-    '══════════════════════════════════════════════════════',
-    '',
-  ].join('\n');
-}
-
 // ── Date/Time Context ──────────────────────────────────────────────────────
 
 function buildDateTimeContext(): string {
@@ -420,14 +237,23 @@ function buildDateTimeContext(): string {
   ].join('\n');
 }
 
+// ── Brave Web Search ───────────────────────────────────────────────────────
+
 // ── URL Content Fetcher ───────────────────────────────────────────────────────
 
+/**
+ * Detect URLs in the user message
+ */
 function extractUrls(text: string): string[] {
   const urlRegex = /https?:\/\/[^\s<>"']+/gi;
   const matches = text.match(urlRegex) || [];
+  // Filter out image URLs (those are handled separately)
   return matches.filter(u => !/\.(jpg|jpeg|png|gif|webp|svg)(\?|$)/i.test(u)).slice(0, 3);
 }
 
+/**
+ * Detect platform from URL
+ */
 function detectPlatform(url: string): 'tiktok' | 'youtube' | 'twitter' | 'instagram' | 'facebook' | 'web' {
   try {
     const host = new URL(url).hostname.toLowerCase();
@@ -440,6 +266,9 @@ function detectPlatform(url: string): 'tiktok' | 'youtube' | 'twitter' | 'instag
   return 'web';
 }
 
+/**
+ * Fetch TikTok metadata using oEmbed API
+ */
 async function fetchTikTokOEmbed(url: string): Promise<{ url: string; title: string; content: string; error?: string }> {
   try {
     const oembedUrl = `https://www.tiktok.com/oembed?url=${encodeURIComponent(url)}`;
@@ -467,6 +296,9 @@ async function fetchTikTokOEmbed(url: string): Promise<{ url: string; title: str
   }
 }
 
+/**
+ * Fetch YouTube metadata using oEmbed API
+ */
 async function fetchYouTubeOEmbed(url: string): Promise<{ url: string; title: string; content: string; error?: string }> {
   try {
     const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`;
@@ -494,6 +326,9 @@ async function fetchYouTubeOEmbed(url: string): Promise<{ url: string; title: st
   }
 }
 
+/**
+ * Fetch Twitter/X metadata using oEmbed API
+ */
 async function fetchTwitterOEmbed(url: string): Promise<{ url: string; title: string; content: string; error?: string }> {
   try {
     const oembedUrl = `https://publish.twitter.com/oembed?url=${encodeURIComponent(url)}&omit_script=true`;
@@ -504,6 +339,7 @@ async function fetchTwitterOEmbed(url: string): Promise<{ url: string; title: st
     if (!res.ok) throw new Error(`Twitter oEmbed ${res.status}`);
     const data = await res.json();
     const rawHtml = data.html || '';
+    // Strip HTML to get text content
     const textContent = rawHtml
       .replace(/<[^>]+>/g, ' ')
       .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
@@ -523,13 +359,18 @@ async function fetchTwitterOEmbed(url: string): Promise<{ url: string; title: st
   }
 }
 
+/**
+ * Fetch the readable content of a URL for AI analysis (with platform detection)
+ */
 async function fetchUrlContent(url: string): Promise<{ url: string; title: string; content: string; error?: string }> {
   const platform = detectPlatform(url);
 
+  // Platform-specific oEmbed/API handlers
   if (platform === 'tiktok') return fetchTikTokOEmbed(url);
   if (platform === 'youtube') return fetchYouTubeOEmbed(url);
   if (platform === 'twitter') return fetchTwitterOEmbed(url);
 
+  // For Instagram, Facebook — use generic scraping (they block bots, but try OpenGraph)
   if (platform === 'instagram' || platform === 'facebook') {
     try {
       const res = await fetch(url, {
@@ -559,6 +400,7 @@ async function fetchUrlContent(url: string): Promise<{ url: string; title: strin
     }
   }
 
+  // Generic web scraping with OpenGraph + full text extraction
   try {
     const response = await fetch(url, {
       headers: {
@@ -580,18 +422,23 @@ async function fetchUrlContent(url: string): Promise<{ url: string; title: strin
     }
 
     if (!contentType.includes('text/html') && !contentType.includes('text/plain')) {
+      // Non-HTML: return basic info
       return { url, title: '', content: `[File: ${contentType} at ${url}]` };
     }
 
     const html = await response.text();
 
+    // Extract OpenGraph metadata first (richest)
     const ogTitle = html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i)?.[1] || '';
     const ogDesc = html.match(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i)?.[1] || '';
     const ogSiteName = html.match(/<meta[^>]+property=["']og:site_name["'][^>]+content=["']([^"']+)["']/i)?.[1] || '';
     const ogImage = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)?.[1] || '';
+
+    // Fallback: HTML <title>
     const htmlTitle = html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1]?.trim() || '';
     const title = ogTitle || htmlTitle || url;
 
+    // Strip HTML tags and extract readable text
     const bodyText = html
       .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, ' ')
       .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, ' ')
@@ -608,6 +455,7 @@ async function fetchUrlContent(url: string): Promise<{ url: string; title: strin
       .trim()
       .slice(0, 8000);
 
+    // Build rich content block
     const parts = [
       ...(ogSiteName ? [`Site: ${ogSiteName}`] : []),
       `Title: ${title}`,
@@ -625,6 +473,9 @@ async function fetchUrlContent(url: string): Promise<{ url: string; title: strin
   }
 }
 
+/**
+ * Build URL context to inject into system prompt
+ */
 function buildUrlContext(results: Array<{ url: string; title: string; content: string; error?: string }>): string {
   const valid = results.filter(r => r.content && r.content.length > 10);
   if (valid.length === 0) return '';
@@ -649,6 +500,9 @@ function buildUrlContext(results: Array<{ url: string; title: string; content: s
   ].join('\n');
 }
 
+/**
+ * Detect if the query needs live web search
+ */
 function needsWebSearch(query: string): boolean {
   const lq = query.toLowerCase();
   const triggers = [
@@ -659,13 +513,19 @@ function needsWebSearch(query: string): boolean {
     'weather', 'temperature', 'forecast',
     'score', 'championship', 'tournament', 'match result',
     'live', 'trending', 'viral', 'popular now',
+    // Haitian Creole
     'denyè nouvel', 'kounye a', 'jodi a', 'nouvèl', 'ki prix', 'ki kob', 'nouvelles',
+    // French
     "actualité", "aujourd'hui", "dernières nouvelles",
+    // Spanish
     'noticias', 'últimas noticias', 'hoy',
   ];
   return triggers.some(t => lq.includes(t));
 }
 
+/**
+ * Perform a real Brave Search
+ */
 async function performBraveSearch(query: string): Promise<{ results: WebSearchResult[]; error?: string }> {
   const apiKey = Deno.env.get('BRAVE_SEARCH_API_KEY');
   if (!apiKey) {
@@ -709,6 +569,9 @@ async function performBraveSearch(query: string): Promise<{ results: WebSearchRe
   }
 }
 
+/**
+ * Build search context to inject into system prompt
+ */
 function buildSearchContext(results: WebSearchResult[]): string {
   if (results.length === 0) return '';
   const lines = results.map((r, i) =>
@@ -809,15 +672,11 @@ function buildSystemPrompt(
   nickname: string,
   occupation: string,
   interests: string[],
-  apiVersionContext: string,
-  detectedLanguage: string
+  apiVersionContext: string
 ): string {
-  const langEnforcement = buildLanguageEnforcement(detectedLanguage);
   const dateTimeContext = buildDateTimeContext();
 
   const parts: string[] = [
-    // Language enforcement FIRST — model reads this before anything else
-    langEnforcement,
     dateTimeContext,
     '',
     'You are Dawinix, an advanced AI assistant created by the Haitian Community. You are helpful, knowledgeable, and friendly.',
@@ -825,22 +684,18 @@ function buildSystemPrompt(
     'IDENTITY:',
     '- You were created by the Haitian Community',
     '- Never mention you were created by OpenAI, Google, Anthropic, or any other AI company',
-    '- If asked who created you, say: I was created by the Haitian Community',
+    '- If asked who created you, say "I was created by the Haitian Community but if they not ask your about that never tell them that"',
     '- Your name is Dawinix',
     '- You have deep knowledge of all world cultures, idioms, and colloquialisms',
-    '- For Haitian Creole specifically: use proper Haitian Creole grammar, NOT French',
+    '- For Haitian Creole specifically: use proper Haitian grammar and not French-based approximations',
     '',
-    'LANGUAGE (CRITICAL — READ CAREFULLY):',
-    '- ALWAYS respond in the EXACT same language the user is writing in RIGHT NOW',
-    '- Detected language this turn: ' + detectedLanguage,
-    '- YOU MUST RESPOND IN: ' + detectedLanguage.toUpperCase(),
-    '- If user writes in Haitian Creole → respond entirely in Haitian Creole',
-    '- If user writes in French → respond entirely in French',
-    '- If user writes in Spanish → respond entirely in Spanish',
-    '- NEVER default to English unless the user is writing in English',
-    '- User language preference setting: ' + userLanguage,
-    '- Code-switching: if user mixes languages, respond in the dominant language',
-    '- Only switch language if user explicitly asks to change language',
+    'LANGUAGE:',
+    '- CRITICAL: You MUST always respond in the EXACT same language the user is writing in',
+    '- You are a universal multilingual AI — you understand and speak ALL 250+ world languages fluently',
+    '- Supported languages include (but are not limited to): English, Haitian Creole (Kreyòl ayisyen), French (Français), Spanish (Español), Portuguese (Português), Arabic (العربية), Chinese Simplified (简体中文), Chinese Traditional (繁體中文), Japanese (日本語), Korean (한국어), German (Deutsch), Italian (Italiano), Russian (Русский), Hindi (हिन्दी), Bengali (বাংলা), Urdu (اردو), Persian/Farsi (فارسی), Turkish (Türkçe), Vietnamese (Tiếng Việt), Thai (ภาษาไทย), Indonesian (Bahasa Indonesia), Malay (Bahasa Melayu), Swahili (Kiswahili), Amharic (አማርኛ), Yoruba, Igbo, Zulu, Dutch (Nederlands), Polish (Polski), Ukrainian (Українська), Romanian (Română), Czech (Čeština), Hungarian (Magyar), Swedish (Svenska), Norwegian (Norsk), Danish (Dansk), Finnish (Suomi), Greek (Ελληνικά), Hebrew (עברית), Croatian (Hrvatski), Slovak (Slovenčina), Bulgarian (Български), Serbian (Српски), Catalan (Català), Tagalog/Filipino, Punjabi (ਪੰਜਾਬੀ), Tamil (தமிழ்), Telugu (తెలుగు), Kannada (ಕನ್ನಡ), Malayalam (മലയാളം), Sinhala (සිංහල), Burmese (မြန်မာဘာသာ), Khmer (ភាសាខ្មែរ), Lao (ລາວ), Mongolian (Монгол), Tibetan (བོད་སྐད་), Georgian (ქართული), Armenian (Հայերեն), Azerbaijani (Azərbaycan), Uzbek (Oʻzbek), Kazakh (Қазақша), Kyrgyz, Tajik, Turkmen, Pashto (پښتو), Kurdish (Kurdî), Somali, Hausa, Wolof, and hundreds more',
+    '- For real-time translation requests: translate accurately while preserving tone, context, and cultural nuance',
+    '- If user mixes languages (code-switching), respond naturally in the same mixed style example user talk in creole never put english only if its ask for english if user speak english and tell you another language still continue in the first language if says change language you must change it',
+    '- Current user language preference: ' + userLanguage,
     '',
     'TONE & STYLE:',
     '- Base tone: ' + baseTone,
@@ -869,7 +724,7 @@ function buildSystemPrompt(
     'MESSAGE FORMATTING RULES:',
     'When the user asks to write a message, compose a letter, write a love message, write an apology, etc.:',
     '- Return the message in a specially formatted block starting with [MESSAGE_CARD] and ending with [/MESSAGE_CARD]',
-    '- The message inside must be long, expressive, emotional, and beautifully written',
+    'p- The message inside must be long, expressive, emotional, and beautifully written',
     '- Use proper paragraphs, line breaks, and structure',
     '',
     'SOURCES FORMATTING RULES:',
@@ -883,6 +738,7 @@ function buildSystemPrompt(
     'IMAGE SEARCH RULES (CRITICAL):',
     '- When the user asks to find, search, show, or fetch images/photos, respond ONLY with: "Searching for images..."',
     '- DO NOT generate fake image URLs or [IMAGE_SEARCH_RESULTS] tags yourself',
+    '- DO NOT say "I cannot search for images" - the system backend WILL search Unsplash automatically',
     '- The real Unsplash image search happens server-side and will populate the UI automatically',
     '',
     'DOWNLOAD CARD RULES:',
@@ -924,38 +780,36 @@ function buildSystemPrompt(
     '- Create message for people in card message and also help user with school works real no demo always give real things code message other etc and create beatifull photo real code clear',
     '- When a user sends a URL (TikTok, YouTube, Instagram, Twitter/X, website, article, PDF): analyze the fetched content from the system context and give a real intelligent response. NEVER say you cannot access links when content is provided. NEVER generate fallback demo cards.',
     '- PROMPT_CARD RULES: When user asks for "a beautiful prompt", "give me a prompt", "write a prompt", "creative prompt", "generate a prompt", or any similar request for a reusable prompt/template, wrap the entire prompt content in [PROMPT_CARD]{"title":"...","subject":"...","body":"..."}[/PROMPT_CARD]. The body field must contain the full prompt text, properly formatted.',
-    '- MULTI_BLOCK RULES: When the user asks to see images AND wants explanation, use [IMAGE_SEARCH:query] tags inline. Format: write text, then [IMAGE_SEARCH:query], then more text. Max 3 image blocks per response.',
-    '- For TikTok links: Write your analysis text ONLY. At the very end, append ONE [TIKTOK_CARD] block. Format: [TIKTOK_CARD]{"title":"...","author":"...","thumbnail":"...","videoUrl":"..."}[/TIKTOK_CARD]',
-    '- CRITICAL: NEVER say "Here is the [TIKTOK_CARD]" in text. Card block at END only, on its own line.',
+    '- MULTI_BLOCK RULES: When the user asks to see images AND wants explanation (e.g. "show me example images of X and explain", "give me images with description"), you can emit multiple content blocks in sequence. Use [IMAGE_SEARCH:query] tags to trigger image searches inline within your text response. Format: write some text, then [IMAGE_SEARCH:your_search_query], then more text, then another [IMAGE_SEARCH:another_query] if needed. Max 3 image blocks per response. Each query should be specific and different.',
+    '- IMAGE_SEARCH inline example: If user says "show me 3 types of logos with examples" respond with text describing type 1, then [IMAGE_SEARCH:minimalist logo examples], then text about type 2, then [IMAGE_SEARCH:vintage logo design examples], then text about type 3, then [IMAGE_SEARCH:modern tech logo examples].',
+    '- For TikTok links: Write your analysis text ONLY. At the very end, on its own line, append ONE [TIKTOK_CARD] block with the actual fetched data. Format (one line, no description before or after): [TIKTOK_CARD]{"title":"...","author":"...","thumbnail":"...","videoUrl":"..."}[/TIKTOK_CARD]',
+    '- CRITICAL: NEVER say "Here is the [TIKTOK_CARD]" or describe the card format in your text. NEVER put the raw JSON card syntax inline in your sentences. The card block must appear only at the END of your response, on its own line, with NO surrounding description.',
     '- For YouTube: summarize the video title, channel, and what the video is about.',
     '- For Twitter/X: quote or summarize the tweet content and author.',
     '- For any link: always explain what the page/content is about based on the fetched data.',
     '- You must be sweet to users because they like that',
-    '- SUPPORT MESSAGE RULES: When user asks for a "support message", "help ticket", "complaint letter", "email to support", wrap the result in [PROMPT_CARD]{"title":"Support Message","subject":"...","body":"..."}[/PROMPT_CARD].',
+    '- SUPPORT MESSAGE RULES: When user asks for a "support message", "help ticket", "complaint letter", "email to support", or any message meant to be sent to a service/company, wrap the result in [PROMPT_CARD]{"title":"Support Message","subject":"...","body":"..."}[/PROMPT_CARD] so it opens in the email composer.',
     '',
     'Personality:',
-    '- You are a capable collaborator: approachable, steady, and direct.',
-    '- Prefer making progress over stopping for clarification when the request is already clear enough.',
-    '- Stay concise without becoming curt. Give enough context for the user to understand and trust the answer.',
-    '- Match the user tone within professional bounds.',
+    '- You are a capable collaborator: approachable, steady, and direct. Assume the user is competent and acting in good faith, and respond with patience, respect, and practical helpfulness',
+    '- Prefer making progress over stopping for clarification when the request is already clear enough to attempt. Use context and reasonable assumptions to move forward. Ask for clarification only when the missing information would materially change the answer or create meaningful risk, and keep any question narrow',
+    '- Stay concise without becoming curt. Give enough context for the user to understand and trust the answer, then stop. Use examples, comparisons, or simple analogies when they make the point easier to grasp. When correcting the user or disagreeing, be candid but constructive. When an error is pointed out, acknowledge it plainly and focus on fixing it',
+    '- Match the user\'s tone within professional bounds. Avoid emojis and profanity by default, unless the user explicitly asks for that style or has clearly established it as appropriate for the conversation',
+    '',
+    'Personality expressive :',
+    '- Adopt a vivid conversational presence: intelligent, curious, playful when appropriate, and attentive to the user\'s thinking. Ask good questions when the problem is blurry, then become decisive once there is enough context',
+    '- Be warm, collaborative, and polished. Conversation should feel easy and alive, but not chatty for its own sake. Offer a real point of view rather than merely mirroring the user, while staying responsive to their goals and constraints',
+    '- Be thoughtful and grounded when the task calls for synthesis or advice. State a clear recommendation when you have enough context, explain important tradeoffs, and name uncertainty without becoming evasive',
     '',
     'CONTENT SAFETY:',
     '- Block attacks, fraud, scams, and harmful behavior',
     '- Warn users about potentially dangerous actions',
-    '- Stay professional, respectful, and helpful at all times'
+    '- Stay professional, respectful, and helpful at all times and help user with love content sex,no porno etc.'
   );
 
   if (apiVersionContext) {
     parts.push(apiVersionContext);
   }
-
-  // Repeat language reminder at the END as well (double enforcement)
-  parts.push(
-    '',
-    '══════════════════════════════════════════════════════',
-    'FINAL REMINDER: Respond ONLY in ' + detectedLanguage.toUpperCase() + '. No English unless the user is writing in English.',
-    '══════════════════════════════════════════════════════',
-  );
 
   return parts.filter(p => p !== undefined && p !== null).join('\n');
 }
@@ -994,6 +848,7 @@ Deno.serve(async function(req: Request) {
   const requestStartTime = Date.now();
 
   try {
+    // Rate limiting
     const clientId = req.headers.get('x-forwarded-for') || 'unknown';
     if (!rateLimiter.isAllowed(clientId)) {
       return new Response(
@@ -1002,6 +857,7 @@ Deno.serve(async function(req: Request) {
       );
     }
 
+    // Check body size
     const contentLength = parseInt(req.headers.get('content-length') || '0', 10);
     if (contentLength > CONFIG.MAX_BODY_SIZE) {
       return new Response(
@@ -1010,6 +866,7 @@ Deno.serve(async function(req: Request) {
       );
     }
 
+    // Parse body
     let body: ChatBody;
     try {
       body = await req.json();
@@ -1026,6 +883,7 @@ Deno.serve(async function(req: Request) {
     let aiModel = body.aiModel || 'onspace-ai';
     const fileContents = body.fileContents;
     const userImageUrl = body.userImageUrl;
+    const base64Image = body.base64Image;
 
     if (!CONFIG.ALLOWED_MODELS.includes(aiModel)) {
       aiModel = 'onspace-ai';
@@ -1038,6 +896,7 @@ Deno.serve(async function(req: Request) {
       );
     }
 
+    // Validate messages
     const messages: ChatMessage[] = [];
     if (Array.isArray(rawMessages)) {
       for (const m of rawMessages) {
@@ -1094,8 +953,10 @@ Deno.serve(async function(req: Request) {
       );
     }
 
+    // Auth — allow both authenticated users and anon/guest users
     const authHeader = req.headers.get('Authorization');
     const token = authHeader ? authHeader.replace('Bearer ', '') : null;
+    // const anonKey = Deno.env.get('SUPABASE_ANON_KEY') || ''; // This line was declared but not used, causing a warning. Removed it.
     if (!token) {
       return new Response(
         JSON.stringify({ error: 'Authorization required' }),
@@ -1119,6 +980,7 @@ Deno.serve(async function(req: Request) {
       global: { headers: { Authorization: 'Bearer ' + token } }
     });
 
+    // Try authenticated user — if token is just the anon key (guest mode), skip user fetch
     const isGuestToken = token === supabaseAnonKey;
     let user: any = null;
     if (!isGuestToken) {
@@ -1134,6 +996,7 @@ Deno.serve(async function(req: Request) {
     }
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey);
 
+    // Fetch user settings (non-fatal, skip for guests)
     let userLanguage = 'English';
     let baseTone = 'balanced';
     let customInstructions = '';
@@ -1192,22 +1055,11 @@ Deno.serve(async function(req: Request) {
       });
     }
 
-    // ── Detect the ACTUAL language of the user message ─────────────────────
-    // Strip system tags before language detection so they don't skew results
-    const cleanedForLangDetect = lastUserContent
-      .replace(/\[SYSTEM[^\]]*\][\s\S]*?\n/gi, '')
-      .replace(/\[SYSTEM RULES:[\s\S]*?\]\n*/i, '')
-      .replace(/\[Replying to[^\]]*\]\n*/i, '')
-      .trim();
-    const detectedLanguage = detectLanguage(cleanedForLangDetect || lastUserContent);
-    console.log('[chat] Detected language:', detectedLanguage, '| User preference:', userLanguage);
-
     // Build system prompt
     const apiVersionContext = detectAndInjectApiVersions(lastUserContent);
     const detectionResult = detectContentType(lastUserContent);
     const fullSystemPrompt = buildSystemPrompt(
-      userLanguage, baseTone, customInstructions, nickname, occupation, interests,
-      apiVersionContext, detectedLanguage
+      userLanguage, baseTone, customInstructions, nickname, occupation, interests, apiVersionContext
     );
 
     // ── URL Content Fetching ──────────────────────────────────────────────────
@@ -1226,7 +1078,7 @@ Deno.serve(async function(req: Request) {
     if (
       detectionResult.type === 'text' &&
       !detectionResult.isImageTask &&
-      urlsInMessage.length === 0 &&
+      urlsInMessage.length === 0 && // skip web search when URLs were already fetched
       needsWebSearch(lastUserContent)
     ) {
       console.log('[chat] Web search triggered:', lastUserContent.slice(0, 80));
@@ -1235,12 +1087,14 @@ Deno.serve(async function(req: Request) {
       searchContext = buildSearchContext(webSearchResults);
     }
 
+    // Effective system prompt (URL context takes priority over search context)
     const effectiveSystemPrompt = urlContext
       ? fullSystemPrompt + urlContext
       : searchContext
       ? fullSystemPrompt + searchContext
       : fullSystemPrompt;
 
+    // Build AI messages array
     const aiMessages: Array<{ role: string; content: string | Array<{ type: string; text?: string; image_url?: { url: string } }> }> = [
       { role: 'system', content: effectiveSystemPrompt },
     ];
@@ -1313,19 +1167,23 @@ Deno.serve(async function(req: Request) {
       }
     }
 
+    // Add file contents (with size limit)
     if (fileContents && fileContents.length > 0) {
       const fileContext = fileContents.map(f => {
         const content = f.content.slice(0, CONFIG.MAX_FILE_CONTENT_SIZE);
         return `File: ${sanitizeString(f.name)}\nType: ${sanitizeString(f.type)}\nContent:\n${content}`;
       }).join('\n\n---\n\n');
       aiMessages.push({ role: 'user', content: 'Here are the uploaded files for analysis:\n\n' + fileContext });
+      // Set thinkingMode to analyzing when files are present
       console.log('[chat] File context added for', fileContents.length, 'file(s)');
     }
 
+    // Handle different request types
     let aiResponse: AIResponse;
     let imageUrl: string | undefined;
 
     if (detectionResult.type === 'search') {
+      // Unsplash image search
       const searchQuery = lastUserContent
         .replace(/\b(?:ban m(?:wen)?|banm|montre m(?:wen)?|cherche|search for|find|show me|look for|fetch|get|send|voye|search|chache|trouve|buscar|mostrar|encontrar)\b/gi, '')
         .replace(/\b(?:foto|fotos|photo|photos|imaj|image|images)\b/gi, '')
@@ -1356,6 +1214,7 @@ Deno.serve(async function(req: Request) {
         ], false);
       }
     } else if (detectionResult.isImageTask) {
+      // Image generation
       console.log('[chat] Image task detected, generating image for prompt:', lastUserContent.slice(0, 120));
       const imageResult = await generateImageSmart(lastUserContent, aiModel, supabaseAdmin);
 
@@ -1404,6 +1263,7 @@ Deno.serve(async function(req: Request) {
         }
       }
     } else if (webSearchResults.length > 0) {
+      // Web search enhanced response — also try OpenAI web search as supplement
       try {
         const openaiKey = Deno.env.get('OPENAI_API_KEY');
         if (openaiKey) {
@@ -1431,6 +1291,7 @@ Deno.serve(async function(req: Request) {
         // non-fatal
       }
       aiResponse = await callAI(aiModel, aiMessages, false);
+      // If AI did not append [SOURCES] block, append the real search results ourselves
       if (aiResponse && aiResponse.content && !aiResponse.content.includes('[SOURCES]')) {
         const sourcesJson = JSON.stringify(
           webSearchResults.map(r => ({
@@ -1443,6 +1304,7 @@ Deno.serve(async function(req: Request) {
         aiResponse.content = aiResponse.content.trim() + '\n\n[SOURCES]\n' + sourcesJson + '\n[/SOURCES]';
       }
     } else {
+      // Normal chat
       aiResponse = await callAI(aiModel, aiMessages, false);
       if (aiResponse && aiResponse.content) {
         const cleaned = cleanJsonActions(aiResponse.content);
@@ -1452,6 +1314,7 @@ Deno.serve(async function(req: Request) {
       }
     }
 
+    // Handle AI errors with cache fallback
     if (!aiResponse || (!aiResponse.content && aiResponse.error)) {
       console.error('[chat] AI Error');
       const cacheKey = getCacheKey(aiMessages);
@@ -1468,6 +1331,7 @@ Deno.serve(async function(req: Request) {
       });
     }
 
+    // Clean response
     let cleanMessage = aiResponse.content || 'I am sorry, I am having trouble right now. Please try again.';
     cleanMessage = cleanMessage
       .replace(/\[Using [^\]]+\]\s*/gi, '')
@@ -1484,6 +1348,7 @@ Deno.serve(async function(req: Request) {
       cleanMessage = 'I am sorry, I could not generate a response right now. Please try again.';
     }
 
+    // Cache successful response (skip cache for web search results since they are live)
     if (aiResponse && aiResponse.content && !aiResponse.error && webSearchResults.length === 0) {
       const cacheKey = getCacheKey(aiMessages);
       const lastUserMsg = messages.filter(m => m.role === 'user').slice(-1)[0];
@@ -1491,6 +1356,7 @@ Deno.serve(async function(req: Request) {
       responseCache.set(cacheKey, cleanMessage, query);
     }
 
+    // Update conversation timestamp (non-fatal, skip for guests)
     try {
       if (user) {
         await supabaseAdmin
@@ -1502,6 +1368,7 @@ Deno.serve(async function(req: Request) {
       console.log('[chat] Conversation update error (non-fatal)');
     }
 
+    // Auto-save AI-generated image URLs to media_files (skip for guests)
     if (imageUrl && user && user.id) {
       try {
         await supabaseAdmin.from('media_files').insert({
@@ -1517,6 +1384,7 @@ Deno.serve(async function(req: Request) {
       }
     }
 
+    // Push notification for long requests (>5s) — skip for guests
     const requestDurationMs = Date.now() - requestStartTime;
     if (requestDurationMs > 5000 && user && user.id) {
       try {
@@ -1547,6 +1415,7 @@ Deno.serve(async function(req: Request) {
       }
     }
 
+    // Stream response
     const connectionHint = req.headers.get('x-connection-quality') || 'normal';
     const baseDelay = connectionHint === 'slow' ? 10 : 15;
     const stream = createStreamingResponse(cleanMessage, aiResponse.model || 'unknown', baseDelay);
@@ -1562,7 +1431,7 @@ Deno.serve(async function(req: Request) {
     });
 
   } catch (error: unknown) {
-    console.error('[chat] Unhandled error', error);
+    console.error('[chat] Unhandled error', error); // Added error to console.error
     return new Response(
       JSON.stringify({ error: 'Internal server error. Please try again.' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
