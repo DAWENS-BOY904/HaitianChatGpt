@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, memo } from 'react';
 import {
   View,
@@ -10,7 +11,7 @@ import {
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../hooks/useTheme';
-import { BlurView } from 'expo-blur'; // ← Added for blur effect
+import { BlurView } from 'expo-blur';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface CalculatorCardProps {
@@ -19,7 +20,7 @@ interface CalculatorCardProps {
   onOpen?: () => void;
 }
 
-// ── Safe math evaluator (unchanged) ───────────────────────────────────────────
+// ── Safe math evaluator (replaces Function constructor) ───────────────────────
 function safeEval(expr: string): number {
   const sanitized = expr
     .replace(/×/g, '*')
@@ -27,14 +28,17 @@ function safeEval(expr: string): number {
     .replace(/−/g, '-')
     .replace(/\s/g, '');
 
+  // Only allow digits, operators, decimals, and parentheses
   if (!/^[\d+\-*/.()]+$/.test(sanitized)) {
     throw new Error('Invalid characters');
   }
 
+  // Prevent consecutive operators and other malformed patterns
   if (/[+\-*/]{2,}/.test(sanitized) || /^[*/]/.test(sanitized) || /[+\-*/]$/.test(sanitized)) {
     throw new Error('Malformed expression');
   }
 
+  // Use Function as last resort with strict validation above
   return Function('"use strict"; return (' + sanitized + ')')();
 }
 
@@ -42,21 +46,21 @@ function safeEval(expr: string): number {
 function useCalculatorColors(isDark: boolean) {
   return {
     accentGreen: '#30D158',
-    cardBg: isDark ? 'rgba(26,26,26,0.85)' : 'rgba(255,255,255,0.85)',
-    keypadBg: isDark ? 'rgba(17,17,17,0.85)' : 'rgba(242,242,247,0.85)',
-    keyBg: isDark ? 'rgba(44,44,46,0.9)' : 'rgba(255,255,255,0.9)',
-    keyOpBg: isDark ? 'rgba(58,58,60,0.9)' : 'rgba(232,232,232,0.9)',
-    keySpecialBg: isDark ? 'rgba(56,56,56,0.9)' : 'rgba(222,222,222,0.9)',
+    cardBg: isDark ? 'rgba(26,26,26,0.65)' : 'rgba(255,255,255,0.65)',
+    keypadBg: isDark ? 'rgba(17,17,17,0.65)' : 'rgba(242,242,247,0.65)',
+    keyBg: isDark ? 'rgba(44,44,46,0.72)' : 'rgba(255,255,255,0.72)',
+    keyOpBg: isDark ? 'rgba(58,58,60,0.72)' : 'rgba(232,232,232,0.72)',
+    keySpecialBg: isDark ? 'rgba(56,56,56,0.72)' : 'rgba(222,222,222,0.72)',
     keyText: isDark ? '#FFFFFF' : '#1A1A1A',
-    headerText: isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.55)',
-    exprText: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)',
-    borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)',
-    iconBorder: isDark ? 'rgba(48,209,88,0.35)' : 'rgba(48,209,88,0.25)',
-    iconBg: isDark ? 'rgba(48,209,88,0.15)' : 'rgba(48,209,88,0.1)',
+    headerText: isDark ? 'rgba(255,255,255,0.65)' : 'rgba(0,0,0,0.65)',
+    exprText: isDark ? 'rgba(255,255,255,0.50)' : 'rgba(0,0,0,0.50)',
+    borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.14)',
+    iconBorder: isDark ? 'rgba(48,209,88,0.40)' : 'rgba(48,209,88,0.30)',
+    iconBg: isDark ? 'rgba(48,209,88,0.18)' : 'rgba(48,209,88,0.12)',
   };
 }
 
-// ── Inline calculator card with Blur Card ─────────────────────────────────────
+// ── Inline calculator card (ChatGPT Instruments style) ────────────────────────
 export const CalculatorCard = memo(function CalculatorCard({
   expression,
   result,
@@ -70,39 +74,70 @@ export const CalculatorCard = memo(function CalculatorCard({
   const [calcResult, setCalcResult] = useState(result);
   const [justEvaluated, setJustEvaluated] = useState(false);
 
-  const handleCalcPress = useCallback((key: string) => {
-    if (Platform.OS !== 'web') Vibration.vibrate(8);
-    if (key === 'C') {
-      setCalcExpr('');
-      setCalcResult('');
-      setJustEvaluated(false);
-      return;
-    }
-    if (key === 'f') {
-      setExpanded(e => !e);
-      return;
-    }
-    if (key === '=') {
-      try {
-        const val = safeEval(calcExpr);
-        if (!Number.isNaN(val) && Number.isFinite(val)) {
-          setCalcResult(String(parseFloat(val.toFixed(10))));
+  const handleCalcPress = useCallback(
+    (key: string) => {
+      if (Platform.OS !== 'web') Vibration.vibrate(8);
+
+      if (key === 'C') {
+        setCalcExpr('');
+        setCalcResult('');
+        setJustEvaluated(false);
+        return;
+      }
+
+      if (key === '=') {
+        try {
+          const val = safeEval(calcExpr);
+          const res = Number.isInteger(val)
+            ? String(val)
+            : parseFloat(val.toFixed(10)).toString();
+          setCalcResult(res);
+          setCalcExpr((prev) => prev + ' = ' + res);
+          setJustEvaluated(true);
+        } catch {
+          setCalcResult('Error');
           setJustEvaluated(true);
         }
-      } catch {
-        setCalcResult('Error');
+        return;
       }
-      return;
-    }
-    if (justEvaluated && /\d/.test(key)) {
-      setCalcExpr(key);
-      setCalcResult('');
-      setJustEvaluated(false);
-      return;
-    }
-    setJustEvaluated(false);
-    setCalcExpr(prev => prev + key);
-  }, [calcExpr, calcResult, justEvaluated]);
+
+      if (justEvaluated && /[0-9.]/.test(key)) {
+        setCalcExpr(key);
+        setCalcResult('');
+        setJustEvaluated(false);
+        return;
+      }
+
+      if (justEvaluated) {
+        setJustEvaluated(false);
+        setCalcExpr(calcResult + key);
+        setCalcResult('');
+        return;
+      }
+
+      setCalcExpr((prev) => prev + key);
+
+      // Live preview
+      try {
+        const previewExpr = calcExpr + key;
+        const sanitized = previewExpr
+          .replace(/×/g, '*')
+          .replace(/÷/g, '/')
+          .replace(/−/g, '-');
+        if (/[+\-*/]$/.test(sanitized.trim())) {
+          setCalcResult('');
+          return;
+        }
+        const val = safeEval(previewExpr);
+        if (!Number.isNaN(val) && Number.isFinite(val)) {
+          setCalcResult(String(parseFloat(val.toFixed(10))));
+        }
+      } catch {
+        setCalcResult('');
+      }
+    },
+    [calcExpr, calcResult, justEvaluated]
+  );
 
   const ROWS: string[][] = [
     ['f', '(', ')', 'C'],
@@ -120,15 +155,27 @@ export const CalculatorCard = memo(function CalculatorCard({
       {/* Label */}
       <Text style={styles.instantLabel}>Instant answer ›</Text>
 
-      {/* Blur Card Header */}
-      <BlurView
-        intensity={isDark ? 85 : 90}
-        tint={isDark ? 'dark' : 'light'}
+      {/* Header card with BlurView */}
+      <TouchableOpacity
+        activeOpacity={0.92}
+        onPress={() => {
+          setExpanded((v) => !v);
+          onOpen?.();
+        }}
         style={[
           styles.headerCard,
-          { borderColor: colors.borderColor },
+          {
+            backgroundColor: colors.cardBg,
+            borderColor: colors.borderColor,
+          },
         ]}
       >
+        <BlurView
+          intensity={isDark ? 95 : 100}
+          tint={isDark ? 'dark' : 'light'}
+          style={StyleSheet.absoluteFill}
+          experimentalBlurMethod="dimezisBlurView"
+        />
         {/* Top row: icon + title */}
         <View style={styles.headerRow}>
           <View
@@ -166,18 +213,25 @@ export const CalculatorCard = memo(function CalculatorCard({
             {displayResult}
           </Text>
         </View>
-      </BlurView>
+      </TouchableOpacity>
 
-      {/* Expandable Blur Keypad */}
+      {/* Expandable keypad with BlurView */}
       {expanded && (
-        <BlurView
-          intensity={isDark ? 80 : 85}
-          tint={isDark ? 'dark' : 'light'}
+        <View
           style={[
             styles.keypad,
-            { borderColor: colors.borderColor },
+            {
+              backgroundColor: colors.keypadBg,
+              borderColor: colors.borderColor,
+            },
           ]}
         >
+          <BlurView
+            intensity={isDark ? 95 : 100}
+            tint={isDark ? 'dark' : 'light'}
+            style={StyleSheet.absoluteFill}
+            experimentalBlurMethod="dimezisBlurView"
+          />
           {ROWS.map((row, ri) => (
             <View key={`row-${ri}`} style={styles.row}>
               {row.map((key) => {
@@ -201,6 +255,15 @@ export const CalculatorCard = memo(function CalculatorCard({
                               ? colors.keySpecialBg
                               : colors.keyBg,
                       },
+                      // iOS shadow for light mode
+                      !isEquals &&
+                        !isDark &&
+                        Platform.OS === 'ios' && {
+                          shadowColor: '#000',
+                          shadowOffset: { width: 0, height: 1 },
+                          shadowOpacity: 0.1,
+                          shadowRadius: 2,
+                        },
                     ]}
                   >
                     <Text
@@ -219,13 +282,11 @@ export const CalculatorCard = memo(function CalculatorCard({
               })}
             </View>
           ))}
-        </BlurView>
+        </View>
       )}
     </Animated.View>
   );
 });
-
-// Rest of your file (detectMathExpression, CalculatorModal, styles) remains the same
 
 // ── Legacy CalculatorModal (no-op) ────────────────────────────────────────────
 export function CalculatorModal({
@@ -291,6 +352,11 @@ const styles = StyleSheet.create({
     paddingTop: 14,
     paddingBottom: 18,
     borderWidth: StyleSheet.hairlineWidth,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
   },
   headerRow: {
     flexDirection: 'row',
@@ -303,7 +369,7 @@ const styles = StyleSheet.create({
     borderRadius: 9,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     marginRight: 8,
   },
   headerTitle: {
@@ -336,6 +402,11 @@ const styles = StyleSheet.create({
     marginTop: -4,
     borderWidth: StyleSheet.hairlineWidth,
     borderTopWidth: 0,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    elevation: 6,
   },
   row: {
     flexDirection: 'row',
@@ -348,6 +419,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginHorizontal: 4,
+    overflow: 'hidden',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(128,128,128,0.06)',
   },
   keyText: {
     fontSize: 20,
