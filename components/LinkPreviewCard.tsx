@@ -403,3 +403,4 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 });
+Enhance the LinkPreviewCard to fetch real OpenGraph metadata from the URL via a lightweight edge function (fetch + OG parser), so thumbnails and titles are accurate for any website, not just platforms with oEmbed APIs.
