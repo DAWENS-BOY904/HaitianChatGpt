@@ -484,6 +484,23 @@ function MentionPopup({ members, onSelect, onClose }: {
   );
 }
 
+// ── Spring-animated wrapper for the user long-press menu ─────────────────────
+function MsgMenuAnimated({ children }: { children: React.ReactNode }) {
+  const scaleAnim = useRef(new Animated.Value(0.82)).current;
+  const opacityAnim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.parallel([
+      Animated.spring(scaleAnim, { toValue: 1, tension: 280, friction: 22, useNativeDriver: true }),
+      Animated.timing(opacityAnim, { toValue: 1, duration: 160, useNativeDriver: true }),
+    ]).start();
+  }, []);
+  return (
+    <Animated.View style={{ opacity: opacityAnim, transform: [{ scale: scaleAnim }] }}>
+      {children}
+    </Animated.View>
+  );
+}
+
 export default function HomeScreen() {
   const { colors, isDark } = useTheme();
   const { settings, updateSetting } = useSettings();
@@ -3530,16 +3547,27 @@ export default function HomeScreen() {
               const createdAt = msgMenuMsg.created_at || msgMenuMsg.createdAt;
               const ts = createdAt ? new Date(createdAt) : new Date();
               const dateLabel = 'Today, ' + ts.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-              const { height: SCREEN_H } = Dimensions.get('window');
-              const menuTop = Math.max(80, Math.min(msgMenuPageY - 10, SCREEN_H - 200));
+              const { height: SCREEN_H, width: SCREEN_W } = Dimensions.get('window');
               // Check if this message has media (image, file, video) — these cannot be edited
               const msgHasMedia = !!(msgMenuMsg.imageUrl || msgMenuMsg.image_url || msgMenuMsg.file_url ||
                 (msgMenuMsg.content && (msgMenuMsg.content.includes('[Attached file:') || msgMenuMsg.content.includes('[Video attached:'))));
+              const MENU_W = 220;
+              const MENU_H = msgHasMedia ? 96 : 152;
+              const MARGIN = 12;
+              // Anchor: prefer just below the long-pressed Y, flip above if it would clip the bottom
+              const belowY = msgMenuPageY + MARGIN;
+              const aboveY = msgMenuPageY - MENU_H - MARGIN;
+              const menuTop = (belowY + MENU_H > SCREEN_H - 80)
+                ? Math.max(insets.top + 8, aboveY)
+                : Math.max(insets.top + 8, belowY);
+              // Anchor right edge to screen right margin (user bubbles hug the right)
+              const menuRight = MARGIN;
               return (
-                <Modal visible={msgMenuVisible} transparent animationType="fade" onRequestClose={() => setMsgMenuVisible(false)}>
+                <Modal visible={msgMenuVisible} transparent animationType="none" onRequestClose={() => setMsgMenuVisible(false)}>
                   {/* Transparent backdrop — no blur so chat stays visible */}
                   <Pressable style={{ flex: 1, backgroundColor: 'transparent' }} onPress={() => setMsgMenuVisible(false)} />
-                  <View style={{ position: 'absolute', right: 14, top: (() => { const SCREEN_H = Dimensions.get('window').height; const menuH = msgHasMedia ? 90 : 140; const belowY = msgMenuPageY + 8; const aboveY = msgMenuPageY - menuH - 8; return (belowY + menuH > SCREEN_H - 80) ? Math.max(80, aboveY) : Math.max(80, belowY); })(), width: 220, borderRadius: 18, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: isDark ? 0.55 : 0.18, shadowRadius: 20, elevation: 20 }}>
+                  <MsgMenuAnimated>
+                  <View style={{ position: 'absolute', right: menuRight, top: menuTop, width: MENU_W, borderRadius: 18, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: isDark ? 0.55 : 0.18, shadowRadius: 20, elevation: 20 }}>
                     {Platform.OS === 'ios' ? (
                       <BlurView intensity={isDark ? 88 : 78} tint={isDark ? 'dark' : 'extraLight'} style={{ borderRadius: 18, overflow: 'hidden' }}>
                         <View style={{ paddingHorizontal: 16, paddingTop: 11, paddingBottom: 8 }}>
@@ -3548,7 +3576,11 @@ export default function HomeScreen() {
                         {/* Copy */}
                         <TouchableOpacity
                           style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13, gap: 12 }}
-                          onPress={async () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setMsgMenuVisible(false); await Clipboard.setStringAsync(msgMenuMsg.content || ''); }}
+                          onPress={async () => {
+                            await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                            setMsgMenuVisible(false);
+                            await Clipboard.setStringAsync(msgMenuMsg.content || '');
+                          }}
                           activeOpacity={0.6}
                         >
                           <Ionicons name="copy-outline" size={20} color={menuTextC} />
@@ -3558,7 +3590,11 @@ export default function HomeScreen() {
                         {!msgHasMedia ? (
                           <TouchableOpacity
                             style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13, gap: 12 }}
-                            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setMsgMenuVisible(false); setTimeout(() => { handleEditMessage(msgMenuMsg.id, msgMenuMsg.content || ''); setTimeout(() => inputRef.current?.focus(), 80); }, 50); }}
+                            onPress={async () => {
+                              await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                              setMsgMenuVisible(false);
+                              setTimeout(() => { handleEditMessage(msgMenuMsg.id, msgMenuMsg.content || ''); setTimeout(() => inputRef.current?.focus(), 80); }, 50);
+                            }}
                             activeOpacity={0.6}
                           >
                             <Ionicons name="pencil-outline" size={20} color={menuTextC} />
@@ -3574,7 +3610,11 @@ export default function HomeScreen() {
                         {/* Copy */}
                         <TouchableOpacity
                           style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13, gap: 12 }}
-                          onPress={async () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setMsgMenuVisible(false); await Clipboard.setStringAsync(msgMenuMsg.content || ''); }}
+                          onPress={async () => {
+                            await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                            setMsgMenuVisible(false);
+                            await Clipboard.setStringAsync(msgMenuMsg.content || '');
+                          }}
                           activeOpacity={0.6}
                         >
                           <Ionicons name="copy-outline" size={20} color={menuTextC} />
@@ -3584,7 +3624,11 @@ export default function HomeScreen() {
                         {!msgHasMedia ? (
                           <TouchableOpacity
                             style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13, gap: 12 }}
-                            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setMsgMenuVisible(false); setTimeout(() => { handleEditMessage(msgMenuMsg.id, msgMenuMsg.content || ''); setTimeout(() => inputRef.current?.focus(), 80); }, 50); }}
+                            onPress={async () => {
+                              await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                              setMsgMenuVisible(false);
+                              setTimeout(() => { handleEditMessage(msgMenuMsg.id, msgMenuMsg.content || ''); setTimeout(() => inputRef.current?.focus(), 80); }, 50);
+                            }}
                             activeOpacity={0.6}
                           >
                             <Ionicons name="pencil-outline" size={20} color={menuTextC} />
@@ -3594,6 +3638,7 @@ export default function HomeScreen() {
                       </View>
                     )}
                   </View>
+                  </MsgMenuAnimated>
                 </Modal>
               );
             })() : null}
