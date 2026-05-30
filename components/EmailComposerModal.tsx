@@ -132,12 +132,23 @@ export function EmailComposerModal({
         blurBackground: {
           ...StyleSheet.absoluteFillObject,
         },
+        blurOverlay: {
+          ...StyleSheet.absoluteFillObject,
+          backgroundColor: isDark ? 'rgba(0,0,0,0.35)' : 'rgba(255,255,255,0.25)',
+        },
         container: {
-          backgroundColor: colors.background,
           borderTopLeftRadius: BorderRadius.xl,
           borderTopRightRadius: BorderRadius.xl,
           maxHeight: '92%',
           overflow: 'hidden',
+          backgroundColor: isDark ? 'rgba(28,28,30,0.82)' : 'rgba(255,255,255,0.82)',
+          borderWidth: StyleSheet.hairlineWidth,
+          borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)',
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: -8 },
+          shadowOpacity: isDark ? 0.45 : 0.15,
+          shadowRadius: 24,
+          elevation: 20,
         },
         header: {
           flexDirection: 'row',
@@ -160,12 +171,13 @@ export function EmailComposerModal({
           padding: Spacing.lg,
         },
         card: {
-          backgroundColor: colors.card,
+          backgroundColor: isDark ? 'rgba(44,44,46,0.55)' : 'rgba(245,245,247,0.60)',
           borderRadius: BorderRadius.lg,
           padding: Spacing.md,
           marginBottom: Spacing.lg,
-          borderWidth: 1,
-          borderColor: colors.border,
+          borderWidth: StyleSheet.hairlineWidth,
+          borderColor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.06)',
+          overflow: 'hidden',
         },
         cardHeader: {
           flexDirection: 'row',
@@ -209,14 +221,14 @@ export function EmailComposerModal({
           paddingVertical: Spacing.sm,
         },
         input: {
-          backgroundColor: colors.surface,
+          backgroundColor: isDark ? 'rgba(58,58,60,0.50)' : 'rgba(255,255,255,0.55)',
           borderRadius: BorderRadius.md,
           padding: Spacing.md,
           ...Typography.body,
           color: colors.text,
           fontSize: 15,
-          borderWidth: 1,
-          borderColor: colors.border,
+          borderWidth: StyleSheet.hairlineWidth,
+          borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
         },
         subjectInput: {
           fontWeight: '600',
@@ -232,8 +244,8 @@ export function EmailComposerModal({
           padding: Spacing.lg,
           paddingBottom: Math.max(insets.bottom, Spacing.lg),
           borderTopWidth: StyleSheet.hairlineWidth,
-          borderTopColor: colors.border,
-          backgroundColor: colors.background,
+          borderTopColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+          backgroundColor: 'transparent',
         },
         sendButton: {
           flex: 1,
@@ -272,9 +284,10 @@ export function EmailComposerModal({
         {/* 🔵 BLUR BACKGROUND EFFECT */}
         <BlurView
           style={styles.blurBackground}
-          intensity={isDark ? 40 : 60}
+          intensity={isDark ? 55 : 75}
           tint={isDark ? 'dark' : 'light'}
         />
+        <View style={styles.blurOverlay} />
 
         {/* Tap outside to close */}
         <TouchableOpacity
@@ -302,6 +315,11 @@ export function EmailComposerModal({
               showsVerticalScrollIndicator={false}
             >
               <View style={styles.card}>
+                <BlurView
+                  intensity={isDark ? 20 : 30}
+                  tint={isDark ? 'dark' : 'light'}
+                  style={StyleSheet.absoluteFill}
+                />
                 {/* Card Header */}
                 <View style={styles.cardHeader}>
                   <Text style={styles.cardLabel}>New Message</Text>
