@@ -1526,4 +1526,3 @@ const styles = StyleSheet.create({
   textInput: { flex: 1, backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 28, paddingHorizontal: 18, paddingVertical: 13, fontSize: 16, color: '#FFF', maxHeight: 100 },
   sendBtn: { width: 46, height: 46, borderRadius: 23, backgroundColor: '#007AFF', alignItems: 'center', justifyContent: 'center' },
 });
-Update the user message long-press menu in home so the BlurView bottom sheet appears anchored directly below the pressed message bubble (using the msgMenuPageY offset) instead of floating at a fixed screen position.
