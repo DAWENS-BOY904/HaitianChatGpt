@@ -1255,17 +1255,6 @@ function VideoPreviewCard({ name, uri, isDark, colors }: { name: string; uri?: s
 
   const allImageUrls = embeddedImages.map(im => im.url);
 
-  // ── Deduplicate preview cards ──────────────────────────────────────────────
-  // Track which URLs already have a dedicated card so we never show a duplicate
-  // generic LinkPreviewCard for the same URL.
-  const _renderedPreviewUrls = new Set<string>();
-  // Mark TikTok URLs as already handled if a [TIKTOK_CARD] block is present
-  if (tiktokCardData) {
-    if (tiktokCardData.videoUrl) _renderedPreviewUrls.add(tiktokCardData.videoUrl);
-    // Also mark any tiktok.com domain URL as handled
-    _renderedPreviewUrls.add('__tiktok__');
-  }
-
   return (
     <>
       <View style={assistantStyles.container}>
@@ -1389,17 +1378,6 @@ function VideoPreviewCard({ name, uri, isDark, colors }: { name: string; uri?: s
                   </View>
                 );
               }
-              // Filter preview links: skip already-shown URLs and TikTok URLs when card exists
-              const deduplicatedPreviewLinks = previewLinks.filter(u => {
-                // If tiktok card is present, suppress any tiktok.com link preview
-                if (tiktokCardData && (u.includes('tiktok.com') || u.includes('vm.tiktok'))) return false;
-                // Skip if this exact URL was already shown as a preview card
-                if (_renderedPreviewUrls.has(u)) return false;
-                // Mark as shown so no other paragraph shows it again
-                _renderedPreviewUrls.add(u);
-                return true;
-              }).slice(0, 1);
-
               return (
                 <View key={`b-${bi}`} style={{ marginVertical: 3 }}>
                   <Text
@@ -1409,8 +1387,8 @@ function VideoPreviewCard({ name, uri, isDark, colors }: { name: string; uri?: s
                   >
                     {renderInlineSegments(block.content || '', handlePhonePress, handleLinkPress, isDark)}
                   </Text>
-                  {/* Show link preview cards for URLs in AI paragraphs (deduplicated) */}
-                  {deduplicatedPreviewLinks.map((pUrl, pi) => {
+                  {/* Show link preview cards for URLs in AI paragraphs */}
+                  {previewLinks.slice(0, 1).map((pUrl, pi) => {
                     // Try to extract metadata from AI response context
                     const meta = extractLinkMetadataFromAIResponse(safeContent, pUrl);
                     return (
