@@ -13,7 +13,7 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../hooks/useTheme';
-import * as WebBrowser from 'expo-web-browser';
+import { openURL } from '../utils/web-browser';
 
 export interface Source {
   title: string;
@@ -70,12 +70,7 @@ export function SourcesModal({ visible, onClose, sources }: SourcesModalProps) {
 
   const handleOpen = async (url: string) => {
     try {
-      await WebBrowser.openBrowserAsync(url, {
-        dismissButtonStyle: 'close',
-        toolbarColor: isDark ? '#000000' : '#FFFFFF',
-        controlsColor: isDark ? '#FFFFFF' : '#000000',
-        enableBarCollapsing: true,
-      });
+      await openURL(url);
     } catch (_e) {}
   };
 
