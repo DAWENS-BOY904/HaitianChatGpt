@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   Animated,
   Image,
+  Alert,
 } from 'react-native';
 import { useRouter, Redirect } from 'expo-router';
 import { useAuth, useAlert, getSupabaseClient } from '@/template';
@@ -18,7 +19,8 @@ import { hasSeenOnboarding } from './onboarding';
 import { useTheme } from '../hooks/useTheme';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BlurView } from 'expo-blur';
+import * as AppleAuthentication from 'expo-apple-authentication';
+import * as Crypto from 'expo-crypto';
 
 const WELCOME_PHRASES = [
   "Let's brainstorm",
@@ -31,6 +33,8 @@ const WELCOME_PHRASES = [
 const AI_LOGO_URL =
   'https://uzxmmddivzqjhcnnrkns.supabase.co/storage/v1/object/public/logo/WhatsApp%20Image%202026-04-18%20at%202.58.46%20AM.jpeg';
 
+const APPLE_NAME_CACHE_KEY = 'apple_signin_name_cache';
+
 async function sendLoginConfirmationEmail(userId: string, email: string) {
   try {
     const supabase = getSupabaseClient();
@@ -42,30 +46,18 @@ async function sendLoginConfirmationEmail(userId: string, email: string) {
   }
 }
 
-// ── Apple Sign-In (dynamic import to avoid web bundle errors) ──
+// ── Apple Sign-In (Production-Ready) ──
 async function performAppleSignIn(showAlert: (title: string, msg?: string) => void): Promise<{ user: any; error?: string }> {
   if (Platform.OS !== 'ios') return { user: null, error: 'Apple Sign In is only available on iOS.' };
 
-  let AppleAuthentication: any;
-  let Crypto: any;
   try {
-    AppleAuthentication = require('expo-apple-authentication');
-    Crypto = require('expo-crypto');
-    // Validate the module loaded correctly
-    if (!AppleAuthentication || typeof AppleAuthentication.signInAsync !== 'function') {
-      throw new Error('Apple Authentication module not properly loaded');
-    }
-  } catch (_e) {
-    return { user: null, error: 'Apple Sign In requires a native development build.' };
-  }
-
-  try {
-    // Check availability safely — some builds don't have isAvailableAsync
-    if (typeof AppleAuthentication.isAvailableAsync === 'function') {
-      const available = await AppleAuthentication.isAvailableAsync();
-      if (!available) return { user: null }; // silently skip — not available
+    // Verify availability
+    const isAvailable = await AppleAuthentication.isAvailableAsync();
+    if (!isAvailable) {
+      return { user: null, error: 'Apple Sign In is not available on this device.' };
     }
 
+    // Generate secure nonce
     const rawNonce = Array.from({ length: 32 }, () =>
       'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'[
         Math.floor(Math.random() * 62)
@@ -77,15 +69,30 @@ async function performAppleSignIn(showAlert: (title: string, msg?: string) => vo
       rawNonce
     );
 
+    // Generate state for CSRF protection
+    const state = Array.from({ length: 16 }, () =>
+      'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'[
+        Math.floor(Math.random() * 62)
+      ]
+    ).join('');
+
     const credential = await AppleAuthentication.signInAsync({
       requestedScopes: [
         AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
         AppleAuthentication.AppleAuthenticationScope.EMAIL,
       ],
       nonce: hashedNonce,
+      state,
     });
 
-    if (!credential.identityToken) return { user: null, error: 'Apple did not return an identity token.' };
+    // Verify state matches (CSRF protection)
+    if (credential.state && credential.state !== state) {
+      return { user: null, error: 'Invalid authentication state. Possible CSRF attack.' };
+    }
+
+    if (!credential.identityToken) {
+      return { user: null, error: 'Apple did not return an identity token.' };
+    }
 
     const supabase = getSupabaseClient();
     const { data, error } = await supabase.auth.signInWithIdToken({
@@ -96,17 +103,29 @@ async function performAppleSignIn(showAlert: (title: string, msg?: string) => vo
 
     if (error) return { user: null, error: error.message };
 
+    // Cache name for future logins (Apple only sends name on first sign-in)
+    const fullName = [
+      credential.fullName?.givenName,
+      credential.fullName?.familyName,
+    ].filter(Boolean).join(' ');
+
+    if (fullName) {
+      await AsyncStorage.setItem(`${APPLE_NAME_CACHE_KEY}_${credential.user}`, fullName);
+    }
+
+    // Update user metadata if name/email available
     if (credential.fullName || credential.email) {
       const updates: any = {};
-      if (credential.fullName?.givenName || credential.fullName?.familyName) {
+      if (fullName) {
         updates.data = {
           ...(updates.data || {}),
-          full_name: [credential.fullName.givenName, credential.fullName.familyName]
-            .filter(Boolean)
-            .join(' '),
-          given_name: credential.fullName.givenName,
-          family_name: credential.fullName.familyName,
+          full_name: fullName,
+          given_name: credential.fullName?.givenName,
+          family_name: credential.fullName?.familyName,
         };
+      }
+      if (credential.email) {
+        updates.email = credential.email;
       }
       if (Object.keys(updates).length > 0) {
         await supabase.auth.updateUser(updates);
@@ -115,8 +134,14 @@ async function performAppleSignIn(showAlert: (title: string, msg?: string) => vo
 
     return { user: data?.user ?? null };
   } catch (e: any) {
-    if (e?.code === 'ERR_REQUEST_CANCELED') return { user: null };
-    return { user: null, error: e?.message || 'Apple Sign In failed' };
+    if (e?.code === 'ERR_REQUEST_CANCELED') {
+      return { user: null }; // Silently handle cancellation
+    }
+    if (e?.code === 'ERR_REQUEST_UNKNOWN') {
+      return { user: null, error: 'Apple Sign In failed. Please try again or use another sign-in method.' };
+    }
+    console.error('Apple Sign In error:', e);
+    return { user: null, error: e?.message || 'Apple Sign In failed. Please try again.' };
   }
 }
 
@@ -180,6 +205,7 @@ function WelcomeScreen() {
   const insets = useSafeAreaInsets();
   const [phraseIndex, setPhraseIndex] = useState(0);
   const [loading, setLoading] = useState<'apple' | 'google' | null>(null);
+  const [appleAvailable, setAppleAvailable] = useState(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(40)).current;
 
@@ -197,16 +223,23 @@ function WelcomeScreen() {
     ]).start();
   }, []);
 
+  // Check Apple Sign In availability
+  useEffect(() => {
+    if (Platform.OS !== 'ios') return;
+    AppleAuthentication.isAvailableAsync().then(setAppleAvailable).catch(() => setAppleAvailable(false));
+  }, []);
+
   const handleApple = async () => {
-    if (Platform.OS !== 'ios') {
-      showAlert('Not Available', 'Apple Sign In is only available on iOS.');
-      return;
-    }
     setLoading('apple');
     try {
       const { user, error } = await performAppleSignIn(showAlert);
-      if (error) { showAlert('Sign In Failed', error); return; }
-      if (user) sendLoginConfirmationEmail(user.id, user.email || '');
+      if (error) {
+        showAlert('Sign In Failed', error);
+        return;
+      }
+      if (user) {
+        sendLoginConfirmationEmail(user.id, user.email || '');
+      }
     } finally {
       setLoading(null);
     }
@@ -260,26 +293,29 @@ function WelcomeScreen() {
 
       <Animated.View style={[styles.bottomSection, { paddingBottom: Math.max(insets.bottom, 20) + 20, opacity: fadeAnim }]}>
 
-        {/* Apple Sign-In — iOS only */}
-        {Platform.OS === 'ios' ? (
-          <TouchableOpacity
-            style={[btnBase, { backgroundColor: isDark ? '#FFFFFF' : '#000000' }]}
+        {/* Apple Sign-In — Native Apple Button (iOS only) */}
+        {Platform.OS === 'ios' && appleAvailable ? (
+          <AppleAuthentication.AppleAuthenticationButton
+            buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
+            buttonStyle={isDark ? AppleAuthentication.AppleAuthenticationButtonStyle.WHITE : AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+            cornerRadius={50}
+            style={{ width: '100%', height: 50 }}
             onPress={handleApple}
-            disabled={loading !== null}
-            activeOpacity={0.82}
+          />
+        ) : Platform.OS === 'ios' && !appleAvailable ? (
+          <TouchableOpacity
+            style={[btnBase, { backgroundColor: isDark ? '#FFFFFF' : '#000000', opacity: 0.5 }]}
+            disabled={true}
+            activeOpacity={1}
           >
-            {loading === 'apple' ? (
-              <ActivityIndicator size="small" color={isDark ? '#000' : '#FFF'} />
-            ) : (
-              <Ionicons name="logo-apple" size={20} color={isDark ? '#000000' : '#FFFFFF'} />
-            )}
+            <Ionicons name="logo-apple" size={20} color={isDark ? '#000000' : '#FFFFFF'} />
             <Text style={{ fontWeight: '700', fontSize: 16, color: isDark ? '#000' : '#FFF' }}>
-              {loading === 'apple' ? 'Signing in...' : 'Continue with Apple'}
+              Apple Sign In Unavailable
             </Text>
           </TouchableOpacity>
         ) : null}
 
-        {/* Google Sign-In — real colored G icon */}
+        {/* Google Sign-In */}
         <TouchableOpacity
           style={[btnBase, {
             backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
@@ -332,7 +368,7 @@ function WelcomeScreen() {
           <Text style={{ fontWeight: '600', fontSize: 16, color: colors.text }}>Continue with phone</Text>
         </TouchableOpacity>
 
-        {/* Continue as Guest */}
+        {/* Login */}
         <TouchableOpacity
           style={[btnBase, {
             backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
@@ -376,7 +412,6 @@ export default function RootScreen() {
   const [checkingOnboarding, setCheckingOnboarding] = useState(true);
   const [showOnboarding, setShowOnboarding] = useState(false);
 
-  // Check first-launch onboarding status
   useEffect(() => {
     hasSeenOnboarding().then((seen) => {
       setShowOnboarding(!seen);
@@ -384,10 +419,8 @@ export default function RootScreen() {
     });
   }, []);
 
-  // New device verification — fires on web/desktop logins
   useDeviceVerification({ userId: user?.id, userEmail: user?.email, skipOnNative: true });
 
-  // Redirect to home once authenticated
   useEffect(() => {
     if (loading || checkingOnboarding) return;
     if (user) {
@@ -398,8 +431,7 @@ export default function RootScreen() {
   }, [user, loading, checkingOnboarding, showOnboarding]);
 
   if (loading || checkingOnboarding) return <SplashScreen />;
-  if (user) return <SplashScreen />; // show splash while effect fires
-  if (showOnboarding) return <SplashScreen />; // show splash while effect fires navigation
+  if (user) return <SplashScreen />;
+  if (showOnboarding) return <SplashScreen />;
   return <WelcomeScreen />;
 }
-
