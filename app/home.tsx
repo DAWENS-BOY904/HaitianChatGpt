@@ -275,76 +275,6 @@ const tmpStyles = StyleSheet.create({
   body: { color: 'rgba(255,255,255,0.55)', fontSize: 14, textAlign: 'center', lineHeight: 21 },
 });
 
-// ── Quiz Loading Card ──────────────────────────────────────────────────────
-function QuizLoadingCard({ topic, isDark, accentColor }: { topic: string; isDark: boolean; accentColor: string }) {
-  const shimmerX = useRef(new Animated.Value(-280)).current;
-  const pulse = useRef(new Animated.Value(0.6)).current;
-  const scale = useRef(new Animated.Value(0.92)).current;
-  const opacity = useRef(new Animated.Value(0)).current;
-  const dots = useRef([new Animated.Value(0.3), new Animated.Value(0.3), new Animated.Value(0.3)]).current;
-  useEffect(() => {
-    Animated.parallel([
-      Animated.spring(scale, { toValue: 1, tension: 180, friction: 18, useNativeDriver: true }),
-      Animated.timing(opacity, { toValue: 1, duration: 220, useNativeDriver: true }),
-    ]).start();
-    const shimmer = Animated.loop(Animated.sequence([
-      Animated.timing(shimmerX, { toValue: 340, duration: 1600, useNativeDriver: true }),
-      Animated.timing(shimmerX, { toValue: -280, duration: 0, useNativeDriver: true }),
-      Animated.delay(400),
-    ]));
-    shimmer.start();
-    const pulseLoop = Animated.loop(Animated.sequence([
-      Animated.timing(pulse, { toValue: 1, duration: 700, useNativeDriver: true }),
-      Animated.timing(pulse, { toValue: 0.6, duration: 700, useNativeDriver: true }),
-    ]));
-    pulseLoop.start();
-    const dotAnims = dots.map((dot, i) =>
-      Animated.loop(Animated.sequence([
-        Animated.delay(i * 150),
-        Animated.timing(dot, { toValue: 1, duration: 350, useNativeDriver: true }),
-        Animated.timing(dot, { toValue: 0.3, duration: 350, useNativeDriver: true }),
-        Animated.delay((2 - i) * 150),
-      ]))
-    );
-    dotAnims.forEach(a => a.start());
-    return () => { shimmer.stop(); pulseLoop.stop(); dotAnims.forEach(a => a.stop()); };
-  }, []);
-  const topicLabel = (topic || 'General Knowledge').slice(0, 32);
-  return (
-    <Animated.View style={{ marginHorizontal: 14, marginVertical: 10, opacity, transform: [{ scale }] }}>
-      <View style={{ borderRadius: 22, overflow: 'hidden', backgroundColor: isDark ? '#0A1628' : '#EBF4FF', borderWidth: 1.5, borderColor: accentColor + '55', shadowColor: accentColor, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.22, shadowRadius: 14, elevation: 8 }}>
-        <Animated.View style={{ position: 'absolute', top: 0, bottom: 0, width: 90, backgroundColor: 'rgba(255,255,255,0.07)', transform: [{ translateX: shimmerX }] }} pointerEvents="none" />
-        <View style={{ padding: 20 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-            <Animated.View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: accentColor + '22', borderWidth: 2, borderColor: accentColor + '66', alignItems: 'center', justifyContent: 'center', opacity: pulse }}>
-              <Ionicons name="albums-outline" size={22} color={accentColor} />
-            </Animated.View>
-            <View style={{ flex: 1 }}>
-              <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 16, fontWeight: '700', marginBottom: 2 }}>Generating Quiz</Text>
-              <Text style={{ color: accentColor, fontSize: 13, fontWeight: '600' }} numberOfLines={1}>{topicLabel}</Text>
-            </View>
-          </View>
-          {[
-            'Crafting questions…',
-            'Setting difficulty level…',
-            'Preparing answers…',
-          ].map((step, i) => (
-            <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-              <Animated.View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: accentColor, opacity: dots[i] }} />
-              <Text style={{ color: isDark ? 'rgba(255,255,255,0.65)' : 'rgba(0,0,0,0.55)', fontSize: 13 }}>{step}</Text>
-            </View>
-          ))}
-          <View style={{ marginTop: 8, gap: 8 }}>
-            {[0.85, 0.65, 0.75, 0.55].map((w, i) => (
-              <Animated.View key={i} style={{ height: 10, borderRadius: 5, width: `${w * 100}%` as any, backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)', opacity: pulse }} />
-            ))}
-          </View>
-        </View>
-      </View>
-    </Animated.View>
-  );
-}
-
 function WaveformAnimation({ isRecording }: { isRecording: boolean }) {
   const bars = 20;
   const anims = useRef(Array.from({ length: bars }, () => new Animated.Value(4))).current;
@@ -692,7 +622,6 @@ export default function HomeScreen() {
   const [userProfilePhoto, setUserProfilePhoto] = useState<string | null>(null);
   const pushTokenRef = useRef<string | null>(null);
   const [inlineQuizVisible, setInlineQuizVisible] = useState(false);
-  const [quizLoadingCardVisible, setQuizLoadingCardVisible] = useState(false);
   const [inlineQuizQuestions, setInlineQuizQuestions] = useState<QuizQuestion[]>([]);
   const [preGeneratedQuestions, setPreGeneratedQuestions] = useState<QuizQuestion[] | null>(null);
   const preGenRunning = useRef(false);
@@ -1545,43 +1474,18 @@ export default function HomeScreen() {
     const isQuizRequest = QUIZ_KEYWORDS.some(kw => lowerTextForQuiz.includes(kw));
     if (isQuizRequest && !currentEditingId) {
       Keyboard.dismiss();
-      // Detect topic before clearing input
+      setInputText(''); setSelectedMedia([]); clearDraft();
+      setQuizGenerating(true);
       let detectedTopic = 'General Knowledge';
       const topicMatch = currentText.match(/(?:quiz|trivia)\s+(?:about|on|sur|sou|sobre)?\s*(.+)/i);
       if (topicMatch && topicMatch[1]?.trim().length > 2) detectedTopic = topicMatch[1].trim().replace(/[?!.]+$/, '');
       setSelectedQuizTopic(detectedTopic);
-      setInputText(''); setSelectedMedia([]); clearDraft();
-      // Show animated loading card immediately
-      setQuizLoadingCardVisible(true);
-      setQuizGenerating(true);
-      setInlineQuizVisible(false);
-      setInlineQuizQuestions([]);
-      // Send user message to chat so it appears in the conversation
-      let quizConvId = currentConversation?.id;
-      if (!quizConvId) {
-        try { quizConvId = await createConversation(); } catch (_e) {}
-      }
-      // Fire both in parallel: AI quiz response + generate questions
-      const aiQuizPromise = quizConvId
-        ? sendMessage(
-            `[SYSTEM: The user requested a quiz. Respond with ONE short sentence acknowledging you are generating a quiz about "${detectedTopic}" for them. Then stop. Do NOT generate the actual questions — they are handled by the quiz engine.] ${currentText}`,
-            undefined, undefined, false, currentAIModel
-          ).catch(() => {})
-        : Promise.resolve();
-      const questionsPromise = generateAIQuizQuestions(detectedTopic, selectedDifficulty)
-        .catch(() => generateQuizQuestions(detectedTopic));
       try {
-        const [, questions] = await Promise.all([aiQuizPromise, questionsPromise]);
-        // Small transition delay so loading card feels smooth
-        await new Promise(r => setTimeout(r, 350));
-        setQuizLoadingCardVisible(false);
-        showInlineQuiz(questions as any);
+        const questions = await generateAIQuizQuestions(detectedTopic, selectedDifficulty);
+        showInlineQuiz(questions);
       } catch (_e) {
-        setQuizLoadingCardVisible(false);
         showInlineQuiz(generateQuizQuestions(detectedTopic));
-      } finally {
-        setQuizGenerating(false);
-      }
+      } finally { setQuizGenerating(false); }
       return;
     }
 
@@ -3104,10 +3008,6 @@ export default function HomeScreen() {
                                 Powered by Shazam
                               </Text>
                             </View>
-                          ) : null}
-                          {/* ── Quiz Loading Card ── */}
-                          {quizLoadingCardVisible ? (
-                            <QuizLoadingCard topic={selectedQuizTopic} isDark={isDark} accentColor={accentColor} />
                           ) : null}
                           {(sending || generating) && !streamingMessageId ? (
                             <ThinkingIndicator
