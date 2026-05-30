@@ -11,7 +11,7 @@ import { BlurView } from 'expo-blur';
 import { Image as ExpoImage } from 'expo-image';
 import { useTheme } from '../hooks/useTheme';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as WebBrowser from 'expo-web-browser'; // ← ADD THIS
+import * as WebBrowser from '../utils/web-browser';
 
 const SHAZAM_BLUE = '#0D72EA';
 const SHAZAM_BLUE_DARK = '#0A5CC8';
@@ -56,12 +56,14 @@ function ShazamLogo({ size = 80 }: { size?: number }) {
 }
 
 function DawinixLogo({ size = 52 }: { size?: number }) {
+  const initial = 'D';
   return (
-    <ExpoImage
-      source={require('../assets/images/logo.png')}
-      style={{ width: size, height: size, borderRadius: size / 2 }}
-      contentFit="cover"
-    />
+    <View style={{
+      width: size, height: size, borderRadius: size / 2,
+      backgroundColor: '#10A37F', alignItems: 'center', justifyContent: 'center',
+    }}>
+      <Text style={{ color: '#FFF', fontSize: size * 0.42, fontWeight: '800' }}>{initial}</Text>
+    </View>
   );
 }
 
@@ -270,12 +272,7 @@ export default function ShazamConnectScreen() {
   // ── UPDATED: Open links in-app via Expo WebBrowser ─────────────────────────
   const handleOpenLink = useCallback(async (url: string) => {
     try {
-      await WebBrowser.openBrowserAsync(url, {
-        dismissButtonStyle: 'close',
-        toolbarColor: isDark ? '#000000' : '#FFFFFF',
-        controlsColor: isDark ? '#FFFFFF' : '#000000',
-        enableBarCollapsing: true,
-      });
+      await WebBrowser.openBrowserAsync(url);
     } catch (_e) {}
   }, [isDark]);
 
