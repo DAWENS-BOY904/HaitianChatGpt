@@ -1,3 +1,17 @@
+/**
+ * StreamingCodeBlock — Premium frosted-glass code block
+ *
+ * Features:
+ * - Semi-transparent BlurView backgrounds (frosted glass)
+ * - HTML+JS → Play ▶ + Copy buttons; other languages → Copy only
+ * - Tap Play → preview replaces code inside the block
+ * - Tap code block while in Preview → opens full-screen Code/Preview modal
+ * - Top-right console icon in modal → BlurView console bottom sheet
+ * - Long/scrollable code (never wraps raw)
+ * - Text selection with native clipboard menu
+ * - All backgrounds semi-transparent so blur shines through
+ */
+
 import React, { useState, useCallback, useRef, memo } from 'react';
 import {
   View,
@@ -8,13 +22,19 @@ import {
   Platform,
   Modal,
   ActivityIndicator,
+  Pressable,
+  Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { useTheme } from '../hooks/useTheme';
+import { BlurView } from 'expo-blur';
 import { WebView } from 'react-native-webview';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Types
+// ─────────────────────────────────────────────────────────────────────────────
 interface StreamingCodeBlockProps {
   code: string;
   language?: string;
@@ -22,7 +42,9 @@ interface StreamingCodeBlockProps {
   isAdmin?: boolean;
 }
 
-// ── Language → display label ──────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Language helpers
+// ─────────────────────────────────────────────────────────────────────────────
 const LANGUAGE_LABELS: Record<string, string> = {
   javascript: 'JavaScript', js: 'JavaScript',
   typescript: 'TypeScript', ts: 'TypeScript',
@@ -40,9 +62,6 @@ const LANGUAGE_LABELS: Record<string, string> = {
   xml: 'XML', markdown: 'Markdown', md: 'Markdown',
   plaintext: 'Plain Text', text: 'Plain Text',
   r: 'R', dart: 'Dart', lua: 'Lua',
-  perl: 'Perl', scala: 'Scala', haskell: 'Haskell',
-  elixir: 'Elixir', erlang: 'Erlang',
-  objectivec: 'Objective-C', 'objective-c': 'Objective-C',
 };
 
 function getLanguageLabel(lang?: string): string {
@@ -50,54 +69,6 @@ function getLanguageLabel(lang?: string): string {
   return LANGUAGE_LABELS[lang.toLowerCase()] || lang.toUpperCase();
 }
 
-// ── Language → icon ────────────────────────────────────────────────────────
-function LanguageIcon({ lang, size = 14, color }: { lang: string; size?: number; color: string }) {
-  const l = (lang || '').toLowerCase();
-  const iconMap: Record<string, any> = {
-    javascript: 'logo-javascript',
-    js: 'logo-javascript',
-    typescript: 'code-slash',
-    ts: 'code-slash',
-    tsx: 'code-slash',
-    jsx: 'code-slash',
-    python: 'logo-python',
-    py: 'logo-python',
-    html: 'logo-html5',
-    css: 'logo-css3',
-    json: 'code',
-    bash: 'terminal',
-    sh: 'terminal',
-    shell: 'terminal',
-    zsh: 'terminal',
-    sql: 'server',
-    swift: 'logo-apple',
-    java: 'cafe',
-    go: 'logo-google',
-    rust: 'hardware-chip',
-    php: 'code',
-    ruby: 'diamond',
-    rb: 'diamond',
-    dart: 'navigate',
-    kotlin: 'code-slash',
-    markdown: 'document-text',
-    md: 'document-text',
-    xml: 'code',
-    yaml: 'document',
-    yml: 'document',
-    scss: 'logo-css3',
-    c: 'code',
-    cpp: 'code',
-    csharp: 'code',
-    cs: 'code',
-  };
-  const iconName = iconMap[l] || 'code-slash';
-  return <Ionicons name={iconName as any} size={size} color={color} />;
-}
-
-// ── Runnable languages ────────────────────────────────────────────────────────
-const RUNNABLE_LANGS = new Set(['javascript', 'js', 'typescript', 'ts', 'python', 'py', 'html', 'jsx', 'tsx']);
-
-// ── Language color dot ────────────────────────────────────────────────────────
 const LANG_COLORS: Record<string, string> = {
   javascript: '#F7DF1E', js: '#F7DF1E',
   typescript: '#3178C6', ts: '#3178C6',
@@ -119,7 +90,28 @@ function getLangColor(lang: string): string {
   return LANG_COLORS[lang.toLowerCase()] || '#10A37F';
 }
 
-// ── Syntax token colors ────────────────────────────────────────────────────────
+function LanguageIcon({ lang, size = 14, color }: { lang: string; size?: number; color: string }) {
+  const iconMap: Record<string, any> = {
+    javascript: 'logo-javascript', js: 'logo-javascript',
+    typescript: 'code-slash', ts: 'code-slash', tsx: 'code-slash', jsx: 'code-slash',
+    python: 'logo-python', py: 'logo-python',
+    html: 'logo-html5', css: 'logo-css3', scss: 'logo-css3',
+    json: 'code', bash: 'terminal', sh: 'terminal', shell: 'terminal', zsh: 'terminal',
+    sql: 'server', swift: 'logo-apple', java: 'cafe', go: 'logo-google',
+    rust: 'hardware-chip', php: 'code', ruby: 'diamond', rb: 'diamond',
+    dart: 'navigate', kotlin: 'code-slash',
+    markdown: 'document-text', md: 'document-text',
+    xml: 'code', yaml: 'document', yml: 'document',
+  };
+  return <Ionicons name={(iconMap[lang.toLowerCase()] || 'code-slash') as any} size={size} color={color} />;
+}
+
+// HTML + JS = previewable; others = copy only
+const PREVIEWABLE_LANGS = new Set(['html', 'javascript', 'js', 'jsx', 'tsx', 'typescript', 'ts']);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Syntax tokenizer (same as before)
+// ─────────────────────────────────────────────────────────────────────────────
 const DARK_TOKENS = {
   keyword: '#FF7AB2', string: '#FC9A59', comment: '#6C7986',
   number: '#D9C97C', function: '#6BDFFF', type: '#DABAFF',
@@ -135,141 +127,308 @@ type TokenType = keyof typeof DARK_TOKENS;
 
 function tokenizeLine(line: string, lang: string): Array<{ text: string; type: TokenType }> {
   const l = lang.toLowerCase();
-  const isHighlighted = ['javascript', 'js', 'typescript', 'ts', 'tsx', 'jsx',
+  const highlighted = ['javascript', 'js', 'typescript', 'ts', 'tsx', 'jsx',
     'python', 'py', 'java', 'c', 'cpp', 'csharp', 'cs', 'go', 'rust',
-    'ruby', 'rb', 'php', 'swift', 'kotlin', 'bash', 'sh', 'shell'].includes(l);
+    'ruby', 'rb', 'php', 'swift', 'kotlin', 'bash', 'sh', 'shell', 'html', 'css'].includes(l);
+  if (!highlighted) return [{ text: line, type: 'default' }];
 
-  if (!isHighlighted) return [{ text: line, type: 'default' }];
-
-  // Full-line comment
-  const isPyComment = (l === 'python' || l === 'py' || l === 'ruby' || l === 'rb' || l === 'bash' || l === 'sh' || l === 'shell') && line.trim().startsWith('#');
+  const isPyComment = ['python', 'py', 'ruby', 'rb', 'bash', 'sh', 'shell'].includes(l) && line.trim().startsWith('#');
   const isCLineComment = line.trim().startsWith('//');
-  const isBlockCommentStart = line.trim().startsWith('/*') || line.trim().startsWith('*');
-  if (isPyComment || isCLineComment || isBlockCommentStart) {
-    return [{ text: line, type: 'comment' }];
-  }
-
-  const ALL_KEYWORDS = /\b(const|let|var|function|return|if|else|for|while|class|import|export|from|async|await|try|catch|throw|new|this|super|extends|implements|interface|type|enum|switch|case|break|continue|default|static|public|private|protected|void|null|undefined|true|false|in|of|do|yield|def|print|pass|not|and|or|lambda|with|as|assert|del|elif|except|finally|global|nonlocal|raise|None|True|False|package|func|struct|map|range|go|chan|select|defer|goto|fallthrough|val|var|object|companion|fun|when|is|override|abstract|sealed|data|by|mut|impl|use|mod|trait|where|fn|let|pub|unsafe|extern|crate|ref|move|box|dyn|std|self|Self|end|begin|require|module|do|rescue|ensure|puts|attr_accessor|attr_reader|echo|fi|then|done|foreach|foreach|in)\b/g;
+  const isBlockComment = line.trim().startsWith('/*') || line.trim().startsWith('*');
+  if (isPyComment || isCLineComment || isBlockComment) return [{ text: line, type: 'comment' }];
 
   const result: Array<{ text: string; type: TokenType }> = [];
   const stringRe = /("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)/g;
   const parts = line.split(stringRe);
-
+  const KW = /\b(const|let|var|function|return|if|else|for|while|class|import|export|from|async|await|try|catch|throw|new|this|super|extends|implements|interface|type|enum|switch|case|break|continue|default|static|public|private|protected|void|null|undefined|true|false|in|of|do|yield|def|print|pass|not|and|or|lambda|with|as|assert|del|elif|except|finally|global|nonlocal|raise|None|True|False|package|func|struct|map|range|go|chan|select|defer|goto|fallthrough|val|var|object|companion|fun|when|is|override|abstract|sealed|data|by|mut|impl|use|mod|trait|where|fn|let|pub|unsafe|extern|crate|ref|move|box|dyn|std|self|Self|end|begin|require|module|rescue|ensure|puts|attr_accessor|attr_reader|echo|fi|then|done|foreach)\b/;
   for (const part of parts) {
-    if (/^(".*"|'.*'|`.*`)$/s.test(part)) {
-      result.push({ text: part, type: 'string' });
-    } else {
-      const combined = new RegExp(`(${ALL_KEYWORDS.source}|\\b\\d+\\.?\\d*\\b|[^\\w]+|\\w+)`, 'g');
-      let m: RegExpExecArray | null;
-      while ((m = combined.exec(part)) !== null) {
-        const tok = m[0];
-        if (/^(const|let|var|function|return|if|else|for|while|class|import|export|from|async|await|try|catch|throw|new|this|super|extends|implements|interface|type|enum|switch|case|break|continue|default|static|public|private|protected|void|null|undefined|true|false|in|of|do|yield|def|print|pass|not|and|or|lambda|with|as|assert|del|elif|except|finally|global|nonlocal|raise|None|True|False|package|func|struct|map|range|go|chan|select|defer|goto|fallthrough|val|var|object|companion|fun|when|is|override|abstract|sealed|data|by|mut|impl|use|mod|trait|where|fn|let|pub|unsafe|extern|crate|ref|move|box|dyn|std|self|Self|end|begin|require|module|do|rescue|ensure|puts|attr_accessor|attr_reader|echo|fi|then|done|foreach|in)$/.test(tok)) {
-          result.push({ text: tok, type: 'keyword' });
-        } else if (/^\d+\.?\d*$/.test(tok)) {
-          result.push({ text: tok, type: 'number' });
-        } else if (/^[+\-*/%=<>!&|^~?:]+$/.test(tok)) {
-          result.push({ text: tok, type: 'operator' });
-        } else {
-          result.push({ text: tok, type: 'default' });
-        }
-      }
+    if (/^(".*"|'.*'|`.*`)$/s.test(part)) { result.push({ text: part, type: 'string' }); continue; }
+    const combined = /(\b(?:const|let|var|function|return|if|else|for|while|class|import|export|from|async|await|try|catch|throw|new|this|super|extends|implements|interface|type|enum|switch|case|break|continue|default|static|public|private|protected|void|null|undefined|true|false|in|of|do|yield|def|print|pass|not|and|or|lambda|with|as|assert|del|elif|except|finally|global|nonlocal|raise|None|True|False|package|func|struct|map|range|go|chan|select|defer|goto|fallthrough|val|object|companion|fun|when|is|override|abstract|sealed|data|by|mut|impl|use|mod|trait|where|fn|pub|unsafe|extern|crate|ref|move|box|dyn|std|self|Self|end|begin|require|module|rescue|ensure|puts|echo|fi|then|done|foreach)\b|\b\d+\.?\d*\b|[^\w]+|\w+)/g;
+    let m: RegExpExecArray | null;
+    while ((m = combined.exec(part)) !== null) {
+      const tok = m[0];
+      if (KW.test(tok)) result.push({ text: tok, type: 'keyword' });
+      else if (/^\d+\.?\d*$/.test(tok)) result.push({ text: tok, type: 'number' });
+      else if (/^[+\-*/%=<>!&|^~?:]+$/.test(tok)) result.push({ text: tok, type: 'operator' });
+      else result.push({ text: tok, type: 'default' });
     }
   }
   return result.length > 0 ? result : [{ text: line, type: 'default' }];
 }
 
-// ── Build sandboxed HTML for JS/TS/HTML execution ──────────────────────────
-function buildJsRunnerHtml(code: string, lang: string): string {
+// ─────────────────────────────────────────────────────────────────────────────
+// Build preview HTML
+// ─────────────────────────────────────────────────────────────────────────────
+function buildPreviewHtml(code: string, lang: string): string {
   const l = lang.toLowerCase();
-  const isHtml = l === 'html';
-  if (isHtml) {
-    return code;
-  }
-  // For TypeScript strip type annotations (basic strip)
+  if (l === 'html') return code;
+  // JS/TS/JSX/TSX — run in console
   let runCode = code;
-  if (l === 'typescript' || l === 'ts' || l === 'tsx' || l === 'jsx') {
-    runCode = code
-      .replace(/:\s*[A-Za-z<>\[\]|&]+(\s*=)?/g, (m, eq) => eq || '')
-      .replace(/<[A-Za-z][^>]*>/g, '')
-      .replace(/<\/[A-Za-z]+>/g, '');
+  if (['typescript', 'ts', 'tsx', 'jsx'].includes(l)) {
+    runCode = code.replace(/:\s*[A-Za-z<>\[\]|&]+(\s*=)?/g, (m, eq) => eq || '').replace(/<[A-Za-z][^>]*>/g, '').replace(/<\/[A-Za-z]+>/g, '');
   }
-  return `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8"/>
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"/>
 <style>
-  body { margin:0; padding:10px; font-family: monospace; font-size:13px;
-         background:#0E0E0E; color:#E4E4E4; word-break:break-word; }
-  .out { white-space:pre-wrap; }
-  .err { color:#FF6B6B; }
-  .ok { color:#30D158; }
-  hr { border-color:#333; margin:6px 0; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, monospace; font-size: 13px;
+         background: #0D0D0D; color: #E4E4E4; padding: 10px; word-break: break-word; }
+  .out { white-space: pre-wrap; line-height: 1.6; padding: 2px 0; }
+  .err { color: #FF6B6B; } .ok { color: #30D158; } .warn { color: #FFD60A; }
 </style>
-</head>
-<body>
+</head><body>
 <div id="output"></div>
 <script>
 (function(){
   var out = document.getElementById('output');
-  var logs = [];
-  var orig = { log: console.log, error: console.error, warn: console.warn, info: console.info };
   function appendLine(text, cls) {
-    var d = document.createElement('div');
-    d.className = 'out ' + (cls||'');
-    d.textContent = text;
-    out.appendChild(d);
+    var d = document.createElement('div'); d.className = 'out ' + (cls||''); d.textContent = text; out.appendChild(d);
   }
-  ['log','info','warn'].forEach(function(m){
-    console[m] = function(){
-      var args = Array.prototype.slice.call(arguments);
-      var text = args.map(function(a){ try { return typeof a === 'object' ? JSON.stringify(a, null, 2) : String(a); } catch(e){ return String(a); } }).join(' ');
-      appendLine(text, m === 'warn' ? 'err' : '');
-      orig[m].apply(console, arguments);
-    };
-  });
-  console.error = function(){
-    var args = Array.prototype.slice.call(arguments);
-    appendLine(args.join(' '), 'err');
-    orig.error.apply(console, arguments);
-  };
-  window.onerror = function(msg, src, line, col, err){
-    appendLine('Error: ' + msg + (line ? ' (line ' + line + ')' : ''), 'err');
-    return true;
-  };
+  var _log = console.log; var _err = console.error; var _warn = console.warn;
+  console.log = function(){ var a = Array.prototype.slice.call(arguments); appendLine(a.map(function(x){ try{return typeof x==='object'?JSON.stringify(x,null,2):String(x);}catch(e){return String(x);}}).join(' '), ''); _log.apply(console,arguments); };
+  console.error = function(){ var a = Array.prototype.slice.call(arguments); appendLine(a.join(' '), 'err'); _err.apply(console,arguments); };
+  console.warn = function(){ var a = Array.prototype.slice.call(arguments); appendLine(a.join(' '), 'warn'); _warn.apply(console,arguments); };
+  window.onerror = function(msg,src,line){ appendLine('Error: '+msg+(line?' (line '+line+')':''), 'err'); return true; };
   try {
-    var result = (function(){ ${runCode} })();
-    if(result !== undefined) appendLine('→ ' + (typeof result === 'object' ? JSON.stringify(result, null, 2) : String(result)), 'ok');
-  } catch(e) {
-    appendLine('Error: ' + e.message, 'err');
-  }
+    var _result = (function(){ ${runCode} })();
+    if(_result !== undefined) appendLine('→ '+(typeof _result==='object'?JSON.stringify(_result,null,2):String(_result)), 'ok');
+  } catch(e) { appendLine('Error: '+e.message, 'err'); }
 })();
 <\/script>
-</body>
-</html>`;
+</body></html>`;
 }
 
-// ── Python → JS transpiler (basic subset for demos) ──────────────────────────
-function pythonToJsBasic(pyCode: string): string {
-  return pyCode
-    .replace(/^def (\w+)\(([^)]*)\):/gm, 'function $1($2) {')
-    .replace(/^class (\w+):/gm, 'class $1 {')
-    .replace(/\bprint\(([^)]*)\)/g, 'console.log($1)')
-    .replace(/\blen\(([^)]*)\)/g, '($1).length')
-    .replace(/\bstr\(([^)]*)\)/g, 'String($1)')
-    .replace(/\bint\(([^)]*)\)/g, 'parseInt($1)')
-    .replace(/\bfloat\(([^)]*)\)/g, 'parseFloat($1)')
-    .replace(/\brange\((\d+),\s*(\d+)\)/g, '{*Array(($2)-($1)).keys()}.map(i=>i+($1))')
-    .replace(/\brange\((\d+)\)/g, '[...Array($1).keys()]')
-    .replace(/\bTrue\b/g, 'true').replace(/\bFalse\b/g, 'false').replace(/\bNone\b/g, 'null')
-    .replace(/\belsif\b/g, 'else if').replace(/\belif /g, 'else if (').replace(/:$/gm, ') {')
-    .replace(/\band\b/g, '&&').replace(/\bor\b/g, '||').replace(/\bnot\b/g, '!')
-    .replace(/^(\s*)#(.*)$/gm, '$1//$2')
-    .replace(/"""[\s\S]*?"""/g, '').replace(/'''[\s\S]*?'''/g, '');
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Syntax-colored code lines (used by both inline block and modal)
+// ─────────────────────────────────────────────────────────────────────────────
+function SyntaxLines({ code, language, isDark }: { code: string; language: string; isDark: boolean }) {
+  const lines = (code || '').split('\n');
+  const mono = Platform.OS === 'ios' ? 'Menlo' : 'monospace';
+  const tokenColors = isDark ? DARK_TOKENS : LIGHT_TOKENS;
+  const lineNumColor = isDark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.22)';
+  const lang = language || 'plaintext';
+  return (
+    <>
+      {lines.map((line, i) => {
+        const tokens = tokenizeLine(line, lang);
+        return (
+          <View key={i} style={{ flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 1.5 }}>
+            <Text style={{ fontFamily: mono, fontSize: 12, lineHeight: 20, color: lineNumColor, minWidth: String(lines.length).length * 8 + 8, textAlign: 'right', marginRight: 12 }}>
+              {i + 1}
+            </Text>
+            <Text
+              selectable
+              selectionColor="rgba(100,180,255,0.35)"
+              style={{ fontFamily: mono, fontSize: 13, lineHeight: 20, flex: 1 }}
+            >
+              {tokens.map((tok, ti) => (
+                <Text key={ti} style={{ color: tokenColors[tok.type] }}>{tok.text}</Text>
+              ))}
+            </Text>
+          </View>
+        );
+      })}
+    </>
+  );
 }
 
-const COLLAPSE_LINES = 22;
+// ─────────────────────────────────────────────────────────────────────────────
+// Console bottom sheet (photo 7)
+// ─────────────────────────────────────────────────────────────────────────────
+function ConsoleSheet({ visible, logs, onClose, onClear, isDark, insets }: {
+  visible: boolean; logs: string[]; onClose: () => void; onClear: () => void;
+  isDark: boolean; insets: any;
+}) {
+  if (!visible) return null;
+  const mono = Platform.OS === 'ios' ? 'Menlo' : 'monospace';
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
+      <View style={{ flex: 1, justifyContent: 'flex-end' }}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+        <View style={{ borderTopLeftRadius: 22, borderTopRightRadius: 22, overflow: 'hidden', maxHeight: '55%' }}>
+          {Platform.OS === 'ios' ? (
+            <BlurView intensity={95} tint={isDark ? 'dark' : 'light'} style={{ flex: 1 }}>
+              <ConsoleContent mono={mono} logs={logs} onClose={onClose} onClear={onClear} isDark={isDark} insets={insets} />
+            </BlurView>
+          ) : (
+            <View style={{ flex: 1, backgroundColor: isDark ? 'rgba(20,20,22,0.97)' : 'rgba(248,248,250,0.97)' }}>
+              <ConsoleContent mono={mono} logs={logs} onClose={onClose} onClear={onClear} isDark={isDark} insets={insets} />
+            </View>
+          )}
+        </View>
+      </View>
+    </Modal>
+  );
+}
 
-// ── Main component ────────────────────────────────────────────────────────────
+function ConsoleContent({ mono, logs, onClose, onClear, isDark, insets }: any) {
+  const textC = isDark ? '#FFFFFF' : '#000000';
+  const subC = isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.4)';
+  return (
+    <View style={{ flex: 1, paddingBottom: insets.bottom + 8 }}>
+      {/* Handle */}
+      <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)', alignSelf: 'center', marginTop: 10, marginBottom: 6 }} />
+      {/* Header */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18, paddingVertical: 10 }}>
+        <TouchableOpacity onPress={onClose} style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.07)', alignItems: 'center', justifyContent: 'center' }}>
+          <Ionicons name="close" size={16} color={textC} />
+        </TouchableOpacity>
+        <Text style={{ flex: 1, textAlign: 'center', fontSize: 16, fontWeight: '700', color: textC }}>Console</Text>
+        <TouchableOpacity onPress={onClear} style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.07)', alignItems: 'center', justifyContent: 'center' }}>
+          <Ionicons name="trash-outline" size={16} color={textC} />
+        </TouchableOpacity>
+      </View>
+      {/* Logs */}
+      <ScrollView style={{ flex: 1, paddingHorizontal: 16 }} showsVerticalScrollIndicator={false}>
+        {logs.length === 0 ? (
+          <Text style={{ color: subC, fontFamily: mono, fontSize: 13, marginTop: 20, textAlign: 'center' }}>Running code…</Text>
+        ) : (
+          logs.map((log: string, i: number) => (
+            <Text key={i} selectable style={{ fontFamily: mono, fontSize: 12, lineHeight: 20, color: log.startsWith('Error:') ? '#FF6B6B' : log.startsWith('warn:') ? '#FFD60A' : isDark ? '#E4E4E4' : '#1A1A1A', marginBottom: 2 }}>{log}</Text>
+          ))
+        )}
+        <View style={{ height: 20 }} />
+      </ScrollView>
+    </View>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Full-screen Code/Preview modal (photos 5 & 6)
+// ─────────────────────────────────────────────────────────────────────────────
+function CodePreviewModal({ visible, onClose, code, language, isDark }: {
+  visible: boolean; onClose: () => void; code: string; language: string; isDark: boolean;
+}) {
+  const insets = useSafeAreaInsets();
+  const [tab, setTab] = useState<'code' | 'preview'>('preview');
+  const [consoleVisible, setConsoleVisible] = useState(false);
+  const [consoleLogs, setConsoleLogs] = useState<string[]>([]);
+  const [webKey, setWebKey] = useState(0);
+  const textC = isDark ? '#FFFFFF' : '#000000';
+  const subC = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.45)';
+  const bgAlpha = isDark ? 'rgba(12,12,14,0.96)' : 'rgba(248,248,250,0.96)';
+  const borderC = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)';
+
+  const lang = language.toLowerCase();
+  const canPreview = PREVIEWABLE_LANGS.has(lang);
+  const previewHtml = canPreview ? buildPreviewHtml(code, lang) : '';
+  const mono = Platform.OS === 'ios' ? 'Menlo' : 'monospace';
+
+  // inject console interceptor into preview html
+  const injectedHtml = previewHtml.replace(
+    '</body>',
+    `<script>
+window._nativeLogs = [];
+var _origLog = console.log; var _origErr = console.error; var _origWarn = console.warn;
+function _sendLog(type, msg){
+  try { window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({type, msg})); } catch(e){}
+}
+console.log = function(){ var s = Array.prototype.slice.call(arguments).map(function(x){try{return typeof x==='object'?JSON.stringify(x,null,2):String(x);}catch(e){return String(x);}}).join(' '); _sendLog('log', s); _origLog.apply(console,arguments); };
+console.error = function(){ var s = Array.prototype.slice.call(arguments).join(' '); _sendLog('error', 'Error: '+s); _origErr.apply(console,arguments); };
+console.warn = function(){ var s = Array.prototype.slice.call(arguments).join(' '); _sendLog('warn', 'warn: '+s); _origWarn.apply(console,arguments); };
+window.onerror = function(msg,src,line){ _sendLog('error','Error: '+msg+(line?' (line '+line+')':'')); return true; };
+<\/script></body>`
+  );
+
+  const handleWebMessage = useCallback((event: any) => {
+    try {
+      const data = JSON.parse(event.nativeEvent.data);
+      setConsoleLogs(prev => [...prev, data.msg || '']);
+    } catch {}
+  }, []);
+
+  const handleOpenConsole = () => {
+    setConsoleLogs([]);
+    setWebKey(k => k + 1);
+    setConsoleVisible(true);
+  };
+
+  if (!visible) return null;
+
+  return (
+    <Modal visible={visible} animationType="slide" transparent={false} onRequestClose={onClose} statusBarTranslucent>
+      <View style={{ flex: 1, backgroundColor: isDark ? '#0C0C0E' : '#F8F8FA' }}>
+        {/* Header */}
+        <View style={{ paddingTop: insets.top + 8, paddingBottom: 10, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', backgroundColor: bgAlpha, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: borderC }}>
+          {/* Close */}
+          <TouchableOpacity
+            onPress={onClose}
+            style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.07)', alignItems: 'center', justifyContent: 'center' }}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="close" size={18} color={textC} />
+          </TouchableOpacity>
+
+          {/* Code / Preview toggle */}
+          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+            {(['code', 'preview'] as const).filter(t => t === 'code' || canPreview).map(t => (
+              <TouchableOpacity
+                key={t}
+                onPress={() => setTab(t)}
+                style={{ paddingHorizontal: 18, paddingVertical: 7, borderRadius: 20, backgroundColor: tab === t ? (isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.09)') : 'transparent' }}
+                activeOpacity={0.7}
+              >
+                <Text style={{ color: tab === t ? textC : subC, fontSize: 15, fontWeight: tab === t ? '600' : '400' }}>
+                  {t === 'code' ? 'Code' : 'Preview'}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {/* Console icon (top right) */}
+          <TouchableOpacity
+            onPress={handleOpenConsole}
+            style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.07)', alignItems: 'center', justifyContent: 'center' }}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="terminal-outline" size={18} color={textC} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Body */}
+        <View style={{ flex: 1 }}>
+          {tab === 'code' ? (
+            <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }} showsVerticalScrollIndicator={false}>
+              <SyntaxLines code={code} language={language} isDark={isDark} />
+              <View style={{ height: insets.bottom + 20 }} />
+            </ScrollView>
+          ) : canPreview ? (
+            <WebView
+              key={`preview-modal-${webKey}`}
+              source={{ html: injectedHtml }}
+              style={{ flex: 1, backgroundColor: 'transparent' }}
+              javaScriptEnabled
+              domStorageEnabled
+              scrollEnabled
+              onMessage={handleWebMessage}
+              originWhitelist={['*']}
+              allowsInlineMediaPlayback
+              backgroundColor={isDark ? '#0D0D0D' : '#FFFFFF'}
+            />
+          ) : (
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+              <Text style={{ color: subC, fontSize: 15 }}>Preview not available for {getLanguageLabel(language)}</Text>
+            </View>
+          )}
+        </View>
+
+        {/* Console */}
+        <ConsoleSheet
+          visible={consoleVisible}
+          logs={consoleLogs}
+          onClose={() => setConsoleVisible(false)}
+          onClear={() => setConsoleLogs([])}
+          isDark={isDark}
+          insets={insets}
+        />
+      </View>
+    </Modal>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Main StreamingCodeBlock
+// ─────────────────────────────────────────────────────────────────────────────
 export const StreamingCodeBlock = memo(function StreamingCodeBlock({
   code,
   language = 'plaintext',
@@ -277,448 +436,215 @@ export const StreamingCodeBlock = memo(function StreamingCodeBlock({
   isAdmin,
 }: StreamingCodeBlockProps) {
   const { isDark } = useTheme();
-  const insets = useSafeAreaInsets();
   const [copied, setCopied] = useState(false);
-  const [expanded, setExpanded] = useState(false);
-  const [highlightedLine, setHighlightedLine] = useState<number | null>(null);
-  const [runnerVisible, setRunnerVisible] = useState(false);
-  const [runnerReady, setRunnerReady] = useState(false);
+  const [previewMode, setPreviewMode] = useState(false); // inline preview vs code
+  const [modalVisible, setModalVisible] = useState(false);
+  const [webReady, setWebReady] = useState(false);
 
   const lang = (language || 'plaintext').toLowerCase();
-  const canRun = RUNNABLE_LANGS.has(lang);
+  const isPreviewable = PREVIEWABLE_LANGS.has(lang);
   const langLabel = getLanguageLabel(language);
   const langColor = getLangColor(lang);
-  const lines = (code || '').split('\n');
-  const isTall = lines.length > COLLAPSE_LINES;
-  const displayLines = isTall && !expanded ? lines.slice(0, COLLAPSE_LINES) : lines;
 
-  const bg = isDark ? '#1A1B1E' : '#F8F8F8';
-  const headerBg = isDark ? '#212225' : '#ECECEC';
-  const borderColor = isDark ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.09)';
-  const lineNumColor = isDark ? '#4A4A55' : '#BBBBBB';
-  const tokenColors = isDark ? DARK_TOKENS : LIGHT_TOKENS;
-  const highlightBg = isDark ? 'rgba(255,220,100,0.07)' : 'rgba(255,200,0,0.1)';
+  // Colors — all semi-transparent for blur
+  const containerBg = isDark ? 'rgba(18,18,20,0.72)' : 'rgba(248,248,252,0.72)';
+  const headerBg = isDark ? 'rgba(28,28,32,0.70)' : 'rgba(240,240,244,0.70)';
+  const borderColor = isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.09)';
+  const subC = isDark ? 'rgba(255,255,255,0.48)' : 'rgba(0,0,0,0.44)';
+  const textC = isDark ? '#FFFFFF' : '#000000';
+
+  const previewHtml = isPreviewable ? buildPreviewHtml(code, lang) : '';
 
   const handleCopy = useCallback(async () => {
     try {
       await Clipboard.setStringAsync(code);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    } catch (_e) {}
+    } catch {}
   }, [code]);
 
-  const handleRun = useCallback(() => {
-    setRunnerReady(false);
-    setRunnerVisible(true);
+  const handlePlay = useCallback(() => {
+    setWebReady(false);
+    setPreviewMode(true);
   }, []);
 
-  // Build runner HTML
-  const runnerHtml = (() => {
-    if (lang === 'python' || lang === 'py') {
-      const jsCode = pythonToJsBasic(code);
-      return buildJsRunnerHtml(jsCode, 'javascript');
-    }
-    return buildJsRunnerHtml(code, lang);
-  })();
+  const handlePressPreview = useCallback(() => {
+    if (previewMode) setModalVisible(true);
+  }, [previewMode]);
+
+  const mono = Platform.OS === 'ios' ? 'Menlo' : 'monospace';
 
   return (
     <>
-      <View style={[codeStyles.container, { backgroundColor: bg, borderColor }]}>
+      <View style={[s.container, { borderColor }]}>
+        {/* Frosted glass background */}
+        {Platform.OS === 'ios' ? (
+          <BlurView intensity={isDark ? 80 : 75} tint={isDark ? 'dark' : 'extraLight'} style={StyleSheet.absoluteFill} />
+        ) : (
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: containerBg }]} />
+        )}
+
         {/* Header */}
-        <View style={[codeStyles.header, { backgroundColor: headerBg, borderBottomColor: borderColor }]}>
-          <View style={codeStyles.headerLeft}>
-            {/* Language color dot */}
-            <View style={[codeStyles.langDot, { backgroundColor: langColor }]} />
-            {/* Language icon */}
-            <LanguageIcon lang={lang} size={13} color={isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.5)'} />
-            <Text style={[codeStyles.langLabel, { color: isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.55)' }]}>
-              {langLabel}
-            </Text>
+        <View style={[s.header, { borderBottomColor: borderColor }]}>
+          {Platform.OS === 'ios' ? (
+            <BlurView intensity={isDark ? 70 : 65} tint={isDark ? 'dark' : 'extraLight'} style={StyleSheet.absoluteFill} />
+          ) : (
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: headerBg }]} />
+          )}
+
+          {/* Left: icon + lang label + lang dot */}
+          <View style={s.headerLeft}>
+            <View style={[s.langDot, { backgroundColor: langColor }]} />
+            <LanguageIcon lang={lang} size={13} color={subC} />
+            <Text style={[s.langLabel, { color: textC, fontFamily: mono }]}>{langLabel}</Text>
             {isStreaming ? (
-              <View style={[codeStyles.streamDot, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.07)' }]}>
-                <Text style={{ color: '#10A37F', fontSize: 10 }}>●</Text>
-              </View>
+              <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#10A37F', marginLeft: 4 }} />
             ) : null}
           </View>
 
-          <View style={codeStyles.headerRight}>
-            {/* Run button — JS/Python/HTML only */}
-            {canRun && !isStreaming ? (
+          {/* Right: Play (HTML/JS only) + Copy */}
+          <View style={s.headerRight}>
+            {isPreviewable && !isStreaming ? (
               <TouchableOpacity
-                onPress={handleRun}
-                style={[codeStyles.runBtn, { backgroundColor: isDark ? 'rgba(48,209,88,0.15)' : 'rgba(48,209,88,0.12)', borderColor: isDark ? 'rgba(48,209,88,0.35)' : 'rgba(48,209,88,0.25)' }]}
+                onPress={previewMode ? () => setPreviewMode(false) : handlePlay}
+                style={[s.iconBtn, { backgroundColor: isDark ? 'rgba(48,209,88,0.15)' : 'rgba(48,209,88,0.12)', borderColor: isDark ? 'rgba(48,209,88,0.3)' : 'rgba(48,209,88,0.22)' }]}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 activeOpacity={0.7}
               >
-                <Ionicons name="play" size={12} color="#30D158" />
-                <Text style={[codeStyles.runLabel, { color: '#30D158' }]}>Run</Text>
+                <Ionicons name={previewMode ? 'code-slash' : 'play'} size={14} color="#30D158" />
               </TouchableOpacity>
             ) : null}
-            {/* Copy button */}
             <TouchableOpacity
               onPress={handleCopy}
-              style={[codeStyles.copyBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }]}
+              style={[s.iconBtn, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.055)', borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)' }]}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               activeOpacity={0.7}
             >
-              <Ionicons
-                name={copied ? 'checkmark' : 'copy-outline'}
-                size={13}
-                color={copied ? '#34C759' : (isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.5)')}
-              />
-              <Text style={[codeStyles.copyLabel, { color: copied ? '#34C759' : (isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.5)') }]}>
-                {copied ? 'Copied!' : 'Copy'}
-              </Text>
+              <Ionicons name={copied ? 'checkmark' : 'copy-outline'} size={14} color={copied ? '#34C759' : subC} />
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* Code body */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          bounces={false}
-          style={{ maxHeight: isTall && !expanded ? 340 : undefined }}
-        >
-          <View style={codeStyles.codeContent}>
-            {displayLines.map((line, i) => {
-              const tokens = tokenizeLine(line, language);
-              const lineNum = i + 1;
-              const isHighlighted = highlightedLine === lineNum;
-              return (
-                <TouchableOpacity
-                  key={`line-${i}`}
-                  onPress={() => setHighlightedLine(prev => prev === lineNum ? null : lineNum)}
-                  activeOpacity={0.6}
-                  style={[
-                    codeStyles.codeLine,
-                    isHighlighted && { backgroundColor: highlightBg, borderRadius: 4 },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      codeStyles.lineNumber,
-                      { color: isHighlighted ? (isDark ? 'rgba(255,200,100,0.7)' : 'rgba(180,120,0,0.7)') : lineNumColor },
-                    ]}
-                  >
-                    {String(lineNum).padStart(String(lines.length).length, ' ')}
-                  </Text>
-                  <Text style={codeStyles.lineContent}>
-                    {tokens.map((tok, ti) => (
-                      <Text key={`tok-${i}-${ti}`} style={{ color: tokenColors[tok.type] }}>
-                        {tok.text}
-                      </Text>
-                    ))}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-            {isTall && !expanded ? (
-              <View
-                style={[codeStyles.fadeOverlay, { backgroundColor: isDark ? 'rgba(26,27,30,0.92)' : 'rgba(248,248,248,0.92)' }]}
-                pointerEvents="none"
-              />
-            ) : null}
-          </View>
-        </ScrollView>
-
-        {/* Expand/collapse */}
-        {isTall ? (
-          <TouchableOpacity
-            style={[codeStyles.expandBtn, { borderTopColor: borderColor, backgroundColor: headerBg }]}
-            onPress={() => setExpanded(v => !v)}
-            activeOpacity={0.7}
-          >
-            <Ionicons
-              name={expanded ? 'chevron-up' : 'chevron-down'}
-              size={14}
-              color={isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.4)'}
-            />
-            <Text style={[codeStyles.expandLabel, { color: isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.4)' }]}>
-              {expanded ? 'Show less' : `Show ${lines.length - COLLAPSE_LINES} more lines`}
-            </Text>
-          </TouchableOpacity>
-        ) : null}
-      </View>
-
-      {/* ── Code Runner Modal ── */}
-      <Modal visible={runnerVisible} animationType="slide" transparent={false} onRequestClose={() => setRunnerVisible(false)}>
-        <View style={{ flex: 1, backgroundColor: '#0E0E0E', paddingTop: insets.top }}>
-          {/* Runner header */}
-          <View style={runnerStyles.header}>
-            <TouchableOpacity
-              onPress={() => setRunnerVisible(false)}
-              style={runnerStyles.closeBtn}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Ionicons name="close" size={18} color="#FFF" />
-            </TouchableOpacity>
-            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <View style={[runnerStyles.langDot, { backgroundColor: langColor }]} />
-              <Text style={runnerStyles.headerTitle}>{langLabel} Runner</Text>
-            </View>
-            <TouchableOpacity
-              onPress={() => { setRunnerReady(false); setTimeout(() => setRunnerReady(true), 50); }}
-              style={runnerStyles.rerunBtn}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Ionicons name="refresh" size={14} color="#30D158" />
-              <Text style={{ color: '#30D158', fontSize: 12, fontWeight: '700', marginLeft: 4 }}>Re-run</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Code preview pane */}
-          <View style={runnerStyles.codePanelHeader}>
-            <Text style={runnerStyles.panelLabel}>Code</Text>
-          </View>
-          <ScrollView
-            style={runnerStyles.codePane}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-          >
-            <Text style={runnerStyles.codeText}>{code}</Text>
-          </ScrollView>
-
-          {/* Output pane */}
-          <View style={runnerStyles.outputPanelHeader}>
-            <Ionicons name="terminal" size={13} color="#30D158" />
-            <Text style={[runnerStyles.panelLabel, { color: '#30D158', marginLeft: 6 }]}>Output</Text>
-            {!runnerReady ? (
-              <ActivityIndicator size="small" color="#30D158" style={{ marginLeft: 8 }} />
-            ) : null}
-          </View>
-
-          <View style={runnerStyles.webViewContainer}>
+        {/* Body — code view OR inline preview */}
+        {previewMode && isPreviewable ? (
+          <TouchableOpacity activeOpacity={0.85} onPress={handlePressPreview} style={{ height: 280 }}>
             <WebView
-              key={runnerReady ? 'ready' : 'loading'}
-              source={{ html: runnerHtml }}
-              style={runnerStyles.webView}
+              key="inline-preview"
+              source={{ html: previewHtml }}
+              style={{ flex: 1, backgroundColor: 'transparent' }}
               javaScriptEnabled
               domStorageEnabled
               scrollEnabled
-              onLoadEnd={() => setRunnerReady(true)}
-              showsVerticalScrollIndicator={false}
-              backgroundColor="#0E0E0E"
+              onLoadEnd={() => setWebReady(true)}
               originWhitelist={['*']}
               allowsInlineMediaPlayback
-              // Sandboxed — no navigation
-              onNavigationStateChange={(state) => {
-                if (!state.url.startsWith('about:')) {
-                  // Block navigation
-                }
-              }}
+              pointerEvents="none"
             />
-          </View>
+            {!webReady ? (
+              <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center', backgroundColor: isDark ? 'rgba(12,12,14,0.8)' : 'rgba(248,248,250,0.8)' }]}>
+                <ActivityIndicator color={isDark ? '#FFF' : '#000'} />
+              </View>
+            ) : null}
+            {/* Tap hint */}
+            <View style={{ position: 'absolute', bottom: 10, right: 10, backgroundColor: 'rgba(0,0,0,0.45)', borderRadius: 10, paddingHorizontal: 9, paddingVertical: 5 }}>
+              <Text style={{ color: '#FFF', fontSize: 11, fontWeight: '500' }}>Tap to expand</Text>
+            </View>
+          </TouchableOpacity>
+        ) : (
+          /* Code view — horizontally scrollable, vertically as tall as needed */
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            bounces={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              scrollEnabled
+              nestedScrollEnabled
+              style={{ maxHeight: 420 }}
+              keyboardShouldPersistTaps="handled"
+            >
+              <View style={s.codeBody}>
+                <SyntaxLines code={code} language={language} isDark={isDark} />
+              </View>
+            </ScrollView>
+          </ScrollView>
+        )}
+      </View>
 
-          <View style={{ paddingBottom: insets.bottom + 8, paddingHorizontal: 16, paddingTop: 8 }}>
-            <Text style={{ color: 'rgba(255,255,255,0.25)', fontSize: 11, textAlign: 'center' }}>
-              Runs in sandboxed environment • No network access
-            </Text>
-          </View>
-        </View>
-      </Modal>
+      {/* Full-screen modal */}
+      <CodePreviewModal
+        visible={modalVisible}
+        onClose={() => setModalVisible(false)}
+        code={code}
+        language={language}
+        isDark={isDark}
+      />
     </>
   );
 });
 
-// ── CodeBlock (re-exported alias) ─────────────────────────────────────────────
+// Re-exported alias
 export { StreamingCodeBlock as CodeBlock };
 
-// ── Styles ────────────────────────────────────────────────────────────────────
-const codeStyles = StyleSheet.create({
+// ─────────────────────────────────────────────────────────────────────────────
+// Math expression detector (unchanged)
+// ─────────────────────────────────────────────────────────────────────────────
+export function detectMathExpression(text: string): { expression: string; result: string } | null {
+  if (!text) return null;
+  const trimmed = text.trim();
+  if (trimmed.split(/\s+/).length > 25) return null;
+  const mathPattern = /(\d+[\s]*[+\-*/×÷−][\s]*\d+(?:[\s]*[+\-*/×÷−][\s]*\d+)*)/;
+  const match = text.match(mathPattern);
+  if (!match) return null;
+  const expr = match[1].trim();
+  try {
+    const sanitized = expr.replace(/×/g, '*').replace(/÷/g, '/').replace(/−/g, '-').replace(/\s/g, '');
+    if (!/^[\d+\-*/.()]+$/.test(sanitized)) return null;
+    const val = Function('"use strict"; return (' + sanitized + ')')();
+    if (!Number.isNaN(val) && Number.isFinite(val)) {
+      return { expression: expr, result: String(parseFloat(val.toFixed(10))) };
+    }
+  } catch { return null; }
+  return null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Styles
+// ─────────────────────────────────────────────────────────────────────────────
+const s = StyleSheet.create({
   container: {
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
     marginVertical: 6,
+    // Remove any solid background — let blur shine through
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 12,
-    paddingVertical: 9,
+    paddingHorizontal: 13,
+    paddingVertical: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-  },
-  headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  langDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  langLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-  },
-  streamDot: {
-    borderRadius: 6,
-    paddingHorizontal: 5,
-    paddingVertical: 2,
-    marginLeft: 4,
-  },
-  runBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 9,
-    paddingVertical: 5,
+  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  langDot: { width: 8, height: 8, borderRadius: 4 },
+  langLabel: { fontSize: 12, fontWeight: '600' },
+  iconBtn: {
+    width: 30,
+    height: 30,
     borderRadius: 8,
-    borderWidth: 1,
-    gap: 4,
-  },
-  runLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  copyBtn: {
-    flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: 7,
-    gap: 4,
+    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
   },
-  copyLabel: {
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  codeContent: {
-    paddingHorizontal: 10,
+  codeBody: {
+    paddingHorizontal: 12,
     paddingVertical: 12,
     minWidth: '100%',
   },
-  codeLine: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    paddingVertical: 1,
-    paddingHorizontal: 2,
-    marginBottom: 1,
-  },
-  lineNumber: {
-    fontSize: 12,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-    lineHeight: 20,
-    marginRight: 14,
-    minWidth: 20,
-    textAlign: 'right',
-  },
-  lineContent: {
-    fontSize: 13,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-    lineHeight: 20,
-    flex: 1,
-  },
-  fadeOverlay: {
-    position: 'absolute',
-    bottom: 0, left: 0, right: 0,
-    height: 52,
-  },
-  expandBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 8,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    gap: 5,
-  },
-  expandLabel: {
-    fontSize: 12,
-    fontWeight: '500',
-  },
 });
-
-const runnerStyles = StyleSheet.create({
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#111',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(255,255,255,0.1)',
-    gap: 10,
-  },
-  closeBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  langDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  headerTitle: {
-    color: '#FFF',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  rerunBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(48,209,88,0.12)',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderWidth: 1,
-    borderColor: 'rgba(48,209,88,0.3)',
-  },
-  codePanelHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    backgroundColor: '#161618',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(255,255,255,0.07)',
-  },
-  panelLabel: {
-    color: 'rgba(255,255,255,0.45)',
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
-  },
-  codePane: {
-    maxHeight: 160,
-    backgroundColor: '#0E0E0E',
-    padding: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(255,255,255,0.06)',
-  },
-  codeText: {
-    color: '#9CDCFE',
-    fontSize: 12,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-    lineHeight: 19,
-  },
-  outputPanelHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    backgroundColor: '#0A1A0A',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(48,209,88,0.15)',
-  },
-  webViewContainer: {
-    flex: 1,
-    backgroundColor: '#0E0E0E',
-  },
-  webView: {
-    flex: 1,
-    backgroundColor: '#0E0E0E',
-  },
-});
+In the StreamingCodeBlock, when user long-presses and selects code text, add a floating 'Copy Selection' pill button (BlurView on iOS) that appears above the selection and copies just the selected portion to clipboard.
