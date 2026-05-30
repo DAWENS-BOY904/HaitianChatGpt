@@ -6,6 +6,7 @@ import { SettingsProvider } from '../contexts/SettingsContext';
 import { SubscriptionProvider } from '../contexts/SubscriptionContext';
 import { GuestLimitsProvider } from '../contexts/GuestLimitsContext';
 import { ProfileProvider } from '../contexts/ProfileContext';
+import { useEffect } from 'react';
 import { Platform, LogBox } from 'react-native';
 
 // Suppress non-critical warnings that could spam logs
@@ -17,9 +18,28 @@ LogBox.ignoreLogs([
   'react-native-worklets',
 ]);
 
-// RevenueCat is configured lazily inside subscription.tsx when the user ID
-// is known — no eager init here to avoid "failed to configure" errors.
-function RevenueCatInit() { return null; }
+// ── Configure RevenueCat once at startup ──
+function RevenueCatInit() {
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    // Defer to avoid blocking the JS thread at startup
+    const timer = setTimeout(() => {
+      try {
+        const Purchases = require('react-native-purchases').default;
+        const apiKey = Platform.OS === 'ios'
+          ? process.env.EXPO_PUBLIC_RC_IOS_KEY
+          : process.env.EXPO_PUBLIC_RC_ANDROID_KEY;
+        if (apiKey) {
+          Purchases.configure({ apiKey });
+        }
+      } catch (_e) {
+        // react-native-purchases not linked — safe to ignore
+      }
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, []);
+  return null;
+}
 export default function RootLayout() {
   return (
     <AlertProvider>

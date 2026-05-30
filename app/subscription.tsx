@@ -670,4 +670,3 @@ const s = StyleSheet.create({
   footerLink:{ fontSize: 12, color: 'rgba(255,255,255,0.3)' },
   footerDot: { fontSize: 12, color: 'rgba(255,255,255,0.2)' },
 });
-create revenu setup md to understanf how to connect profuct.
