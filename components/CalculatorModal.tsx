@@ -70,7 +70,39 @@ export const CalculatorCard = memo(function CalculatorCard({
   const [calcResult, setCalcResult] = useState(result);
   const [justEvaluated, setJustEvaluated] = useState(false);
 
-  const handleCalcPress = useCallback(/* ... unchanged ... */ , [calcExpr, calcResult, justEvaluated]);
+  const handleCalcPress = useCallback((key: string) => {
+    if (Platform.OS !== 'web') Vibration.vibrate(8);
+    if (key === 'C') {
+      setCalcExpr('');
+      setCalcResult('');
+      setJustEvaluated(false);
+      return;
+    }
+    if (key === 'f') {
+      setExpanded(e => !e);
+      return;
+    }
+    if (key === '=') {
+      try {
+        const val = safeEval(calcExpr);
+        if (!Number.isNaN(val) && Number.isFinite(val)) {
+          setCalcResult(String(parseFloat(val.toFixed(10))));
+          setJustEvaluated(true);
+        }
+      } catch {
+        setCalcResult('Error');
+      }
+      return;
+    }
+    if (justEvaluated && /\d/.test(key)) {
+      setCalcExpr(key);
+      setCalcResult('');
+      setJustEvaluated(false);
+      return;
+    }
+    setJustEvaluated(false);
+    setCalcExpr(prev => prev + key);
+  }, [calcExpr, calcResult, justEvaluated]);
 
   const ROWS: string[][] = [
     ['f', '(', ')', 'C'],
