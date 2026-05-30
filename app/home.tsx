@@ -3857,3 +3857,4 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
+fix quiz call more fast and real send message and see a overlay card blue after replace by quiz.
