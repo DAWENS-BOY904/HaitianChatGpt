@@ -247,7 +247,7 @@ function ConsoleSheet({ visible, logs, onClose, onClear, isDark, insets }: {
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
         <View style={{ borderTopLeftRadius: 22, borderTopRightRadius: 22, overflow: 'hidden', maxHeight: '55%' }}>
           {Platform.OS === 'ios' ? (
-            <BlurView intensity={95} tint={isDark ? 'dark' : 'light'} style={{ flex: 1 }}>
+            <BlurView intensity={100} tint={isDark ? 'dark' : 'light'} style={{ flex: 1 }}>
               <ConsoleContent mono={mono} logs={logs} onClose={onClose} onClear={onClear} isDark={isDark} insets={insets} />
             </BlurView>
           ) : (
@@ -446,9 +446,9 @@ export const StreamingCodeBlock = memo(function StreamingCodeBlock({
   const langLabel = getLanguageLabel(language);
   const langColor = getLangColor(lang);
 
-  // Colors — all semi-transparent for blur
-  const containerBg = isDark ? 'rgba(18,18,20,0.72)' : 'rgba(248,248,252,0.72)';
-  const headerBg = isDark ? 'rgba(28,28,32,0.70)' : 'rgba(240,240,244,0.70)';
+  // Colors — all semi-transparent for blur (increased transparency so blur shines through)
+  const containerBg = isDark ? 'rgba(18,18,20,0.45)' : 'rgba(248,248,252,0.45)';
+  const headerBg = isDark ? 'rgba(28,28,32,0.40)' : 'rgba(240,240,244,0.40)';
   const borderColor = isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.09)';
   const subC = isDark ? 'rgba(255,255,255,0.48)' : 'rgba(0,0,0,0.44)';
   const textC = isDark ? '#FFFFFF' : '#000000';
@@ -479,7 +479,7 @@ export const StreamingCodeBlock = memo(function StreamingCodeBlock({
       <View style={[s.container, { borderColor }]}>
         {/* Frosted glass background */}
         {Platform.OS === 'ios' ? (
-          <BlurView intensity={isDark ? 80 : 75} tint={isDark ? 'dark' : 'extraLight'} style={StyleSheet.absoluteFill} />
+          <BlurView intensity={isDark ? 98 : 95} tint={isDark ? 'dark' : 'extraLight'} style={StyleSheet.absoluteFill} />
         ) : (
           <View style={[StyleSheet.absoluteFill, { backgroundColor: containerBg }]} />
         )}
@@ -487,7 +487,7 @@ export const StreamingCodeBlock = memo(function StreamingCodeBlock({
         {/* Header */}
         <View style={[s.header, { borderBottomColor: borderColor }]}>
           {Platform.OS === 'ios' ? (
-            <BlurView intensity={isDark ? 70 : 65} tint={isDark ? 'dark' : 'extraLight'} style={StyleSheet.absoluteFill} />
+            <BlurView intensity={isDark ? 95 : 92} tint={isDark ? 'dark' : 'extraLight'} style={StyleSheet.absoluteFill} />
           ) : (
             <View style={[StyleSheet.absoluteFill, { backgroundColor: headerBg }]} />
           )}
@@ -647,4 +647,3 @@ const s = StyleSheet.create({
     minWidth: '100%',
   },
 });
-In the StreamingCodeBlock, when user long-presses and selects code text, add a floating 'Copy Selection' pill button (BlurView on iOS) that appears above the selection and copies just the selected portion to clipboard.
