@@ -69,10 +69,6 @@ interface MessageItemProps {
   onLike?: (messageId: string) => void;
   onUnlike?: (messageId: string) => void;
   onOpenActions?: (message: Message) => void;
-  /** When true, immediately opens the text-selection overlay for AI messages */
-  openTextSelect?: boolean;
-  /** Called after the overlay opens so parent can reset the trigger */
-  onTextSelectOpened?: () => void;
 }
 
 // ── TikTok Card Parser ───────────────────────────────────────────────────────
@@ -822,8 +818,6 @@ export const MessageItem = memo(function MessageItem({
   onLike,
   onUnlike,
   onOpenActions,
-  openTextSelect,
-  onTextSelectOpened,
 }: MessageItemProps) {
   const { colors, isDark } = useTheme();
   const { settings } = useSettings();
@@ -843,17 +837,6 @@ export const MessageItem = memo(function MessageItem({
   const [inlineSources, setInlineSources] = useState<Source[]>([]);
   const [textSelectOverlayVisible, setTextSelectOverlayVisible] = useState(false);
   const { settings: messageSettings } = useSettings();
-
-  const [textSelectOverlayVisible, setTextSelectOverlayVisible] = useState(false);
-  const { settings: messageSettings } = useSettings();
-
-  // ── Auto-open text selection overlay when parent triggers it ─────────────
-  useEffect(() => {
-    if (openTextSelect && !isUser) {
-      setTextSelectOverlayVisible(true);
-      onTextSelectOpened?.();
-    }
-  }, [openTextSelect, isUser, onTextSelectOpened]);
 
   // CRITICAL: Safe content — never undefined/null, prevents crash during streaming
   const safeContent: string = (() => {
