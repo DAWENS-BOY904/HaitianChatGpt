@@ -1,8 +1,11 @@
 /**
- * IMAGE SEARCH RESULTS — horizontal carousel, up to 10 images.
- * Used in home chat to display AI image search results inline.
+ * IMAGE SEARCH RESULTS COMPONENT
+ * Displays search results in grid layout with download/open actions
+ * Shows real images from internet search
  */
-import React, { useState, useRef, memo } from 'react';
+
+
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -11,374 +14,232 @@ import {
   ScrollView,
   ActivityIndicator,
   Dimensions,
-  Modal,
-  Platform,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import { BlurView } from 'expo-blur';
 import * as FileSystem from 'expo-file-system';
 import * as MediaLibrary from 'expo-media-library';
 import { useTheme } from '../hooks/useTheme';
+import { Spacing, Typography, BorderRadius } from '../constants/theme';
 
-const { width: SCREEN_W } = Dimensions.get('window');
-const CARD_W = Math.min(SCREEN_W * 0.68, 280);
-const CARD_H = CARD_W * 0.72;
-const COMPACT_W = 160;
-const COMPACT_H = 120;
+const { width } = Dimensions.get('window');
+const IMAGE_SIZE = (width - Spacing.md * 3) / 2;
 
-export interface SearchImage {
+interface SearchImage {
   url: string;
   title?: string;
   source?: string;
-  alt?: string;
-  link?: string;
+  resolution?: string;
 }
 
 interface ImageSearchResultsProps {
   query: string;
   images: SearchImage[];
-  onImagePress?: (url: string, index: number) => void;
-  /** compact = small horizontal chips (e.g. inside a message paragraph) */
-  compact?: boolean;
-  /** Max images to show, default 10 */
-  maxImages?: number;
+  onImagePress?: (url: string) => void;
 }
 
-export const ImageSearchResults = memo(function ImageSearchResults({
-  query,
+export function ImageSearchResults({ 
+  query, 
   images,
-  onImagePress,
-  compact = false,
-  maxImages = 10,
+  onImagePress 
 }: ImageSearchResultsProps) {
   const { colors, isDark } = useTheme();
   const [downloading, setDownloading] = useState<string | null>(null);
-  const [viewerVisible, setViewerVisible] = useState(false);
-  const [viewerIndex, setViewerIndex] = useState(0);
-  const scrollRef = useRef<ScrollView>(null);
 
-  const visibleImages = images.slice(0, maxImages);
-
-  const handleDownload = async (imageUrl: string, idx: number) => {
+  const handleDownload = async (imageUrl: string, index: number) => {
     try {
       setDownloading(imageUrl);
       const { status } = await MediaLibrary.requestPermissionsAsync();
-      if (status !== 'granted') { setDownloading(null); return; }
-      const fileUri = `${FileSystem.documentDirectory}dawinix_img_${Date.now()}_${idx}.jpg`;
-      const result = await FileSystem.downloadAsync(imageUrl, fileUri);
-      if (result.status === 200) {
-        const asset = await MediaLibrary.createAssetAsync(result.uri);
-        await MediaLibrary.createAlbumAsync('Dawinix', asset, false);
+      if (status !== 'granted') {
+        alert('Permission required to save images');
+        return;
       }
-    } catch (_e) {}
-    finally { setDownloading(null); }
+      const fileUri = `${FileSystem.documentDirectory}search_image_${Date.now()}_${index}.jpg`;
+      const downloadResult = await FileSystem.downloadAsync(imageUrl, fileUri);
+      if (downloadResult.status !== 200) throw new Error('Download failed');
+      const asset = await MediaLibrary.createAssetAsync(downloadResult.uri);
+      await MediaLibrary.createAlbumAsync('Dawinix', asset, false);
+      alert('Image saved to your library!');
+    } catch (error) {
+      console.error('Download error:', error);
+      alert('Failed to save image');
+    } finally {
+      setDownloading(null);
+    }
   };
 
-  const handlePress = (url: string, idx: number) => {
-    if (onImagePress) { onImagePress(url, idx); return; }
-    setViewerIndex(idx);
-    setViewerVisible(true);
-  };
-
-  if (visibleImages.length === 0) return null;
-
-  const cardW = compact ? COMPACT_W : CARD_W;
-  const cardH = compact ? COMPACT_H : CARD_H;
-
-  return (
-    <View style={styles.root}>
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
-          <Ionicons name="images-outline" size={15} color={colors.textSecondary} />
-          <Text style={[styles.headerLabel, { color: colors.textSecondary }]}>
-            {visibleImages.length} image{visibleImages.length !== 1 ? 's' : ''}
-          </Text>
-          {query ? (
-            <Text style={[styles.headerQuery, { color: colors.text }]} numberOfLines={1}>
-              · {query}
-            </Text>
-          ) : null}
+  if (images.length === 0) {
+    return (
+      <View style={[styles.container, { paddingHorizontal: Spacing.md }]}>
+        <Text style={[styles.headerTitle, { color: colors.textSecondary }]}>Image Search Results</Text>
+        <Text style={[styles.query, { color: colors.text }]}>{query}</Text>
+        <View style={styles.emptyState}>
+          <Ionicons name="images-outline" size={48} color={colors.textSecondary} />
+          <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No images found</Text>
         </View>
       </View>
+    );
+  }
 
-      {/* Horizontal carousel */}
-      <ScrollView
-        ref={scrollRef}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={[styles.carousel, compact && { paddingHorizontal: 0 }]}
-        decelerationRate="fast"
-        snapToInterval={cardW + 12}
-        snapToAlignment="start"
-      >
-        {visibleImages.map((img, idx) => (
-          <ImageCard
-            key={`img-${idx}-${img.url}`}
-            img={img}
-            idx={idx}
-            cardW={cardW}
-            cardH={cardH}
-            isDark={isDark}
-            colors={colors}
-            isDownloading={downloading === img.url}
-            onPress={() => handlePress(img.url, idx)}
-            onDownload={() => handleDownload(img.url, idx)}
-            compact={compact}
-          />
+  // Build grid rows of 2
+  const rows: SearchImage[][] = [];
+  for (let i = 0; i < images.length; i += 2) {
+    rows.push(images.slice(i, i + 2));
+  }
+
+  return (
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <Text style={[styles.headerTitle, { color: colors.textSecondary }]}>
+          {images.length} image{images.length !== 1 ? 's' : ''} found
+        </Text>
+        {query ? <Text style={[styles.query, { color: colors.text }]} numberOfLines={2}>{query}</Text> : null}
+      </View>
+
+      <View style={styles.grid}>
+        {rows.map((row, rowIdx) => (
+          <View key={rowIdx} style={styles.row}>
+            {row.map((img, colIdx) => (
+              <TouchableOpacity
+                key={`${rowIdx}-${colIdx}`}
+                style={[styles.imageCard, { backgroundColor: colors.surface }]}
+                onPress={() => onImagePress?.(img.url)}
+                activeOpacity={0.88}
+              >
+                <Image
+                  source={{ uri: img.url }}
+                  style={styles.image}
+                  contentFit="cover"
+                  transition={200}
+                />
+                {/* Gradient overlay with title + download */}
+                <View style={styles.overlay}>
+                  {img.title ? (
+                    <Text style={styles.imageTitle} numberOfLines={2}>{img.title}</Text>
+                  ) : null}
+                  <View style={styles.actions}>
+                    {img.source ? (
+                      <Text style={styles.sourceText} numberOfLines={1}>{img.source}</Text>
+                    ) : null}
+                    <TouchableOpacity
+                      style={styles.downloadBtn}
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        handleDownload(img.url, rowIdx * 2 + colIdx);
+                      }}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      {downloading === img.url ? (
+                        <ActivityIndicator size="small" color="#FFFFFF" />
+                      ) : (
+                        <Ionicons name="download-outline" size={16} color="#FFFFFF" />
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </View>
+                {/* Tap hint icon */}
+                <View style={styles.tapHint}>
+                  <Ionicons name="expand-outline" size={14} color="rgba(255,255,255,0.75)" />
+                </View>
+              </TouchableOpacity>
+            ))}
+            {/* Fill empty slot if odd count */}
+            {row.length === 1 ? <View style={styles.imagePlaceholder} /> : null}
+          </View>
         ))}
-      </ScrollView>
-
-      {/* Full-screen viewer */}
-      <ImageViewer
-        visible={viewerVisible}
-        images={visibleImages}
-        initialIndex={viewerIndex}
-        isDark={isDark}
-        onClose={() => setViewerVisible(false)}
-      />
+      </View>
     </View>
   );
-});
+}
 
-// ── Single image card ─────────────────────────────────────────────────────────
-const ImageCard = memo(function ImageCard({
-  img, idx, cardW, cardH, isDark, colors,
-  isDownloading, onPress, onDownload, compact,
-}: {
-  img: SearchImage; idx: number; cardW: number; cardH: number;
-  isDark: boolean; colors: any; isDownloading: boolean;
-  onPress: () => void; onDownload: () => void; compact: boolean;
-}) {
-  const [imgError, setImgError] = useState(false);
-
-  return (
-    <TouchableOpacity
-      style={[styles.card, { width: cardW, height: cardH, backgroundColor: isDark ? '#1C1C1E' : '#EBEBF0' }]}
-      onPress={onPress}
-      activeOpacity={0.88}
-    >
-      {!imgError ? (
-        <Image
-          source={{ uri: img.url }}
-          style={StyleSheet.absoluteFill}
-          contentFit="cover"
-          transition={220}
-          onError={() => setImgError(true)}
-        />
-      ) : (
-        <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]}>
-          <Ionicons name="image-outline" size={32} color={isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.18)'} />
-        </View>
-      )}
-
-      {/* Dark gradient overlay */}
-      <View style={styles.gradient} />
-
-      {/* Bottom info */}
-      {!compact && (
-        <View style={styles.infoRow}>
-          {img.title ? (
-            <Text style={styles.cardTitle} numberOfLines={2}>{img.title}</Text>
-          ) : null}
-          <View style={styles.metaRow}>
-            {img.source ? (
-              <Text style={styles.sourceText} numberOfLines={1}>{img.source}</Text>
-            ) : <View style={{ flex: 1 }} />}
-            <TouchableOpacity
-              onPress={(e) => { e.stopPropagation(); onDownload(); }}
-              style={styles.dlBtn}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              {isDownloading ? (
-                <ActivityIndicator size="small" color="#FFF" />
-              ) : (
-                <Ionicons name="arrow-down-circle" size={20} color="#FFF" />
-              )}
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
-
-      {/* Index badge */}
-      <View style={styles.indexBadge}>
-        <Text style={styles.indexText}>{idx + 1}</Text>
-      </View>
-
-      {/* Expand icon top-right */}
-      <View style={styles.expandIcon}>
-        <Ionicons name="expand-outline" size={13} color="rgba(255,255,255,0.85)" />
-      </View>
-    </TouchableOpacity>
-  );
-});
-
-// ── Full-screen image viewer ──────────────────────────────────────────────────
-const ImageViewer = memo(function ImageViewer({
-  visible, images, initialIndex, isDark, onClose,
-}: { visible: boolean; images: SearchImage[]; initialIndex: number; isDark: boolean; onClose: () => void }) {
-  const [current, setCurrent] = useState(initialIndex);
-
-  React.useEffect(() => { if (visible) setCurrent(initialIndex); }, [visible, initialIndex]);
-
-  const img = images[current];
-  if (!img) return null;
-
-  return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
-      <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'center', alignItems: 'center' }]}>
-        {Platform.OS === 'ios' ? <BlurView intensity={50} tint="dark" style={StyleSheet.absoluteFill} /> : null}
-
-        {/* Close */}
-        <TouchableOpacity
-          style={{ position: 'absolute', top: Platform.OS === 'ios' ? 60 : 28, right: 20, zIndex: 10, width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' }}
-          onPress={onClose}
-        >
-          <Ionicons name="close" size={22} color="#FFF" />
-        </TouchableOpacity>
-
-        {/* Image */}
-        <Image
-          source={{ uri: img.url }}
-          style={{ width: SCREEN_W, height: SCREEN_W }}
-          contentFit="contain"
-          transition={200}
-        />
-
-        {/* Info */}
-        {img.title ? (
-          <View style={{ position: 'absolute', bottom: 60, left: 20, right: 20 }}>
-            <Text style={{ color: '#FFF', fontSize: 15, fontWeight: '600', textAlign: 'center', textShadowColor: 'rgba(0,0,0,0.8)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 }} numberOfLines={3}>{img.title}</Text>
-            {img.source ? <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, textAlign: 'center', marginTop: 4 }}>{img.source}</Text> : null}
-          </View>
-        ) : null}
-
-        {/* Prev / Next */}
-        {images.length > 1 ? (
-          <View style={{ position: 'absolute', bottom: 20, flexDirection: 'row', alignItems: 'center', gap: 18 }}>
-            <TouchableOpacity onPress={() => setCurrent(i => Math.max(0, i - 1))} disabled={current === 0} style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: current === 0 ? 'rgba(255,255,255,0.07)' : 'rgba(255,255,255,0.22)', alignItems: 'center', justifyContent: 'center' }}>
-              <Ionicons name="chevron-back" size={22} color="#FFF" />
-            </TouchableOpacity>
-            <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 14 }}>{current + 1} / {images.length}</Text>
-            <TouchableOpacity onPress={() => setCurrent(i => Math.min(images.length - 1, i + 1))} disabled={current === images.length - 1} style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: current === images.length - 1 ? 'rgba(255,255,255,0.07)' : 'rgba(255,255,255,0.22)', alignItems: 'center', justifyContent: 'center' }}>
-              <Ionicons name="chevron-forward" size={22} color="#FFF" />
-            </TouchableOpacity>
-          </View>
-        ) : null}
-      </View>
-    </Modal>
-  );
-});
-
-// ── Styles ────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  root: {
-    marginVertical: 6,
+  container: {
+    marginVertical: 8,
   },
   header: {
-    paddingHorizontal: 16,
-    marginBottom: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
+    paddingHorizontal: Spacing.md,
+    marginBottom: 10,
   },
-  headerLabel: {
+  headerTitle: {
     fontSize: 12,
     fontWeight: '600',
-    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 2,
   },
-  headerQuery: {
-    fontSize: 12,
-    fontWeight: '500',
-    flex: 1,
+  query: {
+    fontSize: 16,
+    fontWeight: '700',
+    lineHeight: 22,
   },
-  carousel: {
-    paddingLeft: 16,
-    paddingRight: 8,
-    gap: 12,
+  grid: {
+    paddingHorizontal: Spacing.md,
+    gap: 8,
+  },
+  row: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    gap: 8,
+    marginBottom: 0,
   },
-  card: {
-    borderRadius: 18,
+  imageCard: {
+    width: IMAGE_SIZE,
+    height: IMAGE_SIZE,
+    borderRadius: 16,
     overflow: 'hidden',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.22,
-    shadowRadius: 12,
-    elevation: 6,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.08)',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    elevation: 5,
   },
-  gradient: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: '55%',
-    backgroundColor: 'transparent',
-    // Simulate gradient from transparent to dark
-    borderBottomLeftRadius: 18,
-    borderBottomRightRadius: 18,
+  image: {
+    width: '100%',
+    height: '100%',
   },
-  infoRow: {
+  overlay: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
     paddingHorizontal: 10,
-    paddingBottom: 10,
-    paddingTop: 36,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    borderBottomLeftRadius: 18,
-    borderBottomRightRadius: 18,
+    paddingVertical: 8,
+    paddingTop: 24,
+    background: 'linear-gradient(transparent, rgba(0,0,0,0.65))',
+    backgroundColor: 'rgba(0,0,0,0)',
+    // Simulate gradient with a semi-transparent bottom
+    borderBottomLeftRadius: 16,
+    borderBottomRightRadius: 16,
   },
-  cardTitle: {
+  imageTitle: {
     color: '#FFFFFF',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
-    lineHeight: 16,
-    marginBottom: 5,
-    textShadowColor: 'rgba(0,0,0,0.9)',
+    lineHeight: 15,
+    marginBottom: 4,
+    textShadowColor: 'rgba(0,0,0,0.8)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 3,
   },
-  metaRow: {
+  actions: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
   sourceText: {
-    color: 'rgba(255,255,255,0.7)',
+    color: 'rgba(255,255,255,0.75)',
     fontSize: 10,
     fontWeight: '500',
     flex: 1,
   },
-  dlBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+  downloadBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: 'rgba(0,0,0,0.55)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  indexBadge: {
-    position: 'absolute',
-    top: 8,
-    left: 8,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  indexText: {
-    color: '#FFF',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  expandIcon: {
+  tapHint: {
     position: 'absolute',
     top: 8,
     right: 8,
@@ -388,5 +249,17 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.45)',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  imagePlaceholder: {
+    width: IMAGE_SIZE,
+  },
+  emptyState: {
+    padding: 24,
+    alignItems: 'center',
+    gap: 8,
+  },
+  emptyText: {
+    fontSize: 14,
+    textAlign: 'center',
   },
 });

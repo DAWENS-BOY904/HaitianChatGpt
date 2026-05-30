@@ -22,23 +22,13 @@ import { BlurView } from 'expo-blur'; // npm install expo-blur
 interface EmailComposerModalProps {
   visible: boolean;
   onClose: () => void;
-  template?: 'support' | 'relations' | 'custom' | 'ai_prompt';
-  /** AI-generated prompt/message passed directly from chat */
-  aiContent?: {
-    subject?: string;
-    body: string;
-    title?: string;
-  };
+  template?: 'support' | 'relations' | 'custom';
 }
 
 // --- Constants ---
 const RECIPIENT_EMAIL = 'support@haitianchatgpt.com';
 
-const TEMPLATES: Record<string, { subject: string; body: string }> = {
-  ai_prompt: {
-    subject: '',
-    body: '',
-  },
+const TEMPLATES = {
   support: {
     subject: 'Support Request – Account Issue',
     body: `Hello Haitian ChatGPT Support Team,
@@ -89,7 +79,6 @@ export function EmailComposerModal({
   visible,
   onClose,
   template = 'support',
-  aiContent,
 }: EmailComposerModalProps) {
   const { colors, isDark } = useTheme();
   const { showAlert } = useAlert();
@@ -98,23 +87,14 @@ export function EmailComposerModal({
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
 
-  const [modalTitle, setModalTitle] = useState('Email Composer');
-
-  // Reset fields when modal opens with new template or AI content
+  // Reset fields when modal opens with new template
   React.useEffect(() => {
     if (visible) {
-      if (template === 'ai_prompt' && aiContent) {
-        setSubject(aiContent.subject || 'AI Generated Prompt');
-        setBody(aiContent.body);
-        setModalTitle(aiContent.title || 'Beautiful Prompt');
-      } else {
-        const t = TEMPLATES[template] || TEMPLATES['support'];
-        setSubject(t.subject);
-        setBody(t.body);
-        setModalTitle('Email Composer');
-      }
+      const t = TEMPLATES[template];
+      setSubject(t.subject);
+      setBody(t.body);
     }
-  }, [visible, template, aiContent]);
+  }, [visible, template]);
 
   const handleCopyEmail = useCallback(() => {
     const fullEmail = `To: ${RECIPIENT_EMAIL}\\nSubject: ${subject}\\n\\n${body}`;
@@ -310,21 +290,10 @@ export function EmailComposerModal({
           <View style={styles.container}>
             {/* Header */}
             <View style={styles.header}>
-              <Text style={styles.headerTitle}>{modalTitle}</Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                {template === 'ai_prompt' ? (
-                  <TouchableOpacity
-                    style={[styles.closeButton, { backgroundColor: colors.primary + '18', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 6 }]}
-                    onPress={handleCopyEmail}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={{ color: colors.primary, fontSize: 13, fontWeight: '700' }}>Copy</Text>
-                  </TouchableOpacity>
-                ) : null}
-                <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-                  <Ionicons name="close" size={24} color={colors.text} />
-                </TouchableOpacity>
-              </View>
+              <Text style={styles.headerTitle}>Email Composer</Text>
+              <TouchableOpacity style={styles.closeButton} onPress={onClose}>
+                <Ionicons name="close" size={24} color={colors.text} />
+              </TouchableOpacity>
             </View>
 
             <ScrollView
@@ -332,55 +301,6 @@ export function EmailComposerModal({
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
             >
-              {template === 'ai_prompt' ? (
-                /* ── AI Prompt display card ── */
-                <View style={[styles.card, { borderColor: colors.primary + '35', borderWidth: 1.5 }]}>
-                  <View style={[styles.cardHeader, { borderBottomColor: colors.primary + '22' }]}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                      <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: colors.primary + '20', alignItems: 'center', justifyContent: 'center' }}>
-                        <Ionicons name="sparkles" size={14} color={colors.primary} />
-                      </View>
-                      <Text style={[styles.cardLabel, { color: colors.primary, letterSpacing: 0 }]}>AI Generated Prompt</Text>
-                    </View>
-                    <View style={styles.iconRow}>
-                      <TouchableOpacity style={styles.iconButton} onPress={handleCopyEmail} activeOpacity={0.7}>
-                        <Ionicons name="copy-outline" size={20} color={colors.textSecondary} />
-                      </TouchableOpacity>
-                      <TouchableOpacity style={styles.iconButton} onPress={handleSendEmail} activeOpacity={0.7}>
-                        <Ionicons name="share-outline" size={20} color={colors.primary} />
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                  {/* Prompt title/subject */}
-                  {subject ? (
-                    <View style={styles.field}>
-                      <Text style={styles.fieldLabel}>Title</Text>
-                      <TextInput
-                        style={[styles.input, styles.subjectInput, { backgroundColor: colors.primary + '08' }]}
-                        value={subject}
-                        onChangeText={setSubject}
-                        placeholder="Prompt title..."
-                        placeholderTextColor={colors.textSecondary}
-                        multiline
-                        maxLength={200}
-                      />
-                    </View>
-                  ) : null}
-                  {/* Prompt body */}
-                  <View style={styles.field}>
-                    <Text style={styles.fieldLabel}>Prompt Content</Text>
-                    <TextInput
-                      style={[styles.input, styles.bodyInput, { backgroundColor: colors.primary + '06', minHeight: 220 }]}
-                      value={body}
-                      onChangeText={setBody}
-                      placeholder="Your AI prompt will appear here..."
-                      placeholderTextColor={colors.textSecondary}
-                      multiline
-                      textAlignVertical="top"
-                    />
-                  </View>
-                </View>
-              ) : (
               <View style={styles.card}>
                 {/* Card Header */}
                 <View style={styles.cardHeader}>
@@ -445,40 +365,18 @@ export function EmailComposerModal({
                   />
                 </View>
               </View>
-              )}
             </ScrollView>
 
             {/* Footer */}
             <View style={styles.footer}>
-              {template === 'ai_prompt' ? (
-                <>
-                  <TouchableOpacity
-                    style={[styles.sendButton, { flex: 0.5, backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.07)' }]}
-                    onPress={handleCopyEmail}
-                    activeOpacity={0.8}
-                  >
-                    <Ionicons name="copy-outline" size={18} color={colors.text} />
-                    <Text style={[styles.sendButtonText, { color: colors.text }]}>Copy</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.sendButton}
-                    onPress={handleSendEmail}
-                    activeOpacity={0.8}
-                  >
-                    <Ionicons name="share-outline" size={20} color="#FFFFFF" />
-                    <Text style={styles.sendButtonText}>Share Prompt</Text>
-                  </TouchableOpacity>
-                </>
-              ) : (
-                <TouchableOpacity
-                  style={styles.sendButton}
-                  onPress={handleSendEmail}
-                  activeOpacity={0.8}
-                >
-                  <Ionicons name="send" size={20} color="#FFFFFF" />
-                  <Text style={styles.sendButtonText}>Send Email</Text>
-                </TouchableOpacity>
-              )}
+              <TouchableOpacity
+                style={styles.sendButton}
+                onPress={handleSendEmail}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="send" size={20} color="#FFFFFF" />
+                <Text style={styles.sendButtonText}>Send Email</Text>
+              </TouchableOpacity>
             </View>
           </View>
         </KeyboardAvoidingView>
