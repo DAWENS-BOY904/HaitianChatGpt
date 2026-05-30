@@ -3539,7 +3539,7 @@ export default function HomeScreen() {
                 <Modal visible={msgMenuVisible} transparent animationType="fade" onRequestClose={() => setMsgMenuVisible(false)}>
                   {/* Transparent backdrop — no blur so chat stays visible */}
                   <Pressable style={{ flex: 1, backgroundColor: 'transparent' }} onPress={() => setMsgMenuVisible(false)} />
-                  <View style={{ position: 'absolute', right: 14, top: (() => { const SCREEN_H = Dimensions.get('window').height; const menuH = 130; return (msgMenuPageY + menuH > SCREEN_H - 60) ? Math.max(80, msgMenuPageY - menuH - 16) : Math.max(80, msgMenuPageY + 12); })(), width: 220, borderRadius: 18, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: isDark ? 0.55 : 0.18, shadowRadius: 20, elevation: 20 }}>
+                  <View style={{ position: 'absolute', right: 14, top: (() => { const SCREEN_H = Dimensions.get('window').height; const menuH = msgHasMedia ? 90 : 140; const belowY = msgMenuPageY + 8; const aboveY = msgMenuPageY - menuH - 8; return (belowY + menuH > SCREEN_H - 80) ? Math.max(80, aboveY) : Math.max(80, belowY); })(), width: 220, borderRadius: 18, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: isDark ? 0.55 : 0.18, shadowRadius: 20, elevation: 20 }}>
                     {Platform.OS === 'ios' ? (
                       <BlurView intensity={isDark ? 88 : 78} tint={isDark ? 'dark' : 'extraLight'} style={{ borderRadius: 18, overflow: 'hidden' }}>
                         <View style={{ paddingHorizontal: 16, paddingTop: 11, paddingBottom: 8 }}>
@@ -3548,7 +3548,7 @@ export default function HomeScreen() {
                         {/* Copy */}
                         <TouchableOpacity
                           style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13, gap: 12 }}
-                          onPress={async () => { setMsgMenuVisible(false); await Clipboard.setStringAsync(msgMenuMsg.content || ''); }}
+                          onPress={async () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setMsgMenuVisible(false); await Clipboard.setStringAsync(msgMenuMsg.content || ''); }}
                           activeOpacity={0.6}
                         >
                           <Ionicons name="copy-outline" size={20} color={menuTextC} />
@@ -3558,7 +3558,7 @@ export default function HomeScreen() {
                         {!msgHasMedia ? (
                           <TouchableOpacity
                             style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13, gap: 12 }}
-                            onPress={() => { setMsgMenuVisible(false); setTimeout(() => { handleEditMessage(msgMenuMsg.id, msgMenuMsg.content || ''); setTimeout(() => inputRef.current?.focus(), 80); }, 50); }}
+                            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setMsgMenuVisible(false); setTimeout(() => { handleEditMessage(msgMenuMsg.id, msgMenuMsg.content || ''); setTimeout(() => inputRef.current?.focus(), 80); }, 50); }}
                             activeOpacity={0.6}
                           >
                             <Ionicons name="pencil-outline" size={20} color={menuTextC} />
@@ -3574,7 +3574,7 @@ export default function HomeScreen() {
                         {/* Copy */}
                         <TouchableOpacity
                           style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13, gap: 12 }}
-                          onPress={async () => { setMsgMenuVisible(false); await Clipboard.setStringAsync(msgMenuMsg.content || ''); }}
+                          onPress={async () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setMsgMenuVisible(false); await Clipboard.setStringAsync(msgMenuMsg.content || ''); }}
                           activeOpacity={0.6}
                         >
                           <Ionicons name="copy-outline" size={20} color={menuTextC} />
@@ -3584,7 +3584,7 @@ export default function HomeScreen() {
                         {!msgHasMedia ? (
                           <TouchableOpacity
                             style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13, gap: 12 }}
-                            onPress={() => { setMsgMenuVisible(false); setTimeout(() => { handleEditMessage(msgMenuMsg.id, msgMenuMsg.content || ''); setTimeout(() => inputRef.current?.focus(), 80); }, 50); }}
+                            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setMsgMenuVisible(false); setTimeout(() => { handleEditMessage(msgMenuMsg.id, msgMenuMsg.content || ''); setTimeout(() => inputRef.current?.focus(), 80); }, 50); }}
                             activeOpacity={0.6}
                           >
                             <Ionicons name="pencil-outline" size={20} color={menuTextC} />
