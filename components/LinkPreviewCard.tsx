@@ -1,24 +1,40 @@
 /**
  * LinkPreviewCard — rich preview card for URLs detected in chat.
- * Supports: TikTok, YouTube, Instagram, Facebook, Twitter/X, generic websites.
- * Usage: <LinkPreviewCard url="https://..." isDark={isDark} colors={colors} />
+ * Fetches real OpenGraph/oEmbed metadata via the fetch-link-preview edge function.
+ * Supports: TikTok, YouTube, Instagram, Facebook, Twitter/X, any website.
  */
-import React, { useState, useEffect, memo } from 'react';
+import React, { useState, useEffect, useRef, memo } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
-  ActivityIndicator,
   Linking,
   Platform,
+  Animated,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import { BlurView } from 'expo-blur';
+import { getSupabaseClient } from '@/template';
+
+// ── Module-level metadata cache (persists across renders, avoids re-fetching) ──
+const _metadataCache = new Map<string, LinkMetadata>();
+const _pendingFetches = new Set<string>(); // deduplicate in-flight requests
 
 // ── Platform detection ────────────────────────────────────────────────────────
-export type LinkPlatform = 'tiktok' | 'youtube' | 'instagram' | 'facebook' | 'twitter' | 'web';
+export type LinkPlatform =
+  | 'tiktok'
+  | 'youtube'
+  | 'instagram'
+  | 'facebook'
+  | 'twitter'
+  | 'reddit'
+  | 'github'
+  | 'linkedin'
+  | 'spotify'
+  | 'amazon'
+  | 'article'
+  | 'web';
 
 export function detectLinkPlatform(url: string): LinkPlatform {
   try {
@@ -28,21 +44,33 @@ export function detectLinkPlatform(url: string): LinkPlatform {
     if (host.includes('instagram.com')) return 'instagram';
     if (host.includes('facebook.com') || host.includes('fb.com') || host.includes('fb.watch')) return 'facebook';
     if (host.includes('twitter.com') || host.includes('x.com')) return 'twitter';
+    if (host.includes('reddit.com')) return 'reddit';
+    if (host.includes('github.com')) return 'github';
+    if (host.includes('linkedin.com')) return 'linkedin';
+    if (host.includes('spotify.com')) return 'spotify';
+    if (host.includes('amazon.com') || host.includes('amzn.to')) return 'amazon';
+    if (host.includes('medium.com') || host.includes('substack.com')) return 'article';
   } catch (_e) {}
   return 'web';
 }
 
-// ── Platform config (icon, color, label) ────────────────────────────────────
+// ── Platform config ───────────────────────────────────────────────────────────
 const PLATFORM_CONFIG: Record<LinkPlatform, { label: string; color: string; bgColor: string; iconName: string }> = {
-  tiktok: { label: 'TikTok', color: '#FFFFFF', bgColor: '#010101', iconName: 'logo-tiktok' },
-  youtube: { label: 'YouTube', color: '#FFFFFF', bgColor: '#FF0000', iconName: 'logo-youtube' },
-  instagram: { label: 'Instagram', color: '#FFFFFF', bgColor: '#E1306C', iconName: 'logo-instagram' },
-  facebook: { label: 'Facebook', color: '#FFFFFF', bgColor: '#1877F2', iconName: 'logo-facebook' },
-  twitter: { label: 'Twitter / X', color: '#FFFFFF', bgColor: '#000000', iconName: 'logo-twitter' },
-  web: { label: 'Open Link', color: '#FFFFFF', bgColor: '#007AFF', iconName: 'globe-outline' },
+  tiktok:   { label: 'TikTok',       color: '#FFFFFF', bgColor: '#010101',  iconName: 'logo-tiktok'    },
+  youtube:  { label: 'YouTube',      color: '#FFFFFF', bgColor: '#FF0000',  iconName: 'logo-youtube'   },
+  instagram:{ label: 'Instagram',    color: '#FFFFFF', bgColor: '#E1306C',  iconName: 'logo-instagram' },
+  facebook: { label: 'Facebook',     color: '#FFFFFF', bgColor: '#1877F2',  iconName: 'logo-facebook'  },
+  twitter:  { label: 'Twitter / X',  color: '#FFFFFF', bgColor: '#000000',  iconName: 'logo-twitter'   },
+  reddit:   { label: 'Reddit',       color: '#FFFFFF', bgColor: '#FF4500',  iconName: 'logo-reddit'    },
+  github:   { label: 'GitHub',       color: '#FFFFFF', bgColor: '#24292E',  iconName: 'logo-github'    },
+  linkedin: { label: 'LinkedIn',     color: '#FFFFFF', bgColor: '#0A66C2',  iconName: 'business'       },
+  spotify:  { label: 'Spotify',      color: '#000000', bgColor: '#1DB954',  iconName: 'musical-notes'  },
+  amazon:   { label: 'Amazon',       color: '#FFFFFF', bgColor: '#FF9900',  iconName: 'cart'           },
+  article:  { label: 'Article',      color: '#FFFFFF', bgColor: '#607D8B',  iconName: 'document-text'  },
+  web:      { label: 'Open Link',    color: '#FFFFFF', bgColor: '#007AFF',  iconName: 'globe-outline'  },
 };
 
-// ── Open URL helper ───────────────────────────────────────────────────────────
+// ── Open URL ──────────────────────────────────────────────────────────────────
 async function openUrl(url: string) {
   try {
     if (await Linking.canOpenURL(url)) await Linking.openURL(url);
@@ -60,24 +88,60 @@ export interface LinkMetadata {
   url: string;
 }
 
-// ── Minimal metadata extractor (client-side, best-effort) ─────────────────────
-// Most metadata comes from the edge function (AI response context), so this
-// is only used as a fallback when the edge function hasn't provided data.
+// ── Fallback metadata (shown while loading) ────────────────────────────────────
 function buildFallbackMetadata(url: string): LinkMetadata {
   const platform = detectLinkPlatform(url);
   let domain = '';
   try { domain = new URL(url).hostname.replace('www.', ''); } catch {}
-  const platformConfig = PLATFORM_CONFIG[platform];
   return {
     title: domain || url,
     description: 'Tap to open this link',
-    siteName: platformConfig.label,
+    siteName: PLATFORM_CONFIG[platform].label,
     platform,
     url,
-    thumbnail: undefined,
-    author: undefined,
   };
 }
+
+// ── Skeleton card (loading state) ─────────────────────────────────────────────
+const SkeletonCard = memo(function SkeletonCard({
+  compact,
+  isDark,
+}: { compact: boolean; isDark: boolean }) {
+  const shimmer = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(shimmer, { toValue: 1, duration: 900, useNativeDriver: true }),
+        Animated.timing(shimmer, { toValue: 0, duration: 900, useNativeDriver: true }),
+      ])
+    );
+    anim.start();
+    return () => anim.stop();
+  }, []);
+
+  const opacity = shimmer.interpolate({ inputRange: [0, 1], outputRange: [0.35, 0.75] });
+  const cardBg   = isDark ? '#1C1C1E' : '#F8F8FA';
+  const skelBg   = isDark ? '#3A3A3C' : '#DCDCDC';
+  const thumbH   = compact ? 120 : 160;
+  const cardW: any = compact ? 260 : '100%';
+
+  return (
+    <View style={[styles.card, { backgroundColor: cardBg, width: cardW, alignSelf: 'flex-start', marginVertical: 6, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)' }]}>
+      {/* Thumbnail skeleton */}
+      <Animated.View style={{ width: '100%', height: thumbH, opacity, backgroundColor: skelBg, borderTopLeftRadius: 16, borderTopRightRadius: 16 }} />
+      {/* Info skeleton */}
+      <View style={{ padding: 12, gap: 7 }}>
+        <Animated.View style={{ height: 13, width: '75%', borderRadius: 6, backgroundColor: skelBg, opacity }} />
+        <Animated.View style={{ height: 10, width: '55%', borderRadius: 6, backgroundColor: skelBg, opacity }} />
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4, alignItems: 'center' }}>
+          <Animated.View style={{ height: 9, width: '40%', borderRadius: 5, backgroundColor: skelBg, opacity }} />
+          <Animated.View style={{ height: 24, width: 60, borderRadius: 12, backgroundColor: skelBg, opacity }} />
+        </View>
+      </View>
+    </View>
+  );
+});
 
 // ── Platform badge ─────────────────────────────────────────────────────────────
 const PlatformBadge = memo(function PlatformBadge({ platform }: { platform: LinkPlatform }) {
@@ -90,7 +154,7 @@ const PlatformBadge = memo(function PlatformBadge({ platform }: { platform: Link
   );
 });
 
-// ── Thumbnail placeholder ──────────────────────────────────────────────────────
+// ── Thumbnail placeholder (no image) ──────────────────────────────────────────
 const ThumbnailPlaceholder = memo(function ThumbnailPlaceholder({
   platform, isDark,
 }: { platform: LinkPlatform; isDark: boolean }) {
@@ -107,77 +171,134 @@ const ThumbnailPlaceholder = memo(function ThumbnailPlaceholder({
 // ── Main LinkPreviewCard ───────────────────────────────────────────────────────
 interface LinkPreviewCardProps {
   url: string;
-  metadata?: LinkMetadata | null;
+  metadata?: LinkMetadata | null; // optional: skip fetching if provided
   isDark: boolean;
   colors: any;
-  compact?: boolean; // smaller card for user bubbles
+  compact?: boolean;
 }
 
 export const LinkPreviewCard = memo(function LinkPreviewCard({
   url,
-  metadata,
+  metadata: propMetadata,
   isDark,
   colors,
   compact = false,
 }: LinkPreviewCardProps) {
+  const [fetchedMeta, setFetchedMeta] = useState<LinkMetadata | null>(null);
+  const [loading, setLoading] = useState(!propMetadata);
   const [imgError, setImgError] = useState(false);
+
   const platform = detectLinkPlatform(url);
-  const cfg = PLATFORM_CONFIG[platform];
 
-  // Use provided metadata or fallback
-  const meta: LinkMetadata = metadata || buildFallbackMetadata(url);
+  // ── Fetch real OG metadata from edge function ──────────────────────────────
+  useEffect(() => {
+    // If metadata was passed as prop, skip fetching
+    if (propMetadata) { setLoading(false); return; }
+    if (!url) { setLoading(false); return; }
 
-  const cardBg = isDark ? '#1C1C1E' : '#F8F8FA';
+    // Check module cache first (instant, no network)
+    const cached = _metadataCache.get(url);
+    if (cached) { setFetchedMeta(cached); setLoading(false); return; }
+
+    // Deduplicate concurrent requests for the same URL
+    if (_pendingFetches.has(url)) { setLoading(false); return; }
+
+    let cancelled = false;
+    _pendingFetches.add(url);
+
+    const supabase = getSupabaseClient();
+    supabase.functions
+      .invoke('fetch-link-preview', { body: { url } })
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        _pendingFetches.delete(url);
+        if (!error && data && (data.title || data.image)) {
+          const meta: LinkMetadata = {
+            title:       data.title       || url,
+            description: data.description || undefined,
+            thumbnail:   data.image       || undefined,
+            author:      data.author      || undefined,
+            siteName:    data.siteName    || undefined,
+            platform:    detectLinkPlatform(url),
+            url,
+          };
+          _metadataCache.set(url, meta);
+          setFetchedMeta(meta);
+          setImgError(false);
+        }
+        setLoading(false);
+      })
+      .catch(() => {
+        if (!cancelled) { _pendingFetches.delete(url); setLoading(false); }
+      });
+
+    return () => { cancelled = true; };
+  }, [url, propMetadata]);
+
+  // ── Show skeleton while fetching ──────────────────────────────────────────
+  if (loading) {
+    return <SkeletonCard compact={compact} isDark={isDark} />;
+  }
+
+  // Best available metadata: prop → fetched → fallback
+  const meta: LinkMetadata = propMetadata || fetchedMeta || buildFallbackMetadata(url);
+  const cfg = PLATFORM_CONFIG[meta.platform];
+
+  const cardBg     = isDark ? '#1C1C1E' : '#F8F8FA';
   const borderColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)';
-  const textColor = isDark ? '#FFFFFF' : '#000000';
-  const subColor = isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.5)';
+  const textColor  = isDark ? '#FFFFFF' : '#000000';
+  const subColor   = isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.5)';
   const thumbnailH = compact ? 120 : 160;
-  const cardW = compact ? 260 : '100%' as any;
+  const cardW: any = compact ? 260 : '100%';
 
   const hasThumbnail = !!(meta.thumbnail && !imgError);
+  const isVideoPlat  = meta.platform === 'tiktok' || meta.platform === 'youtube';
 
   return (
     <TouchableOpacity
       onPress={() => openUrl(url)}
       activeOpacity={0.88}
-      style={[
-        styles.card,
-        {
-          backgroundColor: cardBg,
-          borderColor,
-          width: cardW,
-          alignSelf: 'flex-start',
-          marginVertical: 6,
-        },
-      ]}
+      style={[styles.card, { backgroundColor: cardBg, borderColor, width: cardW, alignSelf: 'flex-start', marginVertical: 6 }]}
     >
-      {/* Thumbnail area */}
+      {/* ── Thumbnail ── */}
       <View style={{ width: '100%', height: thumbnailH, overflow: 'hidden', borderTopLeftRadius: 16, borderTopRightRadius: 16, position: 'relative' }}>
         {hasThumbnail ? (
           <Image
             source={{ uri: meta.thumbnail }}
             style={{ width: '100%', height: thumbnailH }}
             contentFit="cover"
-            transition={200}
+            transition={220}
             onError={() => setImgError(true)}
           />
         ) : (
-          <ThumbnailPlaceholder platform={platform} isDark={isDark} />
+          <ThumbnailPlaceholder platform={meta.platform} isDark={isDark} />
         )}
-        {/* Platform badge top-left */}
+
+        {/* Platform badge — top-left */}
         <View style={{ position: 'absolute', top: 8, left: 8 }}>
-          <PlatformBadge platform={platform} />
+          <PlatformBadge platform={meta.platform} />
         </View>
+
         {/* Play button for video platforms */}
-        {(platform === 'tiktok' || platform === 'youtube') && (
+        {isVideoPlat && (
           <View style={styles.playBtn}>
-            <Ionicons name="play" size={20} color="#FFF" style={{ marginLeft: 2 }} />
+            <Ionicons name="play" size={22} color="#FFF" style={{ marginLeft: 3 }} />
           </View>
+        )}
+
+        {/* Gradient overlay for readability when there's an image */}
+        {hasThumbnail && (
+          <View
+            style={{
+              position: 'absolute', bottom: 0, left: 0, right: 0, height: 48,
+              backgroundColor: 'transparent',
+            }}
+          />
         )}
       </View>
 
-      {/* Info */}
-      <View style={{ padding: 12, gap: 3 }}>
+      {/* ── Info ── */}
+      <View style={{ padding: 12, gap: 4 }}>
         {meta.title ? (
           <Text
             style={{ color: textColor, fontSize: compact ? 13 : 14, fontWeight: '600', lineHeight: 20 }}
@@ -186,6 +307,7 @@ export const LinkPreviewCard = memo(function LinkPreviewCard({
             {meta.title}
           </Text>
         ) : null}
+
         {meta.description ? (
           <Text
             style={{ color: subColor, fontSize: 12, lineHeight: 17 }}
@@ -194,20 +316,24 @@ export const LinkPreviewCard = memo(function LinkPreviewCard({
             {meta.description}
           </Text>
         ) : null}
-        {/* Author / footer */}
+
+        {/* Footer: author + open button */}
         <View style={styles.footer}>
-          {meta.author ? (
-            <View style={styles.authorRow}>
-              <Ionicons name="person-circle-outline" size={13} color={subColor} />
+          <View style={styles.authorRow}>
+            {meta.author ? (
+              <>
+                <Ionicons name="person-circle-outline" size={13} color={subColor} />
+                <Text style={{ color: subColor, fontSize: 11, marginLeft: 3 }} numberOfLines={1}>
+                  {meta.author}
+                </Text>
+              </>
+            ) : (
               <Text style={{ color: subColor, fontSize: 11 }} numberOfLines={1}>
-                {meta.author}
+                {meta.siteName || cfg.label}
               </Text>
-            </View>
-          ) : (
-            <Text style={{ color: subColor, fontSize: 11 }} numberOfLines={1}>
-              {meta.siteName || cfg.label}
-            </Text>
-          )}
+            )}
+          </View>
+
           <View style={[styles.openBtn, { backgroundColor: cfg.bgColor }]}>
             <Ionicons name="open-outline" size={11} color={cfg.color} />
             <Text style={{ color: cfg.color, fontSize: 11, fontWeight: '700' }}>Open</Text>
@@ -228,11 +354,14 @@ interface UrlChipProps {
 export const UrlChip = memo(function UrlChip({ url, isDark, colors }: UrlChipProps) {
   const platform = detectLinkPlatform(url);
   const cfg = PLATFORM_CONFIG[platform];
-  let display = url;
+
+  // Show fetched title if available in cache
+  const cached = _metadataCache.get(url);
+  let display = '';
   try {
     const u = new URL(url);
     display = u.hostname.replace('www.', '') + (u.pathname.length > 1 ? u.pathname.slice(0, 24) : '');
-  } catch {}
+  } catch { display = url; }
 
   return (
     <TouchableOpacity
@@ -253,7 +382,7 @@ export const UrlChip = memo(function UrlChip({ url, isDark, colors }: UrlChipPro
         style={{ color: colors.primary || '#007AFF', fontSize: 12, fontWeight: '500', flex: 1 }}
         numberOfLines={1}
       >
-        {display}
+        {cached?.title || display}
       </Text>
       <Ionicons name="open-outline" size={12} color={colors.textSecondary} />
     </TouchableOpacity>
@@ -261,8 +390,6 @@ export const UrlChip = memo(function UrlChip({ url, isDark, colors }: UrlChipPro
 });
 
 // ── Parse URL metadata from AI response content ────────────────────────────────
-// The edge function injects URL content into the system context; the AI response
-// sometimes echoes the metadata. This utility extracts it from raw content.
 export function extractLinkMetadataFromAIResponse(
   content: string,
   url: string
@@ -286,7 +413,7 @@ export function extractLinkMetadataFromAIResponse(
     } catch {}
   }
 
-  // Extract thumbnail from content (image URL mentioned)
+  // Extract from inline text patterns (AI sometimes describes OG metadata)
   const thumbMatch = content.match(/Thumbnail:\s*(https?:\/\/[^\s\n]+)/i);
   const titleMatch = content.match(/Title:\s*([^\n]+)/i);
   const authorMatch = content.match(/(?:Creator|Channel|Author|By|@):\s*([^\n]+)/i);
@@ -304,11 +431,10 @@ export function extractLinkMetadataFromAIResponse(
       url,
     };
   }
-
   return null;
 }
 
-// ── Helper to extract first URL from text ─────────────────────────────────────
+// ── Helper: extract first URL from text ───────────────────────────────────────
 export function extractFirstUrl(text: string): string | null {
   const match = text.match(/https?:\/\/[^\s"'<>]+/i);
   return match ? match[0] : null;
@@ -355,14 +481,14 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: '50%',
     left: '50%',
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(0,0,0,0.6)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: -22,
-    marginTop: -22,
+    marginLeft: -24,
+    marginTop: -24,
   },
   footer: {
     flexDirection: 'row',
@@ -373,7 +499,6 @@ const styles = StyleSheet.create({
   authorRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
     flex: 1,
   },
   openBtn: {
