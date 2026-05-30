@@ -26,7 +26,7 @@ import * as WebBrowser from '../utils/web-browser';
 import { BlurView } from 'expo-blur';
 import { StreamingCodeBlock } from './StreamingCodeBlock';
 import { SourcesModal, Source, InlineSourcesPill } from './SourcesModal';
-import * as Clipboard from 'expo-clipboard';
+import Clipboard from '@react-native-clipboard/clipboard';
 import * as MediaLibrary from 'expo-media-library';
 import { LinkPreviewCard, extractFirstUrl, extractLinkMetadataFromAIResponse, detectLinkPlatform, UrlChip } from './LinkPreviewCard';
 // expo-video — used for real-time video playback
