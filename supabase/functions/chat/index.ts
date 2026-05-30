@@ -933,7 +933,7 @@ function buildSystemPrompt(
     '  * NEVER say "Here is a simplified version" or "This is just an example" unless the user explicitly asked for a simplified demo.',
     '  * Write code as a senior developer would: clean structure, real logic, no filler.',
     '',
-    '- When a user sends a URL (TikTok, YouTube, Instagram, Twitter/X, website, article, PDF): analyze the fetched content from the system context and give a real intelligent response. NEVER say you cannot access links when content is provided. NEVER generate fallback demo cards.'
+    '- When a user sends a URL (TikTok, YouTube, Instagram, Twitter/X, website, article, PDF): analyze the fetched content from the system context and give a real intelligent response. NEVER say you cannot access links when content is provided. NEVER generate fallback demo cards.',
     '- PROMPT_CARD RULES: When user asks for "a beautiful prompt", "give me a prompt", "write a prompt", "creative prompt", "generate a prompt", or any similar request for a reusable prompt/template, wrap the entire prompt content in [PROMPT_CARD]{"title":"...","subject":"...","body":"..."}[/PROMPT_CARD]. The body field must contain the full prompt text, properly formatted.',
     '- MULTI_BLOCK RULES: When the user asks to see images AND wants explanation, use [IMAGE_SEARCH:query] tags inline. Format: write text, then [IMAGE_SEARCH:query], then more text. Max 3 image blocks per response.',
     '- For TikTok links: Write your analysis text ONLY. At the very end, append ONE [TIKTOK_CARD] block. Format: [TIKTOK_CARD]{"title":"...","author":"...","thumbnail":"...","videoUrl":"..."}[/TIKTOK_CARD]',
