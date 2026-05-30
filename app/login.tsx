@@ -24,6 +24,8 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 import * as Linking from 'expo-linking';
+import * as AppleAuthentication from 'expo-apple-authentication';
+import * as Crypto from 'expo-crypto';
 
 // ── AI Logo ──
 const AI_LOGO_URL = 'https://uzxmmddivzqjhcnnrkns.supabase.co/storage/v1/object/public/logo/logo.png';
@@ -40,7 +42,9 @@ const appleSupabase = createClient(MY_SUPABASE_URL, MY_SUPABASE_ANON_KEY, {
   },
 });
 
-// ── COUNTRY LIST (10 peyi) ──
+const APPLE_NAME_CACHE_KEY = 'apple_signin_name_cache';
+
+// ── COUNTRY LIST (30 peyi) ──
 interface Country {
   name: string;
   code: string;
@@ -59,8 +63,6 @@ const COUNTRIES: Country[] = [
   { name: 'Mexico', code: 'MX', flag: '🇲🇽', dialCode: '+52' },
   { name: 'Brazil', code: 'BR', flag: '🇧🇷', dialCode: '+55' },
   { name: 'India', code: 'IN', flag: '🇮🇳', dialCode: '+91' },
-
-  // ➕ 20 more countries
   { name: 'Italy', code: 'IT', flag: '🇮🇹', dialCode: '+39' },
   { name: 'Spain', code: 'ES', flag: '🇪🇸', dialCode: '+34' },
   { name: 'Portugal', code: 'PT', flag: '🇵🇹', dialCode: '+351' },
@@ -71,13 +73,11 @@ const COUNTRIES: Country[] = [
   { name: 'Norway', code: 'NO', flag: '🇳🇴', dialCode: '+47' },
   { name: 'Denmark', code: 'DK', flag: '🇩🇰', dialCode: '+45' },
   { name: 'Finland', code: 'FI', flag: '🇫🇮', dialCode: '+358' },
-
   { name: 'Nigeria', code: 'NG', flag: '🇳🇬', dialCode: '+234' },
   { name: 'South Africa', code: 'ZA', flag: '🇿🇦', dialCode: '+27' },
   { name: 'Kenya', code: 'KE', flag: '🇰🇪', dialCode: '+254' },
   { name: 'Ghana', code: 'GH', flag: '🇬🇭', dialCode: '+233' },
   { name: 'Egypt', code: 'EG', flag: '🇪🇬', dialCode: '+20' },
-
   { name: 'China', code: 'CN', flag: '🇨🇳', dialCode: '+86' },
   { name: 'Japan', code: 'JP', flag: '🇯🇵', dialCode: '+81' },
   { name: 'South Korea', code: 'KR', flag: '🇰🇷', dialCode: '+82' },
@@ -124,10 +124,8 @@ async function sendLoginConfirmationEmail(userId: string, email: string) {
   }
 }
 
-
-
 export default function LoginScreen() {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const { signInWithPassword, signInWithGoogle, operationLoading, user } = useAuth();
   const { showAlert } = useAlert();
   const router = useRouter();
@@ -142,6 +140,7 @@ export default function LoginScreen() {
   const [appleLoading, setAppleLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [guestModalVisible, setGuestModalVisible] = useState(false);
+  const [appleAvailable, setAppleAvailable] = useState(false);
   
   // ── PHONE STATE ──
   const [isPhoneMode, setIsPhoneMode] = useState(false);
@@ -155,6 +154,14 @@ export default function LoginScreen() {
     return () => { isMounted.current = false; };
   }, []);
 
+  // Check Apple Sign In availability
+  useEffect(() => {
+    if (Platform.OS !== 'ios') return;
+    AppleAuthentication.isAvailableAsync()
+      .then(setAppleAvailable)
+      .catch(() => setAppleAvailable(false));
+  }, []);
+
   const safeSetState = useCallback(<T,>(setter: React.Dispatch<React.SetStateAction<T>>, value: T) => {
     if (isMounted.current) setter(value);
   }, []);
@@ -165,7 +172,6 @@ export default function LoginScreen() {
 
   useEffect(() => {
     if (user) {
-      // Let index.tsx / RootScreen drive the redirect via auth state
       router.replace('/');
     }
   }, [user]);
@@ -278,9 +284,6 @@ export default function LoginScreen() {
     }
   };
 
-  // ═══════════════════════════════════════════════════════════════
-  // ── PHONE LOGIN AK MEME SUPABASE KI APPLE (DIRÈKT) ──
-  // ═══════════════════════════════════════════════════════════════
   const handlePhoneContinue = async () => {
     if (!phoneNumber.trim()) {
       showAlert('Error', 'Please enter your phone number');
@@ -295,7 +298,6 @@ export default function LoginScreen() {
 
     setPhoneLoading(true);
     try {
-      // SENBOL: Itilize appleSupabase (menm kliyan ak Apple Sign In)
       const fullPhone = `${selectedCountry.dialCode}${digits}`;
       
       const { error: otpError } = await appleSupabase.auth.signInWithOtp({ 
@@ -304,7 +306,6 @@ export default function LoginScreen() {
 
       if (otpError) throw otpError;
 
-      // Si OTP voye kòrèkteman, navige nan verify-code
       router.push({
         pathname: '/verify-code',
         params: {
@@ -369,6 +370,7 @@ export default function LoginScreen() {
     return `${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6, 10)} ${digits.slice(10)}`;
   };
 
+  // ── APPLE SIGN IN (Production-Ready with Native Button) ──
   const handleAppleSignIn = async () => {
     if (Platform.OS !== 'ios') {
       showAlert('Not Available', 'Apple Sign In is only available on iOS devices.');
@@ -376,41 +378,44 @@ export default function LoginScreen() {
     }
     setAppleLoading(true);
     try {
-      // Use native expo-apple-authentication — stays fully in-app, no browser
-      let AppleAuthentication: any;
-      try {
-        // Try require first (works in development builds with native modules linked)
-        const appleModule = require('expo-apple-authentication');
-        AppleAuthentication = appleModule;
-
-        // Verify the module has the expected methods AND native module is available
-        if (!AppleAuthentication?.signInAsync || !AppleAuthentication?.AppleAuthenticationScope) {
-          throw new Error('Apple Authentication module not properly loaded');
-        }
-
-        // Extra check: verify native module is actually present (not just JS shim)
-        if (AppleAuthentication.isAvailableAsync) {
-          const isAvailable = await AppleAuthentication.isAvailableAsync();
-          if (!isAvailable) {
-            throw new Error('Apple Sign In not available on this device');
-          }
-        }
-      } catch (moduleErr: any) {
-        console.log('[Apple Sign In] Module error:', moduleErr?.message);
-        // Check if it's a native module error (common in Expo Go vs dev builds)
-        const errMsg = moduleErr?.message || '';
-        // Silently skip — don't show error for unavailable/not-linked cases
-        console.log('[Apple Sign In] Not available:', errMsg);
-        setAppleLoading(false);
+      const isAvailable = await AppleAuthentication.isAvailableAsync();
+      if (!isAvailable) {
+        showAlert('Not Available', 'Apple Sign In is not available on this device.');
         return;
       }
+
+      // Generate secure nonce
+      const rawNonce = Array.from({ length: 32 }, () =>
+        'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'[
+          Math.floor(Math.random() * 62)
+        ]
+      ).join('');
+
+      const hashedNonce = await Crypto.digestStringAsync(
+        Crypto.CryptoDigestAlgorithm.SHA256,
+        rawNonce
+      );
+
+      // Generate state for CSRF protection
+      const state = Array.from({ length: 16 }, () =>
+        'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'[
+          Math.floor(Math.random() * 62)
+        ]
+      ).join('');
 
       const credential = await AppleAuthentication.signInAsync({
         requestedScopes: [
           AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
           AppleAuthentication.AppleAuthenticationScope.EMAIL,
         ],
+        nonce: hashedNonce,
+        state,
       });
+
+      if (credential.state && credential.state !== state) {
+        showAlert('Security Error', 'Invalid authentication state. Please try again.');
+        return;
+      }
 
       const { identityToken } = credential;
       if (!identityToken) {
@@ -418,10 +423,10 @@ export default function LoginScreen() {
         return;
       }
 
-      // Exchange Apple identity token with Supabase
       const { data, error } = await appleSupabase.auth.signInWithIdToken({
         provider: 'apple',
         token: identityToken,
+        nonce: rawNonce,
       });
 
       if (error) {
@@ -429,14 +434,38 @@ export default function LoginScreen() {
         return;
       }
 
+      // Cache name for future logins
+      const fullName = [
+        credential.fullName?.givenName,
+        credential.fullName?.familyName,
+      ].filter(Boolean).join(' ');
+
+      if (fullName) {
+        await AsyncStorage.setItem(`${APPLE_NAME_CACHE_KEY}_${credential.user}`, fullName);
+      }
+
+      // Update user metadata
+      if (credential.fullName || credential.email) {
+        const updates: any = {};
+        if (fullName) {
+          updates.data = {
+            ...(updates.data || {}),
+            full_name: fullName,
+            given_name: credential.fullName?.givenName,
+            family_name: credential.fullName?.familyName,
+          };
+        }
+        if (Object.keys(updates).length > 0) {
+          await appleSupabase.auth.updateUser(updates);
+        }
+      }
+
       if (data?.session) {
-        // Also sign in the main supabase client so AuthProvider picks it up
         const supabase = getSupabaseClient();
         await supabase.auth.setSession({
           access_token: data.session.access_token,
           refresh_token: data.session.refresh_token,
         });
-        // Send login confirmation email non-blocking
         if (data.session.user) {
           sendLoginConfirmationEmail(data.session.user.id, data.session.user.email || '');
         }
@@ -444,7 +473,6 @@ export default function LoginScreen() {
       }
     } catch (e: any) {
       if (e?.code === 'ERR_REQUEST_CANCELED') {
-        // User cancelled — silent
         return;
       }
       const msg = (e?.message || '').toLowerCase();
@@ -482,7 +510,6 @@ export default function LoginScreen() {
     },
     inputLabel: { ...Typography.caption, color: colors.textSecondary, fontSize: 12, marginBottom: 4 },
     input: { ...Typography.body, color: colors.text, fontSize: 16, padding: 0 },
-    // PHONE STYLES
     countrySelector: {
       flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
       backgroundColor: colors.surface, borderRadius: BorderRadius.lg,
@@ -521,14 +548,13 @@ export default function LoginScreen() {
     divider: { flexDirection: 'row', alignItems: 'center', marginBottom: Spacing.xl },
     dividerLine: { flex: 1, height: 1, backgroundColor: colors.border },
     dividerText: { ...Typography.body, color: colors.textSecondary, paddingHorizontal: Spacing.md },
-    appleButton: {
-      flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-      backgroundColor: '#000000', borderRadius: BorderRadius.full,
-      padding: Spacing.md, marginBottom: Spacing.md,
-      borderWidth: 1, borderColor: '#000000', gap: Spacing.sm,
-      opacity: appleLoading ? 0.7 : 1,
+    appleButtonContainer: {
+      width: '100%',
+      height: 50,
+      marginBottom: Spacing.md,
+      borderRadius: BorderRadius.full,
+      overflow: 'hidden',
     },
-    appleButtonText: { ...Typography.body, color: '#FFFFFF', fontSize: 16, fontWeight: '500' },
     oauthButton: {
       flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
       backgroundColor: colors.surface, borderRadius: BorderRadius.full,
@@ -594,7 +620,6 @@ export default function LoginScreen() {
         {/* PHONE INPUT OR EMAIL INPUT */}
         {isPhoneMode ? (
           <>
-            {/* Country Selector */}
             <TouchableOpacity style={styles.countrySelector} onPress={() => setShowCountryList(!showCountryList)} activeOpacity={0.7}>
               <View style={styles.countrySelectorLeft}>
                 <Text style={styles.countryFlag}>{selectedCountry.flag}</Text>
@@ -604,7 +629,6 @@ export default function LoginScreen() {
               <Ionicons name={showCountryList ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textSecondary} />
             </TouchableOpacity>
 
-            {/* Country List */}
             {showCountryList && (
               <View style={styles.countryListContainer}>
                 <ScrollView showsVerticalScrollIndicator={false}>
@@ -626,7 +650,6 @@ export default function LoginScreen() {
               </View>
             )}
 
-            {/* Phone Input */}
             <View style={styles.phoneInputContainer}>
               <Text style={styles.phoneInputLabel}>Phone number</Text>
               <TextInput
@@ -695,13 +718,17 @@ export default function LoginScreen() {
           )}
         </TouchableOpacity>
 
-        {/* Apple */}
-        {Platform.OS === 'ios' && (
-          <TouchableOpacity style={styles.appleButton} onPress={handleAppleSignIn} disabled={appleLoading}>
-            {appleLoading ? <ActivityIndicator size="small" color="#FFFFFF" /> : (
-              <><Ionicons name="logo-apple" size={20} color="#FFFFFF" /><Text style={styles.appleButtonText}>Sign in with Apple</Text></>
-            )}
-          </TouchableOpacity>
+        {/* Apple — Native Apple Button */}
+        {Platform.OS === 'ios' && appleAvailable && (
+          <View style={styles.appleButtonContainer}>
+            <AppleAuthentication.AppleAuthenticationButton
+              buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+              buttonStyle={isDark ? AppleAuthentication.AppleAuthenticationButtonStyle.WHITE : AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+              cornerRadius={25}
+              style={{ width: '100%', height: 50 }}
+              onPress={handleAppleSignIn}
+            />
+          </View>
         )}
 
         {/* Toggle Phone/Email */}
@@ -719,29 +746,27 @@ export default function LoginScreen() {
 
       <Modal visible={guestModalVisible} transparent animationType="slide" onRequestClose={() => setGuestModalVisible(false)}>
         <View style={{ flex: 1, justifyContent: 'flex-end' }}>
-          {/* Backdrop - solid color based on theme */}
           <TouchableOpacity 
-            style={[StyleSheet.absoluteFill, { backgroundColor: colors.text === '#FFFFFF' ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.4)' }]} 
+            style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.4)' }]} 
             activeOpacity={1} 
             onPress={() => setGuestModalVisible(false)} 
           />
 
-          {/* Modal Sheet with BlurView wrapping the content */}
           <View style={{ borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: 'hidden' }}>
             {Platform.OS === 'ios' ? (
-              <BlurView intensity={80} tint={colors.text === '#FFFFFF' ? 'dark' : 'light'} style={{ width: '100%' }} experimentalBlurMethod="dimezisBlurView">
+              <BlurView intensity={80} tint={isDark ? 'dark' : 'light'} style={{ width: '100%' }} experimentalBlurMethod="dimezisBlurView">
                 <GuestModalContent 
                   onStartGuest={() => { setGuestModalVisible(false); handleGuestMode(); }}
                   onClose={() => setGuestModalVisible(false)}
-                  isDark={colors.text === '#FFFFFF'}
+                  isDark={isDark}
                 />
               </BlurView>
             ) : (
-              <View style={{ width: '100%', backgroundColor: colors.text === '#FFFFFF' ? '#1C1C1E' : '#FFFFFF' }}>
+              <View style={{ width: '100%', backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF' }}>
                 <GuestModalContent 
                   onStartGuest={() => { setGuestModalVisible(false); handleGuestMode(); }}
                   onClose={() => setGuestModalVisible(false)}
-                  isDark={colors.text === '#FFFFFF'}
+                  isDark={isDark}
                 />
               </View>
             )}
