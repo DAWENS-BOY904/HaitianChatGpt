@@ -1,6 +1,5 @@
 //
-import React, { createContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import { AppState, AppStateStatus } from 'react-native';
+import React, { createContext, useState, useEffect, ReactNode } from 'react';
 import { getSupabaseClient } from '@/template';
 import { useAuth } from '@/template';
 
@@ -15,7 +14,6 @@ export interface SubscriptionContextType {
   loading: boolean;
   refresh: () => Promise<void>;
   restorePurchases: () => Promise<void>;
-  upgradeTierOptimistic: (tier: SubscriptionTier, expiresAt?: string | null) => void;
 }
 
 export const SubscriptionContext = createContext<SubscriptionContextType | undefined>(undefined);
@@ -28,7 +26,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const fetchSubscription = useCallback(async () => {
+  const fetchSubscription = async () => {
     if (!user?.id) {
       setTier('free');
       setExpiresAt(null);
@@ -61,30 +59,11 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, [user?.id, supabase]);
+  };
 
-  // Fetch when user changes
   useEffect(() => {
     fetchSubscription();
-  }, [fetchSubscription]);
-
-  // Background → foreground AppState refresh
-  useEffect(() => {
-    let lastState: AppStateStatus = AppState.currentState;
-    const sub = AppState.addEventListener('change', (nextState: AppStateStatus) => {
-      if (lastState.match(/inactive|background/) && nextState === 'active') {
-        fetchSubscription();
-      }
-      lastState = nextState;
-    });
-    return () => sub.remove();
-  }, [fetchSubscription]);
-
-  // Optimistic tier upgrade — called immediately after a successful purchase
-  const upgradeTierOptimistic = useCallback((newTier: SubscriptionTier, expiresAtDate?: string | null) => {
-    setTier(newTier);
-    if (expiresAtDate !== undefined) setExpiresAt(expiresAtDate ?? null);
-  }, []);
+  }, [user?.id]);
 
   // Legacy restore — RC SDK restore is now handled directly in subscription.tsx
   const restorePurchases = async () => {
@@ -106,7 +85,6 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         loading,
         refresh: fetchSubscription,
         restorePurchases,
-        upgradeTierOptimistic,
       }}
     >
       {children}

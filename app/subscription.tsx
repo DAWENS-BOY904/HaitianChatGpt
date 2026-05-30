@@ -166,7 +166,7 @@ const fr = StyleSheet.create({
 
 // ─────────────────────────────────────────────────────────────────────────
 export default function SubscriptionScreen() {
-  const { restorePurchases, refresh, upgradeTierOptimistic } = useSubscription();
+  const { restorePurchases } = useSubscription();
   const { showAlert } = useAlert();
   const { user } = useAuth();
   const router = useRouter();
@@ -278,9 +278,6 @@ export default function SubscriptionScreen() {
         }
         throw new Error(msg);
       }
-
-      // Optimistic UI update — immediately reflect new tier
-      upgradeTierOptimistic(plan.key as any, vData?.subscription?.expiresAt ?? null);
 
       // Update user profile tier
       if (user.id) {
