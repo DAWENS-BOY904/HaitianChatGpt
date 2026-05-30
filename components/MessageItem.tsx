@@ -1096,6 +1096,14 @@ function VideoPreviewCard({ name, uri, isDark, colors }: { name: string; uri?: s
     })();
     const hasValidImage = multiImages.length > 0;
 
+  // Extract URLs from user message
+    const userMessageUrls: string[] = (() => {
+      if (!isUser) return [];
+      const urlRx = /https?:\/\/[^\s"'<>]+/gi;
+      const matches = (cleanUserContent || '').match(urlRx) || [];
+      return [...new Set(matches)].slice(0, 3);
+    })();
+
     return (
       <>
         <View style={userStyles.container}>
@@ -1203,7 +1211,16 @@ function VideoPreviewCard({ name, uri, isDark, colors }: { name: string; uri?: s
               {message.isEdited ? <Text style={{ color: colors.textSecondary, fontSize: 11, marginTop: 4, textAlign: 'right' }}>Edited</Text> : null}
             </View>
           ) : null}
-
+          {/* Link preview cards for URLs in user messages */}
+          {userMessageUrls.map((urlItem, urlIdx) => (
+            <LinkPreviewCard
+              key={`user-url-${urlIdx}`}
+              url={urlItem}
+              isDark={isDark}
+              colors={colors}
+              compact
+            />
+          ))}
         </View>
 
         {hasValidImage ? (
