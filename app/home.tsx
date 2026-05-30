@@ -74,6 +74,7 @@ import {
 } from '../components/HomeModals';
 import type { GroupMember } from '../components/HomeModals';
 import { SpotifyMusicCard, SpotifyLoadingOverlay, SpotifyTrack } from '../components/SpotifyMusicCard';
+import { EmailComposerModal } from '../components/EmailComposerModal';
 import { ConnectedAppsModal, ConnectedApp } from '../components/ConnectedAppsModal';
 import { WebView } from 'react-native-webview';
 // Gesture handler — loaded conditionally to avoid native crash when reanimated/gesture-handler is not linked 
@@ -636,6 +637,10 @@ export default function HomeScreen() {
   const [aiActionIsUser, setAiActionIsUser] = useState(false);
   // ── Link search state ─────────────────────────────────────────────────
   const [linkSearchUrl, setLinkSearchUrl] = useState<string | null>(null);
+  // ── Email / Prompt Composer state ─────────────────────────────────────────
+  const [emailComposerVisible, setEmailComposerVisible] = useState(false);
+  const [emailComposerTemplate, setEmailComposerTemplate] = useState<'support' | 'relations' | 'custom' | 'ai_prompt'>('support');
+  const [emailComposerAIContent, setEmailComposerAIContent] = useState<{ subject?: string; body: string; title?: string } | undefined>(undefined);
   const [guestWelcomeVisible, setGuestWelcomeVisible] = useState(false);
   const guestWelcomeDismissedRef = useRef(false);
   const [unreadCount,setUnreadCount]=useState(0);
@@ -2169,6 +2174,73 @@ export default function HomeScreen() {
   }, []);
 
   const displayMessages = isSearchMode && searchQuery ? filteredMessages : (messages || []);
+
+  // ── Parse [PROMPT_CARD] blocks ──────────────────────────────────────────────
+  const parsePromptCard = useCallback((content: string): { cleanContent: string; promptCard: { title: string; subject?: string; body: string } | null } => {
+    const match = content.match(/\[PROMPT_CARD\]([\s\S]*?)\[\/PROMPT_CARD\]/);
+    if (!match) return { cleanContent: content, promptCard: null };
+    try {
+      const card = JSON.parse(match[1]);
+      const cleanContent = content.replace(/\[PROMPT_CARD\][\s\S]*?\[\/PROMPT_CARD\]/, '').trim();
+      return { cleanContent, promptCard: card };
+    } catch {
+      const cleanContent = content.replace(/\[PROMPT_CARD\][\s\S]*?\[\/PROMPT_CARD\]/, '').trim();
+      return { cleanContent, promptCard: { title: 'AI Prompt', body: match[1].trim() } };
+    }
+  }, []);
+
+  // ── Parse inline [IMAGE_SEARCH:query] tags into multi-blocks ─────────────
+  const parseInlineImageSearchTags = useCallback((content: string): Array<{ type: 'text' | 'image_search'; content: string }> => {
+    const blocks: Array<{ type: 'text' | 'image_search'; content: string }> = [];
+    const regex = /\[IMAGE_SEARCH:([^\]]+)\]/g;
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+    while ((match = regex.exec(content)) !== null) {
+      const textBefore = content.slice(lastIndex, match.index).trim();
+      if (textBefore) blocks.push({ type: 'text', content: textBefore });
+      blocks.push({ type: 'image_search', content: match[1].trim() });
+      lastIndex = regex.lastIndex;
+    }
+    const textAfter = content.slice(lastIndex).trim();
+    if (textAfter) blocks.push({ type: 'text', content: textAfter });
+    return blocks.length > 0 ? blocks : [{ type: 'text', content }];
+  }, []);
+
+  // ── Inline image search cache (query → images array) ─────────────────────
+  const [inlineImageCache, setInlineImageCache] = useState<Record<string, Array<{ url: string; title?: string; source?: string }>>>({});
+  const fetchingQueriesRef = useRef<Set<string>>(new Set());
+
+  const fetchInlineImages = useCallback(async (query: string) => {
+    if (inlineImageCache[query] || fetchingQueriesRef.current.has(query)) return;
+    fetchingQueriesRef.current.add(query);
+    try {
+      // Fallback: generate Unsplash placeholder images for the query
+      const fallback = Array.from({ length: 10 }, (_, i) => ({
+        url: `https://source.unsplash.com/400x300/?${encodeURIComponent(query)}&sig=${i + Date.now() % 1000}`,
+        title: `${query} — example ${i + 1}`,
+        source: 'Unsplash',
+      }));
+      setInlineImageCache(prev => ({ ...prev, [query]: fallback }));
+    } catch (_e) {}
+    finally { fetchingQueriesRef.current.delete(query); }
+  }, [inlineImageCache]);
+
+  // ── Auto-open EmailComposerModal when AI returns a [PROMPT_CARD] ──────────
+  const lastProcessedPromptRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!messages || messages.length === 0) return;
+    const lastAI = [...messages].reverse().find(m => m.role === 'assistant');
+    if (!lastAI || lastAI.id === lastProcessedPromptRef.current) return;
+    if (!generating && !sending && streamingMessageId !== lastAI.id) {
+      const { promptCard } = parsePromptCard(lastAI.content || '');
+      if (promptCard) {
+        lastProcessedPromptRef.current = lastAI.id;
+        setEmailComposerAIContent({ title: promptCard.title, subject: promptCard.subject, body: promptCard.body });
+        setEmailComposerTemplate('ai_prompt');
+        setTimeout(() => setEmailComposerVisible(true), 450);
+      }
+    }
+  }, [messages, generating, sending, streamingMessageId, parsePromptCard]);
 
   // Compute last user message that has a math expression (for inline calculator)
   const lastMathMessage = useMemo(() => {
@@ -3734,6 +3806,14 @@ export default function HomeScreen() {
               onClose={() => setPhotoLimitModalVisible(false)}
               resetAtMs={photoLimitResetAtMs}
               modelName="DNX-5.5"
+            />
+
+            {/* Email / Prompt Composer — opens automatically when AI returns a [PROMPT_CARD] */}
+            <EmailComposerModal
+              visible={emailComposerVisible}
+              onClose={() => setEmailComposerVisible(false)}
+              template={emailComposerTemplate}
+              aiContent={emailComposerAIContent}
             />
             {imageAnalyzingOverlay ? (
               <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.78)', zIndex: 9998, alignItems: 'center', justifyContent: 'center' }}>
