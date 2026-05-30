@@ -119,7 +119,7 @@ const PLANS: PlanConfig[] = [
   },
   {
     key: 'super',
-    label: 'SuperGrok',
+    label: 'SuperDawinix',
     tagline: 'Unlock the full power',
     trialTagline: 'Try Free for 3 Days',
     accentColor: '#FF6B35',
@@ -399,7 +399,7 @@ export default function SubscriptionScreen() {
     ? 'Manage Subscription'
     : hasTrial
       ? `Start ${plan.trialDays}-day free trial`
-      : `Upgrade to ${plan.key === 'lite' ? 'SuperGrok Lite' : 'SuperGrok'}`;
+      : `Upgrade to ${plan.key === 'lite' ? 'SuperDawinix Lite' : 'SuperDawinix'}`;
 
   const ctaBusy = loading || webLoading;
 
@@ -428,10 +428,10 @@ export default function SubscriptionScreen() {
         {/* Title block */}
         <View style={s.titleWrap}>
           {plan.key === 'super' ? (
-            <Text style={s.titleBold}>SuperGrok</Text>
+            <Text style={s.titleBold}>SuperDawinix</Text>
           ) : (
             <Text style={s.title}>
-              <Text style={s.titleBold}>SuperGrok </Text>
+              <Text style={s.titleBold}>SuperDawinix </Text>
               <Text style={s.titleLight}>Lite</Text>
             </Text>
           )}
@@ -444,7 +444,7 @@ export default function SubscriptionScreen() {
           )}
         </View>
 
-        {/* 2-segment toggle: Lite | SuperGrok */}
+        {/* 2-segment toggle: Lite | SuperDawinix */}
         <View style={s.segWrap}>
           {PLANS.map((p, i) => {
             const isActive = activePlanIdx === i;
