@@ -16,6 +16,7 @@ import {
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { getSupabaseClient } from '@/template';
+import { BlurView } from 'expo-blur';
 
 // ── Module-level metadata cache (persists across renders, avoids re-fetching) ──
 const _metadataCache = new Map<string, LinkMetadata>();
@@ -121,13 +122,13 @@ const SkeletonCard = memo(function SkeletonCard({
   }, []);
 
   const opacity = shimmer.interpolate({ inputRange: [0, 1], outputRange: [0.35, 0.75] });
-  const cardBg   = isDark ? '#1C1C1E' : '#F8F8FA';
-  const skelBg   = isDark ? '#3A3A3C' : '#DCDCDC';
+  const skelBg   = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.10)';
   const thumbH   = compact ? 120 : 160;
   const cardW: any = compact ? 260 : '100%';
 
   return (
-    <View style={[styles.card, { backgroundColor: cardBg, width: cardW, alignSelf: 'flex-start', marginVertical: 6, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)' }]}>
+    <View style={[styles.card, { width: cardW, alignSelf: 'flex-start', marginVertical: 6, borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.10)', overflow: 'hidden' }]}>
+      <BlurView intensity={isDark ? 35 : 55} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} experimentalBlurMethod="dimezisBlurView" />
       {/* Thumbnail skeleton */}
       <Animated.View style={{ width: '100%', height: thumbH, opacity, backgroundColor: skelBg, borderTopLeftRadius: 16, borderTopRightRadius: 16 }} />
       {/* Info skeleton */}
@@ -160,7 +161,8 @@ const ThumbnailPlaceholder = memo(function ThumbnailPlaceholder({
 }: { platform: LinkPlatform; isDark: boolean }) {
   const cfg = PLATFORM_CONFIG[platform];
   return (
-    <View style={[styles.thumbnailPlaceholder, { backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA' }]}>
+    <View style={[styles.thumbnailPlaceholder, { backgroundColor: isDark ? 'rgba(44,44,46,0.45)' : 'rgba(229,229,234,0.50)' }]}>
+      <BlurView intensity={isDark ? 30 : 45} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} experimentalBlurMethod="dimezisBlurView" />
       <View style={[styles.thumbnailIcon, { backgroundColor: cfg.bgColor }]}>
         <Ionicons name={cfg.iconName as any} size={28} color={cfg.color} />
       </View>
@@ -244,12 +246,12 @@ export const LinkPreviewCard = memo(function LinkPreviewCard({
   const meta: LinkMetadata = propMetadata || fetchedMeta || buildFallbackMetadata(url);
   const cfg = PLATFORM_CONFIG[meta.platform];
 
-  const cardBg     = isDark ? '#1C1C1E' : '#F8F8FA';
-  const borderColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)';
-  const textColor  = isDark ? '#FFFFFF' : '#000000';
-  const subColor   = isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.5)';
-  const thumbnailH = compact ? 120 : 160;
-  const cardW: any = compact ? 260 : '100%';
+  const cardBg      = isDark ? 'rgba(28,28,30,0.72)' : 'rgba(255,255,255,0.72)';
+  const borderColor = isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.10)';
+  const textColor   = isDark ? '#FFFFFF' : '#000000';
+  const subColor    = isDark ? 'rgba(255,255,255,0.60)' : 'rgba(0,0,0,0.55)';
+  const thumbnailH  = compact ? 120 : 160;
+  const cardW: any  = compact ? 260 : '100%';
 
   const hasThumbnail = !!(meta.thumbnail && !imgError);
   const isVideoPlat  = meta.platform === 'tiktok' || meta.platform === 'youtube';
@@ -258,8 +260,15 @@ export const LinkPreviewCard = memo(function LinkPreviewCard({
     <TouchableOpacity
       onPress={() => openUrl(url)}
       activeOpacity={0.88}
-      style={[styles.card, { backgroundColor: cardBg, borderColor, width: cardW, alignSelf: 'flex-start', marginVertical: 6 }]}
+      style={[styles.card, { backgroundColor: cardBg, borderColor, width: cardW, alignSelf: 'flex-start', marginVertical: 6, overflow: 'hidden' }]}
     >
+      {/* Glassmorphism blur layer — iOS native, Android enhanced fallback */}
+      <BlurView
+        intensity={isDark ? 45 : 65}
+        tint={isDark ? 'dark' : 'light'}
+        style={StyleSheet.absoluteFill}
+        experimentalBlurMethod="dimezisBlurView"
+      />
       {/* ── Thumbnail ── */}
       <View style={{ width: '100%', height: thumbnailH, overflow: 'hidden', borderTopLeftRadius: 16, borderTopRightRadius: 16, position: 'relative' }}>
         {hasThumbnail ? (
@@ -290,8 +299,8 @@ export const LinkPreviewCard = memo(function LinkPreviewCard({
         {hasThumbnail && (
           <View
             style={{
-              position: 'absolute', bottom: 0, left: 0, right: 0, height: 48,
-              backgroundColor: 'transparent',
+              position: 'absolute', bottom: 0, left: 0, right: 0, height: 56,
+              backgroundColor: isDark ? 'rgba(0,0,0,0.35)' : 'rgba(255,255,255,0.25)',
             }}
           />
         )}
@@ -370,11 +379,18 @@ export const UrlChip = memo(function UrlChip({ url, isDark, colors }: UrlChipPro
       style={[
         styles.urlChip,
         {
-          backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)',
-          borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.1)',
+          backgroundColor: isDark ? 'rgba(44,44,46,0.55)' : 'rgba(245,245,247,0.60)',
+          borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.10)',
+          overflow: 'hidden',
         },
       ]}
     >
+      <BlurView
+        intensity={isDark ? 40 : 60}
+        tint={isDark ? 'dark' : 'light'}
+        style={StyleSheet.absoluteFill}
+        experimentalBlurMethod="dimezisBlurView"
+      />
       <View style={[styles.urlChipIcon, { backgroundColor: cfg.bgColor }]}>
         <Ionicons name={cfg.iconName as any} size={11} color={cfg.color} />
       </View>
@@ -447,10 +463,10 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    elevation: 5,
   },
   platformBadge: {
     flexDirection: 'row',
@@ -469,6 +485,7 @@ const styles = StyleSheet.create({
     height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
   },
   thumbnailIcon: {
     width: 60,
@@ -514,11 +531,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     borderRadius: 20,
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: 10,
     paddingVertical: 7,
     marginTop: 4,
     maxWidth: 280,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 2,
   },
   urlChipIcon: {
     width: 20,
