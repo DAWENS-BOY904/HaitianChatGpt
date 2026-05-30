@@ -3843,4 +3843,3 @@ class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError:
     return this.props.children;
   }
 }
-add expo-haptics impact feedback to the user message long-press menu actions (Copy and Edit) in home.tsx for a more native iOS/Android feel.Update the user message long-press menu in home.tsx so the BlurView bottom sheet appears anchored directly below the pressed message bubble (using the msgMenuPageY offset) instead of floating at a fixed screen position.
