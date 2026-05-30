@@ -84,8 +84,11 @@ export function ConversationMenuModal({
       transparent
       animationType="none"
       onRequestClose={onClose}
+      // ✅ KEY FIX: Use overFullScreen so modal doesn't wrap/capture the whole screen
+      presentationStyle="overFullScreen"
+      statusBarTranslucent={Platform.OS === 'android'}
     >
-      {/* Backdrop */}
+      {/* Backdrop — sèlman backdrop la bliye, pa tout ekran an */}
       <Pressable style={styles.backdrop} onPress={onClose}>
         {Platform.OS === 'ios' ? (
           <BlurView
@@ -124,7 +127,8 @@ export function ConversationMenuModal({
                 key={item.label}
                 style={[
                   styles.menuItem,
-                  i !== menuItems.length - 1 && styles.itemBorder,
+                  // ✅ KEY FIX: Retire line anba chak message
+                  // i !== menuItems.length - 1 && styles.itemBorder,
                 ]}
                 onPress={item.onPress}
                 activeOpacity={0.65}
@@ -171,7 +175,8 @@ export function ConversationMenuModal({
                 key={item.label}
                 style={[
                   styles.menuItem,
-                  i !== menuItems.length - 1 && styles.itemBorder,
+                  // ✅ KEY FIX: Retire line anba chak message
+                  // i !== menuItems.length - 1 && styles.itemBorder,
                 ]}
                 onPress={item.onPress}
                 activeOpacity={0.65}
@@ -201,7 +206,7 @@ export function ConversationMenuModal({
 
 const styles = StyleSheet.create({
   backdrop: {
-    flex: 1,
+    ...StyleSheet.absoluteFillObject,
   },
   menuContainer: {
     position: 'absolute',
@@ -240,6 +245,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
   },
+  // ✅ Retire itemBorder style si ou pa bezwen li nan lòt kote
   itemBorder: {
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: 'rgba(255,255,255,0.1)',
