@@ -1,16 +1,18 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useState, useEffect, ReactNode } from 'react';
 import { getSupabaseClient } from '@/template';
 import { useAuth } from '@/template';
 
-export type SubscriptionTier = 'free' | 'go' | 'plus';
+export type SubscriptionTier = 'free' | 'lite' | 'super' | 'go' | 'plus';
 
 export interface SubscriptionContextType {
   tier: SubscriptionTier;
-  isGo: boolean;
-  isPlus: boolean;
+  isLite: boolean;    // lite or above
+  isSuper: boolean;   // super only
+  isPaid: boolean;    // any paid tier
   expiresAt: string | null;
   loading: boolean;
   refresh: () => Promise<void>;
+  restorePurchases: () => Promise<void>;
 }
 
 export const SubscriptionContext = createContext<SubscriptionContextType | undefined>(undefined);
@@ -38,18 +40,20 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         .single();
 
       if (data) {
-        const now = new Date();
+        const now    = new Date();
         const expiry = data.subscription_expires_at ? new Date(data.subscription_expires_at) : null;
-        const isActive = data.is_lifetime_member || !expiry || expiry > now;
+        const active = data.is_lifetime_member || !expiry || expiry > now;
 
-        if (isActive && (data.subscription_tier === 'go' || data.subscription_tier === 'plus')) {
-          setTier(data.subscription_tier as SubscriptionTier);
+        const rawTier = (data.subscription_tier as string) ?? 'free';
+        const paidTiers: SubscriptionTier[] = ['lite', 'super', 'go', 'plus'];
+        if (active && paidTiers.includes(rawTier as SubscriptionTier)) {
+          setTier(rawTier as SubscriptionTier);
         } else {
           setTier('free');
         }
         setExpiresAt(data.subscription_expires_at || null);
       }
-    } catch (_e) {
+    } catch {
       setTier('free');
     } finally {
       setLoading(false);
@@ -60,18 +64,26 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     fetchSubscription();
   }, [user?.id]);
 
-  const isGo = tier === 'go' || tier === 'plus';
-  const isPlus = tier === 'plus';
+  // Legacy restore — RC SDK restore is now handled directly in subscription.tsx
+  const restorePurchases = async () => {
+    await fetchSubscription();
+  };
+
+  const isPaid  = tier !== 'free';
+  const isLite  = tier === 'lite' || tier === 'super' || tier === 'go' || tier === 'plus';
+  const isSuper = tier === 'super' || tier === 'plus';
 
   return (
     <SubscriptionContext.Provider
       value={{
         tier,
-        isGo,
-        isPlus,
+        isLite,
+        isSuper,
+        isPaid,
         expiresAt,
         loading,
         refresh: fetchSubscription,
+        restorePurchases,
       }}
     >
       {children}
