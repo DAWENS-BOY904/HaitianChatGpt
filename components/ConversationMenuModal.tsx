@@ -40,7 +40,7 @@ export function ConversationMenuModal({
   const { isDark, colors } = useTheme();
 
   const textC = isDark ? '#FFFFFF' : '#000000';
-  const subC = isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.4)';
+  const subC = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.45)';
 
   const menuItems = [
     {
@@ -85,22 +85,29 @@ export function ConversationMenuModal({
       animationType="none"
       onRequestClose={onClose}
     >
+      {/* Backdrop */}
       <Pressable style={styles.backdrop} onPress={onClose}>
         {Platform.OS === 'ios' ? (
           <BlurView
-            intensity={isDark ? 20 : 12}
+            intensity={isDark ? 45 : 35}
             tint={isDark ? 'dark' : 'light'}
             style={StyleSheet.absoluteFill}
           />
         ) : (
-          <View style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.15)' }]} />
+          <View 
+            style={[
+              StyleSheet.absoluteFill, 
+              { backgroundColor: isDark ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0.35)' }
+            ]} 
+          />
         )}
       </Pressable>
 
+      {/* Menu Container */}
       <View style={[styles.menuContainer, { top: topOffset, right: 14 }]}>
         {Platform.OS === 'ios' ? (
           <BlurView
-            intensity={isDark ? 88 : 78}
+            intensity={isDark ? 92 : 90}
             tint={isDark ? 'dark' : 'extraLight'}
             style={styles.blurWrap}
           >
@@ -111,14 +118,24 @@ export function ConversationMenuModal({
                 </Text>
               </View>
             ) : null}
+
             {menuItems.map((item, i) => (
               <TouchableOpacity
                 key={item.label}
-                style={styles.menuItem}
+                style={[
+                  styles.menuItem,
+                  i !== menuItems.length - 1 && styles.itemBorder,
+                ]}
                 onPress={item.onPress}
                 activeOpacity={0.65}
               >
-                <Text style={[styles.menuLabel, item.destructive && styles.destructive, { color: item.destructive ? '#FF453A' : textC }]}>
+                <Text 
+                  style={[
+                    styles.menuLabel, 
+                    item.destructive && styles.destructive,
+                    { color: item.destructive ? '#FF453A' : textC }
+                  ]}
+                >
                   {item.label}
                 </Text>
                 <Ionicons
@@ -130,7 +147,17 @@ export function ConversationMenuModal({
             ))}
           </BlurView>
         ) : (
-          <View style={[styles.blurWrap, { backgroundColor: isDark ? 'rgba(36,36,40,0.98)' : 'rgba(255,255,255,0.98)' }]}>
+          /* Android Fallback */
+          <View 
+            style={[
+              styles.blurWrap, 
+              { 
+                backgroundColor: isDark 
+                  ? 'rgba(36,36,40,0.98)' 
+                  : 'rgba(255,255,255,0.97)' 
+              }
+            ]}
+          >
             {conversationTitle ? (
               <View style={styles.titleRow}>
                 <Text style={[styles.titleText, { color: subC }]} numberOfLines={1}>
@@ -138,14 +165,24 @@ export function ConversationMenuModal({
                 </Text>
               </View>
             ) : null}
-            {menuItems.map((item) => (
+
+            {menuItems.map((item, i) => (
               <TouchableOpacity
                 key={item.label}
-                style={styles.menuItem}
+                style={[
+                  styles.menuItem,
+                  i !== menuItems.length - 1 && styles.itemBorder,
+                ]}
                 onPress={item.onPress}
                 activeOpacity={0.65}
               >
-                <Text style={[styles.menuLabel, { color: item.destructive ? '#FF453A' : textC }]}>
+                <Text 
+                  style={[
+                    styles.menuLabel, 
+                    item.destructive && styles.destructive,
+                    { color: item.destructive ? '#FF453A' : textC }
+                  ]}
+                >
                   {item.label}
                 </Text>
                 <Ionicons
@@ -172,20 +209,24 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     overflow: 'hidden',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.28,
-    shadowRadius: 20,
-    elevation: 18,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 22,
+    elevation: 20,
   },
   blurWrap: {
     borderRadius: 18,
     overflow: 'hidden',
     paddingVertical: 4,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.15)',
   },
   titleRow: {
     paddingHorizontal: 16,
     paddingTop: 12,
     paddingBottom: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(255,255,255,0.1)',
   },
   titleText: {
     fontSize: 13,
@@ -198,6 +239,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 14,
+  },
+  itemBorder: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(255,255,255,0.1)',
   },
   menuLabel: {
     fontSize: 17,
