@@ -12,6 +12,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "app.onspace.dawinix2027",
       "buildNumber": "12",
+      "usesAppleSignIn": true,
       "infoPlist": {
         "NSCameraUsageDescription": "Dawinix needs camera access to take profile photos and scan documents.",
         "NSMicrophoneUsageDescription": "Dawinix needs microphone access for voice input and recording.",
@@ -69,6 +70,7 @@
     },
     "plugins": [
       "expo-router",
+      "expo-apple-authentication",
       [
         "expo-splash-screen",
         {
