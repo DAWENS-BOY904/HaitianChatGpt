@@ -487,7 +487,8 @@ function parseMarkdownBlocks(raw: string, isStreaming = false): Block[] {
       let closedFence = false;
       while (i < cleanLines.length) {
         const cl = cleanLines[i] ?? '';
-        if (cl.trim() === '```' || (cl.trim().startsWith('```') && cl.trim().length === 3)) {
+        // A closing fence is ONLY a line that is exactly ``` (nothing else)
+        if (cl.trim() === '```') {
           closedFence = true;
           i++;
           break;
@@ -496,11 +497,14 @@ function parseMarkdownBlocks(raw: string, isStreaming = false): Block[] {
         i++;
       }
       const code = codeLines.join('\n');
-      if (!closedFence && isStreaming) {
-        // Partial streaming code block — show live streaming indicator
-        blocks.push({ type: 'code', content: code, language: lang, streaming: true });
-      } else {
-        blocks.push({ type: 'code', content: code.trim(), language: lang, streaming: false });
+      // Only add a code block if there is actual content OR it is streaming
+      if (code.trim().length > 0 || (isStreaming && !closedFence)) {
+        if (!closedFence && isStreaming) {
+          // Partial streaming code block — show live streaming indicator
+          blocks.push({ type: 'code', content: code, language: lang, streaming: true });
+        } else {
+          blocks.push({ type: 'code', content: code.trim(), language: lang, streaming: false });
+        }
       }
       continue;
     }
@@ -545,8 +549,33 @@ function parseMarkdownBlocks(raw: string, isStreaming = false): Block[] {
       i++; continue;
     }
 
-    // Paragraph
-    if (line.trim()) blocks.push({ type: 'paragraph', content: line });
+    // Paragraph — but check if it CONTAINS a ``` opener (AI sometimes puts heading + code fence on same line or without a blank line)
+    if (line.trim()) {
+      // Check if this paragraph line itself starts with ``` embedded in prose (e.g. "### Code ```html")
+      const embeddedFenceMatch = line.match(/```(\w*)$/);
+      if (embeddedFenceMatch) {
+        // Flush the text before the fence as a paragraph
+        const textBefore = line.replace(/```\w*$/, '').trim();
+        if (textBefore) blocks.push({ type: 'paragraph', content: textBefore });
+        // Now collect the rest as a code block
+        const lang = embeddedFenceMatch[1] || 'plaintext';
+        const codeLines: string[] = [];
+        i++;
+        let closedFence = false;
+        while (i < cleanLines.length) {
+          const cl = cleanLines[i] ?? '';
+          if (cl.trim() === '```') { closedFence = true; i++; break; }
+          codeLines.push(cl);
+          i++;
+        }
+        const code = codeLines.join('\n');
+        if (code.trim().length > 0 || (isStreaming && !closedFence)) {
+          blocks.push({ type: 'code', content: code.trim(), language: lang, streaming: !closedFence && isStreaming });
+        }
+        continue;
+      }
+      blocks.push({ type: 'paragraph', content: line });
+    }
     i++;
   }
 
