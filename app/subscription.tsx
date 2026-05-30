@@ -12,6 +12,7 @@ import {
   StatusBar,
   Dimensions,
   ImageBackground,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSubscription } from '../hooks/useSubscription';
@@ -23,7 +24,7 @@ import { FunctionsHttpError } from '@supabase/supabase-js';
 import Constants from 'expo-constants';
 import { BlurView } from 'expo-blur';
 
-const { width: SCREEN_W } = Dimensions.get('window');
+const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
 // ── RevenueCat SDK ────────────────────────────────────────────────────────
 let PurchasesModule: any = null;
@@ -53,8 +54,6 @@ function getRCApiKey() {
 
 // ── Product IDs ───────────────────────────────────────────────────────────
 const RC_PRODUCTS = {
-  animal_monthly: 'app.dawinix.animal.monthly',
-  animal_annual: 'app.dawinix.animal.annual',
   lite_monthly: 'app.dawinix.lite.monthly',
   lite_annual: 'app.dawinix.lite.annual',
   super_monthly: 'app.dawinix.super.monthly',
@@ -62,7 +61,7 @@ const RC_PRODUCTS = {
 };
 
 // ── Plan Config ───────────────────────────────────────────────────────────
-type PlanKey = 'animal' | 'lite' | 'super';
+type PlanKey = 'lite' | 'super';
 
 interface PlanConfig {
   key: PlanKey;
@@ -75,29 +74,24 @@ interface PlanConfig {
   annualPerMonth: string;
   savePct: string;
   trialDays?: number;
+  // Background images - TOP (different per plan)
+  topBackgroundImage: any;
   features: Array<{ icon: string; title: string; subtitle?: string }>;
 }
 
+/*
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                    IMAGE ASSETS YOU NEED TO CREATE                            ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║  1. lite-top-bg.png    → Gray/smoke background for LITE plan (top section)   ║
+║  2. super-top-bg.png   → Face/smoke background for SUPER plan (top section)  ║
+║  3. bottom-bg.png      → Gray background for BOTTOM section (shared)         ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+Place these images in:  assets/images/
+*/
+
 const PLANS: PlanConfig[] = [
-  {
-    key: 'animal',
-    label: 'Animal',
-    tagline: 'Perfect for pet lovers & explorers',
-    accentColor: '#FF9500',
-    accentGlow: 'rgba(255,149,0,0.18)',
-    monthly: '$4.99',
-    annual: '$49.99',
-    annualPerMonth: '$4.17',
-    savePct: '16%',
-    features: [
-      { icon: 'images-outline', title: 'Unlimited photo uploads' },
-      { icon: 'camera-outline', title: '20 photos per session' },
-      { icon: 'time-outline', title: '40 photos per 24 hours' },
-      { icon: 'chatbubble-ellipses-outline', title: 'Standard conversations in Chat' },
-      { icon: 'hardware-chip-outline', title: '1x AI agent on Basic mode' },
-      { icon: 'color-palette-outline', title: 'Try out AI image creation', subtitle: 'Limited access' },
-    ],
-  },
   {
     key: 'lite',
     label: 'Lite',
@@ -108,11 +102,10 @@ const PLANS: PlanConfig[] = [
     annual: '$100',
     annualPerMonth: '$8.33',
     savePct: '17%',
+    // ⬇️ REPLACE: Your own Lite plan top background image
+    topBackgroundImage: require('../assets/images/lite-top-bg.png'),
     features: [
-      { icon: 'images-outline', title: 'Unlimited photo uploads' },
-      { icon: 'camera-outline', title: '20 photos per session' },
-      { icon: 'time-outline', title: '40 photos per 24 hours' },
-      { icon: 'chatbubble-ellipses-outline', title: '2x longer conversations in Chat' },
+      { icon: 'rocket-outline', title: '2x longer conversations in Chat' },
       { icon: 'hardware-chip-outline', title: '1x AI agent on Expert mode' },
       { icon: 'color-palette-outline', title: 'Try out AI image & video creation' },
       { icon: 'arrow-up-circle-outline', title: 'Increased limits at regular speed' },
@@ -121,7 +114,7 @@ const PLANS: PlanConfig[] = [
   {
     key: 'super',
     label: 'Super',
-    tagline: 'Unlock the full power',
+    tagline: 'Unlock the full power of Grok',
     accentColor: '#FF6B35',
     accentGlow: 'rgba(255,107,53,0.22)',
     monthly: '$30',
@@ -129,10 +122,9 @@ const PLANS: PlanConfig[] = [
     annualPerMonth: '$25',
     savePct: '17%',
     trialDays: 3,
+    // ⬇️ REPLACE: Your own Super plan top background image
+    topBackgroundImage: require('../assets/images/super-top-bg.png'),
     features: [
-      { icon: 'images-outline', title: 'Unlimited photo uploads' },
-      { icon: 'camera-outline', title: '50 photos per session' },
-      { icon: 'time-outline', title: '100 photos per 24 hours' },
       { icon: 'rocket-outline', title: '5x longer conversations in Chat' },
       { icon: 'people-outline', title: '4x AI agents on Expert mode', subtitle: 'Collaborating to get you the best answers' },
       { icon: 'sparkles-outline', title: 'Make stunning AI images & videos', subtitle: 'With HD 720p, 30-second video' },
@@ -141,6 +133,9 @@ const PLANS: PlanConfig[] = [
     ],
   },
 ];
+
+// ⬇️ REPLACE: Your own shared bottom background image (gray)
+const BOTTOM_BG_IMAGE = require('../assets/images/bottom-bg.png');
 
 // ── RevenueCat Helper ─────────────────────────────────────────────────────
 class RevenueCatHelper {
@@ -182,12 +177,12 @@ class RevenueCatHelper {
 }
 
 // ── Feature Row ───────────────────────────────────────────────────────────
-function FeatureRow({ icon, title, subtitle, accentColor, isLast }: {
-  icon: string; title: string; subtitle?: string; accentColor: string; isLast?: boolean;
+function FeatureRow({ icon, title, subtitle, isLast }: {
+  icon: string; title: string; subtitle?: string; isLast?: boolean;
 }) {
   return (
     <View style={[fr.row, !isLast && fr.border]}>
-      <View style={[fr.iconWrap, { backgroundColor: 'rgba(255,255,255,0.07)' }]}>
+      <View style={fr.iconWrap}>
         <Ionicons name={icon as any} size={20} color="#FFFFFF" />
       </View>
       <View style={fr.textWrap}>
@@ -201,7 +196,15 @@ function FeatureRow({ icon, title, subtitle, accentColor, isLast }: {
 const fr = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, gap: 14 },
   border: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(255,255,255,0.07)' },
-  iconWrap: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  iconWrap: { 
+    width: 40, 
+    height: 40, 
+    borderRadius: 20, 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    flexShrink: 0,
+    backgroundColor: 'rgba(255,255,255,0.07)',
+  },
   textWrap: { flex: 1 },
   title: { color: '#FFFFFF', fontSize: 16, fontWeight: '500', lineHeight: 22 },
   sub: { color: 'rgba(255,255,255,0.45)', fontSize: 13, marginTop: 2 },
@@ -215,7 +218,7 @@ export default function SubscriptionScreen() {
   const insets = useSafeAreaInsets();
   const supabase = getSupabaseClient();
 
-  const [activePlanIdx, setActivePlanIdx] = useState(2); // default: Super
+  const [activePlanIdx, setActivePlanIdx] = useState(1); // default: Super
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('monthly');
   const [loading, setLoading] = useState(false);
   const [webLoading, setWebLoading] = useState(false);
@@ -392,7 +395,7 @@ export default function SubscriptionScreen() {
           const active = customerInfo.entitlements?.active || {};
           if (Object.keys(active).length > 0 && user?.id) {
             const activeKey = Object.keys(active)[0].toLowerCase();
-            const activePlan: PlanKey = activeKey.includes('super') ? 'super' : activeKey.includes('lite') ? 'lite' : 'animal';
+            const activePlan: PlanKey = activeKey.includes('super') ? 'super' : 'lite';
             await supabase.from('user_profiles').update({ subscription_tier: activePlan }).eq('id', user.id);
             showAlert('Purchases Restored', `Your ${activePlan} subscription has been restored.`);
             await checkSubscriptionStatus();
@@ -410,7 +413,6 @@ export default function SubscriptionScreen() {
   const isSubscribed = subscriptionInfo?.subscribed ?? false;
   const hasTrial = plan.trialDays && !isSubscribed;
 
-  // ── Price display ─────────────────────────────────────────────────────
   const monthlyPrice = plan.monthly;
   const annualPrice = plan.annual;
   const annualPerMonth = plan.annualPerMonth;
@@ -423,29 +425,34 @@ export default function SubscriptionScreen() {
     <View style={s.root}>
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
-      {/* Background glow blobs */}
-      <View style={[s.glowBlob, { backgroundColor: plan.accentGlow, top: -60, right: -40 }]} />
-      <View style={[s.glowBlob, { backgroundColor: plan.accentGlow, bottom: 100, left: -60, opacity: 0.5 }]} />
-
-      {/* Close */}
-      <TouchableOpacity
-        style={[s.closeBtn, { top: insets.top + 12 }]}
-        onPress={() => router.back()}
-        hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {/* LAYER 1: TOP BACKGROUND IMAGE — Different for each plan            */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      <ImageBackground
+        source={plan.topBackgroundImage}
+        style={s.topBackground}
+        resizeMode="cover"
+        imageStyle={{ resizeMode: 'cover' }}
       >
-        <Ionicons name="close" size={18} color="rgba(255,255,255,0.7)" />
-      </TouchableOpacity>
+        {/* Dark overlay for text readability */}
+        <View style={s.topOverlay} />
 
-      <ScrollView
-        style={{ flex: 1 }}
-        contentContainerStyle={[s.scroll, { paddingTop: insets.top + 56, paddingBottom: 220 }]}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Title */}
-        <View style={s.headerWrap}>
+        {/* Close button */}
+        <TouchableOpacity
+          style={[s.closeBtn, { top: insets.top + 12 }]}
+          onPress={() => router.back()}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        >
+          <Ionicons name="close" size={18} color="rgba(255,255,255,0.7)" />
+        </TouchableOpacity>
+
+        {/* Title Section */}
+        <View style={[s.headerWrap, { paddingTop: insets.top + 56 }]}>
           <Text style={s.headerTitle}>
-            <Text style={{ color: '#FFFFFF', fontWeight: '700' }}>Dawinix </Text>
-            <Text style={{ color: 'rgba(255,255,255,0.5)', fontWeight: '300' }}>{plan.label}</Text>
+            <Text style={{ color: '#FFFFFF', fontWeight: '700' }}>Super</Text>
+            <Text style={{ color: 'rgba(255,255,255,0.5)', fontWeight: '300' }}>
+              {plan.label === 'Lite' ? 'Grok ' + plan.label : 'Grok'}
+            </Text>
           </Text>
           {hasTrial ? (
             <Text style={s.headerSub}>
@@ -456,7 +463,7 @@ export default function SubscriptionScreen() {
           )}
         </View>
 
-        {/* 3-segment Plan Toggle */}
+        {/* 2-segment Plan Toggle: Lite | SuperGrok */}
         <View style={s.segWrap}>
           {PLANS.map((p, i) => (
             <TouchableOpacity
@@ -476,89 +483,104 @@ export default function SubscriptionScreen() {
                 )
               ) : null}
               <Text style={[s.segText, activePlanIdx === i && { color: '#FFFFFF', fontWeight: '600' }]}>
-                {p.label}
+                {p.label === 'Lite' ? 'Lite' : 'SuperGrok'}
               </Text>
             </TouchableOpacity>
           ))}
         </View>
+      </ImageBackground>
 
-        {/* Feature Card */}
-        <View style={s.featureCard}>
-          {Platform.OS === 'ios' ? (
-            <BlurView intensity={20} tint="dark" style={StyleSheet.absoluteFill} />
-          ) : (
-            <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255,255,255,0.04)' }]} />
-          )}
-          {plan.features.map((f, i) => (
-            <FeatureRow
-              key={`${plan.key}-${i}`}
-              icon={f.icon}
-              title={f.title}
-              subtitle={f.subtitle}
-              accentColor={accent}
-              isLast={i === plan.features.length - 1}
-            />
-          ))}
-        </View>
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {/* LAYER 2: BOTTOM BACKGROUND IMAGE — Shared for ALL plans            */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      <ImageBackground
+        source={BOTTOM_BG_IMAGE}
+        style={s.bottomBackground}
+        resizeMode="cover"
+        imageStyle={{ resizeMode: 'cover' }}
+      >
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={[s.scroll, { paddingBottom: 220 }]}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Feature Card with glassmorphism */}
+          <View style={s.featureCard}>
+            {Platform.OS === 'ios' ? (
+              <BlurView intensity={20} tint="dark" style={StyleSheet.absoluteFill} />
+            ) : (
+              <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255,255,255,0.04)' }]} />
+            )}
+            {plan.features.map((f, i) => (
+              <FeatureRow
+                key={`${plan.key}-${i}`}
+                icon={f.icon}
+                title={f.title}
+                subtitle={f.subtitle}
+                isLast={i === plan.features.length - 1}
+              />
+            ))}
+          </View>
 
-        {/* Billing cards */}
-        <View style={s.billingRow}>
-          {/* Monthly */}
-          <TouchableOpacity
-            style={[
-              s.billingCard,
-              billingCycle === 'monthly' && [s.billingCardActive, { borderColor: accent + '55' }],
-            ]}
-            onPress={() => setBillingCycle('monthly')}
-            activeOpacity={0.8}
-          >
-            {billingCycle === 'monthly' ? (
-              Platform.OS === 'ios' ? (
-                <BlurView intensity={25} tint="dark" style={StyleSheet.absoluteFill} />
-              ) : (
-                <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255,255,255,0.07)' }]} />
-              )
-            ) : null}
-            {hasTrial && billingCycle === 'monthly' ? (
-              <View style={[s.freeBadge, { backgroundColor: accent }]}>
-                <Text style={s.freeBadgeText}>FREE</Text>
+          {/* Billing cards */}
+          <View style={s.billingRow}>
+            {/* Monthly */}
+            <TouchableOpacity
+              style={[
+                s.billingCard,
+                billingCycle === 'monthly' && [s.billingCardActive, { borderColor: accent + '55' }],
+              ]}
+              onPress={() => setBillingCycle('monthly')}
+              activeOpacity={0.8}
+            >
+              {billingCycle === 'monthly' ? (
+                Platform.OS === 'ios' ? (
+                  <BlurView intensity={25} tint="dark" style={StyleSheet.absoluteFill} />
+                ) : (
+                  <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255,255,255,0.07)' }]} />
+                )
+              ) : null}
+              {hasTrial && billingCycle === 'monthly' ? (
+                <View style={[s.freeBadge, { backgroundColor: accent }]}>
+                  <Text style={s.freeBadgeText}>FREE</Text>
+                </View>
+              ) : null}
+              <Text style={s.billingLabel}>Monthly</Text>
+              <Text style={[s.billingPrice, billingCycle === 'monthly' && { textDecorationLine: hasTrial ? 'line-through' : 'none', opacity: hasTrial ? 0.55 : 1 }]}>
+                {monthlyPrice} <Text style={s.billingUnit}>/month</Text>
+              </Text>
+            </TouchableOpacity>
+
+            {/* Annual */}
+            <TouchableOpacity
+              style={[
+                s.billingCard,
+                billingCycle === 'annual' && [s.billingCardActive, { borderColor: accent + '55' }],
+              ]}
+              onPress={() => setBillingCycle('annual')}
+              activeOpacity={0.8}
+            >
+              {billingCycle === 'annual' ? (
+                Platform.OS === 'ios' ? (
+                  <BlurView intensity={25} tint="dark" style={StyleSheet.absoluteFill} />
+                ) : (
+                  <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255,255,255,0.07)' }]} />
+                )
+              ) : null}
+              <View style={s.savePill}>
+                <Text style={s.savePillText}>Save {plan.savePct}</Text>
               </View>
-            ) : null}
-            <Text style={s.billingLabel}>Monthly</Text>
-            <Text style={[s.billingPrice, billingCycle === 'monthly' && { textDecorationLine: hasTrial ? 'line-through' : 'none', opacity: hasTrial ? 0.55 : 1 }]}>
-              {monthlyPrice} <Text style={s.billingUnit}>/month</Text>
-            </Text>
-          </TouchableOpacity>
+              <Text style={s.billingLabel}>Yearly</Text>
+              <Text style={s.billingPrice}>
+                {annualPrice} <Text style={s.billingUnit}>/year</Text>
+              </Text>
+              <Text style={s.billingPerMonth}>{annualPerMonth} /month</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </ImageBackground>
 
-          {/* Annual */}
-          <TouchableOpacity
-            style={[
-              s.billingCard,
-              billingCycle === 'annual' && [s.billingCardActive, { borderColor: accent + '55' }],
-            ]}
-            onPress={() => setBillingCycle('annual')}
-            activeOpacity={0.8}
-          >
-            {billingCycle === 'annual' ? (
-              Platform.OS === 'ios' ? (
-                <BlurView intensity={25} tint="dark" style={StyleSheet.absoluteFill} />
-              ) : (
-                <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255,255,255,0.07)' }]} />
-              )
-            ) : null}
-            <View style={s.savePill}>
-              <Text style={s.savePillText}>Save {plan.savePct}</Text>
-            </View>
-            <Text style={s.billingLabel}>Yearly</Text>
-            <Text style={s.billingPrice}>
-              {annualPrice} <Text style={s.billingUnit}>/year</Text>
-            </Text>
-            <Text style={s.billingPerMonth}>{annualPerMonth} /month</Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
-
-      {/* ── Bottom CTA ── */}
+      {/* ── Bottom CTA Bar ── */}
       <View style={[s.bottomBar, { paddingBottom: insets.bottom + 12 }]}>
         {Platform.OS === 'ios' ? (
           <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFill} />
@@ -631,14 +653,62 @@ export default function SubscriptionScreen() {
   );
 }
 
+/*
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                           LAYOUT STRUCTURE                                   ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║                                                                              ║
+║   ┌─────────────────────────────────────────────────────────────────────┐    ║
+║   │  TOP BACKGROUND IMAGE (38% screen height)                           │    ║
+║   │  ┌───────────────────────────────────────────────────────────────┐  │    ║
+║   │  │  • Different per plan (Lite = gray, Super = face/smoke)       │  │    ║
+║   │  │  • Close button (top-left)                                    │  │    ║
+║   │  │  • Title: "SuperGrok" / "SuperGrok Lite"                      │  │    ║
+║   │  │  • Tagline / Trial text                                       │  │    ║
+║   │  │  • 2-segment toggle: [Lite] [SuperGrok]                       │  │    ║
+║   │  └───────────────────────────────────────────────────────────────┘  │    ║
+║   └─────────────────────────────────────────────────────────────────────┘    ║
+║                              ↓                                               ║
+║   ┌─────────────────────────────────────────────────────────────────────┐    ║
+║   │  BOTTOM BACKGROUND IMAGE (shared gray background)                   │    ║
+║   │  ┌───────────────────────────────────────────────────────────────┐  │    ║
+║   │  │  • Feature Card (glassmorphism)                                 │  │    ║
+║   │  │  • Billing Cards: [Monthly] [Yearly]                          │  │    ║
+║   │  └───────────────────────────────────────────────────────────────┘  │    ║
+║   └─────────────────────────────────────────────────────────────────────┘    ║
+║                              ↓                                               ║
+║   ┌─────────────────────────────────────────────────────────────────────┐    ║
+║   │  BOTTOM CTA BAR (fixed at bottom)                                   │    ║
+║   │  • [Upgrade / Start Trial] button                                   │    ║
+║   │  • Renewal note                                                     │    ║
+║   │  • Terms · Privacy · Restore                                        │    ║
+║   └─────────────────────────────────────────────────────────────────────┘    ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+*/
+
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#080808' },
 
-  glowBlob: {
+  // ═══ TOP BACKGROUND (different per plan) ═══
+  topBackground: {
+    width: SCREEN_W,
+    height: SCREEN_H * 0.38,
     position: 'absolute',
-    width: 300,
-    height: 300,
-    borderRadius: 150,
+    top: 0,
+    left: 0,
+    right: 0,
+  },
+  topOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+
+  // ═══ BOTTOM BACKGROUND (shared for all plans) ═══
+  bottomBackground: {
+    flex: 1,
+    marginTop: SCREEN_H * 0.38,
+    width: SCREEN_W,
   },
 
   closeBtn: {
@@ -653,23 +723,24 @@ const s = StyleSheet.create({
     justifyContent: 'center',
   },
 
-  scroll: { alignItems: 'center', paddingHorizontal: 20 },
+  scroll: { alignItems: 'center', paddingHorizontal: 20, paddingTop: 20 },
 
   // Header
-  headerWrap: { alignItems: 'center', marginBottom: 24 },
+  headerWrap: { alignItems: 'center', marginBottom: 20 },
   headerTitle: { fontSize: 34, letterSpacing: -0.5, marginBottom: 6 },
   headerSub: { fontSize: 17, color: 'rgba(255,255,255,0.6)', fontWeight: '400', textAlign: 'center' },
 
-  // Segment
+  // Segment (2-segment toggle: Lite | SuperGrok)
   segWrap: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: 'rgba(255,255,255,0.08)',
     borderRadius: 50,
     padding: 4,
-    width: '100%',
-    marginBottom: 20,
+    width: 220,
+    alignSelf: 'center',
+    marginBottom: 0,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: 'rgba(255,255,255,0.12)',
     overflow: 'hidden',
   },
   segBtn: {
