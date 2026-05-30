@@ -844,9 +844,6 @@ export const MessageItem = memo(function MessageItem({
   const [textSelectOverlayVisible, setTextSelectOverlayVisible] = useState(false);
   const { settings: messageSettings } = useSettings();
 
-  const [textSelectOverlayVisible, setTextSelectOverlayVisible] = useState(false);
-  const { settings: messageSettings } = useSettings();
-
   // ── Auto-open text selection overlay when parent triggers it ─────────────
   useEffect(() => {
     if (openTextSelect && !isUser) {

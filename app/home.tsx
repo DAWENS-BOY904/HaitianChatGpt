@@ -631,10 +631,8 @@ export default function HomeScreen() {
   const [msgMenuPageY, setMsgMenuPageY] = useState(0);
   const [msgActionsVisible,setMsgActionsVisible]=useState(false);
   const [msgActionsMsg,setMsgActionsMsg]=useState<any>(null);
-  // ── New modern AI message action bar ──────────────────────────────────
-  const [aiActionVisible, setAiActionVisible] = useState(false);
-  const [aiActionMsg, setAiActionMsg] = useState<any>(null);
-  const [aiActionIsUser, setAiActionIsUser] = useState(false);
+  // ── AI message long-press — uses TextSelectionOverlay inside MessageItem directly
+  // (no external state needed; AIMessageActions is a no-op stub)
   // ── Link search state ─────────────────────────────────────────────────
   const [linkSearchUrl, setLinkSearchUrl] = useState<string | null>(null);
   // ── Email / Prompt Composer state ─────────────────────────────────────────
@@ -672,11 +670,8 @@ export default function HomeScreen() {
   const [atMentionModalVisible, setAtMentionModalVisible] = useState(false);
   const [atMentionQuery, setAtMentionQuery] = useState('');
 
-  const handleOpenMessageActions = useCallback((msg: any) => {
-    // Use new modern action bar for all messages
-    setAiActionMsg(msg);
-    setAiActionIsUser(msg?.role === 'user');
-    setAiActionVisible(true);
+  const handleOpenMessageActions = useCallback((_msg: any) => {
+    // TextSelectionOverlay is handled internally by MessageItem on copy button press
   }, []);
 
   // Detect URL in user message for "Searching for..." UI
@@ -2279,10 +2274,10 @@ export default function HomeScreen() {
         <Pressable
           onPress={isUserMsg && !groupChatMode ? (e: any) => handleUserMsgPress(item, e.nativeEvent.pageY) : undefined}
           onLongPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            setAiActionMsg(item);
-            setAiActionIsUser(item.role === 'user');
-            setAiActionVisible(true);
+            if (isUserMsg && !groupChatMode) {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              handleUserMsgPress(item, 300);
+            }
           }}
           delayLongPress={450}
         >
@@ -3689,27 +3684,6 @@ export default function HomeScreen() {
               handleUnlikeMessage={handleUnlikeMessage}
               isLiked={msgActionsMsg ? messageLikes[msgActionsMsg.id] === 'like' : false}
               isUnliked={msgActionsMsg ? messageLikes[msgActionsMsg.id] === 'dislike' : false}
-            />
-
-            {/* Modern floating action bar — replaces old long-press behavior */}
-            <AIMessageActions
-              visible={aiActionVisible}
-              onClose={() => setAiActionVisible(false)}
-              message={aiActionMsg || { id: '', role: 'assistant', content: '', created_at: new Date().toISOString() }}
-              isUserMessage={aiActionIsUser}
-              onAskAI={(text) => {
-                // Pre-fill the input with context about the message
-                const askText = aiActionIsUser
-                  ? text
-                  : `Regarding what you said: "${text.slice(0, 120)}${text.length > 120 ? '...' : ''}" — can you elaborate?`;
-                setInputText(askText);
-                setTimeout(() => inputRef.current?.focus(), 150);
-              }}
-              onEdit={(msgId, content) => {
-                setEditingMessageId(msgId);
-                setInputText(content);
-                setTimeout(() => inputRef.current?.focus(), 150);
-              }}
             />
 
             {thinkingMode === 'creating_image' && (generating || sending) ? <ImageCreatingOverlay /> : null}
