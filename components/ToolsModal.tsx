@@ -87,7 +87,7 @@ export function ToolsModal({
   const { user } = useAuth();
 
   const isAdmin = user?.email ? ADMIN_EMAILS.includes(user.email.toLowerCase()) : false;
-  const isPro = isAdmin || tier === 'plus' || tier === 'go';
+  const isPro = isAdmin || tier === 'Lite' || tier === 'Super';
   const isGuest = !user;
 
   const [loading, setLoading] = useState<string | null>(null);
