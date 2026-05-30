@@ -670,9 +670,8 @@ export default function HomeScreen() {
   const [atMentionModalVisible, setAtMentionModalVisible] = useState(false);
   const [atMentionQuery, setAtMentionQuery] = useState('');
 
-  const handleOpenMessageActions = useCallback((msg: any) => {
-    setMsgActionsMsg(msg);
-    setMsgActionsVisible(true);
+  const handleOpenMessageActions = useCallback((_msg: any) => {
+    // TextSelectionOverlay is handled internally by MessageItem on copy button press
   }, []);
 
   // Detect URL in user message for "Searching for..." UI
@@ -2266,25 +2265,21 @@ export default function HomeScreen() {
     const isUserMsg = item.role === 'user';
     // Messages with image/file/video attachments cannot be edited
     const hasMediaAttachment = !!(item.imageUrl || item.image_url || item.file_url ||
-      (item.content && (item.content.includes('[Attached file:') || item.content.includes('[Video attached:'))));  
-    // Track touch Y for long-press positioning
-    const touchYRef = React.createRef<number>() as React.MutableRefObject<number>;
-    touchYRef.current = 0;
+      (item.content && (item.content.includes('[Attached file:') || item.content.includes('[Video attached:'))));
 
     const displayItem = msgSearchImages ? { ...item, content: msgCleanContent } : item;
 
     return (
       <View>
         <Pressable
-          onPressIn={(e: any) => { touchYRef.current = e.nativeEvent.pageY; }}
-          onPress={isUserMsg && !groupChatMode ? () => handleUserMsgPress(item, touchYRef.current) : undefined}
+          onPress={isUserMsg && !groupChatMode ? (e: any) => handleUserMsgPress(item, e.nativeEvent.pageY) : undefined}
           onLongPress={() => {
             if (isUserMsg && !groupChatMode) {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-              handleUserMsgPress(item, touchYRef.current);
+              handleUserMsgPress(item, 300);
             }
           }}
-          delayLongPress={400}
+          delayLongPress={450}
         >
           <MessageItem
             message={displayItem}
@@ -3059,7 +3054,17 @@ export default function HomeScreen() {
                 </View>
               ) : null}
 
-
+              {editingMessageId ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingBottom: 6 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: isDark ? '#0D1A30' : '#E8F0FF', borderRadius: 50, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: isDark ? 'rgba(0,122,255,0.35)' : 'rgba(0,122,255,0.25)' }}>
+                    <Ionicons name="pencil" size={13} color="#007AFF" />
+                    <Text style={{ color: '#007AFF', fontSize: 13, fontWeight: '700' }}>Editing message</Text>
+                    <TouchableOpacity onPress={handleCancelEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                      <Ionicons name="close" size={15} color={isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.4)'} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : null}
 
               {deepResearchActive && deepResearchSteps.length > 0 ? (
                 <View style={{ marginHorizontal: 12, marginBottom: 8, backgroundColor: isDark ? 'rgba(44,44,46,0.9)' : 'rgba(242,242,247,0.95)', borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)' }}>
@@ -3149,19 +3154,6 @@ export default function HomeScreen() {
                       </View>
                     ) : null}
                   </View>
-
-                  {/* Editing message chip — inside input wrapper like Spotify/Shazam */}
-                  {editingMessageId ? (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8, gap: 8, flexWrap: 'wrap' }}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: isDark ? '#0D1A30' : '#E8F0FF', borderRadius: 50, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: isDark ? 'rgba(0,122,255,0.35)' : 'rgba(0,122,255,0.25)' }}>
-                        <Ionicons name="pencil" size={13} color="#007AFF" />
-                        <Text style={{ color: '#007AFF', fontSize: 13, fontWeight: '700' }}>Editing</Text>
-                        <TouchableOpacity onPress={handleCancelEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                          <Ionicons name="close" size={14} color={isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.4)'} />
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  ) : null}
 
                   {renderInlineMediaPreviews()}
 
@@ -3538,22 +3530,16 @@ export default function HomeScreen() {
               const createdAt = msgMenuMsg.created_at || msgMenuMsg.createdAt;
               const ts = createdAt ? new Date(createdAt) : new Date();
               const dateLabel = 'Today, ' + ts.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+              const { height: SCREEN_H } = Dimensions.get('window');
+              const menuTop = Math.max(80, Math.min(msgMenuPageY - 10, SCREEN_H - 200));
               // Check if this message has media (image, file, video) — these cannot be edited
               const msgHasMedia = !!(msgMenuMsg.imageUrl || msgMenuMsg.image_url || msgMenuMsg.file_url ||
-                (msgMenuMsg.content && (msgMenuMsg.content.includes('[Attached file:') || msgMenuMsg.content.includes('[Video attached:'))));   
-              // Menu height based on items
-              const menuItemH = 50;
-              const menuH = (msgHasMedia ? 1 : 2) * menuItemH + 44; // header + items
-              const SCREEN_H = Dimensions.get('window').height;
-              // Position: prefer just below the touched point, flip up if near bottom
-              const belowY = msgMenuPageY + 12;
-              const aboveY = msgMenuPageY - menuH - 12;
-              const finalTop = (belowY + menuH > SCREEN_H - 100) ? Math.max(80, aboveY) : Math.max(80, belowY);
+                (msgMenuMsg.content && (msgMenuMsg.content.includes('[Attached file:') || msgMenuMsg.content.includes('[Video attached:'))));
               return (
                 <Modal visible={msgMenuVisible} transparent animationType="fade" onRequestClose={() => setMsgMenuVisible(false)}>
                   {/* Transparent backdrop — no blur so chat stays visible */}
                   <Pressable style={{ flex: 1, backgroundColor: 'transparent' }} onPress={() => setMsgMenuVisible(false)} />
-                  <View style={{ position: 'absolute', right: 14, top: finalTop, width: 220, borderRadius: 18, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: isDark ? 0.55 : 0.18, shadowRadius: 20, elevation: 20 }}>
+                  <View style={{ position: 'absolute', right: 14, top: (() => { const SCREEN_H = Dimensions.get('window').height; const menuH = msgHasMedia ? 90 : 140; const belowY = msgMenuPageY + 8; const aboveY = msgMenuPageY - menuH - 8; return (belowY + menuH > SCREEN_H - 80) ? Math.max(80, aboveY) : Math.max(80, belowY); })(), width: 220, borderRadius: 18, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: isDark ? 0.55 : 0.18, shadowRadius: 20, elevation: 20 }}>
                     {Platform.OS === 'ios' ? (
                       <BlurView intensity={isDark ? 88 : 78} tint={isDark ? 'dark' : 'extraLight'} style={{ borderRadius: 18, overflow: 'hidden' }}>
                         <View style={{ paddingHorizontal: 16, paddingTop: 11, paddingBottom: 8 }}>
