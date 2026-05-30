@@ -1,4 +1,4 @@
-  import React, { useEffect, useState, useRef } from 'react';
+    import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -91,7 +91,7 @@ function AgeVerificationModal({ visible, onClose, onVerified }: {
         <View style={{
           flexDirection: 'row', alignItems: 'center',
           paddingTop: insets2.top + 8, paddingHorizontal: 16, paddingBottom: 12,
-          borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: borderColor,
+          borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.08)',
         }}>
           {step !== 'consent' ? (
             <TouchableOpacity
@@ -168,7 +168,7 @@ function AgeVerificationModal({ visible, onClose, onVerified }: {
               <Text style={{ color: btnText, fontSize: 17, fontWeight: '700' }}>Get started</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={{ width: '100%', borderRadius: 50, paddingVertical: 17, alignItems: 'center', borderWidth: 1.5, borderColor: outlineBtnBorder, marginBottom: insets2.bottom + 8 }}
+              style={{ width: '100%', borderRadius: 50, paddingVertical: 17, alignItems: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: outlineBtnBorder, marginBottom: insets2.bottom + 8 }}
               onPress={() => setStep('device')}
             >
               <Text style={{ color: outlineBtnText, fontSize: 17, fontWeight: '600' }}>Continue on another device</Text>
@@ -183,7 +183,7 @@ function AgeVerificationModal({ visible, onClose, onVerified }: {
               To verify your identity, we will need access to your camera. You can scan the QR code with your phone camera to continue on your mobile device. No app download is required.
             </Text>
             <View style={{ alignItems: 'center', marginBottom: 36 }}>
-              <View style={{ width: 180, height: 180, borderRadius: 16, backgroundColor: inputBg, borderWidth: 1, borderColor, alignItems: 'center', justifyContent: 'center' }}>
+              <View style={{ width: 180, height: 180, borderRadius: 16, backgroundColor: inputBg, borderWidth: StyleSheet.hairlineWidth, borderColor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.08)', alignItems: 'center', justifyContent: 'center' }}>
                 <Ionicons name="qr-code" size={140} color={qrIconColor} />
               </View>
               <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 14 }} onPress={handleCopyLink} activeOpacity={0.7}>
@@ -280,7 +280,7 @@ function VerifiedBadge({ onPress, tier }: { onPress: () => void; tier: 'pro' | '
 function VerifiedBadgeModal({ visible, onClose, isDark, tier }: {
   visible: boolean; onClose: () => void; isDark: boolean; tier: 'pro' | 'plus' | 'go';
 }) {
-  const bg = isDark ? '#1C1C1E' : '#FFFFFF';
+  const bg = isDark ? 'rgba(28,28,30,0.75)' : 'rgba(255,255,255,0.75)';
   const primaryText = isDark ? '#FFFFFF' : '#000000';
   const secondaryText = isDark ? 'rgba(255,255,255,0.65)' : 'rgba(0,0,0,0.6)';
   const isPlus = tier === 'plus';
@@ -325,9 +325,12 @@ function VerifiedBadgeModal({ visible, onClose, isDark, tier }: {
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.55)', paddingHorizontal: 24 }}>
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 }}>
+        <BlurView intensity={isDark ? 70 : 85} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} experimentalBlurMethod="dimezisBlurView" />
+        {Platform.OS !== 'ios' ? <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.55)' }]} /> : null}
         <TouchableOpacity style={{ ...StyleSheet.absoluteFillObject }} activeOpacity={1} onPress={onClose} />
-        <View style={{ width: '100%', maxWidth: 360, borderRadius: 24, overflow: 'hidden', backgroundColor: bg, shadowColor: '#000', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.4, shadowRadius: 24, elevation: 24 }}>
+        <View style={{ width: '100%', maxWidth: 360, borderRadius: 24, overflow: 'hidden', backgroundColor: isDark ? 'rgba(28,28,30,0.75)' : 'rgba(255,255,255,0.75)', borderWidth: StyleSheet.hairlineWidth, borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)', shadowColor: '#000', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.4, shadowRadius: 24, elevation: 24 }}>
+          <BlurView intensity={isDark ? 45 : 60} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} experimentalBlurMethod="dimezisBlurView" />
           <TouchableOpacity
             style={{ position: 'absolute', top: 14, right: 14, width: 32, height: 32, borderRadius: 16, backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}
             onPress={onClose}
@@ -338,7 +341,7 @@ function VerifiedBadgeModal({ visible, onClose, isDark, tier }: {
             <ExpoImageBadge source={badgeSource} style={{ width: 72, height: 72, marginBottom: 16 }} contentFit="contain" />
             <Text style={{ fontSize: 22, fontWeight: '800', color: primaryText, marginBottom: 6, textAlign: 'center' }}>{title}</Text>
             <Text style={{ fontSize: 14, color: secondaryText, textAlign: 'center', lineHeight: 20, marginBottom: 24 }}>{subtitle}</Text>
-            <View style={{ width: '100%', backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)', borderRadius: 16, padding: 16, marginBottom: 20 }}>
+            <View style={{ width: '100%', backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', borderRadius: 16, padding: 16, marginBottom: 20 }}>
               <Text style={{ fontSize: 13, fontWeight: '700', color: secondaryText, marginBottom: 12, textTransform: 'uppercase' }}>
                 {isPlus ? 'Plus Benefits' : 'Exclusive Benefits'}
               </Text>
@@ -349,7 +352,7 @@ function VerifiedBadgeModal({ visible, onClose, isDark, tier }: {
                 </View>
               ))}
             </View>
-            <View style={{ backgroundColor: 'rgba(220,38,38,0.1)', borderRadius: 12, padding: 12, width: '100%', borderWidth: 1, borderColor: 'rgba(220,38,38,0.2)' }}>
+            <View style={{ backgroundColor: 'rgba(220,38,38,0.08)', borderRadius: 12, padding: 12, width: '100%', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(220,38,38,0.15)' }}>
               <Text style={{ fontSize: 12, color: '#DC2626', textAlign: 'center', fontWeight: '600', lineHeight: 18 }}>
                 All benefits are activated only for verified {isPlus ? 'Plus' : 'Pro'} members. Badge status is controlled by the system only.
               </Text>
@@ -378,8 +381,8 @@ function EditModalContent({
   onPickPhoto: () => void; onChangeName: (v: string) => void;
   onChangeUsername: (v: string) => void; onSave: () => void; onClose: () => void;
 }) {
-  const inputBg = isDark ? '#2C2C2E' : '#F2F2F7';
-  const borderColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)';
+  const inputBg = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)';
+  const borderColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
   const canChange = canChangeUsername();
   const daysLeft = daysUntilUsernameChange();
 
@@ -411,7 +414,7 @@ function EditModalContent({
 
       <Text style={{ fontSize: 13, fontWeight: '500', color: secondaryText, marginBottom: 6, marginLeft: 2 }}>Display Name</Text>
       <TextInput
-        style={{ backgroundColor: inputBg, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, fontSize: 16, color: primaryText, marginBottom: 12, borderWidth: 1, borderColor }}
+        style={{ backgroundColor: inputBg, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, fontSize: 16, color: primaryText, marginBottom: 12, borderWidth: StyleSheet.hairlineWidth, borderColor }}
         value={editName}
         onChangeText={onChangeName}
         placeholder="Your name"
@@ -421,7 +424,7 @@ function EditModalContent({
 
       <Text style={{ fontSize: 13, fontWeight: '500', color: secondaryText, marginBottom: 6, marginLeft: 2 }}>Username</Text>
       <TextInput
-        style={{ backgroundColor: canChange ? inputBg : (isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)'), borderRadius: 12, paddingHorizontal: 16, paddingVertical: 14, fontSize: 16, color: canChange ? primaryText : secondaryText, marginBottom: 6, borderWidth: 1, borderColor }}
+        style={{ backgroundColor: canChange ? inputBg : (isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)'), borderRadius: 12, paddingHorizontal: 16, paddingVertical: 14, fontSize: 16, color: canChange ? primaryText : secondaryText, marginBottom: 6, borderWidth: StyleSheet.hairlineWidth, borderColor }}
         value={editUsername}
         onChangeText={onChangeUsername}
         placeholder="username"
@@ -839,7 +842,7 @@ export default function SettingsScreen() {
   const initials = (displayName[0] || 'U').toUpperCase();
 
   const Card = ({ children }: { children: React.ReactNode }) => (
-    <View style={{ backgroundColor: cardBg, borderRadius: 16, overflow: 'hidden', marginHorizontal: 16 }}>{children}</View>
+    <View style={{ backgroundColor: isDark ? 'rgba(28,28,30,0.55)' : 'rgba(255,255,255,0.55)', borderRadius: 16, overflow: 'hidden', marginHorizontal: 16, borderWidth: StyleSheet.hairlineWidth, borderColor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.08)' }}>{children}</View>
   );
 
   const SectionLabel = ({ text }: { text: string }) => (
@@ -932,7 +935,7 @@ export default function SettingsScreen() {
           </View>
         </TouchableOpacity>
         {showDropdown && (
-          <View style={{ backgroundColor: isDark ? '#2C2C2E' : '#F2F2F7', marginHorizontal: 16, marginBottom: 8, borderRadius: 12, overflow: 'hidden' }}>
+          <View style={{ backgroundColor: isDark ? 'rgba(44,44,46,0.60)' : 'rgba(242,242,247,0.60)', marginHorizontal: 16, marginBottom: 8, borderRadius: 12, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.08)' }}>
             {options.map((opt, i) => {
               const isSelected = current === opt;
               return (
@@ -965,13 +968,11 @@ export default function SettingsScreen() {
         >
           {Platform.OS === 'ios' ? (
             <BlurView
-              intensity={isDark ? 88 : 72}
+              intensity={isDark ? 95 : 85}
               tint={isDark ? 'chromeMaterialDark' : 'chromeMaterial'}
-              style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}
+              style={{ width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}
             >
-              <View style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center', backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)' }}>
-                <Ionicons name="close" size={17} color={isDark ? '#FFFFFF' : '#000000'} />
-              </View>
+              <Ionicons name="close" size={17} color={isDark ? '#FFFFFF' : '#000000'} />
             </BlurView>
           ) : (
             <View style={{ width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: isDark ? 'rgba(80,80,88,0.82)' : 'rgba(220,220,228,0.82)', borderWidth: StyleSheet.hairlineWidth, borderColor: isDark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.12)' }}>
@@ -1010,7 +1011,7 @@ export default function SettingsScreen() {
           </View>
           {displayUsername ? <Text style={{ fontSize: 15, color: secondaryText, marginBottom: 14 }}>{displayUsername}</Text> : null}
           <TouchableOpacity
-            style={{ paddingHorizontal: 22, paddingVertical: 9, borderRadius: 20, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)', backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)', opacity: isConnected ? 1 : 0.4 }}
+            style={{ paddingHorizontal: 22, paddingVertical: 9, borderRadius: 20, borderWidth: StyleSheet.hairlineWidth, borderColor: isDark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.10)', backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)', opacity: isConnected ? 1 : 0.4 }}
             onPress={() => {
               if (!isConnected) { showAlert('No Internet', 'An internet connection is required to edit your profile.'); return; }
               openEditModal();
@@ -1124,7 +1125,7 @@ export default function SettingsScreen() {
         {/* LOG OUT */}
         <View style={{ marginTop: 24, marginHorizontal: 16, marginBottom: 8 }}>
           <TouchableOpacity
-            style={{ backgroundColor: cardBg, borderRadius: 16, flexDirection: 'row', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4, elevation: 1 }}
+            style={{ backgroundColor: isDark ? 'rgba(28,28,30,0.65)' : 'rgba(255,255,255,0.65)', borderRadius: 16, flexDirection: 'row', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4, elevation: 1, borderWidth: StyleSheet.hairlineWidth, borderColor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.08)' }}
             onPress={handleLogout}
             activeOpacity={0.6}
           >
@@ -1142,14 +1143,12 @@ export default function SettingsScreen() {
       {/* EDIT PROFILE MODAL */}
       <Modal visible={editModalVisible} transparent animationType="slide" onRequestClose={() => setEditModalVisible(false)}>
         <View style={{ flex: 1, backgroundColor: 'transparent' }}>
-          {Platform.OS === 'ios' ? (
-            <BlurView intensity={isDark ? 55 : 40} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
-          ) : (
-            <View style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.35)' }]} />
-          )}
+          <BlurView intensity={isDark ? 65 : 80} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} experimentalBlurMethod="dimezisBlurView" />
+          {Platform.OS !== 'ios' ? <View style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? 'rgba(0,0,0,0.45)' : 'rgba(0,0,0,0.25)' }]} /> : null}
           <TouchableOpacity style={{ flex: 0.25 }} activeOpacity={1} onPress={() => setEditModalVisible(false)} />
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 0.75, maxHeight: 560 }}>
-            <View style={{ flex: 1, borderTopLeftRadius: 28, borderTopRightRadius: 28, overflow: 'hidden', backgroundColor: isDark ? 'rgba(28,28,32,0.98)' : 'rgba(248,248,252,0.98)', borderWidth: StyleSheet.hairlineWidth, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)', shadowColor: '#000', shadowOffset: { width: 0, height: -8 }, shadowOpacity: isDark ? 0.5 : 0.15, shadowRadius: 24, elevation: 24 }}>
+            <View style={{ flex: 1, borderTopLeftRadius: 28, borderTopRightRadius: 28, overflow: 'hidden', backgroundColor: isDark ? 'rgba(28,28,32,0.78)' : 'rgba(248,248,252,0.78)', borderWidth: StyleSheet.hairlineWidth, borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)', shadowColor: '#000', shadowOffset: { width: 0, height: -8 }, shadowOpacity: isDark ? 0.5 : 0.15, shadowRadius: 24, elevation: 24 }}>
+              <BlurView intensity={isDark ? 40 : 55} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} experimentalBlurMethod="dimezisBlurView" />
               <EditModalContent
                 isDark={isDark}
                 editPhoto={editPhoto}
@@ -1191,13 +1190,13 @@ export default function SettingsScreen() {
 
       {/* PHOTO PICKER MODAL */}
       <Modal visible={photoPickerVisible} transparent animationType="fade" onRequestClose={() => setPhotoPickerVisible(false)}>
-        <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: isDark ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.3)' }}>
+        <View style={{ flex: 1, justifyContent: 'flex-end' }}>
+          <BlurView intensity={isDark ? 70 : 85} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} experimentalBlurMethod="dimezisBlurView" />
+          {Platform.OS !== 'ios' ? <View style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? 'rgba(0,0,0,0.45)' : 'rgba(0,0,0,0.25)' }]} /> : null}
           <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setPhotoPickerVisible(false)} />
           <View style={{ paddingHorizontal: 12, paddingBottom: insets.bottom + 8 }}>
-            <View style={{ borderRadius: 20, overflow: 'hidden', marginBottom: 10, backgroundColor: Platform.OS === 'ios' ? 'transparent' : cardBg }}>
-              {Platform.OS === 'ios' ? (
-                <BlurView intensity={isDark ? 85 : 72} tint={isDark ? 'chromeMaterialDark' : 'chromeMaterial'} style={StyleSheet.absoluteFill} />
-              ) : null}
+            <View style={{ borderRadius: 20, overflow: 'hidden', marginBottom: 10, backgroundColor: isDark ? 'rgba(44,44,46,0.65)' : 'rgba(255,255,255,0.65)', borderWidth: StyleSheet.hairlineWidth, borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)' }}>
+              <BlurView intensity={isDark ? 50 : 70} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} experimentalBlurMethod="dimezisBlurView" />
               <TouchableOpacity
                 style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 18, gap: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: divider }}
                 onPress={pickFromCamera} activeOpacity={0.7}
@@ -1214,12 +1213,10 @@ export default function SettingsScreen() {
               </TouchableOpacity>
             </View>
             <TouchableOpacity
-              style={{ borderRadius: 20, overflow: 'hidden', paddingVertical: 18, alignItems: 'center', backgroundColor: Platform.OS === 'ios' ? 'transparent' : cardBg }}
+              style={{ borderRadius: 20, overflow: 'hidden', paddingVertical: 18, alignItems: 'center', backgroundColor: isDark ? 'rgba(44,44,46,0.65)' : 'rgba(255,255,255,0.65)', borderWidth: StyleSheet.hairlineWidth, borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)' }}
               onPress={() => setPhotoPickerVisible(false)} activeOpacity={0.8}
             >
-              {Platform.OS === 'ios' ? (
-                <BlurView intensity={isDark ? 85 : 72} tint={isDark ? 'chromeMaterialDark' : 'chromeMaterial'} style={StyleSheet.absoluteFill} />
-              ) : null}
+              <BlurView intensity={isDark ? 50 : 70} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} experimentalBlurMethod="dimezisBlurView" />
               <Text style={{ fontSize: 17, fontWeight: '600', color: primaryText }}>Cancel</Text>
             </TouchableOpacity>
           </View>
@@ -1228,9 +1225,12 @@ export default function SettingsScreen() {
 
       {/* ACCENT COLOR PICKER MODAL */}
       <Modal visible={accentPickerVisible} transparent animationType="slide" onRequestClose={() => setAccentPickerVisible(false)}>
-        <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.45)' }}>
+        <View style={{ flex: 1, justifyContent: 'flex-end' }}>
+          <BlurView intensity={isDark ? 65 : 80} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} experimentalBlurMethod="dimezisBlurView" />
+          {Platform.OS !== 'ios' ? <View style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? 'rgba(0,0,0,0.45)' : 'rgba(0,0,0,0.25)' }]} /> : null}
           <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setAccentPickerVisible(false)} />
-          <View style={{ backgroundColor: cardBg, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingBottom: insets.bottom + 16 }}>
+          <View style={{ backgroundColor: isDark ? 'rgba(28,28,30,0.78)' : 'rgba(255,255,255,0.78)', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingBottom: insets.bottom + 16, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)' }}>
+            <BlurView intensity={isDark ? 40 : 55} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} experimentalBlurMethod="dimezisBlurView" />
             <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)', alignSelf: 'center', marginTop: 12, marginBottom: 16 }} />
             <Text style={{ fontSize: 18, fontWeight: '700', color: primaryText, textAlign: 'center', marginBottom: 4 }}>Accent Color</Text>
             <Text style={{ fontSize: 13, color: secondaryText, textAlign: 'center', marginBottom: 20, paddingHorizontal: 24 }}>Choose a color that reflects your style</Text>
