@@ -647,3 +647,4 @@ const s = StyleSheet.create({
     minWidth: '100%',
   },
 });
+In the StreamingCodeBlock, when user long-presses and selects code text, add a floating 'Copy Selection' pill button (BlurView on iOS) that appears above the selection and copies just the selected portion to clipboard.
