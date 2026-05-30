@@ -113,4 +113,3 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     </SubscriptionContext.Provider>
   );
 }
-Add a scheduled check in the subscription context: if subscription expires within 3 days, show a local push notification reminding the user to renew, using expo-notifications.
