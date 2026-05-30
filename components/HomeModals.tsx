@@ -43,9 +43,9 @@ export function RenameModal({ visible, currentTitle, onConfirm, onCancel }: {
   const [text, setText] = useState(currentTitle);
   const { isDark } = useTheme();
   const textC = isDark ? '#FFF' : '#000';
-  const inputBg = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)';
-  const cardBg = isDark ? 'rgba(30,30,34,0.98)' : 'rgba(255,255,255,0.98)';
-  const divC = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)';
+  const inputBg = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)';
+  const cardBg = isDark ? 'rgba(30,30,34,0.82)' : 'rgba(255,255,255,0.82)';
+  const divC = isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.08)';
 
   useEffect(() => {
     if (visible) setText(currentTitle);
@@ -54,10 +54,11 @@ export function RenameModal({ visible, currentTitle, onConfirm, onCancel }: {
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
       <View style={renameStyles.backdrop}>
-        <BlurView intensity={60} tint={isDark ? 'dark' : 'light'} style={renameStyles.blurBg}>
+        <BlurView intensity={isDark ? 55 : 75} tint={isDark ? 'dark' : 'light'} style={renameStyles.blurBg}experimentalBlurMethod="dimezisBlurView">
           <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onCancel} />
         </BlurView>
         <Animated.View style={renameStyles.card}>
+          <BlurView intensity={isDark ? 40 : 60} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} experimentalBlurMethod="dimezisBlurView" />
           <View style={[renameStyles.cardInner, { backgroundColor: cardBg }]}>
             <Text style={[renameStyles.title, { color: textC }]}>Rename chat</Text>
             <TextInput
@@ -108,9 +109,9 @@ export function ArchiveConfirmModal({ visible, onConfirm, onCancel }: {
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
       <View style={archStyles.backdrop}>
-        <BlurView intensity={60} tint="dark" style={StyleSheet.absoluteFill} />
+        <BlurView intensity={70} tint="dark" style={StyleSheet.absoluteFill} experimentalBlurMethod="dimezisBlurView" />
         <View style={archStyles.card}>
-          <BlurView intensity={90} tint="dark" style={archStyles.blurCard}>
+          <BlurView intensity={95} tint="dark" style={archStyles.blurCard}experimentalBlurMethod="dimezisBlurView">
             <Text style={archStyles.title}>Archive Chat</Text>
             <Text style={archStyles.body}>
               {'Are you sure you want to archive this chat?\nYou can view archived chats in Settings'}
@@ -131,7 +132,7 @@ const archStyles = StyleSheet.create({
   blurCard: { padding: 24, alignItems: 'center' },
   title: { color: '#FFF', fontSize: 20, fontWeight: '700', marginBottom: 12 },
   body: { color: 'rgba(255,255,255,0.6)', fontSize: 15, textAlign: 'center', lineHeight: 22, marginBottom: 24 },
-  archBtn: { width: '100%', backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 14, paddingVertical: 14, alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
+  archBtn: { width: '100%', backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 14, paddingVertical: 14, alignItems: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.08)' },
   archBtnText: { color: '#FF453A', fontSize: 17, fontWeight: '600' },
 });
 
@@ -169,17 +170,18 @@ export function ProfileEditModal({ visible, user, profilePhotoUrl, onClose, onSa
     } catch (_e) {}
   };
 
-  const bg = isDark ? 'rgba(28,28,30,0.98)' : 'rgba(255,255,255,0.98)';
+  const bg = isDark ? 'rgba(28,28,30,0.78)' : 'rgba(255,255,255,0.78)';
   const textC = isDark ? '#FFFFFF' : '#000000';
-  const inputBg = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)';
+  const inputBg = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)';
   const subC = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.45)';
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' }}>
-        {Platform.OS === 'ios' ? <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} /> : null}
+        <BlurView intensity={isDark ? 55 : 70} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} experimentalBlurMethod="dimezisBlurView" />
         <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onClose} />
-        <View style={{ backgroundColor: bg, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 28, paddingBottom: 40 }}>
+        <View style={{ backgroundColor: bg, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 28, paddingBottom: 40, overflow: 'hidden' }}>
+          <BlurView intensity={isDark ? 35 : 50} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} experimentalBlurMethod="dimezisBlurView" />
           <View style={{ alignItems: 'center', marginBottom: 24 }}>
             <TouchableOpacity onPress={pickPhoto} activeOpacity={0.8} style={{ position: 'relative' }}>
               {photoUri ? (
@@ -231,20 +233,19 @@ export function GroupStartModal({ visible, user, profilePhotoUrl, onClose, onSta
   isDark?: boolean;
   onSetupProfile?: () => void;
 }) {
-  const bg = isDark ? 'rgba(28,28,30,0.97)' : 'rgba(255,255,255,0.97)';
+  const bg = isDark ? 'rgba(28,28,30,0.80)' : 'rgba(255,255,255,0.80)';
   const textC = isDark ? '#FFFFFF' : '#000000';
   const subC = isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.5)';
-  const profileRowBg = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.04)';
+  const profileRowBg = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)';
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={{ flex: 1, justifyContent: 'flex-end' }}>
-        {Platform.OS === 'ios'
-          ? <BlurView intensity={isDark ? 60 : 50} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
-          : <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.5)' }]} />
-        }
+        <BlurView intensity={isDark ? 65 : 75} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} experimentalBlurMethod="dimezisBlurView" />
+        {Platform.OS !== 'ios' ? <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.35)' }]} /> : null}
         <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onClose} />
-        <View style={{ backgroundColor: bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingTop: 16, paddingBottom: 40, paddingHorizontal: 20, minHeight: '55%' }}>
+        <View style={{ backgroundColor: bg, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingTop: 16, paddingBottom: 40, paddingHorizontal: 20, minHeight: '55%', overflow: 'hidden' }}>
+          <BlurView intensity={isDark ? 40 : 55} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} experimentalBlurMethod="dimezisBlurView" />
           <TouchableOpacity
             style={{ position: 'absolute', top: 16, right: 16, width: 36, height: 36, borderRadius: 18, backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.07)', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}
             onPress={onClose}
@@ -306,10 +307,8 @@ export function PeopleModal({ visible, onClose, groupName, userName, profilePhot
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={{ flex: 1, justifyContent: 'flex-end' }}>
-        {Platform.OS === 'ios'
-          ? <BlurView intensity={40} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} />
-          : <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.4)' }]} />
-        }
+        <BlurView intensity={isDark ? 60 : 70} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} experimentalBlurMethod="dimezisBlurView" />
+        {Platform.OS !== 'ios' ? <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.30)' }]} /> : null}
         <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onClose} />
         <View style={{ borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: 'hidden', minHeight: '55%' }}>
           <View style={{ backgroundColor: isDark ? '#1C1C1E' : '#F2F2F7', paddingBottom: 40, minHeight: '100%' }}>
@@ -354,11 +353,12 @@ export function RenameGroupBox({ isDark, currentName, onSave, onCancel }: {
   useEffect(() => { setText(currentName); }, [currentName]);
 
   const textC = isDark ? '#FFF' : '#000';
-  const inputBg = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)';
+  const inputBg = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)';
 
   return (
     <View style={{ width: '82%', borderRadius: 22, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.35, shadowRadius: 22, elevation: 22 }}>
-      <View style={{ backgroundColor: isDark ? '#2C2C2E' : '#FFF', padding: 22, borderRadius: 22 }}>
+      <BlurView intensity={isDark ? 50 : 70} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFill} experimentalBlurMethod="dimezisBlurView" />
+      <View style={{ backgroundColor: isDark ? 'rgba(44,44,46,0.72)' : 'rgba(255,255,255,0.72)', padding: 22, borderRadius: 22 }}>
         <Text style={{ color: textC, fontSize: 18, fontWeight: '700', marginBottom: 16 }}>Rename group</Text>
         <View style={{ backgroundColor: inputBg, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 16 }}>
           <TextInput style={{ color: textC, fontSize: 16 }} value={text} onChangeText={setText} autoFocus selectTextOnFocus />
@@ -400,7 +400,7 @@ export function CustomizeAIModal({ visible, onClose, onSave, initialInstructions
       <View style={{ flex: 1 }}>
         <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onClose} />
         <View style={customStyles.sheet}>
-          <BlurView intensity={90} tint="dark" style={customStyles.sheetBlur}>
+          <BlurView intensity={95} tint="dark" style={customStyles.sheetBlur}experimentalBlurMethod="dimezisBlurView">
             <View style={customStyles.handle} />
             <Text style={customStyles.title}>Customize Dawinix</Text>
             <Text style={customStyles.sectionLabel}>Custom instructions</Text>
@@ -444,7 +444,7 @@ const customStyles = StyleSheet.create({
   handle: { width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.3)', alignSelf: 'center', marginBottom: 16 },
   title: { color: '#FFF', fontSize: 18, fontWeight: '700', textAlign: 'center', marginBottom: 20 },
   sectionLabel: { color: 'rgba(255,255,255,0.55)', fontSize: 14, marginBottom: 8 },
-  textArea: { backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 12, padding: 14, color: '#FFF', fontSize: 15, minHeight: 100, textAlignVertical: 'top', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', marginBottom: 16 },
+  textArea: { backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 12, padding: 14, color: '#FFF', fontSize: 15, minHeight: 100, textAlignVertical: 'top', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.08)', marginBottom: 16 },
   toggleRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
   toggleLabel: { color: '#FFF', fontSize: 16, fontWeight: '600' },
   toggleSub: { color: 'rgba(255,255,255,0.5)', fontSize: 13, marginTop: 2 },
@@ -483,10 +483,10 @@ export function InviteLinkModal({ visible, onClose, isPlus, isDark }: {
       <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onClose} />
       <View style={{ borderTopLeftRadius: 20, borderTopRightRadius: 20, overflow: 'hidden' }}>
         <BlurView
-          intensity={isDark !== false ? 90 : 75}
-          tint={isDark !== false ? 'dark' : 'extraLight'}
+          intensity={isDark !== false ? 95 : 80}
+          tint={isDark !== false ? 'dark' : 'light'}
           style={{ padding: 24 }}
-        >
+        experimentalBlurMethod="dimezisBlurView">
           <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: isDark !== false ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.2)', alignSelf: 'center', marginBottom: 16 }} />
           <Text style={{ color: textC, fontSize: 18, fontWeight: '700', marginBottom: 6 }}>Group link</Text>
           <Text style={{ color: '#007AFF', fontSize: 13, marginBottom: 20 }} numberOfLines={1}>{link}</Text>
@@ -499,7 +499,7 @@ export function InviteLinkModal({ visible, onClose, isPlus, isDark }: {
               style={{
                 flexDirection: 'row', alignItems: 'center', paddingVertical: 16, gap: 16,
                 borderTopWidth: i > 0 ? StyleSheet.hairlineWidth : 0,
-                borderTopColor: isDark !== false ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)',
+                borderTopColor: isDark !== false ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
               }}
               onPress={item.onPress}
             >
@@ -530,7 +530,7 @@ export function GroupMemberProfileContent({ member, isOwner, isAdmin, isDark, is
   if (!member) return null;
   const textC = isDark ? '#FFF' : '#000';
   const subC = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.45)';
-  const divC = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)';
+  const divC = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
   const initials = (member.username || '?').slice(0, 2).toUpperCase();
   const canManage = isOwner || isAdmin;
 
