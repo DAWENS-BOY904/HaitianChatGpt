@@ -48,6 +48,7 @@ import { AIMessageActions } from '../components/AIMessageActions';
 import { StreamingText } from '../components/StreamingText';
 import { ConversationMenuModal } from '../components/ConversationMenuModal';
 import { MessageItem } from '../components/MessageItem';
+import { LinkPreviewCard, extractFirstUrl, extractLinkMetadataFromAIResponse, detectLinkPlatform } from '../components/LinkPreviewCard';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getSupabaseClient } from '@/template';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -2943,6 +2944,7 @@ export default function HomeScreen() {
                               mode={thinkingMode}
                               onCancel={handleStopGeneration}
                               isGroupMode={groupChatMode}
+                              linkSearchUrl={linkSearchUrl}
                             />
                           ) : null}
                         </>
