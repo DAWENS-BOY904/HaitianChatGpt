@@ -28,7 +28,6 @@ import { StreamingCodeBlock } from './StreamingCodeBlock';
 import { SourcesModal, Source, InlineSourcesPill } from './SourcesModal';
 import * as Clipboard from 'expo-clipboard';
 import * as MediaLibrary from 'expo-media-library';
-import { LinkPreviewCard, extractFirstUrl, extractLinkMetadataFromAIResponse, detectLinkPlatform, UrlChip } from './LinkPreviewCard';
 // expo-video — used for real-time video playback
 let VideoComponent: any = null;
 let VideoResizeMode: any = { CONTAIN: 'contain' };
@@ -1096,14 +1095,6 @@ function VideoPreviewCard({ name, uri, isDark, colors }: { name: string; uri?: s
     })();
     const hasValidImage = multiImages.length > 0;
 
-  // Extract URLs from user message
-    const userMessageUrls: string[] = (() => {
-      if (!isUser) return [];
-      const urlRx = /https?:\/\/[^\s"'<>]+/gi;
-      const matches = (cleanUserContent || '').match(urlRx) || [];
-      return [...new Set(matches)].slice(0, 3);
-    })();
-
     return (
       <>
         <View style={userStyles.container}>
@@ -1201,26 +1192,10 @@ function VideoPreviewCard({ name, uri, isDark, colors }: { name: string; uri?: s
 
           {cleanUserContent ? (
             <View style={[userStyles.bubble, { backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA' }]}>
-              <Text
-                selectable
-                selectionColor={(settings as any)?.accentColor ? (settings as any).accentColor + '55' : '#007AFF55'}
-                style={[userStyles.text, { color: colors.text }]}
-              >
-                {cleanUserContent}
-              </Text>
+              <Text style={[userStyles.text, { color: colors.text }]}>{cleanUserContent}</Text>
               {message.isEdited ? <Text style={{ color: colors.textSecondary, fontSize: 11, marginTop: 4, textAlign: 'right' }}>Edited</Text> : null}
             </View>
           ) : null}
-          {/* Link preview cards for URLs in user messages */}
-          {userMessageUrls.map((urlItem, urlIdx) => (
-            <LinkPreviewCard
-              key={`user-url-${urlIdx}`}
-              url={urlItem}
-              isDark={isDark}
-              colors={colors}
-              compact
-            />
-          ))}
         </View>
 
         {hasValidImage ? (
@@ -1362,46 +1337,19 @@ function VideoPreviewCard({ name, uri, isDark, colors }: { name: string; uri?: s
             if (block.type === 'paragraph') {
               const urlsInPara = (block.content || '').match(URL_REGEX) || [];
               const hasDownloadLink = urlsInPara.some(u => /\.(pdf|zip|doc|docx|xls|xlsx|csv|mp3|mp4|mov|apk)(\?|$)/i.test(u));
-              // Extract non-download links for preview cards
-              const previewLinks = urlsInPara.filter(u => !(/\.(pdf|zip|doc|docx|xls|xlsx|csv|mp3|mp4|mov|apk)(\?|$)/i.test(u)));
               if (hasDownloadLink) {
                 return (
                   <View key={`b-${bi}`} style={{ marginVertical: 3 }}>
-                    <Text
-                      selectable
-                      selectionColor={colors.primary + '55'}
-                      style={{ fontSize: 16, color: colors.text, lineHeight: 25 }}
-                    >
-                      {renderInlineSegments((block.content || '').replace(URL_REGEX, '').trim(), handlePhonePress, handleLinkPress, isDark)}
-                    </Text>
+                    <InlineText text={(block.content || '').replace(URL_REGEX, '').trim()} textStyle={{ fontSize: 16, color: colors.text, lineHeight: 25 }} onPhonePress={handlePhonePress} onLinkPress={handleLinkPress} />
                     {urlsInPara.map((url, ui) => <DownloadLinkCard key={ui} url={url} />)}
                   </View>
                 );
               }
               return (
                 <View key={`b-${bi}`} style={{ marginVertical: 3 }}>
-                  <Text
-                    selectable
-                    selectionColor={colors.primary + '55'}
-                    style={{ fontSize: 16, color: colors.text, lineHeight: 25 }}
-                  >
+                  <Text selectable selectionColor={colors.primary + '55'} style={{ fontSize: 16, color: colors.text, lineHeight: 25 }}>
                     {renderInlineSegments(block.content || '', handlePhonePress, handleLinkPress, isDark)}
                   </Text>
-                  {/* Show link preview cards for URLs in AI paragraphs */}
-                  {previewLinks.slice(0, 1).map((pUrl, pi) => {
-                    // Try to extract metadata from AI response context
-                    const meta = extractLinkMetadataFromAIResponse(safeContent, pUrl);
-                    return (
-                      <LinkPreviewCard
-                        key={`ai-url-${pi}-${pUrl}`}
-                        url={pUrl}
-                        metadata={meta}
-                        isDark={isDark}
-                        colors={colors}
-                        compact={false}
-                      />
-                    );
-                  })}
                 </View>
               );
             }

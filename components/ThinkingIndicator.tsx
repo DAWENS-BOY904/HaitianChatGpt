@@ -11,7 +11,6 @@ interface ThinkingIndicatorProps {
   isGroupMode?: boolean;
   isWebSearch?: boolean;
   isFileAnalysis?: boolean;
-  linkSearchUrl?: string | null;
 }
 
 export function ThinkingIndicator({
@@ -21,7 +20,6 @@ export function ThinkingIndicator({
   isGroupMode,
   isWebSearch,
   isFileAnalysis,
-  linkSearchUrl,
 }: ThinkingIndicatorProps) {
   const { isDark } = useTheme();
   const pulse = useRef(new Animated.Value(0.5)).current;
@@ -53,32 +51,6 @@ export function ThinkingIndicator({
   // Determine label and dot color based on context
   let label = 'Thinking';
   let dotColor = isDark ? '#FFFFFF' : '#000000';
-
-  // ── Link analysis mode: show "Searching for {domain}..." ──
-  if (linkSearchUrl) {
-    let displayUrl = linkSearchUrl;
-    try {
-      const u = new URL(linkSearchUrl);
-      displayUrl = u.hostname.replace('www.', '') + (u.pathname.length > 1 ? u.pathname.slice(0, 20) : '');
-    } catch {}
-    return (
-      <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, gap: 8 }}>
-        <Animated.View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#5AC8FA', opacity: pulse }} />
-        <Text style={{ color: isDark ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.55)', fontSize: 14, fontWeight: '500', flex: 1 }} numberOfLines={1}>
-          {'Searching for '}
-          <Text style={{ color: '#5AC8FA', fontWeight: '600' }}>{displayUrl}</Text>
-          <Text style={{ color: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.28)' }}>{'...'}</Text>
-        </Text>
-        {onCancel ? (
-          <TouchableOpacity onPress={onCancel} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <View style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.07)', alignItems: 'center', justifyContent: 'center' }}>
-              <Ionicons name="stop" size={10} color={isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.45)'} />
-            </View>
-          </TouchableOpacity>
-        ) : null}
-      </View>
-    );
-  }
 
   if (isWebSearch) {
     label = 'Searching web';
