@@ -1,18 +1,15 @@
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
-  ScrollView,
   Platform,
   Linking,
   ActivityIndicator,
   StatusBar,
   Dimensions,
   ImageBackground,
-  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSubscription } from '../hooks/useSubscription';
@@ -60,50 +57,38 @@ const RC_PRODUCTS = {
   super_annual: 'app.dawinix.super.annual',
 };
 
-// ── Plan Config ───────────────────────────────────────────────────────────
 type PlanKey = 'lite' | 'super';
 
 interface PlanConfig {
   key: PlanKey;
   label: string;
+  displayTitle: string;
   tagline: string;
+  trialTagline?: string;
   accentColor: string;
-  accentGlow: string;
   monthly: string;
+  monthlyRaw: string;
   annual: string;
   annualPerMonth: string;
   savePct: string;
   trialDays?: number;
-  // Background images - TOP (different per plan)
-  topBackgroundImage: any;
+  backgroundImage: any;
   features: Array<{ icon: string; title: string; subtitle?: string }>;
 }
-
-/*
-╔══════════════════════════════════════════════════════════════════════════════╗
-║                    IMAGE ASSETS YOU NEED TO CREATE                            ║
-╠══════════════════════════════════════════════════════════════════════════════╣
-║  1. lite-top-bg.png    → Gray/smoke background for LITE plan (top section)   ║
-║  2. super-top-bg.png   → Face/smoke background for SUPER plan (top section)  ║
-║  3. bottom-bg.png      → Gray background for BOTTOM section (shared)         ║
-╚══════════════════════════════════════════════════════════════════════════════╝
-
-Place these images in:  assets/images/
-*/
 
 const PLANS: PlanConfig[] = [
   {
     key: 'lite',
     label: 'Lite',
+    displayTitle: 'SuperGrok Lite',
     tagline: 'Keep chatting with higher usage',
     accentColor: '#FF6B35',
-    accentGlow: 'rgba(255,107,53,0.18)',
     monthly: '$10',
+    monthlyRaw: '$10',
     annual: '$100',
     annualPerMonth: '$8.33',
     savePct: '17%',
-    // ⬇️ REPLACE: Your own Lite plan top background image
-    topBackgroundImage: require('../assets/images/lite-top-bg.png'),
+    backgroundImage: require('../assets/images/lite-top-bg.png'),
     features: [
       { icon: 'rocket-outline', title: '2x longer conversations in Chat' },
       { icon: 'hardware-chip-outline', title: '1x AI agent on Expert mode' },
@@ -113,17 +98,18 @@ const PLANS: PlanConfig[] = [
   },
   {
     key: 'super',
-    label: 'Super',
+    label: 'SuperGrok',
+    displayTitle: 'SuperGrok',
     tagline: 'Unlock the full power of Grok',
+    trialTagline: 'Try Free for 3 Days',
     accentColor: '#FF6B35',
-    accentGlow: 'rgba(255,107,53,0.22)',
     monthly: '$30',
+    monthlyRaw: '$30',
     annual: '$300',
     annualPerMonth: '$25',
     savePct: '17%',
     trialDays: 3,
-    // ⬇️ REPLACE: Your own Super plan top background image
-    topBackgroundImage: require('../assets/images/super-top-bg.png'),
+    backgroundImage: require('../assets/images/super-top-bg.png'),
     features: [
       { icon: 'rocket-outline', title: '5x longer conversations in Chat' },
       { icon: 'people-outline', title: '4x AI agents on Expert mode', subtitle: 'Collaborating to get you the best answers' },
@@ -133,9 +119,6 @@ const PLANS: PlanConfig[] = [
     ],
   },
 ];
-
-// ⬇️ REPLACE: Your own shared bottom background image (gray)
-const BOTTOM_BG_IMAGE = require('../assets/images/bottom-bg.png');
 
 // ── RevenueCat Helper ─────────────────────────────────────────────────────
 class RevenueCatHelper {
@@ -154,7 +137,6 @@ class RevenueCatHelper {
       this.isConfigured = true;
       return true;
     } catch (err: any) {
-      console.log('[RevenueCat] configure error:', err.message);
       return false;
     }
   }
@@ -194,20 +176,16 @@ function FeatureRow({ icon, title, subtitle, isLast }: {
 }
 
 const fr = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, gap: 14 },
-  border: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(255,255,255,0.07)' },
-  iconWrap: { 
-    width: 40, 
-    height: 40, 
-    borderRadius: 20, 
-    alignItems: 'center', 
-    justifyContent: 'center', 
-    flexShrink: 0,
-    backgroundColor: 'rgba(255,255,255,0.07)',
+  row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 13, gap: 14 },
+  border: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(255,255,255,0.08)' },
+  iconWrap: {
+    width: 40, height: 40, borderRadius: 20,
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+    backgroundColor: 'rgba(255,255,255,0.1)',
   },
   textWrap: { flex: 1 },
-  title: { color: '#FFFFFF', fontSize: 16, fontWeight: '500', lineHeight: 22 },
-  sub: { color: 'rgba(255,255,255,0.45)', fontSize: 13, marginTop: 2 },
+  title: { color: '#FFFFFF', fontSize: 15, fontWeight: '500', lineHeight: 21 },
+  sub: { color: 'rgba(255,255,255,0.45)', fontSize: 12, marginTop: 2 },
 });
 
 export default function SubscriptionScreen() {
@@ -224,7 +202,6 @@ export default function SubscriptionScreen() {
   const [webLoading, setWebLoading] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [managing, setManaging] = useState(false);
-  const [checkingStatus, setCheckingStatus] = useState(false);
   const [subscriptionInfo, setSubscriptionInfo] = useState<{
     subscribed: boolean; plan: string | null; subscription_end: string | null; provider?: string;
   } | null>(null);
@@ -238,10 +215,11 @@ export default function SubscriptionScreen() {
 
   const plan = PLANS[activePlanIdx];
   const accent = plan.accentColor;
+  const isSubscribed = subscriptionInfo?.subscribed ?? false;
+  const hasTrial = plan.trialDays && !isSubscribed;
 
   const checkSubscriptionStatus = useCallback(async () => {
     if (!user) return;
-    safe(setCheckingStatus, true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) return;
@@ -256,83 +234,55 @@ export default function SubscriptionScreen() {
           provider: data.provider ?? undefined,
         });
       }
-    } catch { console.log('[subscription] status check failed'); }
-    finally { safe(setCheckingStatus, false); }
+    } catch { /* ignore */ }
   }, [user, supabase, safe]);
 
   useFocusEffect(useCallback(() => { checkSubscriptionStatus(); }, [checkSubscriptionStatus]));
 
-  const checkRCAvailable = async (): Promise<boolean> => {
-    if (Platform.OS === 'web') {
-      showAlert('Not Available', 'In-App Purchases are not available on web. Use web billing below.');
-      return false;
-    }
-    if (ENV.IS_EXPO_GO) {
-      showAlert('Development Build Required', 'In-App Purchases require a development build.\n\nBuild with EAS:\n\neas build --profile development');
-      return false;
-    }
-    const Purchases = await getPurchases();
-    if (!Purchases) { showAlert('SDK Missing', 'Please run:\n\nnpx expo install react-native-purchases'); return false; }
-    if (!getRCApiKey()) { showAlert('Configuration Error', 'RevenueCat API key is missing.'); return false; }
-    return true;
-  };
-
   const purchaseWithRC = async () => {
-    const ok = await checkRCAvailable();
-    if (!ok) return;
+    if (Platform.OS === 'web') { purchaseOnWeb(); return; }
+    if (ENV.IS_EXPO_GO) {
+      showAlert('Development Build Required', 'In-App Purchases require a development build.');
+      return;
+    }
     safe(setLoading, true);
     try {
       const configured = await RevenueCatHelper.init();
-      if (!configured) throw new Error('Failed to configure RevenueCat. Check your API keys.');
+      if (!configured) throw new Error('Failed to configure RevenueCat.');
       const offerings = await RevenueCatHelper.getOfferings();
       const offering = offerings.current;
-      if (!offering) throw new Error('No offerings available. Check App Store Connect setup.');
+      if (!offering) throw new Error('No offerings available.');
 
       const productKey = `${plan.key}_${billingCycle}` as keyof typeof RC_PRODUCTS;
       const productId = RC_PRODUCTS[productKey];
-
       let pkg = offering.availablePackages.find(
         (p: any) => p.product?.productIdentifier === productId || p.product?.identifier === productId,
       );
-
       if (!pkg) {
         const pkgType = billingCycle === 'annual' ? 'ANNUAL' : 'MONTHLY';
-        pkg = offering.availablePackages.find((p: any) => p.packageType === pkgType)
-          || offering.availablePackages[0];
+        pkg = offering.availablePackages.find((p: any) => p.packageType === pkgType) || offering.availablePackages[0];
       }
-
-      if (!pkg) throw new Error(`${plan.label} ${billingCycle} plan not found. Contact support.`);
+      if (!pkg) throw new Error(`${plan.label} ${billingCycle} plan not found.`);
 
       const { customerInfo } = await RevenueCatHelper.purchasePackage(pkg);
-      const receiptData = JSON.stringify(customerInfo);
-      const transactionId = customerInfo?.originalAppUserId || `rc_${Date.now()}`;
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) throw new Error('Not authenticated');
 
       const { data, error } = await supabase.functions.invoke('verify-purchase', {
-        body: { platform: Platform.OS, receipt: receiptData, transactionId, productId, isSandbox: __DEV__ },
+        body: { platform: Platform.OS, receipt: JSON.stringify(customerInfo), transactionId: customerInfo?.originalAppUserId || `rc_${Date.now()}`, productId, isSandbox: __DEV__ },
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
-
-      if (error) {
-        let msg = error.message;
-        if (error instanceof FunctionsHttpError) { try { msg = await error.context?.text() || msg; } catch { /* ignore */ } }
-        throw new Error(msg);
-      }
+      if (error) { let msg = error.message; if (error instanceof FunctionsHttpError) { try { msg = await error.context?.text() || msg; } catch { /* ignore */ } } throw new Error(msg); }
 
       if (user?.id) {
-        await supabase.from('user_profiles').update({
-          subscription_tier: plan.key,
-          subscription_expires_at: data?.subscription?.expiresAt || null,
-        }).eq('id', user.id);
+        await supabase.from('user_profiles').update({ subscription_tier: plan.key, subscription_expires_at: data?.subscription?.expiresAt || null }).eq('id', user.id);
       }
-
-      showAlert(`Subscribed to ${plan.label}!`, `Your ${plan.label} plan is now active. Enjoy!`);
+      showAlert(`Subscribed to ${plan.label}!`, `Your ${plan.label} plan is now active.`);
       await checkSubscriptionStatus();
       router.push('/subscription-success');
     } catch (err: any) {
       if (err?.userCancelled || err?.code === '1' || String(err?.message).toLowerCase().includes('cancel')) return;
-      showAlert('Purchase Failed', err?.message || 'Something went wrong. Please try again.');
+      showAlert('Purchase Failed', err?.message || 'Something went wrong.');
     } finally { safe(setLoading, false); }
   };
 
@@ -341,30 +291,17 @@ export default function SubscriptionScreen() {
     safe(setWebLoading, true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) {
-        showAlert('Sign In Required', 'Please sign in to purchase on web.');
-        return;
-      }
+      if (!session?.access_token) { showAlert('Sign In Required', 'Please sign in to purchase.'); return; }
       const { data, error } = await supabase.functions.invoke('revenuecat-web-checkout', {
         body: { plan: plan.key, billingCycle },
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
-      if (error) {
-        let msg = error.message;
-        if (error instanceof FunctionsHttpError) { try { msg = await error.context?.text() || msg; } catch { /* ignore */ } }
-        throw new Error(msg);
-      }
+      if (error) { let msg = error.message; if (error instanceof FunctionsHttpError) { try { msg = await error.context?.text() || msg; } catch { /* ignore */ } } throw new Error(msg); }
       const url = data?.url;
       if (!url) throw new Error('No checkout URL received.');
-      if (Platform.OS !== 'web') {
-        try {
-          const wb = require('../utils/web-browser.native');
-          if (typeof wb?.openInAppBrowser === 'function') { wb.openInAppBrowser(url); return; }
-        } catch { /* fall through */ }
-      }
       await Linking.openURL(url);
     } catch (err: any) {
-      showAlert('Web Purchase Error', err?.message || 'Could not open web checkout. Please try again.');
+      showAlert('Web Purchase Error', err?.message || 'Could not open web checkout.');
     } finally { safe(setWebLoading, false); }
   };
 
@@ -372,15 +309,9 @@ export default function SubscriptionScreen() {
     if (managing) return;
     safe(setManaging, true);
     try {
-      if (subscriptionInfo?.provider === 'revenuecat') {
-        await Linking.openURL('https://app.revenuecat.com/billing');
-      } else if (Platform.OS === 'ios') {
-        await Linking.openURL('https://apps.apple.com/account/subscriptions');
-      } else if (Platform.OS === 'android') {
-        await Linking.openURL('https://play.google.com/store/account/subscriptions');
-      } else {
-        await Linking.openURL('https://app.revenuecat.com/billing');
-      }
+      if (Platform.OS === 'ios') await Linking.openURL('https://apps.apple.com/account/subscriptions');
+      else if (Platform.OS === 'android') await Linking.openURL('https://play.google.com/store/account/subscriptions');
+      else await Linking.openURL('https://app.revenuecat.com/billing');
     } catch { showAlert('Error', 'Could not open subscription management.'); }
     finally { safe(setManaging, false); }
   };
@@ -410,227 +341,202 @@ export default function SubscriptionScreen() {
     finally { safe(setRestoring, false); }
   };
 
-  const isSubscribed = subscriptionInfo?.subscribed ?? false;
-  const hasTrial = plan.trialDays && !isSubscribed;
-
-  const monthlyPrice = plan.monthly;
-  const annualPrice = plan.annual;
-  const annualPerMonth = plan.annualPerMonth;
-
-  const ctaLabel = hasTrial
-    ? `Start ${plan.trialDays}-day free trial`
-    : `Upgrade to ${plan.label}`;
+  // CTA label
+  const ctaLabel = isSubscribed
+    ? 'Manage Subscription'
+    : hasTrial
+      ? `Start ${plan.trialDays}-day free trial`
+      : `Upgrade to ${plan.label === 'Lite' ? 'SuperGrok Lite' : 'SuperGrok'}`;
 
   return (
     <View style={s.root}>
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
-      {/* ═══════════════════════════════════════════════════════════════════ */}
-      {/* LAYER 1: TOP BACKGROUND IMAGE — Different for each plan            */}
-      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {/* Full-screen background image — changes per plan */}
       <ImageBackground
-        source={plan.topBackgroundImage}
-        style={s.topBackground}
+        source={plan.backgroundImage}
+        style={StyleSheet.absoluteFill}
         resizeMode="cover"
-        imageStyle={{ resizeMode: 'cover' }}
       >
-        {/* Dark overlay for text readability */}
-        <View style={s.topOverlay} />
+        {/* Gradient overlay — dark at bottom, lighter at top */}
+        <View style={s.bgOverlay} />
+      </ImageBackground>
+
+      {/* ── CONTENT (fixed, no scroll) ── */}
+      <View style={[s.content, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 12 }]}>
 
         {/* Close button */}
         <TouchableOpacity
-          style={[s.closeBtn, { top: insets.top + 12 }]}
+          style={s.closeBtn}
           onPress={() => router.back()}
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
-          <Ionicons name="close" size={18} color="rgba(255,255,255,0.7)" />
+          <Ionicons name="close" size={18} color="rgba(255,255,255,0.75)" />
         </TouchableOpacity>
 
-        {/* Title Section */}
-        <View style={[s.headerWrap, { paddingTop: insets.top + 56 }]}>
-          <Text style={s.headerTitle}>
-            <Text style={{ color: '#FFFFFF', fontWeight: '700' }}>Super</Text>
-            <Text style={{ color: 'rgba(255,255,255,0.5)', fontWeight: '300' }}>
-              {plan.label === 'Lite' ? 'Grok ' + plan.label : 'Grok'}
+        {/* Title */}
+        <View style={s.titleWrap}>
+          {plan.key === 'super' ? (
+            <Text style={s.title}>SuperGrok</Text>
+          ) : (
+            <Text style={s.title}>
+              <Text style={s.titleBold}>SuperGrok </Text>
+              <Text style={s.titleLight}>Lite</Text>
             </Text>
-          </Text>
+          )}
+
+          {/* Tagline */}
           {hasTrial ? (
-            <Text style={s.headerSub}>
+            <Text style={s.tagline}>
               Try <Text style={{ color: accent, fontWeight: '700' }}>Free</Text> for {plan.trialDays} Days
             </Text>
           ) : (
-            <Text style={s.headerSub}>{plan.tagline}</Text>
+            <Text style={s.tagline}>{plan.tagline}</Text>
           )}
         </View>
 
-        {/* 2-segment Plan Toggle: Lite | SuperGrok */}
+        {/* 2-segment Toggle */}
         <View style={s.segWrap}>
-          {PLANS.map((p, i) => (
-            <TouchableOpacity
-              key={p.key}
-              style={[
-                s.segBtn,
-                activePlanIdx === i && [s.segBtnActive, { borderColor: p.accentColor + '88' }],
-              ]}
-              onPress={() => setActivePlanIdx(i)}
-              activeOpacity={0.75}
-            >
-              {activePlanIdx === i ? (
-                Platform.OS === 'ios' ? (
-                  <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
-                ) : (
-                  <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255,255,255,0.1)' }]} />
-                )
-              ) : null}
-              <Text style={[s.segText, activePlanIdx === i && { color: '#FFFFFF', fontWeight: '600' }]}>
-                {p.label === 'Lite' ? 'Lite' : 'SuperGrok'}
-              </Text>
-            </TouchableOpacity>
+          {PLANS.map((p, i) => {
+            const isActive = activePlanIdx === i;
+            return (
+              <TouchableOpacity
+                key={p.key}
+                style={[s.segBtn, isActive && [s.segBtnActive, { borderColor: accent + 'AA' }]]}
+                onPress={() => setActivePlanIdx(i)}
+                activeOpacity={0.75}
+              >
+                {isActive ? (
+                  Platform.OS === 'ios' ? (
+                    <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
+                  ) : (
+                    <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255,255,255,0.12)' }]} />
+                  )
+                ) : null}
+                <Text style={[s.segText, isActive && { color: '#FFFFFF', fontWeight: '600' }]}>
+                  {p.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        {/* Feature Card */}
+        <View style={s.featureCard}>
+          {Platform.OS === 'ios' ? (
+            <BlurView intensity={18} tint="dark" style={StyleSheet.absoluteFill} />
+          ) : (
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(20,20,20,0.7)' }]} />
+          )}
+          {plan.features.map((f, i) => (
+            <FeatureRow
+              key={`${plan.key}-${i}`}
+              icon={f.icon}
+              title={f.title}
+              subtitle={f.subtitle}
+              isLast={i === plan.features.length - 1}
+            />
           ))}
         </View>
-      </ImageBackground>
 
-      {/* ═══════════════════════════════════════════════════════════════════ */}
-      {/* LAYER 2: BOTTOM BACKGROUND IMAGE — Shared for ALL plans            */}
-      {/* ═══════════════════════════════════════════════════════════════════ */}
-      <ImageBackground
-        source={BOTTOM_BG_IMAGE}
-        style={s.bottomBackground}
-        resizeMode="cover"
-        imageStyle={{ resizeMode: 'cover' }}
-      >
-        <ScrollView
-          style={{ flex: 1 }}
-          contentContainerStyle={[s.scroll, { paddingBottom: 220 }]}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Feature Card with glassmorphism */}
-          <View style={s.featureCard}>
-            {Platform.OS === 'ios' ? (
-              <BlurView intensity={20} tint="dark" style={StyleSheet.absoluteFill} />
-            ) : (
-              <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255,255,255,0.04)' }]} />
-            )}
-            {plan.features.map((f, i) => (
-              <FeatureRow
-                key={`${plan.key}-${i}`}
-                icon={f.icon}
-                title={f.title}
-                subtitle={f.subtitle}
-                isLast={i === plan.features.length - 1}
-              />
-            ))}
-          </View>
+        {/* Spacer */}
+        <View style={{ flex: 1 }} />
 
-          {/* Billing cards */}
-          <View style={s.billingRow}>
-            {/* Monthly */}
-            <TouchableOpacity
-              style={[
-                s.billingCard,
-                billingCycle === 'monthly' && [s.billingCardActive, { borderColor: accent + '55' }],
-              ]}
-              onPress={() => setBillingCycle('monthly')}
-              activeOpacity={0.8}
-            >
-              {billingCycle === 'monthly' ? (
-                Platform.OS === 'ios' ? (
-                  <BlurView intensity={25} tint="dark" style={StyleSheet.absoluteFill} />
-                ) : (
-                  <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255,255,255,0.07)' }]} />
-                )
-              ) : null}
-              {hasTrial && billingCycle === 'monthly' ? (
-                <View style={[s.freeBadge, { backgroundColor: accent }]}>
-                  <Text style={s.freeBadgeText}>FREE</Text>
-                </View>
-              ) : null}
-              <Text style={s.billingLabel}>Monthly</Text>
-              <Text style={[s.billingPrice, billingCycle === 'monthly' && { textDecorationLine: hasTrial ? 'line-through' : 'none', opacity: hasTrial ? 0.55 : 1 }]}>
-                {monthlyPrice} <Text style={s.billingUnit}>/month</Text>
-              </Text>
-            </TouchableOpacity>
-
-            {/* Annual */}
-            <TouchableOpacity
-              style={[
-                s.billingCard,
-                billingCycle === 'annual' && [s.billingCardActive, { borderColor: accent + '55' }],
-              ]}
-              onPress={() => setBillingCycle('annual')}
-              activeOpacity={0.8}
-            >
-              {billingCycle === 'annual' ? (
-                Platform.OS === 'ios' ? (
-                  <BlurView intensity={25} tint="dark" style={StyleSheet.absoluteFill} />
-                ) : (
-                  <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255,255,255,0.07)' }]} />
-                )
-              ) : null}
-              <View style={s.savePill}>
-                <Text style={s.savePillText}>Save {plan.savePct}</Text>
-              </View>
-              <Text style={s.billingLabel}>Yearly</Text>
-              <Text style={s.billingPrice}>
-                {annualPrice} <Text style={s.billingUnit}>/year</Text>
-              </Text>
-              <Text style={s.billingPerMonth}>{annualPerMonth} /month</Text>
-            </TouchableOpacity>
-          </View>
-        </ScrollView>
-      </ImageBackground>
-
-      {/* ── Bottom CTA Bar ── */}
-      <View style={[s.bottomBar, { paddingBottom: insets.bottom + 12 }]}>
-        {Platform.OS === 'ios' ? (
-          <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFill} />
-        ) : (
-          <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(10,10,12,0.97)' }]} />
-        )}
-
-        {isSubscribed && subscriptionInfo ? (
-          <>
-            <View style={s.activeBadge}>
-              <Ionicons name="checkmark-circle" size={14} color={accent} />
-              <Text style={[s.activeBadgeText, { color: accent }]}>
-                {subscriptionInfo.plan?.toUpperCase()} ACTIVE
-                {subscriptionInfo.subscription_end
-                  ? ` · renews ${new Date(subscriptionInfo.subscription_end).toLocaleDateString()}`
-                  : ''}
-              </Text>
-            </View>
-            <TouchableOpacity style={s.manageBtn} onPress={handleManage} disabled={managing}>
-              {managing ? <ActivityIndicator color="#fff" /> : <Text style={s.manageBtnText}>Manage Subscription</Text>}
-            </TouchableOpacity>
-          </>
-        ) : (
-          <>
-            {/* Primary CTA */}
-            <TouchableOpacity
-              style={[s.ctaBtn, (loading || webLoading) && { opacity: 0.6 }]}
-              onPress={Platform.OS !== 'web' ? purchaseWithRC : purchaseOnWeb}
-              disabled={loading || webLoading}
-              activeOpacity={0.85}
-            >
-              {loading || webLoading ? (
-                <ActivityIndicator color="#000" />
+        {/* Billing Cards */}
+        <View style={s.billingRow}>
+          {/* Monthly */}
+          <TouchableOpacity
+            style={[s.billingCard, billingCycle === 'monthly' && s.billingCardActive]}
+            onPress={() => setBillingCycle('monthly')}
+            activeOpacity={0.8}
+          >
+            {billingCycle === 'monthly' ? (
+              Platform.OS === 'ios' ? (
+                <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
               ) : (
-                <Text style={s.ctaBtnText}>{ctaLabel}</Text>
-              )}
-            </TouchableOpacity>
-
-            {/* Renewal note */}
-            {hasTrial ? (
-              <Text style={s.renewNote}>
-                Renews at {monthlyPrice} a month after trial, cancel anytime
-              </Text>
+                <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255,255,255,0.1)' }]} />
+              )
             ) : (
-              <Text style={s.renewNote}>Cancel anytime. No hidden fees.</Text>
+              Platform.OS === 'ios' ? (
+                <BlurView intensity={15} tint="dark" style={StyleSheet.absoluteFill} />
+              ) : (
+                <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255,255,255,0.04)' }]} />
+              )
             )}
-          </>
+            {hasTrial && billingCycle === 'monthly' ? (
+              <View style={[s.freeBadge, { backgroundColor: accent }]}>
+                <Text style={s.freeBadgeText}>FREE</Text>
+              </View>
+            ) : null}
+            <Text style={s.billingLabel}>Monthly</Text>
+            <Text style={[
+              s.billingPrice,
+              hasTrial && billingCycle === 'monthly' && { textDecorationLine: 'line-through', opacity: 0.55 },
+            ]}>
+              {plan.monthly}{' '}
+              <Text style={s.billingUnit}>/month</Text>
+            </Text>
+          </TouchableOpacity>
+
+          {/* Annual */}
+          <TouchableOpacity
+            style={[s.billingCard, billingCycle === 'annual' && s.billingCardActive]}
+            onPress={() => setBillingCycle('annual')}
+            activeOpacity={0.8}
+          >
+            {billingCycle === 'annual' ? (
+              Platform.OS === 'ios' ? (
+                <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
+              ) : (
+                <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255,255,255,0.1)' }]} />
+              )
+            ) : (
+              Platform.OS === 'ios' ? (
+                <BlurView intensity={15} tint="dark" style={StyleSheet.absoluteFill} />
+              ) : (
+                <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255,255,255,0.04)' }]} />
+              )
+            )}
+            <View style={s.savePill}>
+              <Text style={s.savePillText}>Save {plan.savePct}</Text>
+            </View>
+            <Text style={s.billingLabel}>Yearly</Text>
+            <Text style={s.billingPrice}>
+              {plan.annual}{' '}
+              <Text style={s.billingUnit}>/year</Text>
+            </Text>
+            <Text style={s.billingPerMonth}>{plan.annualPerMonth} /month</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* CTA Button */}
+        {isSubscribed ? (
+          <TouchableOpacity style={s.ctaBtn} onPress={handleManage} disabled={managing}>
+            {managing ? <ActivityIndicator color="#000" /> : <Text style={s.ctaBtnText}>Manage Subscription</Text>}
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={[s.ctaBtn, (loading || webLoading) && { opacity: 0.6 }]}
+            onPress={Platform.OS !== 'web' ? purchaseWithRC : purchaseOnWeb}
+            disabled={loading || webLoading}
+            activeOpacity={0.85}
+          >
+            {loading || webLoading ? (
+              <ActivityIndicator color="#000" />
+            ) : (
+              <Text style={s.ctaBtnText}>{ctaLabel}</Text>
+            )}
+          </TouchableOpacity>
         )}
 
-        {/* Footer links */}
+        {/* Renewal note */}
+        {hasTrial && !isSubscribed ? (
+          <Text style={s.renewNote}>
+            Renews at {plan.monthly} a month after trial, cancel anytime
+          </Text>
+        ) : null}
+
+        {/* Footer */}
         <View style={s.footerRow}>
           <TouchableOpacity onPress={() => Linking.openURL('https://dawinix.com/terms').catch(() => {})}>
             <Text style={s.footerLink}>Terms of Service</Text>
@@ -653,136 +559,120 @@ export default function SubscriptionScreen() {
   );
 }
 
-/*
-╔══════════════════════════════════════════════════════════════════════════════╗
-║                           LAYOUT STRUCTURE                                   ║
-╠══════════════════════════════════════════════════════════════════════════════╣
-║                                                                              ║
-║   ┌─────────────────────────────────────────────────────────────────────┐    ║
-║   │  TOP BACKGROUND IMAGE (38% screen height)                           │    ║
-║   │  ┌───────────────────────────────────────────────────────────────┐  │    ║
-║   │  │  • Different per plan (Lite = gray, Super = face/smoke)       │  │    ║
-║   │  │  • Close button (top-left)                                    │  │    ║
-║   │  │  • Title: "SuperGrok" / "SuperGrok Lite"                      │  │    ║
-║   │  │  • Tagline / Trial text                                       │  │    ║
-║   │  │  • 2-segment toggle: [Lite] [SuperGrok]                       │  │    ║
-║   │  └───────────────────────────────────────────────────────────────┘  │    ║
-║   └─────────────────────────────────────────────────────────────────────┘    ║
-║                              ↓                                               ║
-║   ┌─────────────────────────────────────────────────────────────────────┐    ║
-║   │  BOTTOM BACKGROUND IMAGE (shared gray background)                   │    ║
-║   │  ┌───────────────────────────────────────────────────────────────┐  │    ║
-║   │  │  • Feature Card (glassmorphism)                                 │  │    ║
-║   │  │  • Billing Cards: [Monthly] [Yearly]                          │  │    ║
-║   │  └───────────────────────────────────────────────────────────────┘  │    ║
-║   └─────────────────────────────────────────────────────────────────────┘    ║
-║                              ↓                                               ║
-║   ┌─────────────────────────────────────────────────────────────────────┐    ║
-║   │  BOTTOM CTA BAR (fixed at bottom)                                   │    ║
-║   │  • [Upgrade / Start Trial] button                                   │    ║
-║   │  • Renewal note                                                     │    ║
-║   │  • Terms · Privacy · Restore                                        │    ║
-║   └─────────────────────────────────────────────────────────────────────┘    ║
-║                                                                              ║
-╚══════════════════════════════════════════════════════════════════════════════╝
-*/
-
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#080808' },
-
-  // ═══ TOP BACKGROUND (different per plan) ═══
-  topBackground: {
-    width: SCREEN_W,
-    height: SCREEN_H * 0.38,
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-  },
-  topOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.35)',
-  },
-
-  // ═══ BOTTOM BACKGROUND (shared for all plans) ═══
-  bottomBackground: {
+  root: {
     flex: 1,
-    marginTop: SCREEN_H * 0.38,
-    width: SCREEN_W,
+    backgroundColor: '#080808',
   },
-
+  bgOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    // Dark gradient effect: transparent at top, dark at bottom
+    backgroundColor: 'transparent',
+    // Bottom half darker
+  },
+  content: {
+    flex: 1,
+    paddingHorizontal: 20,
+  },
   closeBtn: {
-    position: 'absolute',
-    left: 18,
-    zIndex: 20,
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     backgroundColor: 'rgba(255,255,255,0.1)',
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: 10,
+    alignSelf: 'flex-start',
+  },
+  titleWrap: {
+    alignItems: 'center',
+    marginBottom: 18,
+  },
+  title: {
+    fontSize: 36,
+    fontWeight: '300',
+    color: 'rgba(255,255,255,0.9)',
+    letterSpacing: -0.5,
+    marginBottom: 6,
+  },
+  titleBold: {
+    fontSize: 36,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  titleLight: {
+    fontSize: 36,
+    fontWeight: '300',
+    color: 'rgba(255,255,255,0.55)',
+  },
+  tagline: {
+    fontSize: 17,
+    color: 'rgba(255,255,255,0.75)',
+    fontWeight: '400',
+    textAlign: 'center',
   },
 
-  scroll: { alignItems: 'center', paddingHorizontal: 20, paddingTop: 20 },
-
-  // Header
-  headerWrap: { alignItems: 'center', marginBottom: 20 },
-  headerTitle: { fontSize: 34, letterSpacing: -0.5, marginBottom: 6 },
-  headerSub: { fontSize: 17, color: 'rgba(255,255,255,0.6)', fontWeight: '400', textAlign: 'center' },
-
-  // Segment (2-segment toggle: Lite | SuperGrok)
+  // 2-segment toggle
   segWrap: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: 'rgba(255,255,255,0.07)',
     borderRadius: 50,
     padding: 4,
-    width: 220,
     alignSelf: 'center',
-    marginBottom: 0,
+    marginBottom: 20,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(255,255,255,0.12)',
     overflow: 'hidden',
   },
   segBtn: {
-    flex: 1,
-    paddingVertical: 10,
+    paddingVertical: 9,
+    paddingHorizontal: 26,
     borderRadius: 46,
     alignItems: 'center',
     overflow: 'hidden',
-    position: 'relative',
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 1,
     borderColor: 'transparent',
   },
-  segBtnActive: {},
-  segText: { fontSize: 14, fontWeight: '400', color: 'rgba(255,255,255,0.38)', zIndex: 1 },
+  segBtnActive: {
+    borderWidth: 1,
+  },
+  segText: {
+    fontSize: 14,
+    fontWeight: '400',
+    color: 'rgba(255,255,255,0.38)',
+    zIndex: 1,
+  },
 
   // Feature card
   featureCard: {
-    width: '100%',
     borderRadius: 20,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderColor: 'rgba(255,255,255,0.12)',
     paddingHorizontal: 16,
-    paddingVertical: 4,
-    marginBottom: 20,
+    paddingVertical: 2,
     overflow: 'hidden',
   },
 
-  // Billing cards
-  billingRow: { flexDirection: 'row', width: '100%', gap: 12, marginBottom: 8 },
+  // Billing
+  billingRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 14,
+  },
   billingCard: {
     flex: 1,
     borderRadius: 18,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.1)',
-    padding: 16,
-    minHeight: 100,
+    borderColor: 'rgba(255,255,255,0.12)',
+    padding: 14,
+    minHeight: 90,
     overflow: 'hidden',
     position: 'relative',
     justifyContent: 'flex-end',
   },
   billingCardActive: {
     borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
   },
   freeBadge: {
     position: 'absolute',
@@ -798,44 +688,19 @@ const s = StyleSheet.create({
     position: 'absolute',
     top: 10,
     right: 10,
-    backgroundColor: 'rgba(255,255,255,0.13)',
+    backgroundColor: 'rgba(255,255,255,0.15)',
     borderRadius: 10,
     paddingHorizontal: 8,
     paddingVertical: 3,
     zIndex: 2,
   },
-  savePillText: { color: 'rgba(255,255,255,0.75)', fontSize: 11, fontWeight: '600' },
-  billingLabel: { color: 'rgba(255,255,255,0.55)', fontSize: 13, fontWeight: '500', marginBottom: 6 },
+  savePillText: { color: 'rgba(255,255,255,0.85)', fontSize: 11, fontWeight: '600' },
+  billingLabel: { color: 'rgba(255,255,255,0.55)', fontSize: 13, fontWeight: '500', marginBottom: 5 },
   billingPrice: { color: '#FFFFFF', fontSize: 22, fontWeight: '700', lineHeight: 26 },
-  billingUnit: { fontSize: 13, fontWeight: '400', color: 'rgba(255,255,255,0.55)' },
-  billingPerMonth: { color: 'rgba(255,255,255,0.45)', fontSize: 12, marginTop: 3 },
+  billingUnit: { fontSize: 13, fontWeight: '400', color: 'rgba(255,255,255,0.5)' },
+  billingPerMonth: { color: 'rgba(255,255,255,0.4)', fontSize: 12, marginTop: 2 },
 
-  // Bottom bar
-  bottomBar: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    paddingHorizontal: 20,
-    paddingTop: 14,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(255,255,255,0.07)',
-    alignItems: 'center',
-    gap: 10,
-    overflow: 'hidden',
-  },
-
-  activeBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-  },
-  activeBadgeText: { fontSize: 12, fontWeight: '600' },
-
+  // CTA
   ctaBtn: {
     width: '100%',
     height: 54,
@@ -843,34 +708,31 @@ const s = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: 8,
     shadowColor: '#FFF',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 6,
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    elevation: 4,
   },
   ctaBtnText: { color: '#000000', fontSize: 17, fontWeight: '700' },
-
-  manageBtn: {
-    width: '100%',
-    height: 50,
-    borderRadius: 50,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-  },
-  manageBtnText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
 
   renewNote: {
     fontSize: 12,
     color: 'rgba(255,255,255,0.38)',
     textAlign: 'center',
     lineHeight: 17,
+    marginBottom: 8,
   },
 
-  footerRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', justifyContent: 'center' },
+  footerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    marginTop: 4,
+  },
   footerLink: { fontSize: 12, color: 'rgba(255,255,255,0.3)' },
   footerDot: { fontSize: 12, color: 'rgba(255,255,255,0.2)' },
 });
