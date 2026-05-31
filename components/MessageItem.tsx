@@ -1316,7 +1316,7 @@ function VideoPreviewCard({ name, uri, isDark, colors }: { name: string; uri?: s
 
 
           {/* Action row — only shown after streaming completes */}
-          {!isGenerating && !streaming && safeContent ? (() => {
+          {!isGenerating && !streaming && safeContent && safeContent.trim().length > 0 ? (() => {
             const sourcesBlock = blocks.find(b => b.type === 'sources' && b.sources && b.sources.length > 0);
             // Parse sources to Source[] objects
             let parsedSources: Source[] = [];
