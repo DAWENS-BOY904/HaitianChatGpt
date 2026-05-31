@@ -1,4 +1,4 @@
-// by me
+// by me dawens
 import React, { useState, useCallback, useRef, useEffect, memo } from 'react';
 import {
   View,
