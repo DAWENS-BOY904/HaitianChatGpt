@@ -647,4 +647,3 @@ const s = StyleSheet.create({
     minWidth: '100%',
   },
 });
-make this more blur never past simple tex code on it only code.
