@@ -354,10 +354,24 @@ export function ImageViewerModal({
           /* User image: just save & share in bottom bar */
           <View style={[vS.footer, { paddingBottom: insets.bottom + 18 }]}>
             <BlurView intensity={70} tint="dark" style={vS.footerBlur}>
-              <TouchableOpacity style={vS.footerBtn} onPress={handleSave} disabled={saving} activeOpacity={0.75}>
-                {saving ? <ActivityIndicator size="small" color="#FFF" /> : <Ionicons name="arrow-down-circle-outline" size={26} color="#FFF" />}
-                <Text style={vS.footerBtnLabel}>Save</Text>
-              </TouchableOpacity>
+              <TouchableOpacity
+  style={vS.footerBtn}
+  onPress={handleSave}
+  disabled={saving}
+  activeOpacity={0.75}
+>
+  {saving ? (
+    <ActivityIndicator size="small" color="#FFF" />
+  ) : (
+    <Ionicons
+      name="download-outline"
+      size={26}
+      color="#FFF"
+    />
+  )}
+
+  <Text style={vS.footerBtnLabel}>Save</Text>
+</TouchableOpacity>
               <View style={vS.footerDivider} />
               <TouchableOpacity style={vS.footerBtn} onPress={handleShare} disabled={sharing} activeOpacity={0.75}>
                 {sharing ? <ActivityIndicator size="small" color="#FFF" /> : <Ionicons name="share-outline" size={26} color="#FFF" />}
