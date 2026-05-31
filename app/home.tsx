@@ -641,6 +641,11 @@ export default function HomeScreen() {
   const [presetsModalVisible, setPresetsModalVisible] = useState(false);
   const [thinkingMode, setThinkingMode] = useState<'thinking' | 'creating_image' | 'analyzing' | 'editing_image'>('thinking');
   const [showCompletionStatus, setShowCompletionStatus] = useState(false);
+  // Tracks if streaming has started for the current generation cycle
+  // Prevents ThinkingIndicator from reappearing after streaming ends but before
+  // generating/sending flip to false (race condition ghost bug)
+  const [streamingEverStarted, setStreamingEverStarted] = useState(false);
+  const prevSendingRef = useRef(false);
   const [pendingNotifConvId, setPendingNotifConvId] = useState<string|null>(null);
   const [imageAnalyzingOverlay, setImageAnalyzingOverlay] = useState(false);
   const [savedImageUrls, setSavedImageUrls] = useState<Set<string>>(new Set());
@@ -751,6 +756,22 @@ export default function HomeScreen() {
     const urlMatch = text.match(/https?:\/\/[^\s<>"']+/i);
     return urlMatch ? urlMatch[0] : null;
   }, []);
+
+  // ── Reset streamingEverStarted when a new send begins ─────────────────────
+  useEffect(() => {
+    if (sending && !prevSendingRef.current) {
+      // New generation cycle starting — clear the flag
+      setStreamingEverStarted(false);
+    }
+    prevSendingRef.current = sending;
+  }, [sending]);
+
+  // ── Set streamingEverStarted once the first token arrives ────────────────
+  useEffect(() => {
+    if (streamingMessageId) {
+      setStreamingEverStarted(true);
+    }
+  }, [streamingMessageId]);
 
   const wasGeneratingRef = useRef(false);
   const appStateForNotifRef = useRef(AppState.currentState);
@@ -3109,10 +3130,10 @@ export default function HomeScreen() {
                           {quizLoadingCardVisible ? (
                             <QuizLoadingCard topic={selectedQuizTopic} isDark={isDark} accentColor={accentColor} />
                           ) : null}
-                          {(sending || generating) && !streamingMessageId ? (
+                          {(sending || generating) && !streamingMessageId && !streamingEverStarted ? (
                             <ThinkingIndicator
                               userMessage={(messages || []).length > 0 ? (messages || [])[(messages || []).length - 1].content : inputText}
-                              completed={showCompletionStatus}
+                              completed={false}
                               mode={thinkingMode}
                               onCancel={handleStopGeneration}
                               isGroupMode={groupChatMode}
