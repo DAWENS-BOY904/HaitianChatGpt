@@ -41,14 +41,8 @@ export function ThinkingIndicator({
     }
   }, [completed]);
 
-  if (completed) {
-    return (
-      <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8, gap: 6 }}>
-        <Ionicons name="checkmark-circle" size={16} color="#34C759" />
-        <Text style={{ color: '#34C759', fontSize: 14, fontWeight: '500' }}>Done</Text>
-      </View>
-    );
-  }
+  // ── Silently disappear when completed — no "Done" badge shown ──
+  if (completed) return null;
 
   // Determine label and dot color based on context
   let label = 'Thinking';
