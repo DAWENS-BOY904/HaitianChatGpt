@@ -446,6 +446,82 @@ window.onerror = function(msg,src,line){ _sendLog('error','Error: '+msg+(line?' 
 // ─────────────────────────────────────────────────────────────────────────────
 // Main StreamingCodeBlock (ENHANCED)
 // ─────────────────────────────────────────────────────────────────────────────
+// ── CodeScrollView: 150-line limit with expand/collapse + horizontal scroll ──────────────
+const CODE_LINE_LIMIT = 150;
+
+function CodeScrollView({ code, language, isDark, horizontalScrollRef, codeScrollRef }: {
+  code: string;
+  language: string;
+  isDark: boolean;
+  horizontalScrollRef: React.RefObject<ScrollView>;
+  codeScrollRef: React.RefObject<ScrollView>;
+}) {
+  const lines = (code || '').split('\n');
+  const totalLines = lines.length;
+  const isLong = totalLines > CODE_LINE_LIMIT;
+  const [expanded, setExpanded] = useState(!isLong);
+  const displayCode = expanded ? code : lines.slice(0, CODE_LINE_LIMIT).join('\n');
+  const subC = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.45)';
+  const mono = Platform.OS === 'ios' ? 'Menlo' : 'monospace';
+
+  return (
+    <View>
+      <ScrollView
+        ref={horizontalScrollRef}
+        horizontal
+        showsHorizontalScrollIndicator={true}
+        bounces={true}
+        keyboardShouldPersistTaps="handled"
+        scrollEnabled={true}
+        nestedScrollEnabled={true}
+        directionalLockEnabled={false}
+        style={{ maxHeight: expanded ? (isLong ? 540 : 420) : 340 }}
+      >
+        <ScrollView
+          ref={codeScrollRef}
+          showsVerticalScrollIndicator={true}
+          scrollEnabled={true}
+          nestedScrollEnabled={true}
+          keyboardShouldPersistTaps="handled"
+          directionalLockEnabled={false}
+          style={{ maxHeight: expanded ? (isLong ? 540 : 420) : 340 }}
+        >
+          <View style={s.codeBody}>
+            <SyntaxLines code={displayCode} language={language} isDark={isDark} />
+          </View>
+        </ScrollView>
+      </ScrollView>
+      {isLong ? (
+        <TouchableOpacity
+          onPress={() => setExpanded(e => !e)}
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 6,
+            paddingVertical: 10,
+            borderTopWidth: StyleSheet.hairlineWidth,
+            borderTopColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.07)',
+          }}
+          activeOpacity={0.7}
+        >
+          <Ionicons
+            name={expanded ? 'chevron-up' : 'chevron-down'}
+            size={14}
+            color={subC}
+          />
+          <Text style={{ color: subC, fontFamily: mono, fontSize: 12 }}>
+            {expanded
+              ? `Collapse (${totalLines} lines)`
+              : `Show all ${totalLines} lines (${totalLines - CODE_LINE_LIMIT} more)`}
+          </Text>
+        </TouchableOpacity>
+      ) : null}
+    </View>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 export const StreamingCodeBlock = memo(function StreamingCodeBlock({
   code,
   language = 'plaintext',
@@ -607,32 +683,14 @@ export const StreamingCodeBlock = memo(function StreamingCodeBlock({
             </View>
           </TouchableOpacity>
         ) : (
-          /* ENHANCED: Code view — horizontally scrollable, vertically scrollable, with selection support */
-          <ScrollView
-            ref={horizontalScrollRef}
-            horizontal
-            showsHorizontalScrollIndicator={true}
-            bounces={true}
-            keyboardShouldPersistTaps="handled"
-            scrollEnabled={true}
-            nestedScrollEnabled={true}
-            directionalLockEnabled={false}
-            style={{ maxHeight: 420 }}
-          >
-            <ScrollView
-              ref={codeScrollRef}
-              showsVerticalScrollIndicator={true}
-              scrollEnabled={true}
-              nestedScrollEnabled={true}
-              keyboardShouldPersistTaps="handled"
-              directionalLockEnabled={false}
-              style={{ maxHeight: 420 }}
-            >
-              <View style={s.codeBody}>
-                <SyntaxLines code={code} language={language} isDark={isDark} />
-              </View>
-            </ScrollView>
-          </ScrollView>
+          /* ENHANCED: Code view — 150-line limit collapsed, with expand/scroll support */
+          <CodeScrollView
+            code={code}
+            language={language}
+            isDark={isDark}
+            horizontalScrollRef={horizontalScrollRef}
+            codeScrollRef={codeScrollRef}
+          />
         )}
       </View>
 
