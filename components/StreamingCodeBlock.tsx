@@ -2,14 +2,15 @@
  * StreamingCodeBlock — Premium frosted-glass code block
  *
  * Features:
- * - Semi-transparent BlurView backgrounds (frosted glass)
+ * - Enhanced semi-transparent BlurView backgrounds (frosted glass)
  * - HTML+JS → Play ▶ + Copy buttons; other languages → Copy only
  * - Tap Play → preview replaces code inside the block
  * - Tap code block while in Preview → opens full-screen Code/Preview modal
  * - Top-right console icon in modal → BlurView console bottom sheet
- * - Long/scrollable code (never wraps raw)
- * - Text selection with native clipboard menu
+ * - Long/scrollable code (horizontal + vertical scroll)
+ * - Text selection with native clipboard menu + Expo Clipboard copy
  * - All backgrounds semi-transparent so blur shines through
+ * - Smooth swipe gestures for navigation
  */
 
 import React, { useState, useCallback, useRef, memo } from 'react';
@@ -24,6 +25,9 @@ import {
   ActivityIndicator,
   Pressable,
   Dimensions,
+  PanResponder,
+  GestureResponderEvent,
+  PanResponderGestureState,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
@@ -110,7 +114,7 @@ function LanguageIcon({ lang, size = 14, color }: { lang: string; size?: number;
 const PREVIEWABLE_LANGS = new Set(['html', 'javascript', 'js', 'jsx', 'tsx', 'typescript', 'ts']);
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Syntax tokenizer (same as before)
+// Syntax tokenizer (enhanced for better highlighting)
 // ─────────────────────────────────────────────────────────────────────────────
 const DARK_TOKENS = {
   keyword: '#FF7AB2', string: '#FC9A59', comment: '#6C7986',
@@ -134,20 +138,26 @@ function tokenizeLine(line: string, lang: string): Array<{ text: string; type: T
 
   const isPyComment = ['python', 'py', 'ruby', 'rb', 'bash', 'sh', 'shell'].includes(l) && line.trim().startsWith('#');
   const isCLineComment = line.trim().startsWith('//');
-  const isBlockComment = line.trim().startsWith('/*') || line.trim().startsWith('*');
+  const isBlockComment = line.trim().startsWith('/*') || line.trim().startsWith('*') || line.trim().startsWith('*/');
   if (isPyComment || isCLineComment || isBlockComment) return [{ text: line, type: 'comment' }];
 
   const result: Array<{ text: string; type: TokenType }> = [];
   const stringRe = /("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)/g;
   const parts = line.split(stringRe);
-  const KW = /\b(const|let|var|function|return|if|else|for|while|class|import|export|from|async|await|try|catch|throw|new|this|super|extends|implements|interface|type|enum|switch|case|break|continue|default|static|public|private|protected|void|null|undefined|true|false|in|of|do|yield|def|print|pass|not|and|or|lambda|with|as|assert|del|elif|except|finally|global|nonlocal|raise|None|True|False|package|func|struct|map|range|go|chan|select|defer|goto|fallthrough|val|var|object|companion|fun|when|is|override|abstract|sealed|data|by|mut|impl|use|mod|trait|where|fn|let|pub|unsafe|extern|crate|ref|move|box|dyn|std|self|Self|end|begin|require|module|rescue|ensure|puts|attr_accessor|attr_reader|echo|fi|then|done|foreach)\b/;
+
+  const KEYWORDS = /\b(const|let|var|function|return|if|else|for|while|class|import|export|from|async|await|try|catch|throw|new|this|super|extends|implements|interface|type|enum|switch|case|break|continue|default|static|public|private|protected|void|null|undefined|true|false|in|of|do|yield|def|print|pass|not|and|or|lambda|with|as|assert|del|elif|except|finally|global|nonlocal|raise|None|True|False|package|func|struct|map|range|go|chan|select|defer|goto|fallthrough|val|var|object|companion|fun|when|is|override|abstract|sealed|data|by|mut|impl|use|mod|trait|where|fn|let|pub|unsafe|extern|crate|ref|move|box|dyn|std|self|Self|end|begin|require|module|rescue|ensure|puts|attr_accessor|attr_reader|echo|fi|then|done|foreach)\b/;
+
   for (const part of parts) {
-    if (/^(".*"|'.*'|`.*`)$/s.test(part)) { result.push({ text: part, type: 'string' }); continue; }
+    if (/^(".*"|'.*'|`.*`)$/s.test(part)) { 
+      result.push({ text: part, type: 'string' }); 
+      continue; 
+    }
+
     const combined = /(\b(?:const|let|var|function|return|if|else|for|while|class|import|export|from|async|await|try|catch|throw|new|this|super|extends|implements|interface|type|enum|switch|case|break|continue|default|static|public|private|protected|void|null|undefined|true|false|in|of|do|yield|def|print|pass|not|and|or|lambda|with|as|assert|del|elif|except|finally|global|nonlocal|raise|None|True|False|package|func|struct|map|range|go|chan|select|defer|goto|fallthrough|val|object|companion|fun|when|is|override|abstract|sealed|data|by|mut|impl|use|mod|trait|where|fn|pub|unsafe|extern|crate|ref|move|box|dyn|std|self|Self|end|begin|require|module|rescue|ensure|puts|echo|fi|then|done|foreach)\b|\b\d+\.?\d*\b|[^\w]+|\w+)/g;
     let m: RegExpExecArray | null;
     while ((m = combined.exec(part)) !== null) {
       const tok = m[0];
-      if (KW.test(tok)) result.push({ text: tok, type: 'keyword' });
+      if (KEYWORDS.test(tok)) result.push({ text: tok, type: 'keyword' });
       else if (/^\d+\.?\d*$/.test(tok)) result.push({ text: tok, type: 'number' });
       else if (/^[+\-*/%=<>!&|^~?:]+$/.test(tok)) result.push({ text: tok, type: 'operator' });
       else result.push({ text: tok, type: 'default' });
@@ -162,16 +172,20 @@ function tokenizeLine(line: string, lang: string): Array<{ text: string; type: T
 function buildPreviewHtml(code: string, lang: string): string {
   const l = lang.toLowerCase();
   if (l === 'html') return code;
-  // JS/TS/JSX/TSX — run in console
+
   let runCode = code;
   if (['typescript', 'ts', 'tsx', 'jsx'].includes(l)) {
-    runCode = code.replace(/:\s*[A-Za-z<>\[\]|&]+(\s*=)?/g, (m, eq) => eq || '').replace(/<[A-Za-z][^>]*>/g, '').replace(/<\/[A-Za-z]+>/g, '');
+    runCode = code
+      .replace(/:\s*[A-Za-z<>\[\]|&]+(\s*=)?/g, (m, eq) => eq || '')
+      .replace(/<[A-Za-z][^>]*>/g, '')
+      .replace(/<\/[A-Za-z]+>/g, '');
   }
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"/>
+
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: -apple-system, monospace; font-size: 13px;
-         background: #0D0D0D; color: #E4E4E4; padding: 10px; word-break: break-word; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', monospace; font-size: 13px;
+         background: #0D0D0D; color: #E4E4E4; padding: 10px; word-break: break-word; overflow-x: auto; }
   .out { white-space: pre-wrap; line-height: 1.6; padding: 2px 0; }
   .err { color: #FF6B6B; } .ok { color: #30D158; } .warn { color: #FFD60A; }
 </style>
@@ -207,6 +221,7 @@ function SyntaxLines({ code, language, isDark }: { code: string; language: strin
   const tokenColors = isDark ? DARK_TOKENS : LIGHT_TOKENS;
   const lineNumColor = isDark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.22)';
   const lang = language || 'plaintext';
+
   return (
     <>
       {lines.map((line, i) => {
@@ -233,7 +248,7 @@ function SyntaxLines({ code, language, isDark }: { code: string; language: strin
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Console bottom sheet (photo 7)
+// Console bottom sheet (enhanced blur)
 // ─────────────────────────────────────────────────────────────────────────────
 function ConsoleSheet({ visible, logs, onClose, onClear, isDark, insets }: {
   visible: boolean; logs: string[]; onClose: () => void; onClear: () => void;
@@ -241,13 +256,14 @@ function ConsoleSheet({ visible, logs, onClose, onClear, isDark, insets }: {
 }) {
   if (!visible) return null;
   const mono = Platform.OS === 'ios' ? 'Menlo' : 'monospace';
+
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
       <View style={{ flex: 1, justifyContent: 'flex-end' }}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
-        <View style={{ borderTopLeftRadius: 22, borderTopRightRadius: 22, overflow: 'hidden', maxHeight: '55%' }}>
+        <View style={{ borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: 'hidden', maxHeight: '55%' }}>
           {Platform.OS === 'ios' ? (
-            <BlurView intensity={100} tint={isDark ? 'dark' : 'light'} style={{ flex: 1 }}>
+            <BlurView intensity={120} tint={isDark ? 'dark' : 'light'} style={{ flex: 1 }}>
               <ConsoleContent mono={mono} logs={logs} onClose={onClose} onClear={onClear} isDark={isDark} insets={insets} />
             </BlurView>
           ) : (
@@ -264,22 +280,23 @@ function ConsoleSheet({ visible, logs, onClose, onClear, isDark, insets }: {
 function ConsoleContent({ mono, logs, onClose, onClear, isDark, insets }: any) {
   const textC = isDark ? '#FFFFFF' : '#000000';
   const subC = isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.4)';
+
   return (
     <View style={{ flex: 1, paddingBottom: insets.bottom + 8 }}>
       {/* Handle */}
-      <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)', alignSelf: 'center', marginTop: 10, marginBottom: 6 }} />
+      <View style={{ width: 40, height: 5, borderRadius: 3, backgroundColor: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.15)', alignSelf: 'center', marginTop: 12, marginBottom: 8 }} />
       {/* Header */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 18, paddingVertical: 10 }}>
-        <TouchableOpacity onPress={onClose} style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.07)', alignItems: 'center', justifyContent: 'center' }}>
-          <Ionicons name="close" size={16} color={textC} />
+      <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 12 }}>
+        <TouchableOpacity onPress={onClose} style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.07)', alignItems: 'center', justifyContent: 'center' }}>
+          <Ionicons name="close" size={18} color={textC} />
         </TouchableOpacity>
-        <Text style={{ flex: 1, textAlign: 'center', fontSize: 16, fontWeight: '700', color: textC }}>Console</Text>
-        <TouchableOpacity onPress={onClear} style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.07)', alignItems: 'center', justifyContent: 'center' }}>
-          <Ionicons name="trash-outline" size={16} color={textC} />
+        <Text style={{ flex: 1, textAlign: 'center', fontSize: 17, fontWeight: '700', color: textC }}>Console</Text>
+        <TouchableOpacity onPress={onClear} style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.07)', alignItems: 'center', justifyContent: 'center' }}>
+          <Ionicons name="trash-outline" size={18} color={textC} />
         </TouchableOpacity>
       </View>
       {/* Logs */}
-      <ScrollView style={{ flex: 1, paddingHorizontal: 16 }} showsVerticalScrollIndicator={false}>
+      <ScrollView style={{ flex: 1, paddingHorizontal: 18 }} showsVerticalScrollIndicator={false}>
         {logs.length === 0 ? (
           <Text style={{ color: subC, fontFamily: mono, fontSize: 13, marginTop: 20, textAlign: 'center' }}>Running code…</Text>
         ) : (
@@ -294,7 +311,7 @@ function ConsoleContent({ mono, logs, onClose, onClear, isDark, insets }: any) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Full-screen Code/Preview modal (photos 5 & 6)
+// Full-screen Code/Preview modal (enhanced blur & scroll)
 // ─────────────────────────────────────────────────────────────────────────────
 function CodePreviewModal({ visible, onClose, code, language, isDark }: {
   visible: boolean; onClose: () => void; code: string; language: string; isDark: boolean;
@@ -427,7 +444,7 @@ window.onerror = function(msg,src,line){ _sendLog('error','Error: '+msg+(line?' 
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Main StreamingCodeBlock
+// Main StreamingCodeBlock (ENHANCED)
 // ─────────────────────────────────────────────────────────────────────────────
 export const StreamingCodeBlock = memo(function StreamingCodeBlock({
   code,
@@ -437,20 +454,27 @@ export const StreamingCodeBlock = memo(function StreamingCodeBlock({
 }: StreamingCodeBlockProps) {
   const { isDark } = useTheme();
   const [copied, setCopied] = useState(false);
-  const [previewMode, setPreviewMode] = useState(false); // inline preview vs code
+  const [previewMode, setPreviewMode] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [webReady, setWebReady] = useState(false);
+  const [selectedText, setSelectedText] = useState('');
+  const [showSelectionMenu, setShowSelectionMenu] = useState(false);
+  const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
+
+  const scrollViewRef = useRef<ScrollView>(null);
+  const horizontalScrollRef = useRef<ScrollView>(null);
+  const codeScrollRef = useRef<ScrollView>(null);
 
   const lang = (language || 'plaintext').toLowerCase();
   const isPreviewable = PREVIEWABLE_LANGS.has(lang);
   const langLabel = getLanguageLabel(language);
   const langColor = getLangColor(lang);
 
-  // Colors — all semi-transparent for blur (increased transparency so blur shines through)
-  const containerBg = isDark ? 'rgba(18,18,20,0.45)' : 'rgba(248,248,252,0.45)';
-  const headerBg = isDark ? 'rgba(28,28,32,0.40)' : 'rgba(240,240,244,0.40)';
-  const borderColor = isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.09)';
-  const subC = isDark ? 'rgba(255,255,255,0.48)' : 'rgba(0,0,0,0.44)';
+  // ENHANCED: More transparent for better blur effect
+  const containerBg = isDark ? 'rgba(18,18,20,0.25)' : 'rgba(248,248,252,0.25)';
+  const headerBg = isDark ? 'rgba(28,28,32,0.20)' : 'rgba(240,240,244,0.20)';
+  const borderColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
+  const subC = isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.5)';
   const textC = isDark ? '#FFFFFF' : '#000000';
 
   const previewHtml = isPreviewable ? buildPreviewHtml(code, lang) : '';
@@ -463,6 +487,16 @@ export const StreamingCodeBlock = memo(function StreamingCodeBlock({
     } catch {}
   }, [code]);
 
+  // NEW: Copy selected text via Expo Clipboard
+  const handleCopySelection = useCallback(async () => {
+    if (!selectedText) return;
+    try {
+      await Clipboard.setStringAsync(selectedText);
+      setShowSelectionMenu(false);
+      setSelectedText('');
+    } catch {}
+  }, [selectedText]);
+
   const handlePlay = useCallback(() => {
     setWebReady(false);
     setPreviewMode(true);
@@ -472,14 +506,36 @@ export const StreamingCodeBlock = memo(function StreamingCodeBlock({
     if (previewMode) setModalVisible(true);
   }, [previewMode]);
 
+  // NEW: Swipe gesture handler for left-right navigation
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        return Math.abs(gestureState.dx) > 15 && Math.abs(gestureState.dy) < 50;
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        if (gestureState.dx > 50) {
+          // Swipe right - go back to code view
+          if (previewMode) setPreviewMode(false);
+        } else if (gestureState.dx < -50) {
+          // Swipe left - go to preview
+          if (isPreviewable && !isStreaming) {
+            setWebReady(false);
+            setPreviewMode(true);
+          }
+        }
+      },
+    })
+  ).current;
+
   const mono = Platform.OS === 'ios' ? 'Menlo' : 'monospace';
 
   return (
     <>
-      <View style={[s.container, { borderColor }]}>
-        {/* Frosted glass background */}
+      <View style={[s.container, { borderColor }]} {...panResponder.panHandlers}>
+        {/* ENHANCED: Frosted glass background - more blur */}
         {Platform.OS === 'ios' ? (
-          <BlurView intensity={isDark ? 98 : 95} tint={isDark ? 'dark' : 'extraLight'} style={StyleSheet.absoluteFill} />
+          <BlurView intensity={isDark ? 140 : 130} tint={isDark ? 'dark' : 'extraLight'} style={StyleSheet.absoluteFill} />
         ) : (
           <View style={[StyleSheet.absoluteFill, { backgroundColor: containerBg }]} />
         )}
@@ -487,7 +543,7 @@ export const StreamingCodeBlock = memo(function StreamingCodeBlock({
         {/* Header */}
         <View style={[s.header, { borderBottomColor: borderColor }]}>
           {Platform.OS === 'ios' ? (
-            <BlurView intensity={isDark ? 95 : 92} tint={isDark ? 'dark' : 'extraLight'} style={StyleSheet.absoluteFill} />
+            <BlurView intensity={isDark ? 130 : 120} tint={isDark ? 'dark' : 'extraLight'} style={StyleSheet.absoluteFill} />
           ) : (
             <View style={[StyleSheet.absoluteFill, { backgroundColor: headerBg }]} />
           )}
@@ -551,19 +607,26 @@ export const StreamingCodeBlock = memo(function StreamingCodeBlock({
             </View>
           </TouchableOpacity>
         ) : (
-          /* Code view — horizontally scrollable, vertically as tall as needed */
+          /* ENHANCED: Code view — horizontally scrollable, vertically scrollable, with selection support */
           <ScrollView
+            ref={horizontalScrollRef}
             horizontal
-            showsHorizontalScrollIndicator={false}
-            bounces={false}
+            showsHorizontalScrollIndicator={true}
+            bounces={true}
             keyboardShouldPersistTaps="handled"
+            scrollEnabled={true}
+            nestedScrollEnabled={true}
+            directionalLockEnabled={false}
+            style={{ maxHeight: 420 }}
           >
             <ScrollView
-              showsVerticalScrollIndicator={false}
-              scrollEnabled
-              nestedScrollEnabled
-              style={{ maxHeight: 420 }}
+              ref={codeScrollRef}
+              showsVerticalScrollIndicator={true}
+              scrollEnabled={true}
+              nestedScrollEnabled={true}
               keyboardShouldPersistTaps="handled"
+              directionalLockEnabled={false}
+              style={{ maxHeight: 420 }}
             >
               <View style={s.codeBody}>
                 <SyntaxLines code={code} language={language} isDark={isDark} />
@@ -611,22 +674,22 @@ export function detectMathExpression(text: string): { expression: string; result
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Styles
+// Styles (ENHANCED)
 // ─────────────────────────────────────────────────────────────────────────────
 const s = StyleSheet.create({
   container: {
-    borderRadius: 16,
+    borderRadius: 20,
     borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
-    marginVertical: 6,
-    // Remove any solid background — let blur shine through
+    marginVertical: 8,
+    // No solid background — let blur shine through
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 13,
-    paddingVertical: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 6 },
@@ -634,16 +697,16 @@ const s = StyleSheet.create({
   langDot: { width: 8, height: 8, borderRadius: 4 },
   langLabel: { fontSize: 12, fontWeight: '600' },
   iconBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 8,
+    width: 32,
+    height: 32,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: StyleSheet.hairlineWidth,
   },
   codeBody: {
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
     minWidth: '100%',
   },
 });
