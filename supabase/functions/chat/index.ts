@@ -1215,7 +1215,9 @@ Deno.serve(async function(req: Request) {
       aiModel = 'onspace-ai';
     }
 
-    if (!conversationId || !isValidUUID(conversationId)) {
+    // Allow guest-session and local- prefixed IDs in addition to valid UUIDs
+    const isGuestConvId = typeof conversationId === 'string' && (conversationId.startsWith('guest-') || conversationId.startsWith('local-'));
+    if (!conversationId || (!isValidUUID(conversationId) && !isGuestConvId)) {
       return new Response(
         JSON.stringify({ error: 'Valid conversationId (UUID) is required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -1653,7 +1655,7 @@ Deno.serve(async function(req: Request) {
     }
 
     try {
-      if (user) {
+      if (user && !conversationId.startsWith('guest-') && !conversationId.startsWith('local-')) {
         await supabaseAdmin
           .from('conversations')
           .update({ updated_at: new Date().toISOString() })
