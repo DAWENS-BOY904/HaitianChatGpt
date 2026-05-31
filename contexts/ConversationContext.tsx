@@ -149,7 +149,11 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
   const abortControllerRef = useRef<any | null>(null);
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [currentConversation, setCurrentConversation] = useState<Conversation | null>(null);
+  const [currentConversation, setCurrentConversationState] = useState<Conversation | null>(null);
+  const setCurrentConversation = useCallback((conv: Conversation | null) => {
+    currentConversationRef.current = conv;
+    setCurrentConversationState(conv);
+  }, []);
   const [messages, setMessages] = useState<Message[]>([]);
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -164,6 +168,9 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
   });
 
   const [temporaryMode, setTemporaryMode] = useState(false);
+
+  // ── Ref to always have the latest currentConversation.id in async closures ──
+  const currentConversationRef = useRef<Conversation | null>(null);
 
   // ── Offline cache helpers ──────────────────────────────────────────────────
   const cacheConversations = useCallback(async (convs: Conversation[]) => {
@@ -601,7 +608,7 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
 
     if (accountStatus.isSuspended) throw new Error(`Account suspended: ${accountStatus.reason || 'Contact support'}`);
 
-    let conversationId = currentConversation?.id;
+    let conversationId = currentConversationRef.current?.id || currentConversation?.id;
     if (!conversationId) {
       conversationId = await createConversation();
       if (!conversationId) throw new Error('Failed to create conversation');
@@ -946,7 +953,8 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
   };
 
   const updateMessage = async (messageId: string, newContent: string) => {
-    if (!currentConversation || !user) return;
+    if (!user) return;
+    if (!currentConversationRef.current && !currentConversation) return;
     try {
       const { error } = await supabase.from('messages').update({ content: newContent, edited: true, edited_at: new Date().toISOString() }).eq('id', messageId);
       if (error) throw error;
@@ -955,8 +963,9 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
   };
 
   const updateMessageAndRegenerate = async (messageId: string, newContent: string, aiModel?: string) => {
-    if (!currentConversation || !user) return;
-    const conversationId = currentConversation.id;
+    if (!user) return;
+    const conversationId = currentConversationRef.current?.id || currentConversation?.id;
+    if (!conversationId) { console.error('[ConversationContext] updateMessageAndRegenerate: no conversationId'); return; }
     const editedMessageIndex = messages.findIndex(m => m.id === messageId);
     if (editedMessageIndex === -1) return;
     try {

@@ -1216,10 +1216,16 @@ Deno.serve(async function(req: Request) {
     }
 
     // Allow guest-session and local- prefixed IDs in addition to valid UUIDs
+    // If conversationId is missing/undefined, generate a guest UUID rather than hard-rejecting
+    if (!conversationId) {
+      console.log('[chat] conversationId missing — generating guest UUID');
+      conversationId = 'guest-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+    }
     const isGuestConvId = typeof conversationId === 'string' && (conversationId.startsWith('guest-') || conversationId.startsWith('local-'));
-    if (!conversationId || (!isValidUUID(conversationId) && !isGuestConvId)) {
+    if (!isValidUUID(conversationId) && !isGuestConvId) {
+      console.log('[chat] Invalid conversationId:', conversationId);
       return new Response(
-        JSON.stringify({ error: 'Valid conversationId (UUID) is required' }),
+        JSON.stringify({ error: 'Valid conversationId (UUID or guest-/local- prefix) is required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -1274,10 +1280,9 @@ Deno.serve(async function(req: Request) {
     }
 
     if (!messages || messages.length === 0) {
-      return new Response(
-        JSON.stringify({ error: 'Messages array is required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      console.log('[chat] Messages array empty after processing, rawMessages length:', Array.isArray(rawMessages) ? rawMessages.length : 'not-array');
+      // Instead of hard 400, insert a fallback user message so the AI can still respond
+      messages.push({ role: 'user', content: 'Hello' });
     }
 
     const authHeader = req.headers.get('Authorization');
