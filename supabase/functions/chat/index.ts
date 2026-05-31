@@ -445,7 +445,7 @@ async function fetchTikTokOEmbed(url: string): Promise<{ url: string; title: str
     const oembedUrl = `https://www.tiktok.com/oembed?url=${encodeURIComponent(url)}`;
     const res = await fetch(oembedUrl, {
       headers: { 'User-Agent': 'Mozilla/5.0 (compatible; DawinixBot/1.0)' },
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.timeout(URL_FETCH_TIMEOUT_MS),
     });
     if (!res.ok) throw new Error(`TikTok oEmbed ${res.status}`);
     const data = await res.json();
@@ -472,7 +472,7 @@ async function fetchYouTubeOEmbed(url: string): Promise<{ url: string; title: st
     const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`;
     const res = await fetch(oembedUrl, {
       headers: { 'User-Agent': 'Mozilla/5.0 (compatible; DawinixBot/1.0)' },
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.timeout(URL_FETCH_TIMEOUT_MS),
     });
     if (!res.ok) throw new Error(`YouTube oEmbed ${res.status}`);
     const data = await res.json();
@@ -499,7 +499,7 @@ async function fetchTwitterOEmbed(url: string): Promise<{ url: string; title: st
     const oembedUrl = `https://publish.twitter.com/oembed?url=${encodeURIComponent(url)}&omit_script=true`;
     const res = await fetch(oembedUrl, {
       headers: { 'User-Agent': 'Mozilla/5.0 (compatible; DawinixBot/1.0)' },
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.timeout(URL_FETCH_TIMEOUT_MS),
     });
     if (!res.ok) throw new Error(`Twitter oEmbed ${res.status}`);
     const data = await res.json();
@@ -523,6 +523,9 @@ async function fetchTwitterOEmbed(url: string): Promise<{ url: string; title: st
   }
 }
 
+// Reduced URL fetch timeout (was 8s → 4s) to avoid chain timeouts causing 504
+const URL_FETCH_TIMEOUT_MS = 4000;
+
 async function fetchUrlContent(url: string): Promise<{ url: string; title: string; content: string; error?: string }> {
   const platform = detectPlatform(url);
 
@@ -537,7 +540,7 @@ async function fetchUrlContent(url: string): Promise<{ url: string; title: strin
           'User-Agent': 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)',
           'Accept': 'text/html,*/*',
         },
-        signal: AbortSignal.timeout(7000),
+        signal: AbortSignal.timeout(URL_FETCH_TIMEOUT_MS),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const html = await res.text();
@@ -566,7 +569,7 @@ async function fetchUrlContent(url: string): Promise<{ url: string; title: strin
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Accept-Language': 'en-US,en;q=0.9',
       },
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.timeout(URL_FETCH_TIMEOUT_MS),
     });
 
     if (!response.ok) {
@@ -674,14 +677,14 @@ async function performBraveSearch(query: string): Promise<{ results: WebSearchRe
   }
 
   try {
-    const url = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=6&search_lang=en&result_filter=web`;
+    const url = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=5&search_lang=en&result_filter=web`;
     const response = await fetch(url, {
       headers: {
         'Accept': 'application/json',
         'Accept-Encoding': 'gzip',
         'X-Subscription-Token': apiKey,
       },
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.timeout(5000),
     });
 
     if (!response.ok) {
@@ -1587,32 +1590,7 @@ Deno.serve(async function(req: Request) {
         }
       }
     } else if (webSearchResults.length > 0) {
-      try {
-        const openaiKey = Deno.env.get('OPENAI_API_KEY');
-        if (openaiKey) {
-          const oaiRes = await fetch('https://api.openai.com/v1/responses', {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ model: 'gpt-4o-mini', tools: [{ type: 'web_search_preview' }], input: lastUserContent }),
-            signal: AbortSignal.timeout(12000),
-          });
-          if (oaiRes.ok) {
-            const oaiData = await oaiRes.json();
-            const oaiText = oaiData.output
-              ?.filter((o: any) => o.type === 'message')
-              ?.flatMap((o: any) => o.content || [])
-              ?.filter((c: any) => c.type === 'output_text')
-              ?.map((c: any) => c.text || '')
-              ?.join('\n') || '';
-            if (oaiText && oaiText.length > 50) {
-              const augmented = effectiveSystemPrompt + '\n\n[SUPPLEMENTARY REAL-TIME DATA FROM WEB SEARCH]:\n' + oaiText.slice(0, 3000);
-              aiMessages[0] = { role: 'system', content: augmented };
-            }
-          }
-        }
-      } catch (_wsErr) {
-        // non-fatal
-      }
+      // Skip expensive OpenAI preview augmentation — go straight to AI call to avoid 504
       aiResponse = await callAI(aiModel, aiMessages, false);
       if (aiResponse && aiResponse.content && !aiResponse.content.includes('[SOURCES]')) {
         const sourcesJson = JSON.stringify(

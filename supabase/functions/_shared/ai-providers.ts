@@ -82,7 +82,7 @@ const CONFIG = {
   DEFAULT_IMAGE_MODEL: getEnv('DEFAULT_IMAGE_MODEL') || 'dalle-3',
   MAX_RETRIES: parseInt(getEnv('AI_MAX_RETRIES') || '3', 10),
   BASE_DELAY_MS: parseInt(getEnv('AI_BASE_DELAY_MS') || '1000', 10),
-  REQUEST_TIMEOUT_MS: parseInt(getEnv('AI_REQUEST_TIMEOUT_MS') || '45000', 10),
+  REQUEST_TIMEOUT_MS: parseInt(getEnv('AI_REQUEST_TIMEOUT_MS') || '25000', 10),
   IMAGE_TIMEOUT_MS: parseInt(getEnv('AI_IMAGE_TIMEOUT_MS') || '60000', 10),
 };
 

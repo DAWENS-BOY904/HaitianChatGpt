@@ -1478,12 +1478,3 @@ const assistantStyles = StyleSheet.create({
   sourcesBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 7, paddingHorizontal: 6 },
   sourcesLabel: { fontSize: 13, fontWeight: '500' },
 });
-fix {
-  "eventMessage": "POST | 504 | http://njpuoozygqtpvlzhnjpu.backend.onspace.ai/functions/v1/chat | Gateway Timeout",
-  "functionId": "chat",
-  "id": "1ab6ac38-e01f-49d9-bca4-7c80ebd38238",
-  "logLevel": "ERROR",
-  "method": "POST",
-  "statusCode": 504,
-  "timestamp": 1780228592
-}.
