@@ -1239,15 +1239,14 @@ function VideoPreviewCard({ name, uri, isDark, colors }: { name: string; uri?: s
             if (block.type === 'paragraph') {
               const urlsInPara = (block.content || '').match(URL_REGEX) || [];
               const hasDownloadLink = urlsInPara.some(u => /\.(pdf|zip|doc|docx|xls|xlsx|csv|mp3|mp4|mov|apk)(\?|$)/i.test(u));
-              // Extract non-download links for preview cards
               const previewLinks = urlsInPara.filter(u => !(/\.(pdf|zip|doc|docx|xls|xlsx|csv|mp3|mp4|mov|apk)(\?|$)/i.test(u)));
               if (hasDownloadLink) {
                 return (
-                  <View key={`b-${bi}`} style={{ marginVertical: 3 }}>
+                  <View key={`b-${bi}`} style={{ marginVertical: 4 }}>
                     <Text
                       selectable
                       selectionColor={colors.primary + '55'}
-                      style={{ fontSize: 16, color: colors.text, lineHeight: 25 }}
+                      style={{ fontSize: 16, color: colors.text, lineHeight: 26 }}
                     >
                       {renderInlineSegments((block.content || '').replace(URL_REGEX, '').trim(), handlePhonePress, handleLinkPress, isDark)}
                     </Text>
@@ -1255,30 +1254,28 @@ function VideoPreviewCard({ name, uri, isDark, colors }: { name: string; uri?: s
                   </View>
                 );
               }
-              // Filter preview links: skip already-shown URLs and TikTok URLs when card exists
               const deduplicatedPreviewLinks = previewLinks.filter(u => {
-                // If tiktok card is present, suppress any tiktok.com link preview
                 if (tiktokCardData && (u.includes('tiktok.com') || u.includes('vm.tiktok'))) return false;
-                // Skip if this exact URL was already shown as a preview card
                 if (_renderedPreviewUrls.has(u)) return false;
-                // Mark as shown so no other paragraph shows it again
                 _renderedPreviewUrls.add(u);
                 return true;
               }).slice(0, 1);
 
+              // Spacing between paragraphs — add top margin when previous block is also a paragraph
+              const prevBlock = bi > 0 ? blocks[bi - 1] : null;
+              const topMargin = prevBlock && (prevBlock.type === 'paragraph' || prevBlock.type === 'code') ? 10 : 4;
+
               return (
-                <View key={`b-${bi}`} style={{ marginVertical: 3 }}>
+                <View key={`b-${bi}`} style={{ marginTop: topMargin, marginBottom: 4 }}>
                   <Text
                     selectable
                     selectionColor={colors.primary + '55'}
-                    style={{ fontSize: 16, color: colors.text, lineHeight: 25 }}
+                    style={{ fontSize: 16, color: colors.text, lineHeight: 26 }}
                     onSelectionChange={(e) => handleSelectionChange(e, block.content || '', setSelectedText, setShowFloatingCopy)}
                   >
                     {renderInlineSegments(block.content || '', handlePhonePress, handleLinkPress, isDark)}
                   </Text>
-                  {/* Show link preview cards for URLs in AI paragraphs (deduplicated) */}
                   {deduplicatedPreviewLinks.map((pUrl, pi) => {
-                    // Try to extract metadata from AI response context
                     const meta = extractLinkMetadataFromAIResponse(safeContent, pUrl);
                     return (
                       <LinkPreviewCard
@@ -1316,7 +1313,7 @@ function VideoPreviewCard({ name, uri, isDark, colors }: { name: string; uri?: s
 
 
           {/* Action row — only shown after streaming completes */}
-          {!isGenerating && !streaming && safeContent && safeContent.trim().length > 0 ? (() => {
+          {!isGenerating && !streaming && safeContent ? (() => {
             const sourcesBlock = blocks.find(b => b.type === 'sources' && b.sources && b.sources.length > 0);
             // Parse sources to Source[] objects
             let parsedSources: Source[] = [];

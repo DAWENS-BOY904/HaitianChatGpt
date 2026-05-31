@@ -41,10 +41,8 @@ export function ThinkingIndicator({
     }
   }, [completed]);
 
-  if (completed) {
-    // Silently disappear — no "Done" text shown
-    return null;
-  }
+  // ── Silently disappear when completed — no "Done" badge shown ──
+  if (completed) return null;
 
   // Determine label and dot color based on context
   let label = 'Thinking';
