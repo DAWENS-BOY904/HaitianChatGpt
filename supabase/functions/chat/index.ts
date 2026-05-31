@@ -913,7 +913,7 @@ function buildSystemPrompt(
     '==============================',
     '1. ALWAYS use triple-backtick fenced code blocks with an EXPLICIT language identifier.',
     '2. ALWAYS SPLIT code into SEPARATE blocks by purpose.',
-    '3. LABEL each block with a plain-text heading ABOVE it.',
+    '3. After the ai generate a code explain to user what this code is or what this code can do or cannot do.',
     '4. Supported identifiers: javascript, typescript, python, html, css, scss, bash, json, sql, java, kotlin, swift, rust, go, ruby, php, c, cpp, dart, yaml, xml, dockerfile, graphql, markdown, text',
     '==============================',
     '',
