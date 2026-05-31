@@ -800,6 +800,167 @@ function detectAndInjectApiVersions(userMessage: string): string {
   return '\n==============================\nDETECTED THIRD-PARTY APIs:\n' + lines + '\nCRITICAL: Use ONLY these exact version numbers.\n==============================';
 }
 
+// ── Coding Assistant Detector ────────────────────────────────────────────────
+
+type CodingTaskType = 'debug' | 'review' | 'test' | 'docs' | 'refactor' | 'general_code' | null;
+
+function detectCodingTaskType(text: string): CodingTaskType {
+  const t = text.toLowerCase();
+
+  // Debug / fix
+  if (
+    /\b(debug|fix( this)?|bug|error|exception|crash|not working|broken|issue|problem|why (is|does|am)|what('s| is) wrong|help me fix|doesn't work|throws?|stack ?trace|traceback)\b/.test(t)
+  ) return 'debug';
+
+  // Code review
+  if (
+    /\b(review( this| my| the)?( code)?|check( this| my)? code|code review|look at( this| my) code|is this (good|correct|right|ok)|improve( this| my| the) code|any (issues|problems|bugs) (in|with) (this|my) code)\b/.test(t)
+  ) return 'review';
+
+  // Unit tests
+  if (
+    /\b(write (unit )?tests?|generate tests?|test(ing)? (this|my|the) (code|function|class|method)|add tests?|create tests?|unit test|jest|pytest|junit|mocha|vitest|test coverage)\b/.test(t)
+  ) return 'test';
+
+  // API docs
+  if (
+    /\b(api (docs?|documentation)|document(ation)? (this|my|the|for) (api|endpoint|route|function)|write docs?|generate docs?|openapi|swagger|postman collection|jsdoc|typedoc)\b/.test(t)
+  ) return 'docs';
+
+  // Refactor
+  if (
+    /\b(refactor|clean( up)?|improve (code )?quality|optimize( this| my| the)?( code)?|restructure|rewrite (this|my|the)?( code)?|make (this|it) (cleaner|better|more readable)|simplify)\b/.test(t)
+  ) return 'refactor';
+
+  // General coding request
+  if (
+    /\b(write|create|build|make|generate|code|program|implement|develop|script)\b/.test(t) &&
+    /\b(function|class|component|app|application|api|server|bot|website|page|script|module|library|util|helper|hook|service|endpoint|query|schema|model|controller|middleware|algorithm|data structure)\b/.test(t)
+  ) return 'general_code';
+
+  return null;
+}
+
+function buildCodingAssistantPrompt(taskType: CodingTaskType): string {
+  if (!taskType || taskType === 'general_code') return '';
+
+  const sections: string[] = [
+    '',
+    '==============================',
+    'CODING ASSISTANT MODE ACTIVATED:',
+    '==============================',
+  ];
+
+  if (taskType === 'debug') {
+    sections.push(
+      'You are a senior software engineer with 15+ years debugging production systems.',
+      '',
+      'When debugging code, ALWAYS provide:',
+      '1. Root cause analysis — explain exactly WHY the bug occurs',
+      '2. Step-by-step breakdown of the failure path',
+      '3. Corrected, complete, production-ready code with inline comments on what changed',
+      '4. Preventive measures — how to avoid similar bugs in the future',
+      '5. Testing recommendations — how to verify the fix works',
+      '',
+      'FORMAT YOUR RESPONSE AS:',
+      '- Start with a plain-text explanation of the root cause (NO code block yet)',
+      '- Then show the corrected code in a properly labelled code block',
+      '- After the code block, write a plain-text "What changed:" section explaining each fix',
+      '- End with plain-text "Prevention tips:" and "How to test:" sections',
+      '- NEVER put explanation text INSIDE the code block',
+    );
+  } else if (taskType === 'review') {
+    sections.push(
+      'You are a senior engineer conducting thorough code reviews.',
+      '',
+      'Review the code comprehensively. Check for:',
+      '1. Bugs — logic errors, edge cases, missing null checks',
+      '2. Security — vulnerabilities, injection risks, auth issues, exposed secrets',
+      '3. Performance — inefficiencies, memory leaks, N+1 queries, blocking calls',
+      '4. Readability — naming, structure, comments, DRY violations',
+      '5. Best practices — design patterns, SOLID principles, proper error handling',
+      '',
+      'FORMAT YOUR RESPONSE AS:',
+      '- Start with a plain-text summary of overall code quality',
+      '- List issues using: 🔴 Critical (must fix) | 🟡 Suggestions (should consider) | 🟢 What is done well',
+      '- Each issue: plain-text title + plain-text explanation',
+      '- If refactored code is needed, show it in a code block AFTER all plain-text issues',
+      '- After the code block, write a plain-text "Changes made:" section',
+      '- NEVER mix issue lists inside code blocks',
+    );
+  } else if (taskType === 'test') {
+    sections.push(
+      'You are a test-driven development expert.',
+      '',
+      'Generate comprehensive unit tests. Cover:',
+      '1. All public functions and methods',
+      '2. Happy path (valid inputs, expected outputs)',
+      '3. Edge cases (empty, null, boundary values)',
+      '4. Error conditions (invalid input, thrown errors)',
+      '5. Async behavior with proper await/mock patterns',
+      '',
+      'FORMAT YOUR RESPONSE AS:',
+      '- Start with a plain-text intro: what framework is used, what is being tested, coverage goal',
+      '- Show the complete test file in a single properly-labelled code block',
+      '- After the code block, write a plain-text "Test breakdown:" section listing each test group and what it covers',
+      '- End with plain-text "How to run:" with the exact command',
+      '- NEVER describe individual tests outside the code block in code format',
+    );
+  } else if (taskType === 'docs') {
+    sections.push(
+      'You are a technical writer specializing in API and code documentation.',
+      '',
+      'For each function/endpoint/module, document:',
+      '1. Purpose and description',
+      '2. Parameters (name, type, required, description)',
+      '3. Return value (type, structure)',
+      '4. Example usage',
+      '5. Error cases',
+      '',
+      'FORMAT YOUR RESPONSE AS:',
+      '- Start with a plain-text overview of what the documented API/code does',
+      '- Show any schema, interface definitions, or OpenAPI snippets in code blocks',
+      '- After each code block, write plain-text explanations of each parameter/return value',
+      '- End with plain-text usage examples and plain-text notes on edge cases',
+      '- NEVER put descriptive text inside code blocks',
+    );
+  } else if (taskType === 'refactor') {
+    sections.push(
+      'You are a refactoring expert who improves code quality without changing behavior.',
+      '',
+      'When refactoring, analyze and improve:',
+      '1. Code structure and organization (single responsibility)',
+      '2. Naming conventions (clear, descriptive, consistent)',
+      '3. DRY violations (extract repeated logic)',
+      '4. Design pattern opportunities',
+      '5. Type safety and null safety',
+      '6. Error handling completeness',
+      '7. Testability (dependency injection, pure functions)',
+      '',
+      'FORMAT YOUR RESPONSE AS:',
+      '- Start with a plain-text "Issues found:" section listing what needs improvement',
+      '- Show the refactored code in a properly-labelled code block',
+      '- After the code block, write a plain-text "Changes explained:" section for each major change',
+      '- End with plain-text "Testing recommendations:" section',
+      '- NEVER put the list of issues inside the code block',
+    );
+  }
+
+  sections.push(
+    '',
+    'UNIVERSAL CODING RESPONSE RULES (HIGHEST PRIORITY):',
+    '- ALL explanations, analysis, summaries, and descriptions MUST be plain text OUTSIDE code blocks',
+    '- Code blocks contain ONLY executable code — no comments explaining the response, no prose',
+    '- After EVERY code block, write a plain-text explanation section in the chat',
+    '- Structure: [plain-text intro] → [code block] → [plain-text explanation] → [plain-text next steps]',
+    '- NEVER show raw code directly in the chat message without a code block',
+    '- NEVER end your response with a code block — always follow it with plain-text explanation',
+    '==============================',
+  );
+
+  return sections.join('\n');
+}
+
 // ── System Prompt Builder ──────────────────────────────────────────────────
 
 function buildSystemPrompt(
@@ -810,7 +971,8 @@ function buildSystemPrompt(
   occupation: string,
   interests: string[],
   apiVersionContext: string,
-  detectedLanguage: string
+  detectedLanguage: string,
+  codingTaskType?: CodingTaskType
 ): string {
   const langEnforcement = buildLanguageEnforcement(detectedLanguage);
   const dateTimeContext = buildDateTimeContext();
@@ -958,6 +1120,12 @@ function buildSystemPrompt(
 
   if (apiVersionContext) {
     parts.push(apiVersionContext);
+  }
+
+  // Coding assistant mode — injected when a coding task is detected
+  if (codingTaskType && codingTaskType !== 'general_code') {
+    const codingPrompt = buildCodingAssistantPrompt(codingTaskType);
+    if (codingPrompt) parts.push(codingPrompt);
   }
 
   // Repeat language reminder at the END as well (double enforcement)
@@ -1216,9 +1384,11 @@ Deno.serve(async function(req: Request) {
     // Build system prompt
     const apiVersionContext = detectAndInjectApiVersions(lastUserContent);
     const detectionResult = detectContentType(lastUserContent);
+    const codingTaskType = detectCodingTaskType(lastUserContent);
+    if (codingTaskType) console.log('[chat] Coding task detected:', codingTaskType);
     const fullSystemPrompt = buildSystemPrompt(
       userLanguage, baseTone, customInstructions, nickname, occupation, interests,
-      apiVersionContext, detectedLanguage
+      apiVersionContext, detectedLanguage, codingTaskType
     );
 
     // ── URL Content Fetching ──────────────────────────────────────────────────
