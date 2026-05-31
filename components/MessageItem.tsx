@@ -1478,8 +1478,4 @@ const assistantStyles = StyleSheet.create({
   sourcesBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 7, paddingHorizontal: 6 },
   sourcesLabel: { fontSize: 13, fontWeight: '500' },
 });
-  "logLevel": "ERROR",
-  "method": "POST",
-  "statusCode": 400,
-  "timestamp": 1780240206
-}.
+ 
