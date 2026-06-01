@@ -821,4 +821,4 @@ function GuestModalContent({ onStartGuest, onClose, isDark }: { onStartGuest: ()
     </View>
   );
 }
-fix if you login in web with exist email auto show to aceppts in app yes it you to access and also push user in app notifications.
+
