@@ -1131,4 +1131,3 @@ export function useConversation() {
   if (context === undefined) throw new Error('useConversation must be used within a ConversationProvider');
   return context;
 }
-the chat edge function is returning 401 Unauthorized. Please check the Authorization header in ConversationContext.tsx — ensure the session access_token is always refreshed before calling the chat function, and that the anon key is used as a fallback for guest sessions. Also verify the EXPO_PUBLIC_SUPABASE_ANON_KEY env variable is set correctly in .env.
