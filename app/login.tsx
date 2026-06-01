@@ -821,5 +821,12 @@ function GuestModalContent({ onStartGuest, onClose, isDark }: { onStartGuest: ()
     </View>
   );
 }
-
-in this page (web flow), after inserting the web_login_request into activity_logs, add a polling loop that checks every 3 seconds for approval_status='approved' and shows a waiting screen with a cancel button. Auto-cancel after 10 minutes.
+fix{
+  "eventMessage": "POST | 401 | http://njpuoozygqtpvlzhnjpu.backend.onspace.ai/functions/v1/chat | Unauthorized",
+  "functionId": "chat",
+  "id": "ebaf0e9e-c3b9-4c30-b1c3-f4b6c8d4b352",
+  "logLevel": "ERROR",
+  "method": "POST",
+  "statusCode": 401,
+  "timestamp": 1780303647
+} also create md file to know how tu integrate approve login.
