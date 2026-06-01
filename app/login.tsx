@@ -822,3 +822,4 @@ function GuestModalContent({ onStartGuest, onClose, isDark }: { onStartGuest: ()
   );
 }
 
+in this page (web flow), after inserting the web_login_request into activity_logs, add a polling loop that checks every 3 seconds for approval_status='approved' and shows a waiting screen with a cancel button. Auto-cancel after 10 minutes.
