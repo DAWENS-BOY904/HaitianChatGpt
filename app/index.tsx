@@ -21,6 +21,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
+import { signInWithGoogleCrossPlatform } from '../utils/google-auth';
+import { maybeCompleteAuthSession } from '../utils/web-browser';
 
 const WELCOME_PHRASES = [
   "Let's brainstorm",
@@ -199,7 +201,6 @@ function AILogo({ size = 100 }: { size?: number }) {
 
 function WelcomeScreen() {
   const { colors, isDark } = useTheme();
-  const { signInWithGoogle } = useAuth();
   const { showAlert } = useAlert();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -208,6 +209,13 @@ function WelcomeScreen() {
   const [appleAvailable, setAppleAvailable] = useState(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(40)).current;
+
+  // Complete any pending OAuth session (web popup scenario)
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      maybeCompleteAuthSession();
+    }
+  }, []);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -248,8 +256,7 @@ function WelcomeScreen() {
   const handleGoogle = async () => {
     setLoading('google');
     try {
-      const result: any = await signInWithGoogle();
-      const error = result?.error;
+      const { error } = await signInWithGoogleCrossPlatform();
       if (error) {
         const lower = (error || '').toLowerCase();
         const isCancellation = lower.includes('cancel') || lower.includes('dismiss') || lower.includes('closed');

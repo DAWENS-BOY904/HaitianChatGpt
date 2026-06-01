@@ -24,6 +24,7 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 import * as Linking from 'expo-linking';
+import { signInWithGoogleCrossPlatform } from '../utils/google-auth';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
 
@@ -325,7 +326,7 @@ export default function LoginScreen() {
     if (googleLoading) return;
     safeSetState(setGoogleLoading, true);
     try {
-      const { error } = await signInWithGoogle();
+      const { error } = await signInWithGoogleCrossPlatform();
       if (error) {
         const lower = (error || '').toLowerCase();
         const isCancellation = lower.includes('cancel') || lower.includes('dismiss') || lower.includes('closed');
