@@ -15,8 +15,8 @@
  */
 
 import { Platform } from 'react-native';
-import { getSupabaseClient } from '../core/client';
-import * as WebBrowser from '../../utils/web-browser';
+import { getSupabaseClient } from '@/template';
+import * as WebBrowser from './web-browser';
 
 // ── App scheme from app.json  ──────────────────────────────────────────────
 const APP_SCHEME = 'dawinixht';
