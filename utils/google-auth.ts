@@ -21,17 +21,24 @@ import * as WebBrowser from './web-browser';
 // ── App scheme from app.json  ──────────────────────────────────────────────
 const APP_SCHEME = 'dawinixht';
 
-// ── Published web URL — update if you have a custom domain ────────────────
-// Falls back to the current origin (works on published OnSpace URLs too).
+// ── Published web URL ─────────────────────────────────────────────────────
+// IMPORTANT: Must be the REAL published URL (not window.location.origin)
+// Safari & iframe environments reject dynamic origins — always use the canonical URL.
+// Update this to your custom domain if you have one.
+const PUBLISHED_WEB_URL = 'https://dawinixht.onspace.app';
+
 function getWebCallbackUrl(): string {
+  // In production (published app) always use the canonical origin
+  // to avoid Safari "invalid address" errors when running in an iframe.
   if (typeof window !== 'undefined') {
-    // window.location.origin is fine here because we're building the URL
-    // that will be opened in a *popup* — not an iframe.
-    // We strip any trailing iframe path to avoid stale path issues.
     const origin = window.location.origin;
-    return `${origin}/auth/callback`;
+    // Only trust the origin if it matches our known domain (not localhost/iframe)
+    const isTrustedOrigin = origin.includes('onspace.app') || origin.includes('dawinixht');
+    if (isTrustedOrigin) {
+      return `${origin}/auth/callback`;
+    }
   }
-  return 'https://dawinixht.onspace.app/auth/callback';
+  return `${PUBLISHED_WEB_URL}/auth/callback`;
 }
 
 // ── Native redirect URL  ───────────────────────────────────────────────────
