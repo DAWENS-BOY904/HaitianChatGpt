@@ -822,4 +822,3 @@ function GuestModalContent({ onStartGuest, onClose, isDark }: { onStartGuest: ()
     </View>
   );
 }
-hello ai dont skip please in components/SpotifyMusicCard and components/MessageItem.tsx, add parsing for [SPOTIFY_RESULTS:...] tags in AI message content so Spotify track results are rendered as music cards with album art, song title, artist, and a play button — matching the existing SpotifyMusicCard component design In the spotify-connect edge function and app/spotify-connect, implement OAuth token caching in AsyncStorage so the Spotify access token is reused across sessions instead of re-authenticating on every request, with automatic refresh when expired.

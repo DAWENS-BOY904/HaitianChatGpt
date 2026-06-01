@@ -30,6 +30,7 @@ import { SourcesModal, Source, InlineSourcesPill } from './SourcesModal';
 import Clipboard from '@react-native-clipboard/clipboard';
 import * as MediaLibrary from 'expo-media-library';
 import { LinkPreviewCard, extractFirstUrl, extractLinkMetadataFromAIResponse, detectLinkPlatform, UrlChip } from './LinkPreviewCard';
+import { SpotifyMusicCard, SpotifyTrack } from './SpotifyMusicCard';
 // expo-video — used for real-time video playback
 let VideoComponent: any = null;
 let VideoResizeMode: any = { CONTAIN: 'contain' };
@@ -1097,8 +1098,24 @@ function VideoPreviewCard({ name, uri, isDark, colors }: { name: string; uri?: s
   // ── Assistant message ─────────────────────────────────────────────────────
   const isCurrentlyStreaming = !!(isGenerating || streaming);
 
+  // ── Parse Spotify results tag ───────────────────────────────────────────
+  let spotifyTracks: SpotifyTrack[] | null = null;
+  let contentWithoutSpotify = safeContent;
+  try {
+    const spotifyMatch = safeContent.match(/\[SPOTIFY_RESULTS:(.*?)\]/s);
+    if (spotifyMatch) {
+      const parsed = JSON.parse(spotifyMatch[1]);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        spotifyTracks = parsed as SpotifyTrack[];
+      }
+      contentWithoutSpotify = safeContent.replace(/\[SPOTIFY_RESULTS:.*?\]/s, '').trim();
+    }
+  } catch (_e) {
+    contentWithoutSpotify = safeContent.replace(/\[SPOTIFY_RESULTS:[^\]]*\]/g, '').trim();
+  }
+
   // Extract TikTok card before parsing blocks
-  const { cleanContent: contentWithoutTiktok, card: tiktokCardData } = parseTikTokCard(safeContent);
+  const { cleanContent: contentWithoutTiktok, card: tiktokCardData } = parseTikTokCard(contentWithoutSpotify);
 
   // SAFE parse — wrap entire parseMarkdownBlocks in try/catch to prevent crashes
   let blocks: Block[] = [];
@@ -1297,6 +1314,15 @@ function VideoPreviewCard({ name, uri, isDark, colors }: { name: string; uri?: s
 
           {embeddedImages.length > 0 ? (
             <ImageGrid images={embeddedImages} onPress={(url, idx) => handleImagePress(url, allImageUrls, idx)} onSendToChat={handleSendImageToChat} />
+          ) : null}
+
+          {/* Spotify results card */}
+          {spotifyTracks && spotifyTracks.length > 0 ? (
+            <SpotifyMusicCard
+              tracks={spotifyTracks}
+              isDark={isDark}
+              onConnectSpotify={() => {}}
+            />
           ) : null}
 
           {/* TikTok preview card */}
