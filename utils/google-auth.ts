@@ -137,8 +137,6 @@ export async function signInWithGoogleCrossPlatform(): Promise<GoogleAuthResult>
         if (code) {
           const { error: exchError } = await supabase.auth.exchangeCodeForSession(result.url);
           if (exchError) return { error: exchError.message };
-          // Refresh so the newly-stored tokens are confirmed and auth listeners fire.
-          try { await supabase.auth.refreshSession(); } catch (_) {}
           return { error: null };
         }
 
@@ -148,18 +146,9 @@ export async function signInWithGoogleCrossPlatform(): Promise<GoogleAuthResult>
             refresh_token: refreshToken,
           });
           if (setError) return { error: setError.message };
-          // Force a session refresh so the persisted tokens are validated
-          // and onAuthStateChange fires with the latest session.
-          try { await supabase.auth.refreshSession(); } catch (_) {}
           return { error: null };
         }
 
-        // No tokens found — try a plain session refresh in case the deep-link
-        // already set a session via the Supabase JS listener.
-        try {
-          const { data: refreshed } = await supabase.auth.refreshSession();
-          if (refreshed?.session) return { error: null };
-        } catch (_) {}
         return { error: null };
       }
 
