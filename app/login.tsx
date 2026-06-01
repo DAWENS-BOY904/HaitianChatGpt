@@ -822,4 +822,3 @@ function GuestModalContent({ onStartGuest, onClose, isDark }: { onStartGuest: ()
     </View>
   );
 }
-in the chat edge function (supabase/functions/chat/index), add a detectSpotifyIntent function that recognizes music-related queries ('play', 'search music', 'find song', 'artist', 'playlist', etc.) and calls the spotify-connect edge function to return real track results rendered as SpotifyMusicCard components in the chat.

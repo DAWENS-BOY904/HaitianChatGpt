@@ -803,6 +803,68 @@ function detectAndInjectApiVersions(userMessage: string): string {
   return '\n==============================\nDETECTED THIRD-PARTY APIs:\n' + lines + '\nCRITICAL: Use ONLY these exact version numbers.\n==============================';
 }
 
+// ── Spotify Music Intent Detector ───────────────────────────────────────────
+
+function detectSpotifyIntent(text: string): string | null {
+  const t = text.toLowerCase().trim();
+  const triggers = [
+    /\bplay\b.*\bsong\b/,
+    /\bplay\b.*\bmusic\b/,
+    /\bplay\b.*\btrack\b/,
+    /\bsearch\b.*\bmusic\b/,
+    /\bfind\b.*\bsong\b/,
+    /\bfind\b.*\bmusic\b/,
+    /\bsearch\b.*\bsong\b/,
+    /\bfind\b.*\btrack\b/,
+    /\bsearch\b.*\bartist\b/,
+    /\bfind\b.*\bartist\b/,
+    /\bshow\b.*\bmusic\b/,
+    /\bshow\b.*\bsong\b/,
+    /\bshow\b.*\bplaylist\b/,
+    /\bplay\b.*\bartist\b/,
+    /\bmusic\b.*\bby\b/,
+    /\bsongs?\b.*\bby\b/,
+    /\btracks?\b.*\bby\b/,
+    /\bartist\b.*\bsongs?\b/,
+  ];
+  const musicKeywords = [
+    'play song', 'play music', 'play track', 'play the song', 'play me',
+    'search music', 'find song', 'find music', 'search song', 'find track',
+    'music search', 'song search', 'artist search',
+    'spotify', 'show me music', 'show music', 'music by', 'songs by', 'tracks by',
+    'chante', 'chante m', 'jwenn yon chante', 'ban mwen yon chante',
+    'search for song', 'look for song', 'find me a song',
+    'recommand music', 'recommend music', 'suggest song', 'suggest music',
+  ];
+  if (musicKeywords.some(kw => t.includes(kw))) {
+    // Extract search query: remove command words to get artist/song name
+    return t
+      .replace(/\b(play|search|find|show|spotify|music|song|track|tracks|songs|me|by|for|the|a|an|recommend|suggest|chante|jwenn|ban mwen|yon|chante m)\b/gi, '')
+      .replace(/\s+/g, ' ').trim() || text;
+  }
+  if (triggers.some(re => re.test(t))) {
+    return t
+      .replace(/\b(play|search|find|show|me|the|a|an|song|music|track|by)\b/gi, '')
+      .replace(/\s+/g, ' ').trim() || text;
+  }
+  return null;
+}
+
+async function searchSpotifyTracks(query: string, supabaseAdmin: any): Promise<{ tracks: any[]; error?: string }> {
+  try {
+    const { data, error } = await supabaseAdmin.functions.invoke('spotify-connect', {
+      body: { action: 'search', query, limit: 8 },
+    });
+    if (error) return { tracks: [], error: error.message };
+    if (data && Array.isArray(data.tracks)) return { tracks: data.tracks };
+    if (data && data.results) return { tracks: data.results };
+    return { tracks: [] };
+  } catch (err: any) {
+    console.error('[chat] Spotify search error:', err.message);
+    return { tracks: [], error: err.message };
+  }
+}
+
 // ── Coding Assistant Detector ────────────────────────────────────────────────
 
 type CodingTaskType = 'debug' | 'review' | 'test' | 'docs' | 'refactor' | 'general_code' | null;
@@ -1406,6 +1468,11 @@ Deno.serve(async function(req: Request) {
     const detectionResult = detectContentType(lastUserContent);
     const codingTaskType = detectCodingTaskType(lastUserContent);
     if (codingTaskType) console.log('[chat] Coding task detected:', codingTaskType);
+
+    // ── Spotify music search detection ──────────────────────────────────────────
+    const spotifyQuery = detectionResult.type === 'text' ? detectSpotifyIntent(lastUserContent) : null;
+    if (spotifyQuery) console.log('[chat] Spotify intent detected, query:', spotifyQuery.slice(0, 80));
+    // ───────────────────────────────────────────────────────────────────────
     const fullSystemPrompt = buildSystemPrompt(
       userLanguage, baseTone, customInstructions, nickname, occupation, interests,
       apiVersionContext, detectedLanguage, codingTaskType
@@ -1526,7 +1593,23 @@ Deno.serve(async function(req: Request) {
     let aiResponse: AIResponse;
     let imageUrl: string | undefined;
 
-    if (detectionResult.type === 'search') {
+    if (spotifyQuery) {
+      const spotifyResult = await searchSpotifyTracks(spotifyQuery, supabaseAdmin);
+      if (spotifyResult.tracks && spotifyResult.tracks.length > 0) {
+        const tracksJson = safeJsonStringify(spotifyResult.tracks);
+        aiResponse = {
+          content: `[SPOTIFY_RESULTS:${tracksJson}]`,
+          model: 'spotify-search',
+          tokens: 0,
+        };
+      } else {
+        // Spotify returned nothing — fall back to AI text response
+        aiResponse = await callAI(aiModel, [
+          ...aiMessages,
+          { role: 'system', content: 'The Spotify search returned no results for this query. Apologize briefly in the user language and suggest they try different keywords or connect Spotify in the app settings.' },
+        ], false);
+      }
+    } else if (detectionResult.type === 'search') {
       const searchQuery = lastUserContent
         .replace(/\b(?:ban m(?:wen)?|banm|montre m(?:wen)?|cherche|search for|find|show me|look for|fetch|get|send|voye|search|chache|trouve|buscar|mostrar|encontrar)\b/gi, '')
         .replace(/\b(?:foto|fotos|photo|photos|imaj|image|images)\b/gi, '')
