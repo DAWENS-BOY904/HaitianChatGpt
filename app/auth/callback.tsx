@@ -30,14 +30,10 @@ export default function OAuthCallback() {
         // ── Popup path: signal the opener then close ───────────────────
         if (window.opener) {
           try {
-            // Use '*' as target origin so the message reaches the opener
-            // even when running in an iframe with a different origin (Safari fix)
             window.opener.postMessage(
               { type: 'supabase:oauth:callback', url: window.location.href },
-              '*'
+              window.location.origin
             );
-            // Small delay so the message is received before the popup closes
-            await new Promise(r => setTimeout(r, 300));
             window.close();
             return;
           } catch (_e) {
