@@ -1478,13 +1478,3 @@ const assistantStyles = StyleSheet.create({
   sourcesBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 7, paddingHorizontal: 6 },
   sourcesLabel: { fontSize: 13, fontWeight: '500' },
 });
- 
-please ai fix error {
-  "eventMessage": "POST | 401 | http://njpuoozygqtpvlzhnjpu.backend.onspace.ai/functions/v1/chat | Unauthorized",
-  "functionId": "chat",
-  "id": "ebaf0e9e-c3b9-4c30-b1c3-f4b6c8d4b352",
-  "logLevel": "ERROR",
-  "method": "POST",
-  "statusCode": 401,
-  "timestamp": 1780303647
-}.
