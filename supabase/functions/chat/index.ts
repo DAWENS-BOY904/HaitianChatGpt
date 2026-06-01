@@ -1206,7 +1206,7 @@ Deno.serve(async function(req: Request) {
     }
 
     const rawMessages = body.messages;
-    const conversationId = body.conversationId;
+    let conversationId = body.conversationId;
     let aiModel = body.aiModel || 'onspace-ai';
     const fileContents = body.fileContents;
     const userImageUrl = body.userImageUrl;
@@ -1287,9 +1287,10 @@ Deno.serve(async function(req: Request) {
 
     const authHeader = req.headers.get('Authorization');
     const token = authHeader ? authHeader.replace('Bearer ', '') : null;
+    // Allow requests with the anon key (guest sessions) or a valid user JWT
     if (!token) {
       return new Response(
-        JSON.stringify({ error: 'Authorization required' }),
+        JSON.stringify({ error: 'Authorization required. Pass the anon key for guest sessions or a user JWT.' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -1313,15 +1314,21 @@ Deno.serve(async function(req: Request) {
     const isGuestToken = token === supabaseAnonKey;
     let user: any = null;
     if (!isGuestToken) {
+      // Try to authenticate with the JWT token
       const authResult = await supabaseClient.auth.getUser(token);
       if (authResult.error || !authResult.data.user) {
-        console.error('[chat] Auth failed');
-        return new Response(
-          JSON.stringify({ error: 'Invalid or expired token' }),
-          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        // If JWT validation fails, check if it's the anon key (fallback for guests passing anon key explicitly)
+        if (token !== supabaseAnonKey) {
+          console.error('[chat] Auth failed:', authResult.error?.message);
+          return new Response(
+            JSON.stringify({ error: 'Invalid or expired token. Please sign in again.' }),
+            { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        // Token equals anon key — treat as guest
+      } else {
+        user = authResult.data.user;
       }
-      user = authResult.data.user;
     }
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey);
 
