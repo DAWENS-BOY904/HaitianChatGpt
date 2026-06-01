@@ -1,5 +1,3 @@
-
-
 import { Stack } from 'expo-router';
 import { AlertProvider, AuthProvider } from '@/template';
 import { ThemeProvider } from '../contexts/ThemeContext';
@@ -132,6 +130,7 @@ export default function RootLayout() {
                     <Stack.Screen name="spotify-connect" />
                     <Stack.Screen name="shazam-connect" />
                     <Stack.Screen name="subscription-success" />
+                    <Stack.Screen name="auth/callback" options={{ headerShown: false }} />
                     <Stack.Screen name="onboarding" options={{ headerShown: false, gestureEnabled: false }} />
                     </Stack>
                   </ConversationProvider>

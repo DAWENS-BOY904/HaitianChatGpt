@@ -1,5 +1,3 @@
-
-
 /**
  * OAuth Callback Handler
  *
