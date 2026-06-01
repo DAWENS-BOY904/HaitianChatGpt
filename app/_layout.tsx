@@ -1,3 +1,5 @@
+
+
 import { Stack } from 'expo-router';
 import { AlertProvider, AuthProvider } from '@/template';
 import { ThemeProvider } from '../contexts/ThemeContext';
