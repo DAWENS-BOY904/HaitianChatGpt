@@ -238,22 +238,27 @@ function WelcomeScreen() {
   }, []);
 
   const handleApple = async () => {
+    if (loading) return;
     setLoading('apple');
     try {
       const { user, error } = await performAppleSignIn(showAlert);
       if (error) {
+        setLoading(null);
         showAlert('Sign In Failed', error);
         return;
       }
       if (user) {
         sendLoginConfirmationEmail(user.id, user.email || '');
       }
+    } catch (_e) {
+      // silent
     } finally {
       setLoading(null);
     }
   };
 
   const handleGoogle = async () => {
+    if (loading) return;
     setLoading('google');
     try {
       const { error } = await signInWithGoogleCrossPlatform();
