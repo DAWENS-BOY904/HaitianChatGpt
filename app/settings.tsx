@@ -1285,4 +1285,3 @@ export default function SettingsScreen() {
     </View>
   );
 }
-Add functionality on account deletion and enforce email uniqueness.
