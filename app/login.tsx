@@ -822,3 +822,4 @@ function GuestModalContent({ onStartGuest, onClose, isDark }: { onStartGuest: ()
     </View>
   );
 }
+the image search detection in `supabase/functions/_shared/ai-providers.ts` — specifically the `detectContentType` function — may be missing some common search phrases Read that file and expand the search trigger keywords so queries like 'show me photos of cats', 'find images of Paris', 'search for dog pictures' reliably return type: 'search' instead of falling through to a regular AI text response.
