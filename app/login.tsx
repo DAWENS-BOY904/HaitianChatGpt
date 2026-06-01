@@ -323,7 +323,7 @@ export default function LoginScreen() {
   };
 
   const handleGoogleSignIn = async () => {
-    if (googleLoading) return;
+    if (googleLoading || appleLoading || operationLoading) return;
     safeSetState(setGoogleLoading, true);
     try {
       const { error } = await signInWithGoogleCrossPlatform();
@@ -377,6 +377,7 @@ export default function LoginScreen() {
       showAlert('Not Available', 'Apple Sign In is only available on iOS devices.');
       return;
     }
+    if (appleLoading || googleLoading || operationLoading) return;
     setAppleLoading(true);
     try {
       const isAvailable = await AppleAuthentication.isAvailableAsync();
@@ -467,6 +468,8 @@ export default function LoginScreen() {
           access_token: data.session.access_token,
           refresh_token: data.session.refresh_token,
         });
+        // Persist & validate tokens so app restarts stay logged in
+        try { await supabase.auth.refreshSession(); } catch (_) {}
         if (data.session.user) {
           sendLoginConfirmationEmail(data.session.user.id, data.session.user.email || '');
         }
