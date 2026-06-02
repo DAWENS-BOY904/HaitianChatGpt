@@ -75,6 +75,7 @@ import {
 import type { GroupMember } from '../components/HomeModals';
 import { SpotifyMusicCard, SpotifyLoadingOverlay, SpotifyTrack } from '../components/SpotifyMusicCard';
 import { EmailComposerModal } from '../components/EmailComposerModal';
+import { ImageEditModal } from '../components/ImageEditModal';
 import { ConnectedAppsModal, ConnectedApp } from '../components/ConnectedAppsModal';
 import { WebView } from 'react-native-webview';
 // Gesture handler — loaded conditionally to avoid native crash when reanimated/gesture-handler is not linked 
@@ -720,6 +721,8 @@ export default function HomeScreen() {
   const prevSendingRef = useRef(false);
   const [pendingNotifConvId, setPendingNotifConvId] = useState<string|null>(null);
   const [imageAnalyzingOverlay, setImageAnalyzingOverlay] = useState(false);
+  const [imageEditModalVisible, setImageEditModalVisible] = useState(false);
+  const [imageEditSourceUrl, setImageEditSourceUrl] = useState('');
   const [savedImageUrls, setSavedImageUrls] = useState<Set<string>>(new Set());
   const [savingImageId, setSavingImageId] = useState<string | null>(null);
   const [isOffline] = useState(false);
@@ -2554,6 +2557,18 @@ export default function HomeScreen() {
               {isSavingThis ? <ActivityIndicator size="small" color="#30D158" /> : <Ionicons name={alreadySaved ? 'checkmark-circle' : 'image-outline'} size={15} color={alreadySaved ? '#30D158' : colors.textSecondary} />}
               <Text style={{ fontSize: 13, fontWeight: '600', color: alreadySaved ? '#30D158' : colors.textSecondary }}>{alreadySaved ? 'Saved' : 'Save'}</Text>
             </TouchableOpacity>
+            {/* Edit with AI button */}
+            <TouchableOpacity
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)' }}
+              onPress={() => {
+                setImageEditSourceUrl(detectedImageUrl);
+                setImageEditModalVisible(true);
+              }}
+              activeOpacity={0.75}
+            >
+              <Ionicons name="color-wand-outline" size={15} color={accentColor} />
+              <Text style={{ fontSize: 13, fontWeight: '600', color: accentColor }}>Edit</Text>
+            </TouchableOpacity>
             <TouchableOpacity
               style={{ flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)' }}
               onPress={async () => {
@@ -4011,6 +4026,20 @@ export default function HomeScreen() {
               onClose={() => setEmailComposerVisible(false)}
               template={emailComposerTemplate}
               aiContent={emailComposerAIContent}
+            />
+            {/* AI Image Edit Modal — opens when user taps edit on an AI-generated image */}
+            <ImageEditModal
+              visible={imageEditModalVisible}
+              imageUrl={imageEditSourceUrl}
+              onClose={() => setImageEditModalVisible(false)}
+              onApplyEdits={(editedUrl, prompt) => {
+                setImageEditModalVisible(false);
+                // Add edited image to chat input so user can send it
+                const media: MediaFile = { type: 'image', uri: editedUrl, name: 'edited-image.jpg', mimeType: 'image/jpeg' };
+                setSelectedMedia(prev => [...prev, media]);
+                setInputText(prev => (prev ? prev + ' ' : '') + `[Edited: ${prompt}]`);
+                setTimeout(() => inputRef.current?.focus(), 100);
+              }}
             />
             {imageAnalyzingOverlay ? (
               <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.78)', zIndex: 9998, alignItems: 'center', justifyContent: 'center' }}>
