@@ -822,4 +822,4 @@ function GuestModalContent({ onStartGuest, onClose, isDark }: { onStartGuest: ()
     </View>
   );
 }
-
+fix edit photo in home re call the edg for real editing and create md file how to fetch img search in app to web also email composer,quiz.
