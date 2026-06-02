@@ -2347,11 +2347,18 @@ export default function HomeScreen() {
   }, [groupChatMode]);
 
   const parseImageSearchResults = useCallback((content: string): { cleanContent: string; searchImages: Array<{ url: string; title?: string; source?: string }> | null } => {
-    const match = content.match(/\[IMAGE_SEARCH_RESULTS:([\s\S]*?)\]/);
-    if (!match) return { cleanContent: content, searchImages: null };
+    // Use :IMAGE_SEARCH_END] as closing delimiter to avoid conflicts with JSON brackets
+    const match = content.match(/\[IMAGE_SEARCH_RESULTS:([\s\S]*?):IMAGE_SEARCH_END\]/);
+    // Legacy fallback: old format without safe delimiter
+    const legacyMatch = !match ? content.match(/\[IMAGE_SEARCH_RESULTS:([\s\S]+?)\]\s*(?:\n|\[SOURCES\]|$)/) : null;
+    const rawJson = match ? match[1] : (legacyMatch ? legacyMatch[1] : null);
+    if (!rawJson) return { cleanContent: content, searchImages: null };
     try {
-      const parsed = JSON.parse(match[1]);
-      const cleanContent = content.replace(/\[IMAGE_SEARCH_RESULTS:[\s\S]*?\]/, '').trim();
+      const parsed = JSON.parse(rawJson);
+      const cleanContent = content
+        .replace(/\[IMAGE_SEARCH_RESULTS:[\s\S]*?:IMAGE_SEARCH_END\]/, '')
+        .replace(/\[IMAGE_SEARCH_RESULTS:[\s\S]+?\]\s*/, '')
+        .trim();
       return { cleanContent, searchImages: Array.isArray(parsed) ? parsed : null };
     } catch {
       return { cleanContent: content, searchImages: null };

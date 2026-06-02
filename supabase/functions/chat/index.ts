@@ -1723,7 +1723,7 @@ Deno.serve(async function(req: Request) {
           })).filter((s: any) => s.url)
         );
         aiResponse = {
-          content: 'Men kek imaj mwen jwenn pou "' + searchQuery + '":\n\n[IMAGE_SEARCH_RESULTS:' + safeJsonStringify(searchResult.images) + ']\n\n[SOURCES]\n' + sourcesJson + '\n[/SOURCES]',
+          content: 'Men kek imaj mwen jwenn pou "' + searchQuery + '":\n\n[IMAGE_SEARCH_RESULTS:' + safeJsonStringify(searchResult.images) + ':IMAGE_SEARCH_END]\n\n[SOURCES]\n' + sourcesJson + '\n[/SOURCES]',
           model: 'image-search',
           tokens: 0,
         };
