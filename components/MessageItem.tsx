@@ -31,6 +31,8 @@ import Clipboard from '@react-native-clipboard/clipboard';
 import * as MediaLibrary from 'expo-media-library';
 import { LinkPreviewCard, extractFirstUrl, extractLinkMetadataFromAIResponse, detectLinkPlatform, UrlChip } from './LinkPreviewCard';
 import { SpotifyMusicCard, SpotifyTrack } from './SpotifyMusicCard';
+import WeatherCard from './WeatherCard';
+import MapCard from './MapCard';
 // expo-video — used for real-time video playback
 let VideoComponent: any = null;
 let VideoResizeMode: any = { CONTAIN: 'contain' };
@@ -1099,8 +1101,27 @@ function VideoPreviewCard({ name, uri, isDark, colors }: { name: string; uri?: s
   const isCurrentlyStreaming = !!(isGenerating || streaming);
 
   // ── Parse Spotify results tag ───────────────────────────────────────────
+  // ── Parse [WEATHER_CITY:city] tag
+  let weatherCity: string | null = null;
+  const weatherMatch = safeContent.match(/\[WEATHER_CITY:([^\]]+)\]/);
+  if (weatherMatch) weatherCity = weatherMatch[1].trim();
+
+  // ── Parse [MAP_LOCATION:json] tag
+  let mapLocationData: { location: string; lat?: number; lon?: number } | null = null;
+  const mapMatch = safeContent.match(/\[MAP_LOCATION:([^\]]+)\]/);
+  if (mapMatch) {
+    try {
+      mapLocationData = JSON.parse(mapMatch[1]);
+    } catch {
+      mapLocationData = { location: mapMatch[1].trim() };
+    }
+  }
+
   let spotifyTracks: SpotifyTrack[] | null = null;
-  let contentWithoutSpotify = safeContent;
+  let contentWithoutSpotify = safeContent
+    .replace(/\[WEATHER_CITY:[^\]]+\]/g, '')
+    .replace(/\[MAP_LOCATION:[^\]]+\]/g, '')
+    .trim();
   try {
     const spotifyMatch = safeContent.match(/\[SPOTIFY_RESULTS:(.*?)\]/s);
     if (spotifyMatch) {
@@ -1317,6 +1338,17 @@ function VideoPreviewCard({ name, uri, isDark, colors }: { name: string; uri?: s
           ) : null}
 
           {/* Spotify results card */}
+          {weatherCity ? (
+            <WeatherCard city={weatherCity} isDark={isDark} />
+          ) : null}
+          {mapLocationData ? (
+            <MapCard
+              location={mapLocationData.location}
+              lat={mapLocationData.lat}
+              lon={mapLocationData.lon}
+              isDark={isDark}
+            />
+          ) : null}
           {spotifyTracks && spotifyTracks.length > 0 ? (
             <SpotifyMusicCard
               tracks={spotifyTracks}
