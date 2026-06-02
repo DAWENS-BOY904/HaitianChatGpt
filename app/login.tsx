@@ -822,4 +822,3 @@ function GuestModalContent({ onStartGuest, onClose, isDark }: { onStartGuest: ()
     </View>
   );
 }
-fix user message pres long better only with ecopy,edit button function and lew press long message lan f messag lan bouje like pres long.
