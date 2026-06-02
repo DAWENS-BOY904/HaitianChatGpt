@@ -823,4 +823,3 @@ function GuestModalContent({ onStartGuest, onClose, isDark }: { onStartGuest: ()
   );
 }
 
-hello ai Add a weather widget in the chat — when the AI responds to weather-related questions (e.g. 'weather in Paris'), display a compact card with temperature, conditions, and a 3-day forecast using a free weather API like Open-Meteo (no key required) When the AI responds about a specific location or place (city, landmark, address), auto-detect and embed a small interactive map card below the response using OpenStreetMap iframe — no API key needed.

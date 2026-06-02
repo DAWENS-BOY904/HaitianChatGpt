@@ -1231,7 +1231,101 @@ function safeJsonStringify(obj: unknown): string {
   });
 }
 
-// ── Main Serve Function ────────────────────────────────────────────────────
+// ── Weather & Location Detection ──────────────────────────────────────────
+
+/**
+ * Detect if the user message is asking about weather for a specific city.
+ * Returns the city name or null.
+ */
+function detectWeatherQuery(text: string): string | null {
+  const t = text.toLowerCase().trim();
+  const weatherPatterns = [
+    /\bweather\b.*\bin\b\s+([a-zA-Z\s,'-]{2,30})/i,
+    /\bweather\b.*\bfor\b\s+([a-zA-Z\s,'-]{2,30})/i,
+    /\bhow.*\bweather\b.*\bin\b\s+([a-zA-Z\s,'-]{2,30})/i,
+    /\bwhat.*\bweather\b.*\bin\b\s+([a-zA-Z\s,'-]{2,30})/i,
+    /\btemperature\b.*\bin\b\s+([a-zA-Z\s,'-]{2,30})/i,
+    /\bforecast\b.*\bfor\b\s+([a-zA-Z\s,'-]{2,30})/i,
+    /\bforecast\b.*\bin\b\s+([a-zA-Z\s,'-]{2,30})/i,
+    /\brain.*\bin\b\s+([a-zA-Z\s,'-]{2,30})/i,
+    // French / Haitian Creole
+    /\btémps\b.*\bà\b\s+([a-zA-Z\s,'-]{2,30})/i,
+    /\bmeteo\b.*\bà\b\s+([a-zA-Z\s,'-]{2,30})/i,
+    /\btemps qu'il fait\b.*\bà\b\s+([a-zA-Z\s,'-]{2,30})/i,
+    /\btan\b.*\ban\b\s+([a-zA-Z\s,'-]{2,30})/i,
+    // Spanish
+    /\bclima\b.*\ben\b\s+([a-zA-Z\s,'-]{2,30})/i,
+    /\btempo\b.*\ben\b\s+([a-zA-Z\s,'-]{2,30})/i,
+  ];
+
+  for (const pattern of weatherPatterns) {
+    const m = text.match(pattern);
+    if (m && m[1]) {
+      const city = m[1].trim().replace(/[?!.,]+$/, '').trim();
+      if (city.length >= 2) return city;
+    }
+  }
+
+  // Simple fallback: "weather Paris" or "weather in Paris"
+  const simpleMatch = t.match(/(?:weather|forecast|temperature)(?:\s+in)?\s+([a-zA-Z][a-zA-Z\s'-]{1,28})/i);
+  if (simpleMatch && simpleMatch[1]) {
+    const city = simpleMatch[1].trim().replace(/[?!.,]+$/, '').trim();
+    if (city.length >= 2) return city;
+  }
+
+  return null;
+}
+
+/**
+ * Detect if the AI response mentions a specific city/location that warrants a map.
+ * Returns the location name or null.
+ */
+function detectLocationInResponse(responseText: string, userQuery: string): string | null {
+  const combined = userQuery.toLowerCase();
+  // Skip weather queries (already handled by WeatherCard)
+  if (/\bweather\b|\bforecast\b|\btemperature\b/.test(combined)) return null;
+
+  const locationPatterns = [
+    // User asking about a place
+    /(?:where is|where's|location of|tell me about|show me|visit|travel to|how to get to|directions to)\s+([A-Z][a-zA-Z\s,'-]{2,40})/i,
+    /(?:in|at|near|around|from|to)\s+([A-Z][a-zA-Z]{2,20}(?:,\s*[A-Z][a-zA-Z]{2,20})?)/,
+  ];
+
+  for (const pattern of locationPatterns) {
+    const m = userQuery.match(pattern);
+    if (m && m[1]) {
+      const loc = m[1].trim().replace(/[?!.,]+$/, '').trim();
+      if (loc.length >= 3 && !/\b(the|a|an|my|your|our|this|that|his|her|its|we|they|you|i)\b/i.test(loc)) {
+        return loc;
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Fetch geocoordinates for a city using Open-Meteo geocoding API (free, no key).
+ */
+async function geocodeCity(city: string): Promise<{ lat: number; lon: number; name: string } | null> {
+  try {
+    const res = await fetch(
+      `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=en&format=json`,
+      { signal: AbortSignal.timeout(4000) }
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    const loc = data.results?.[0];
+    if (!loc) return null;
+    return { lat: loc.latitude, lon: loc.longitude, name: loc.name };
+  } catch {
+    return null;
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+
+
 
 Deno.serve(async function(req: Request) {
   if (req.method === 'OPTIONS') {
@@ -1707,6 +1801,25 @@ Deno.serve(async function(req: Request) {
         const cleaned = cleanJsonActions(aiResponse.content);
         if (cleaned !== aiResponse.content) {
           aiResponse.content = cleaned || aiResponse.content;
+        }
+      }
+
+      // ── Append WEATHER_CITY tag if user asked about weather ────────────────
+      const weatherCity = detectWeatherQuery(lastUserContent);
+      if (weatherCity && aiResponse && aiResponse.content) {
+        aiResponse.content = aiResponse.content.trim() + `\n[WEATHER_CITY:${weatherCity}]`;
+      }
+
+      // ── Append MAP_LOCATION tag if user asked about a location ──────────────
+      if (!weatherCity && aiResponse && aiResponse.content) {
+        const locationName = detectLocationInResponse(aiResponse.content, lastUserContent);
+        if (locationName) {
+          // Try to geocode for precise coordinates
+          const coords = await geocodeCity(locationName).catch(() => null);
+          const mapData = coords
+            ? JSON.stringify({ location: coords.name, lat: coords.lat, lon: coords.lon })
+            : JSON.stringify({ location: locationName });
+          aiResponse.content = aiResponse.content.trim() + `\n[MAP_LOCATION:${mapData}]`;
         }
       }
     }
