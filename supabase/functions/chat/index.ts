@@ -1722,8 +1722,10 @@ Deno.serve(async function(req: Request) {
             domain: (() => { try { return new URL(img.link || img.url || '').hostname.replace('www.', ''); } catch { return ''; } })()
           })).filter((s: any) => s.url)
         );
+        // Image search: return ONLY the image data tag (no text prefix).
+        // The client renders images directly; the AI adds commentary only if needed.
         aiResponse = {
-          content: 'Men kek imaj mwen jwenn pou "' + searchQuery + '":\n\n[IMAGE_SEARCH_RESULTS:' + safeJsonStringify(searchResult.images) + ':IMAGE_SEARCH_END]\n\n[SOURCES]\n' + sourcesJson + '\n[/SOURCES]',
+          content: '[IMAGE_SEARCH_RESULTS:' + safeJsonStringify(searchResult.images) + ':IMAGE_SEARCH_END]\n\n[SOURCES]\n' + sourcesJson + '\n[/SOURCES]',
           model: 'image-search',
           tokens: 0,
         };
