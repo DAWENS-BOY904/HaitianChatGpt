@@ -822,4 +822,5 @@ function GuestModalContent({ onStartGuest, onClose, isDark }: { onStartGuest: ()
     </View>
   );
 }
-      hello ai if you see this please fix error when i send ai a img with tex or without its return message erorr fix ai can read real img fix all edg.
+
+please add image search function via unplash api and dislay in home with carousel it can be row 1 limit catouse 10 img and anba same please no keyword add must know that.
