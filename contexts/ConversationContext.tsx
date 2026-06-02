@@ -108,7 +108,7 @@ const SELF_HARM_KEYWORDS = [
   'pa anfom', 'feeling hopeless', 'hopeless',
 ];
 
-function generateSmartConversationTitle(firstMessage: string, hasImage: boolean): string {
+function generateFallbackTitle(firstMessage: string, hasImage: boolean): string {
   if (!firstMessage) return 'New Chat';
   const lower = firstMessage.toLowerCase();
   if (SELF_HARM_KEYWORDS.some(kw => lower.includes(kw))) return 'Safety Support';
@@ -135,6 +135,93 @@ function generateSmartConversationTitle(firstMessage: string, hasImage: boolean)
   if (lower.includes('recipe') || lower.includes('cook') || lower.includes('food')) return 'Recipe';
   const cleaned = firstMessage.replace(/[\r\n]+/g, ' ').trim();
   return cleaned.length <= 40 ? cleaned : cleaned.slice(0, 37) + '...';
+}
+
+async function generateAIConversationTitle(
+  firstMessage: string,
+  hasImage: boolean,
+  supabase: any
+): Promise<string> {
+  // Safety check — never send harmful content to title AI
+  const lower = firstMessage.toLowerCase();
+  if (SELF_HARM_KEYWORDS.some(kw => lower.includes(kw))) return 'Safety Support';
+
+  // Keep title generation fast with a hard timeout
+  try {
+    const titlePrompt = `Generate a concise 4-6 word title for this conversation. Reply with ONLY the title, no punctuation, no quotes, no explanation.\n\nUser message: "${firstMessage.slice(0, 200)}"${hasImage ? '\n(User also attached an image)' : ''}`;
+
+    const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+    const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
+
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData?.session?.access_token || anonKey;
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000); // 8s timeout
+
+    const response = await fetch(`${supabaseUrl}/functions/v1/chat`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+        'apikey': anonKey,
+      },
+      body: JSON.stringify({
+        messages: [{ role: 'user', content: titlePrompt }],
+        conversationId: 'title-gen-' + Date.now(),
+        aiModel: 'google-gemini',
+        isTitleGeneration: true,
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) return generateFallbackTitle(firstMessage, hasImage);
+
+    // Collect streamed response
+    let fullText = '';
+    const reader = response.body?.getReader();
+    if (reader) {
+      const decoder = new TextDecoder();
+      let buffer = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n'); buffer = lines.pop() || '';
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith('data:')) continue;
+          try {
+            const parsed = JSON.parse(trimmed.slice(5).trim());
+            if (parsed.done) continue;
+            fullText += parsed.content ?? parsed.token ?? '';
+          } catch (_e) {}
+        }
+      }
+    } else {
+      const text = await response.text();
+      for (const line of text.split('\n')) {
+        if (!line.trim().startsWith('data:')) continue;
+        try {
+          const parsed = JSON.parse(line.trim().slice(5).trim());
+          if (!parsed.done) fullText += parsed.content ?? parsed.token ?? '';
+        } catch (_e) {}
+      }
+    }
+
+    const cleaned = fullText
+      .replace(/["'*#_`]/g, '')
+      .replace(/^title[:\s]*/i, '')
+      .replace(/\n.*/s, '') // keep first line only
+      .trim();
+
+    if (cleaned.length >= 3 && cleaned.length <= 60) return cleaned;
+    return generateFallbackTitle(firstMessage, hasImage);
+  } catch (_e) {
+    return generateFallbackTitle(firstMessage, hasImage);
+  }
 }
 
 // ==================== WEB-ONLY TYPES (guarded by Platform.OS) ====================
@@ -886,7 +973,7 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
 
       if (!isTransientId) {
         if (messages.length === 0) {
-          const title = generateSmartConversationTitle(content, !!finalImageUrlFromResponse);
+          const title = await generateAIConversationTitle(content, !!finalImageUrlFromResponse, supabase);
           await updateConversationTitle(conversationId, title);
           const newConv: Conversation = { id: conversationId, title, createdAt: currentConversation?.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() };
           setConversations(prev => {
