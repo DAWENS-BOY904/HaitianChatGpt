@@ -822,3 +822,4 @@ function GuestModalContent({ onStartGuest, onClose, isDark }: { onStartGuest: ()
     </View>
   );
 }
+      hello ai if you see this please fix error when i send ai a img with tex or without its return message erorr fix ai can read real img fix all edg.
