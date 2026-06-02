@@ -822,3 +822,4 @@ function GuestModalContent({ onStartGuest, onClose, isDark }: { onStartGuest: ()
     </View>
   );
 }
+hello fix user message pres long with copy/edit button only and when pres long the message add effect message better press.
