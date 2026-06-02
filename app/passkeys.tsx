@@ -17,6 +17,50 @@ import { getSupabaseClient } from '@/template';
 import { useTheme } from '../hooks/useTheme';
 import * as LocalAuthentication from 'expo-local-authentication';
 
+// ── WebAuthn helpers (web only) ──────────────────────────────────────────────
+function bufferToBase64(buffer: ArrayBuffer): string {
+  return btoa(String.fromCharCode(...new Uint8Array(buffer)));
+}
+function isWebAuthnSupported(): boolean {
+  if (Platform.OS !== 'web') return false;
+  return typeof (globalThis as any).PublicKeyCredential !== 'undefined' &&
+    typeof navigator?.credentials?.create === 'function';
+}
+async function createWebAuthnCredential(userId: string, email: string): Promise<{ credentialId: string; error?: never } | { credentialId?: never; error: string }> {
+  try {
+    const challenge = new Uint8Array(32);
+    crypto.getRandomValues(challenge);
+    const credential = await navigator.credentials.create({
+      publicKey: {
+        challenge,
+        rp: { name: 'Dawinix AI', id: window.location.hostname },
+        user: {
+          id: new TextEncoder().encode(userId),
+          name: email,
+          displayName: email,
+        },
+        pubKeyCredParams: [
+          { type: 'public-key', alg: -7 },   // ES256
+          { type: 'public-key', alg: -257 },  // RS256
+        ],
+        authenticatorSelection: {
+          authenticatorAttachment: 'platform',
+          userVerification: 'required',
+          residentKey: 'preferred',
+        },
+        timeout: 60000,
+        attestation: 'none',
+      },
+    }) as PublicKeyCredential | null;
+    if (!credential) return { error: 'No credential returned.' };
+    const credentialId = bufferToBase64(credential.rawId);
+    return { credentialId };
+  } catch (e: any) {
+    if (e?.name === 'NotAllowedError') return { error: 'Cancelled by user.' };
+    return { error: e?.message || 'WebAuthn failed.' };
+  }
+}
+
 interface PasskeyRecord {
   id: string;
   key_name: string;
@@ -94,10 +138,67 @@ export default function PasskeysScreen() {
   }, [user]);
 
   const createPasskey = async () => {
-    if (Platform.OS === 'web') {
-      showAlert('Not supported', 'Passkeys require a native iOS or Android device.');
+    if (!user) {
+      showAlert('Sign in required', 'You must be signed in to create a passkey.');
       return;
     }
+
+    // ── WEB: WebAuthn via navigator.credentials.create ─────────────────────────────────────
+    if (Platform.OS === 'web') {
+      if (!isWebAuthnSupported()) {
+        showAlert(
+          'Not supported',
+          'Your browser does not support passkeys. Please use a modern browser (Chrome 108+, Safari 16+, Edge 108+) with a platform authenticator (Windows Hello, Touch ID, Face ID).'
+        );
+        return;
+      }
+      setCreating(true);
+      try {
+        const result = await createWebAuthnCredential(user.id, user.email || '');
+        if (result.error) {
+          if (result.error !== 'Cancelled by user.') {
+            showAlert('Error', result.error);
+          }
+          return;
+        }
+        const deviceLabel = (() => {
+          const ua = (typeof navigator !== 'undefined' ? navigator.userAgent : '').toLowerCase();
+          if (ua.includes('mac')) return 'Mac (Touch ID)';
+          if (ua.includes('windows')) return 'Windows Hello';
+          if (ua.includes('iphone') || ua.includes('ipad')) return 'iCloud Keychain';
+          if (ua.includes('android')) return 'Android Passkey';
+          return 'Browser Passkey';
+        })();
+        const passkeyValue = JSON.stringify({
+          platform: 'web',
+          device: deviceLabel,
+          createdAt: new Date().toISOString(),
+          biometricType: 'WebAuthn',
+          credentialId: result.credentialId,
+        });
+        const { data, error: dbErr } = await supabase
+          .from('user_api_keys')
+          .insert({
+            user_id: user.id,
+            key_name: 'passkey',
+            key_value: passkeyValue,
+            provider: 'webauthn',
+            is_active: true,
+          })
+          .select()
+          .single();
+        if (dbErr) throw dbErr;
+        setPasskeys(prev => [data as PasskeyRecord, ...prev]);
+        showAlert('Passkey created!', `Your passkey is saved for ${deviceLabel}. You can now sign in with it.`, [{ text: 'Done' }]);
+      } catch (e: any) {
+        showAlert('Error', e.message || 'Failed to create passkey.');
+      } finally {
+        setCreating(false);
+      }
+      return;
+    }
+
+    // ── NATIVE: Face ID / Touch ID via expo-local-authentication ─────────────────────────
     if (!biometricSupported) {
       showAlert(
         'Biometrics not available',
@@ -105,14 +206,9 @@ export default function PasskeysScreen() {
       );
       return;
     }
-    if (!user) {
-      showAlert('Sign in required', 'You must be signed in to create a passkey.');
-      return;
-    }
 
     setCreating(true);
     try {
-      // Use real Face ID / Touch ID biometric authentication
       const result = await LocalAuthentication.authenticateAsync({
         promptMessage: `Create passkey with ${biometricType}`,
         fallbackLabel: 'Use passcode',
@@ -129,7 +225,6 @@ export default function PasskeysScreen() {
         return;
       }
 
-      // Brief pause for UX
       await new Promise(r => setTimeout(r, 400));
 
       const deviceLabel = Platform.select({
@@ -385,21 +480,28 @@ export default function PasskeysScreen() {
           </View>
           <Text style={styles.emptyTitle}>Add a passkey</Text>
           <Text style={styles.emptyDesc}>
-            {biometricType === 'Face ID'
+            {Platform.OS === 'web'
+              ? isWebAuthnSupported()
+                ? 'Use your platform authenticator (Windows Hello, Touch ID, Face ID) to sign in faster and more securely.'
+                : 'Your browser does not support passkeys. Try Chrome 108+, Safari 16+, or Edge 108+ with a platform authenticator.'
+              : biometricType === 'Face ID'
               ? 'Use Face ID to sign in faster and more securely. Your passkey is stored in iCloud Keychain.'
               : biometricType === 'Touch ID' || biometricType === 'Fingerprint'
               ? `Use ${biometricType} to sign in faster and more securely.`
               : 'Passkeys are more secure than passwords and take less than a minute to add.'}
           </Text>
           <TouchableOpacity
-            style={[styles.createBtn, { width: '100%' }]}
+            style={[
+              styles.createBtn,
+              { width: '100%', opacity: (Platform.OS === 'web' && !isWebAuthnSupported()) ? 0.4 : 1 },
+            ]}
             onPress={createPasskey}
-            disabled={creating}
+            disabled={creating || (Platform.OS === 'web' && !isWebAuthnSupported())}
           >
             {creating
               ? <ActivityIndicator color="#FFF" />
               : <Text style={styles.createBtnText}>
-                  {biometricType !== 'Biometrics' ? `Create passkey with ${biometricType}` : 'Create a passkey'}
+                  {biometricType !== 'Biometrics' ? `Create passkey with ${biometricType}` : Platform.OS === 'web' ? 'Create a passkey' : 'Create a passkey'}
                 </Text>}
           </TouchableOpacity>
         </View>

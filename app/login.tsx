@@ -822,3 +822,4 @@ function GuestModalContent({ onStartGuest, onClose, isDark }: { onStartGuest: ()
     </View>
   );
 }
+hello ai please Auto-generate smarter conversation titles by sending the first user message to the AI edge function and asking it to produce a short 4-6 word descriptive title, then update the conversations table.
