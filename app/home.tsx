@@ -3755,80 +3755,124 @@ export default function HomeScreen() {
 
             {/* User message long-press menu — Copy only for media messages, Copy+Edit for text */}
             {msgMenuVisible && msgMenuMsg ? (() => {
-              const menuBg = isDark ? 'rgba(36,36,40,0.98)' : 'rgba(255,255,255,0.97)';
               const menuTextC = isDark ? '#FFFFFF' : '#000000';
               const menuSubC = isDark ? 'rgba(255,255,255,0.38)' : 'rgba(0,0,0,0.38)';
               const divC = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)';
               const createdAt = msgMenuMsg.created_at || msgMenuMsg.createdAt;
               const ts = createdAt ? new Date(createdAt) : new Date();
-              const dateLabel = 'Today, ' + ts.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+              const dateLabel = ts.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
               // Check if this message has media (image, file, video) — these cannot be edited
               const msgHasMedia = !!(msgMenuMsg.imageUrl || msgMenuMsg.image_url || msgMenuMsg.file_url ||
-                (msgMenuMsg.content && (msgMenuMsg.content.includes('[Attached file:') || msgMenuMsg.content.includes('[Video attached:'))));   
-              // Menu height based on items
-              const menuItemH = 50;
-              const menuH = (msgHasMedia ? 1 : 2) * menuItemH + 44; // header + items
+                (msgMenuMsg.content && (msgMenuMsg.content.includes('[Attached file:') || msgMenuMsg.content.includes('[Video attached:'))));
+              // Actions list
+              const menuActions = [
+                { id: 'copy', icon: 'copy-outline', label: 'Copy', destructive: false },
+                ...(!msgHasMedia ? [{ id: 'edit', icon: 'pencil-outline', label: 'Edit & Resend', destructive: false }] : []),
+                { id: 'share', icon: 'share-outline', label: 'Share', destructive: false },
+                { id: 'delete', icon: 'trash-outline', label: 'Delete', destructive: true },
+              ];
+              const menuW = 240;
+              const menuH = 44 + menuActions.length * 52;
               const SCREEN_H = Dimensions.get('window').height;
-              // Position: prefer just below the touched point, flip up if near bottom
-              const belowY = msgMenuPageY + 12;
-              const aboveY = msgMenuPageY - menuH - 12;
-              const finalTop = (belowY + menuH > SCREEN_H - 100) ? Math.max(80, aboveY) : Math.max(80, belowY);
+              const SCREEN_W = Dimensions.get('window').width;
+              const belowY = msgMenuPageY + 10;
+              const aboveY = msgMenuPageY - menuH - 10;
+              const finalTop = (belowY + menuH > SCREEN_H - 80) ? Math.max(60, aboveY) : Math.max(60, belowY);
+              const finalRight = 14;
               return (
                 <Modal visible={msgMenuVisible} transparent animationType="fade" onRequestClose={() => setMsgMenuVisible(false)}>
-                  {/* Transparent backdrop — no blur so chat stays visible */}
-                  <Pressable style={{ flex: 1, backgroundColor: 'transparent' }} onPress={() => setMsgMenuVisible(false)} />
-                  <View style={{ position: 'absolute', right: 14, top: finalTop, width: 220, borderRadius: 18, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: isDark ? 0.55 : 0.18, shadowRadius: 20, elevation: 20 }}>
+                  <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.18)' }} onPress={() => setMsgMenuVisible(false)} />
+                  <View style={{ position: 'absolute', right: finalRight, top: finalTop, width: menuW, borderRadius: 20, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: isDark ? 0.6 : 0.22, shadowRadius: 24, elevation: 24 }}>
                     {Platform.OS === 'ios' ? (
-                      <BlurView intensity={isDark ? 88 : 78} tint={isDark ? 'dark' : 'extraLight'} style={{ borderRadius: 18, overflow: 'hidden' }}>
-                        <View style={{ paddingHorizontal: 16, paddingTop: 11, paddingBottom: 8 }}>
-                          <Text style={{ color: menuSubC, fontSize: 12, fontWeight: '500' }}>{dateLabel}</Text>
+                      <BlurView intensity={isDark ? 90 : 82} tint={isDark ? 'dark' : 'extraLight'} style={{ borderRadius: 20, overflow: 'hidden' }}>
+                        {/* Timestamp header */}
+                        <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: divC }}>
+                          <Text style={{ color: menuSubC, fontSize: 11, fontWeight: '600', letterSpacing: 0.3 }}>Sent at {dateLabel}</Text>
                         </View>
-                        {/* Copy */}
-                        <TouchableOpacity
-                          style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13, gap: 12 }}
-                          onPress={async () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setMsgMenuVisible(false); await Clipboard.setStringAsync(msgMenuMsg.content || ''); }}
-                          activeOpacity={0.6}
-                        >
-                          <Ionicons name="copy-outline" size={20} color={menuTextC} />
-                          <Text style={{ fontSize: 17, color: menuTextC }}>Copy</Text>
-                        </TouchableOpacity>
-                        {/* Edit */}
-                        {!msgHasMedia ? (
+                        {menuActions.map((action, idx) => (
                           <TouchableOpacity
-                            style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13, gap: 12 }}
-                            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setMsgMenuVisible(false); setTimeout(() => { handleEditMessage(msgMenuMsg.id, msgMenuMsg.content || ''); setTimeout(() => inputRef.current?.focus(), 80); }, 50); }}
-                            activeOpacity={0.6}
+                            key={action.id}
+                            style={[
+                              { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, gap: 14 },
+                              idx < menuActions.length - 1 && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: divC },
+                            ]}
+                            onPress={async () => {
+                              Haptics.impactAsync(action.destructive ? Haptics.ImpactFeedbackStyle.Heavy : Haptics.ImpactFeedbackStyle.Light);
+                              setMsgMenuVisible(false);
+                              if (action.id === 'copy') {
+                                await Clipboard.setStringAsync(msgMenuMsg.content || '');
+                              } else if (action.id === 'edit') {
+                                setTimeout(() => { handleEditMessage(msgMenuMsg.id, msgMenuMsg.content || ''); setTimeout(() => inputRef.current?.focus(), 80); }, 60);
+                              } else if (action.id === 'share') {
+                                Share.share({ message: msgMenuMsg.content || '' }).catch(() => {});
+                              } else if (action.id === 'delete') {
+                                showAlert('Delete message?', 'This message and the AI response will be removed.', [
+                                  { text: 'Cancel', style: 'cancel' },
+                                  { text: 'Delete', style: 'destructive', onPress: async () => {
+                                    const msgIdx = (messages || []).findIndex((m: any) => m.id === msgMenuMsg.id);
+                                    const toRemove = msgIdx >= 0 ? (messages || []).slice(msgIdx) : [msgMenuMsg];
+                                    for (const m of toRemove) {
+                                      try { await supabase.from('messages').delete().eq('id', m.id); } catch (_e) {}
+                                    }
+                                    if (currentConversation?.id) selectConversation(currentConversation.id);
+                                  }},
+                                ]);
+                              }
+                            }}
+                            activeOpacity={0.65}
                           >
-                            <Ionicons name="pencil-outline" size={20} color={menuTextC} />
-                            <Text style={{ fontSize: 17, color: menuTextC }}>Edit</Text>
+                            <View style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: action.destructive ? 'rgba(255,69,58,0.12)' : (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)'), alignItems: 'center', justifyContent: 'center' }}>
+                              <Ionicons name={action.icon as any} size={17} color={action.destructive ? '#FF453A' : menuTextC} />
+                            </View>
+                            <Text style={{ fontSize: 16, color: action.destructive ? '#FF453A' : menuTextC, fontWeight: '500', flex: 1 }}>{action.label}</Text>
+                            {action.id === 'edit' && <Ionicons name="arrow-forward-outline" size={14} color={menuSubC} />}
                           </TouchableOpacity>
-                        ) : null}
+                        ))}
                       </BlurView>
                     ) : (
-                      <View style={{ backgroundColor: isDark ? 'rgba(36,36,40,0.98)' : 'rgba(255,255,255,0.98)', borderRadius: 18 }}>
-                        <View style={{ paddingHorizontal: 16, paddingTop: 11, paddingBottom: 8 }}>
-                          <Text style={{ color: menuSubC, fontSize: 12, fontWeight: '500' }}>{dateLabel}</Text>
+                      <View style={{ backgroundColor: isDark ? '#2C2C30' : '#FFFFFF', borderRadius: 20 }}>
+                        <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: divC }}>
+                          <Text style={{ color: menuSubC, fontSize: 11, fontWeight: '600', letterSpacing: 0.3 }}>Sent at {dateLabel}</Text>
                         </View>
-                        {/* Copy */}
-                        <TouchableOpacity
-                          style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13, gap: 12 }}
-                          onPress={async () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setMsgMenuVisible(false); await Clipboard.setStringAsync(msgMenuMsg.content || ''); }}
-                          activeOpacity={0.6}
-                        >
-                          <Ionicons name="copy-outline" size={20} color={menuTextC} />
-                          <Text style={{ fontSize: 17, color: menuTextC }}>Copy</Text>
-                        </TouchableOpacity>
-                        {/* Edit */}
-                        {!msgHasMedia ? (
+                        {menuActions.map((action, idx) => (
                           <TouchableOpacity
-                            style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13, gap: 12 }}
-                            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setMsgMenuVisible(false); setTimeout(() => { handleEditMessage(msgMenuMsg.id, msgMenuMsg.content || ''); setTimeout(() => inputRef.current?.focus(), 80); }, 50); }}
-                            activeOpacity={0.6}
+                            key={action.id}
+                            style={[
+                              { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, gap: 14 },
+                              idx < menuActions.length - 1 && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: divC },
+                            ]}
+                            onPress={async () => {
+                              Haptics.impactAsync(action.destructive ? Haptics.ImpactFeedbackStyle.Heavy : Haptics.ImpactFeedbackStyle.Light);
+                              setMsgMenuVisible(false);
+                              if (action.id === 'copy') {
+                                await Clipboard.setStringAsync(msgMenuMsg.content || '');
+                              } else if (action.id === 'edit') {
+                                setTimeout(() => { handleEditMessage(msgMenuMsg.id, msgMenuMsg.content || ''); setTimeout(() => inputRef.current?.focus(), 80); }, 60);
+                              } else if (action.id === 'share') {
+                                Share.share({ message: msgMenuMsg.content || '' }).catch(() => {});
+                              } else if (action.id === 'delete') {
+                                showAlert('Delete message?', 'This message and the AI response will be removed.', [
+                                  { text: 'Cancel', style: 'cancel' },
+                                  { text: 'Delete', style: 'destructive', onPress: async () => {
+                                    const msgIdx = (messages || []).findIndex((m: any) => m.id === msgMenuMsg.id);
+                                    const toRemove = msgIdx >= 0 ? (messages || []).slice(msgIdx) : [msgMenuMsg];
+                                    for (const m of toRemove) {
+                                      try { await supabase.from('messages').delete().eq('id', m.id); } catch (_e) {}
+                                    }
+                                    if (currentConversation?.id) selectConversation(currentConversation.id);
+                                  }},
+                                ]);
+                              }
+                            }}
+                            activeOpacity={0.65}
                           >
-                            <Ionicons name="pencil-outline" size={20} color={menuTextC} />
-                            <Text style={{ fontSize: 17, color: menuTextC }}>Edit</Text>
+                            <View style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: action.destructive ? 'rgba(255,69,58,0.12)' : (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)'), alignItems: 'center', justifyContent: 'center' }}>
+                              <Ionicons name={action.icon as any} size={17} color={action.destructive ? '#FF453A' : menuTextC} />
+                            </View>
+                            <Text style={{ fontSize: 16, color: action.destructive ? '#FF453A' : menuTextC, fontWeight: '500', flex: 1 }}>{action.label}</Text>
+                            {action.id === 'edit' && <Ionicons name="arrow-forward-outline" size={14} color={menuSubC} />}
                           </TouchableOpacity>
-                        ) : null}
+                        ))}
                       </View>
                     )}
                   </View>

@@ -822,5 +822,3 @@ function GuestModalContent({ onStartGuest, onClose, isDark }: { onStartGuest: ()
     </View>
   );
 }
-
-please fix ai img serach never return message only img for message only if the ai want to explain and fix edit message in home must be real edit-recall edg for the new message and fix user message press long better.
