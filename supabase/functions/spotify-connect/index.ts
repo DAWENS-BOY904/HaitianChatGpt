@@ -152,10 +152,16 @@ serve(async (req: Request) => {
         return {};
       };
 
-      const doSearch = async (token: string): Promise<any> => {
-        const searchUrl = `https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=track,playlist&limit=8&market=US`;
+      const doSearch = async (token: string, useMarket = true): Promise<any> => {
+        const marketParam = useMarket ? '&market=US' : '';
+        const searchUrl = `https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=track,playlist&limit=8${marketParam}`;
         try {
           const res = await fetch(searchUrl, { headers: { Authorization: `Bearer ${token}` } });
+          if (res.status === 403 && useMarket) {
+            // Retry without market restriction — some tokens don't allow market filtering
+            console.log('[spotify-connect] 403 with market=US, retrying without market param');
+            return doSearch(token, false);
+          }
           if (!res.ok) {
             console.error('[spotify-connect] search HTTP error:', res.status);
             return {};

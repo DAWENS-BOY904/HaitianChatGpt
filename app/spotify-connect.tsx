@@ -799,10 +799,3 @@ const spStyles = StyleSheet.create({
   sectionTitle: { fontSize: 22, fontWeight: '700', paddingHorizontal: 16, marginBottom: 12 },
   infoCard: { marginHorizontal: 16, borderRadius: 20, overflow: 'hidden' },
 });
-please ai fix error {
-  "eventMessage": "[spotify-connect] search HTTP error: \u001b[33m403\u001b[39m\n",
-  "functionId": "spotify-connect",
-  "id": "c965128e-b932-4bec-88d0-ea910e9aff61",
-  "logLevel": "ERROR",
-  "timestamp": 1780363152
-}.
