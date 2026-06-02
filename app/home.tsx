@@ -102,6 +102,78 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // ThinkingIndicator is now imported from components/ThinkingIndicator.tsx
 
+// ── Unsplash Home Carousels ──────────────────────────────────────────────────────
+const UNSPLASH_ROWS: Array<{ label: string; photos: Array<{ id: string; alt: string }> }> = [
+  {
+    label: 'Discover',
+    photos: [
+      { id: 'photo-1506905925346-21bda4d32df4', alt: 'Mountain sunset' },
+      { id: 'photo-1476514525535-07fb3b4ae5f1', alt: 'Calm lake' },
+      { id: 'photo-1464822759023-fed622ff2c3b', alt: 'Green forest' },
+      { id: 'photo-1498049794561-7780e7231661', alt: 'City at night' },
+      { id: 'photo-1519681393784-d120267933ba', alt: 'Snowy peak' },
+      { id: 'photo-1559131397-f94da358f7ca', alt: 'Wildflowers' },
+      { id: 'photo-1449495169669-7b118f960251', alt: 'Ocean waves' },
+      { id: 'photo-1517248135467-4c7edcad34c4', alt: 'Interior space' },
+      { id: 'photo-1504639725590-34d0984388bd', alt: 'Architecture' },
+      { id: 'photo-1500534314209-a25ddb2bd429', alt: 'Desert road' },
+    ],
+  },
+  {
+    label: 'Trending',
+    photos: [
+      { id: 'photo-1519389950473-47ba0277781c', alt: 'Tech workspace' },
+      { id: 'photo-1496181133206-80ce9b88a853', alt: 'Laptop' },
+      { id: 'photo-1477959858617-67f85cf4f1df', alt: 'City skyline' },
+      { id: 'photo-1551288049-bebda4e38f71', alt: 'Developer desk' },
+      { id: 'photo-1518770660439-4636190af475', alt: 'Circuit board' },
+      { id: 'photo-1536240478700-b869ad10e09c', alt: 'Abstract art' },
+      { id: 'photo-1434394354979-a235cd36269d', alt: 'Mountain trail' },
+      { id: 'photo-1513364776144-60967b0f800f', alt: 'Paris street' },
+      { id: 'photo-1529333166437-7750a6dd5a70', alt: 'Coffee shop' },
+      { id: 'photo-1455459839431-2ea4894e9db5', alt: 'Neon lights' },
+    ],
+  },
+];
+
+const UnsplashHomeCarousel = memo(function UnsplashHomeCarousel({ isDark, colors, onImagePress }: { isDark: boolean; colors: any; onImagePress?: (url: string) => void }) {
+  return (
+    <View style={{ paddingBottom: 10 }}>
+      {UNSPLASH_ROWS.map((row) => (
+        <View key={row.label} style={{ marginBottom: 12 }}>
+          <Text style={{ color: colors.textSecondary, fontSize: 11, fontWeight: '600', letterSpacing: 0.5, paddingHorizontal: 18, marginBottom: 8, textTransform: 'uppercase' }}>
+            {row.label}
+          </Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ paddingHorizontal: 16, gap: 8 }}
+          >
+            {row.photos.map((photo, idx) => {
+              const uri = `https://images.unsplash.com/${photo.id}?w=300&h=200&q=80&fit=crop`;
+              return (
+                <TouchableOpacity
+                  key={`${row.label}-${idx}`}
+                  activeOpacity={0.85}
+                  onPress={() => onImagePress?.(uri)}
+                  style={{ borderRadius: 14, overflow: 'hidden', width: 130, height: 90, backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA' }}
+                >
+                  <ExpoImage
+                    source={{ uri }}
+                    style={{ width: 130, height: 90 }}
+                    contentFit="cover"
+                    transition={200}
+                  />
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+      ))}
+    </View>
+  );
+});
+
 // ── Deep Researchs Progress Card  ──────────────────────────────────────────────
 const DeepResearchCard = memo(function DeepResearchCard({ step, label, done, colors }: { step: number; label: string; done: boolean; colors: any }) {
   const pulse = useRef(new Animated.Value(0.5)).current;
@@ -2910,6 +2982,15 @@ export default function HomeScreen() {
                         </View>
                       ) : (
                         <View style={{ flex: 1, justifyContent: 'flex-end' }}>
+                          <UnsplashHomeCarousel
+                            isDark={isDark}
+                            colors={colors}
+                            onImagePress={(url) => {
+                              const media: MediaFile = { type: 'image', uri: url, name: 'unsplash.jpg', mimeType: 'image/jpeg' };
+                              setSelectedMedia(prev => [...prev, media]);
+                              setTimeout(() => inputRef.current?.focus(), 80);
+                            }}
+                          />
                           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 14, gap: 10 }}>
                             {smartSuggestions.map((s, i) => {
                               const anim = suggestionAnims[i] || { opacity: new Animated.Value(1), translateY: new Animated.Value(0) };
