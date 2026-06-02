@@ -822,3 +822,4 @@ function GuestModalContent({ onStartGuest, onClose, isDark }: { onStartGuest: ()
     </View>
   );
 }
+hello ai can you fix theme light/dark auto saved and In app/passkeys., add web passkey support using the WebAuthn API (navigator.credentials.create) so users on web browsers can register a platform authenticator (Windows Hello, Touch ID on Mac) and save the credential ID to user_api_keys, with a fallback message for unsupported browsers.
