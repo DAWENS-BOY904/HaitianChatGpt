@@ -1,9 +1,13 @@
 // AI Provider Service - Handles all AI model integrations (PRODUCTION-READY 2026)
 // Compatible with Deno, Node.js (18+), and modern browsers
 
+type AIMessagePart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string } };
+
 interface AIMessage {
   role: 'system' | 'user' | 'assistant';
-  content: string;
+  content: string | AIMessagePart[];
   image_url?: string;
 }
 
@@ -110,7 +114,7 @@ class RateLimiter {
 const rateLimiter = new RateLimiter();
 
 // ── Input sanitization ───────────────────────────────────────────────────
-function sanitizeMessage(content: string): string {
+function sanitizeTextContent(content: string): string {
   // Remove potential XSS vectors while preserving legitimate content
   return content
     .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
@@ -119,10 +123,40 @@ function sanitizeMessage(content: string): string {
     .trim();
 }
 
+function sanitizeMessage(content: string): string {
+  return sanitizeTextContent(content);
+}
+
 function sanitizeMessages(messages: AIMessage[]): AIMessage[] {
   return messages.map(m => ({
     ...m,
-    content: sanitizeMessage(m.content),
+    content: typeof m.content === 'string'
+      ? sanitizeTextContent(m.content)
+      : m.content.map(part => {
+          if (part.type === 'text') return { ...part, text: sanitizeTextContent(part.text || '') };
+          return part; // image_url parts pass through unchanged
+        }),
+  }));
+}
+
+/**
+ * Convert AIMessage content to a flat string (for text-only providers)
+ */
+function flattenContent(content: string | AIMessagePart[]): string {
+  if (typeof content === 'string') return content;
+  return content
+    .filter(p => p.type === 'text')
+    .map(p => (p as { type: 'text'; text: string }).text)
+    .join(' ');
+}
+
+/**
+ * Build OpenAI-compatible message array (supports multimodal content)
+ */
+function toOpenAIMessages(messages: AIMessage[]): Array<{ role: string; content: string | Array<any> }> {
+  return sanitizeMessages(messages).map(m => ({
+    role: m.role,
+    content: m.content, // pass arrays as-is for vision support
   }));
 }
 
@@ -199,7 +233,7 @@ export async function callOnSpaceAI(messages: AIMessage[]): Promise<AIResponse> 
         },
         body: JSON.stringify({
           model,
-          messages: sanitizeMessages(messages).map(m => ({ role: m.role, content: m.content })),
+          messages: toOpenAIMessages(messages),
           temperature: 0.7,
           max_tokens: 4096,
           stream: false,
@@ -246,7 +280,7 @@ export async function callOpenAI(messages: AIMessage[]): Promise<AIResponse> {
       },
       body: JSON.stringify({
         model: CONFIG.DEFAULT_TEXT_MODEL,
-        messages: sanitizeMessages(messages).map(m => ({ role: m.role, content: m.content })),
+        messages: toOpenAIMessages(messages),
         temperature: 0.7,
         max_tokens: 4096,
       }),
@@ -287,20 +321,42 @@ export async function callGemini(
     const requestBody: any = {
       contents: sanitizedMessages
         .filter(m => m.role !== 'system')
-        .map(m => ({
-          role: m.role === 'assistant' ? 'model' : 'user',
-          parts: [{ text: m.content }],
-        })),
+        .map(m => {
+          // Build Gemini-compatible parts (supports inline images)
+          let parts: any[];
+          if (Array.isArray(m.content)) {
+            parts = m.content.map((part: AIMessagePart) => {
+              if (part.type === 'image_url') {
+                const url = part.image_url.url;
+                if (url.startsWith('data:image/')) {
+                  const match = url.match(/^data:(image\/[a-z+]+);base64,(.+)$/);
+                  if (match) {
+                    return { inlineData: { mimeType: match[1], data: match[2] } };
+                  }
+                }
+                // For remote URLs, use the url type if supported, else skip
+                return { text: `[Image: ${url}]` };
+              }
+              return { text: (part as any).text || '' };
+            }).filter(Boolean);
+          } else {
+            parts = [{ text: m.content || '' }];
+          }
+          return {
+            role: m.role === 'assistant' ? 'model' : 'user',
+            parts,
+          };
+        }),
       generationConfig: {
         maxOutputTokens: 4096,
         temperature: 0.7,
       },
     };
 
-    const systemMessage = sanitizedMessages.find(m => m.role === 'system');
-    if (systemMessage) {
+    const systemInstruction = sanitizedMessages.find(m => m.role === 'system');
+    if (systemInstruction) {
       requestBody.system_instruction = {
-        parts: [{ text: systemMessage.content }]
+        parts: [{ text: flattenContent(systemInstruction.content) }]
       };
     }
 
@@ -341,12 +397,29 @@ export async function callClaude(messages: AIMessage[]): Promise<AIResponse> {
 
   try {
     const sanitizedMessages = sanitizeMessages(messages);
-    const systemMessage = sanitizedMessages.find(m => m.role === 'system')?.content;
+    const systemMessage = flattenContent(sanitizedMessages.find(m => m.role === 'system')?.content ?? '');
     const conversationMessages = sanitizedMessages
       .filter(m => m.role !== 'system')
       .map(m => ({
         role: m.role === 'assistant' ? ('assistant' as const) : ('user' as const),
-        content: m.content || '',
+        // Claude supports vision via content arrays — pass multimodal as-is when available
+        content: Array.isArray(m.content)
+          ? m.content.map((p: AIMessagePart) => {
+              if (p.type === 'image_url') {
+                return {
+                  type: 'image' as const,
+                  source: {
+                    type: 'base64' as const,
+                    media_type: 'image/jpeg' as const,
+                    data: p.image_url.url.startsWith('data:')
+                      ? p.image_url.url.replace(/^data:image\/[a-z+]+;base64,/, '')
+                      : '',
+                  },
+                };
+              }
+              return { type: 'text' as const, text: (p as any).text || '' };
+            })
+          : (m.content || ''),
       }));
 
     if (conversationMessages.length === 0) {
@@ -405,7 +478,8 @@ export async function callGroq(messages: AIMessage[]): Promise<AIResponse> {
         model: 'llama-3.3-70b-versatile',
         messages: sanitizeMessages(messages).map(m => ({
           role: m.role,
-          content: m.content || '',
+          // Groq is text-only — flatten any multimodal content to text
+          content: flattenContent(m.content) || '',
         })),
         temperature: 0.6,
         max_completion_tokens: 4000,
