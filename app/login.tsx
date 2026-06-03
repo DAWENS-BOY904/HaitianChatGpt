@@ -822,4 +822,3 @@ function GuestModalContent({ onStartGuest, onClose, isDark }: { onStartGuest: ()
     </View>
   );
 }
-for google login i want to use my own google console login not supabase function login please refix and set all function i will replace.
