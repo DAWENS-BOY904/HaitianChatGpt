@@ -36,7 +36,7 @@ const PUBLISHED_WEB_URL = 'https://dawinix.com';
 function getWebCallbackUrl(): string {
   if (typeof window !== 'undefined') {
     const origin = window.location.origin;
-    const isTrustedOrigin = origin.includes('onspace.app') || origin.includes('dawinixht');
+    const isTrustedOrigin = origin.includes('onspace.app') || origin.includes('dawinix');
     if (isTrustedOrigin) return `${origin}/auth/callback`;
   }
   return `${PUBLISHED_WEB_URL}/auth/callback`;
@@ -162,7 +162,7 @@ async function signInWithGoogleBrowser(origin: 'web' | 'native' = 'web'): Promis
           access_type: 'offline',
           prompt: 'select_account',
           // Pass your web client ID explicitly so Google uses your own OAuth app
-          ...(GOOGLE_WEB_CLIENT_ID !== 'YOUR_WEB_CLIENT_ID.apps.googleusercontent.com'
+          ...(GOOGLE_WEB_CLIENT_ID !== '153408485563-rlq4fqkp66lsapggf7hr017vkbkjgipd.apps.googleusercontent.com'
             ? { client_id: GOOGLE_WEB_CLIENT_ID }
             : {}),
         },
