@@ -822,3 +822,12 @@ function GuestModalContent({ onStartGuest, onClose, isDark }: { onStartGuest: ()
     </View>
   );
 }
+hello ai can you please ffix ai generate images real ai says its cant generate images and also fix {
+  "eventMessage": "POST | 400 | http://njpuoozygqtpvlzhnjpu.backend.onspace.ai/functions/v1/chat | Bad Request",
+  "functionId": "chat",
+  "id": "9459c83f-8612-47b3-9871-fe20e791f106",
+  "logLevel": "ERROR",
+  "method": "POST",
+  "statusCode": 400,
+  "timestamp": 1780482328
+} please dont skip.
