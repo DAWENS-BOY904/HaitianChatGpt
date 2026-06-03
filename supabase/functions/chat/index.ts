@@ -1372,19 +1372,16 @@ Deno.serve(async function(req: Request) {
       aiModel = 'onspace-ai';
     }
 
-    // Allow guest-session and local- prefixed IDs in addition to valid UUIDs
-    // If conversationId is missing/undefined, generate a guest UUID rather than hard-rejecting
+    // Allow any non-empty string as conversationId (UUID, guest-, local-, or any custom ID)
+    // If conversationId is missing/undefined, generate one rather than hard-rejecting
     if (!conversationId) {
       console.log('[chat] conversationId missing — generating guest UUID');
       conversationId = 'guest-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
     }
-    const isGuestConvId = typeof conversationId === 'string' && (conversationId.startsWith('guest-') || conversationId.startsWith('local-'));
-    if (!isValidUUID(conversationId) && !isGuestConvId) {
-      console.log('[chat] Invalid conversationId:', conversationId);
-      return new Response(
-        JSON.stringify({ error: 'Valid conversationId (UUID or guest-/local- prefix) is required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    const isGuestConvId = typeof conversationId === 'string' && !isValidUUID(conversationId);
+    // Accept all conversationId formats — UUID or any non-empty string
+    if (!conversationId || typeof conversationId !== 'string' || conversationId.trim().length === 0) {
+      conversationId = 'guest-' + Date.now();
     }
 
     const messages: ChatMessage[] = [];
@@ -1866,7 +1863,7 @@ Deno.serve(async function(req: Request) {
     }
 
     try {
-      if (user && !conversationId.startsWith('guest-') && !conversationId.startsWith('local-')) {
+      if (user && isValidUUID(conversationId)) {
         await supabaseAdmin
           .from('conversations')
           .update({ updated_at: new Date().toISOString() })

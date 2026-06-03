@@ -822,7 +822,7 @@ export async function generateImageWithStabilityAI(prompt: string): Promise<{
 }
 
 /**
- * OnSpace AI Image Generation via chat completions
+ * OnSpace AI Image Generation via dedicated image endpoint
  */
 export async function generateImageWithOnSpaceAI(prompt: string): Promise<{
   imageUrl?: string;
@@ -837,15 +837,75 @@ export async function generateImageWithOnSpaceAI(prompt: string): Promise<{
 
   const enhancedPrompt = buildEnhancedImagePrompt(prompt);
 
-  const imageModels = [
-    'google/gemini-2.0-flash-exp',
-    'google/gemini-2.5-flash',
-    'google/gemini-3-flash-preview',
+  // Try the dedicated image generation endpoint first
+  const imageEndpoints = [
+    {
+      url: `${baseUrl}/images/generations`,
+      body: {
+        model: 'dall-e-3',
+        prompt: enhancedPrompt.slice(0, 4000),
+        n: 1,
+        size: '1024x1024',
+        quality: 'standard',
+        response_format: 'url',
+      },
+    },
+    {
+      url: `${baseUrl}/images/generations`,
+      body: {
+        model: 'dall-e-2',
+        prompt: enhancedPrompt.slice(0, 1000),
+        n: 1,
+        size: '1024x1024',
+        response_format: 'url',
+      },
+    },
   ];
 
-  for (const model of imageModels) {
+  for (const endpoint of imageEndpoints) {
     try {
-      console.log(`[OnSpace AI Image] Trying model: ${model}`);
+      console.log(`[OnSpace AI Image] Trying ${endpoint.url} with model ${endpoint.body.model}`);
+      const response = await fetch(endpoint.url, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(endpoint.body),
+        signal: createTimeoutSignal(CONFIG.IMAGE_TIMEOUT_MS),
+      });
+
+      if (!response.ok) {
+        const errText = await response.text().catch(() => response.statusText);
+        console.log(`[OnSpace AI Image] ${endpoint.body.model} failed (${response.status}): ${errText.slice(0, 120)}`);
+        continue;
+      }
+
+      const data = await response.json();
+      const imageResult = data.data?.[0];
+      if (imageResult?.url) {
+        console.log(`[OnSpace AI Image] Success with ${endpoint.body.model}!`);
+        return { imageUrl: imageResult.url };
+      }
+      if (imageResult?.b64_json) {
+        return { imageUrl: `data:image/png;base64,${imageResult.b64_json}` };
+      }
+
+      console.log(`[OnSpace AI Image] ${endpoint.body.model} returned no image data`);
+    } catch (e: any) {
+      console.log(`[OnSpace AI Image] ${endpoint.body.model} exception:`, e.message);
+    }
+  }
+
+  // Fallback: try chat completions asking for image
+  const chatModels = [
+    'google/gemini-2.0-flash-exp',
+    'google/gemini-2.5-flash',
+  ];
+
+  for (const model of chatModels) {
+    try {
+      console.log(`[OnSpace AI Image] Trying chat model: ${model}`);
       const response = await fetch(`${baseUrl}/chat/completions`, {
         method: 'POST',
         headers: {
@@ -1124,14 +1184,15 @@ export async function generateImageSmart(
   }
 
   // Try providers in order, return on first success
+  // OnSpace AI DALL-E endpoint is tried first as it's the most reliable
   const providers = [
+    { name: 'onspace-ai', fn: () => generateImageWithOnSpaceAI(prompt) },
     { name: 'gemini-nano-banana-2', fn: () => generateImageWithGeminiOnSpace(prompt) },
     { name: 'dalle-3', fn: () => generateImageWithDalle(prompt) },
     { name: 'elevenlabs', fn: () => generateImageWithElevenLabs(prompt) },
     { name: 'midjourney', fn: () => generateImageWithMidjourney(prompt) },
     { name: 'stability-ai', fn: () => generateImageWithStabilityAI(prompt) },
     { name: 'gemini-image', fn: () => generateImageWithGemini(prompt) },
-    { name: 'onspace-ai', fn: () => generateImageWithOnSpaceAI(prompt) },
   ];
 
   for (const provider of providers) {
