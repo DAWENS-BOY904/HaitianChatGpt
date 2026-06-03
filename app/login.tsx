@@ -822,3 +822,4 @@ function GuestModalContent({ onStartGuest, onClose, isDark }: { onStartGuest: ()
     </View>
   );
 }
+Implement a Service Worker to keep the AI streaming fetch alive even when the tab is hidden or the user navigates away — the worker intercepts the /functions/v1/chat request and saves chunks to IndexedDB, which ChatPage reads on return.
