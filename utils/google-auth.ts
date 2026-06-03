@@ -27,7 +27,7 @@ import * as WebBrowser from './web-browser';
 // ── YOUR GOOGLE CLIENT IDs ─────────────────────────────────────────────────
 // Replace these with your real values from Google Cloud Console
 const GOOGLE_WEB_CLIENT_ID   = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID   || 'YOUR_WEB_CLIENT_ID.apps.googleusercontent.com';
-const GOOGLE_IOS_CLIENT_ID   = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID   || 'YOUR_IOS_CLIENT_ID.apps.googleusercontent.com';
+const GOOGLE_IOS_CLIENT_ID   = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID   || '153408485563-5nom14bpg7re9m36pk91ndv45vqpcvsv.apps.googleusercontent.com';
 
 // ── App scheme ─────────────────────────────────────────────────────────────
 const APP_SCHEME = 'dawinixht';
