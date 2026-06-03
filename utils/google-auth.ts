@@ -30,8 +30,8 @@ const GOOGLE_WEB_CLIENT_ID   = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID   ||
 const GOOGLE_IOS_CLIENT_ID   = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID   || '153408485563-5nom14bpg7re9m36pk91ndv45vqpcvsv.apps.googleusercontent.com';
 
 // ── App scheme ─────────────────────────────────────────────────────────────
-const APP_SCHEME = 'dawinixht';
-const PUBLISHED_WEB_URL = 'https://dawinixht.onspace.app';
+const APP_SCHEME = 'dawinix';
+const PUBLISHED_WEB_URL = 'https://dawinix.com';
 
 function getWebCallbackUrl(): string {
   if (typeof window !== 'undefined') {
