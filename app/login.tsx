@@ -822,3 +822,4 @@ function GuestModalContent({ onStartGuest, onClose, isDark }: { onStartGuest: ()
     </View>
   );
 }
+hello ai can you dont skip please Create a GOOGLE_OAUTH_SETUP.md guide from login app for web integration fetch and Fix Apple Sign-In in LoginPage — update the signInWithApple function in lib/auth to use the correct Apple OAuth provider configuration with the proper redirect URL and scopes.
