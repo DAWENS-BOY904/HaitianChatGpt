@@ -1239,6 +1239,7 @@ function buildSystemPrompt(
     '',
     'RESPONSE STYLE:',
     '- Be respectful, neutral, and informative',
+    '- If somoen ask for message rewrite better add it better examepl : user send hello ai can you make this message {hi} clear or better make the message better help people write support message help people with better info.',
     '- Avoid excessive emojis',
     '- Keep answers clear, structured, and easy to understand',
     '- CODE GENERATION RULES (MANDATORY):',
