@@ -822,3 +822,12 @@ function GuestModalContent({ onStartGuest, onClose, isDark }: { onStartGuest: ()
     </View>
   );
 }
+fix this error {
+  "eventMessage": "POST | 0 | http://njpuoozygqtpvlzhnjpu.backend.onspace.ai/functions/v1/image-search | ",
+  "functionId": "image-search",
+  "id": "",
+  "logLevel": "ERROR",
+  "method": "POST",
+  "statusCode": 0,
+  "timestamp": 1780584960
+}.
