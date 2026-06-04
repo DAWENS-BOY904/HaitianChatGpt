@@ -849,6 +849,43 @@ function detectAndInjectApiVersions(userMessage: string): string {
   return '\n==============================\nDETECTED THIRD-PARTY APIs:\n' + lines + '\nCRITICAL: Use ONLY these exact version numbers.\n==============================';
 }
 
+// ── Contextual Unsplash Photo Enrichment (no keywords needed) ────────────────
+
+const PHOTO_TOPIC_PATTERNS: Array<[RegExp, string]> = [
+  [/\b(dog|cat|lion|tiger|elephant|giraffe|panda|wolf|fox|bear|eagle|owl|dolphin|whale|horse|rabbit|deer|monkey|gorilla|cheetah|zebra)s?\b/i, '$1'],
+  [/\b(eiffel tower|statue of liberty|great wall|colosseum|machu picchu|taj mahal|mount everest|grand canyon|niagara falls|times square|big ben|amazon rainforest|sahara desert|maldives|bora bora|mount fuji)\b/i, '$1'],
+  [/\b(pizza|sushi|burger|pasta|chocolate cake|ice cream|tacos|ramen|croissant|cheesecake|steak|lobster|spaghetti|fried chicken)\b/i, '$1 food'],
+  [/\b(black hole|galaxy|nebula|milky way|aurora borealis|solar eclipse|mars landscape|saturn rings|jupiter storm)\b/i, '$1 space'],
+  [/\b(new york city|paris france|tokyo japan|dubai skyline|london cityscape|sydney opera|rome colosseum|barcelona sagrada|amsterdam canal|singapore skyline|hong kong night|istanbul mosque|bali temple|venice canal|santorini greece)\b/i, '$1'],
+  [/\b(waterfall|mountain peak|tropical forest|ocean waves|sandy beach|desert dunes|volcano eruption|glacier|coral reef|northern lights|golden sunset|misty sunrise)\b/i, '$1 nature landscape'],
+  [/\b(astronaut in space|firefighter action|chef cooking|nurse hospital|athlete running|musician performing|artist painting)\b/i, '$1 professional photo'],
+  [/\b(robot|futuristic spaceship|autonomous drone|electric vehicle|solar panel farm|wind turbine|microchip|3d printing)\b/i, '$1 technology'],
+  [/\b(american football|basketball game|soccer match|tennis court|olympic swimming|mountain cycling|alpine skiing|surfing wave|gymnastics|marathon race)\b/i, '$1 sport action'],
+];
+
+function detectContextualPhotoTopic(userMessage: string, aiResponseText: string): string | null {
+  const lowerUser = userMessage.toLowerCase().trim();
+  // Skip: user already asked for images/photos explicitly
+  if (
+    /\b(generate|create|make|draw|design|show me|find|search|fetch|look for|ban m|banm)\b.*\b(image|photo|picture|imaj|foto|pic)\b/i.test(lowerUser) ||
+    /\b(photo|image|picture|foto|imaj)\b.*\b(of|de|about)\b/i.test(lowerUser)
+  ) return null;
+
+  // Only enrich substantive informational responses
+  const plainText = aiResponseText.replace(/```[\s\S]*?```/g, '').trim();
+  if (plainText.length < 150) return null;
+
+  // Match against user message first (more reliable), then AI response
+  for (const [pattern, queryTemplate] of PHOTO_TOPIC_PATTERNS) {
+    const match = lowerUser.match(pattern) || aiResponseText.toLowerCase().match(pattern);
+    if (match) {
+      const resolved = queryTemplate.replace('$1', match[1] || match[0]);
+      return resolved.trim();
+    }
+  }
+  return null;
+}
+
 // ── Spotify Music Intent Detector ───────────────────────────────────────────
 
 function detectSpotifyIntent(text: string): string | null {
@@ -1870,6 +1907,27 @@ Deno.serve(async function(req: Request) {
             ? JSON.stringify({ location: coords.name, lat: coords.lat, lon: coords.lon })
             : JSON.stringify({ location: locationName });
           aiResponse.content = aiResponse.content.trim() + `\n[MAP_LOCATION:${mapData}]`;
+        }
+      }
+
+      // ── Contextual Unsplash photo enrichment (no keywords needed) ────────────
+      // Automatically fetch a relevant Unsplash photo for informational topics
+      // only when no explicit image request was made and no other visual was generated
+      if (!imageUrl && !weatherCity && aiResponse && aiResponse.content) {
+        const photoQuery = detectContextualPhotoTopic(lastUserContent, aiResponse.content);
+        if (photoQuery) {
+          console.log('[chat] Contextual photo enrichment triggered, query:', photoQuery);
+          try {
+            const photoResult = await searchImages(photoQuery, 3);
+            if (photoResult.images && photoResult.images.length > 0) {
+              const photo = photoResult.images[0];
+              const photoTag = `\n[CONTEXT_PHOTO:${JSON.stringify({ url: photo.url, title: photo.title || photoQuery, query: photoQuery })}]`;
+              aiResponse.content = aiResponse.content.trim() + photoTag;
+              console.log('[chat] Contextual photo appended for query:', photoQuery);
+            }
+          } catch (_photoErr) {
+            // Non-fatal — skip photo enrichment silently
+          }
         }
       }
     }

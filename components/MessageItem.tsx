@@ -1117,10 +1117,22 @@ function VideoPreviewCard({ name, uri, isDark, colors }: { name: string; uri?: s
     }
   }
 
+  // ── Parse [CONTEXT_PHOTO:json] tag — contextual Unsplash photo reference
+  let contextPhoto: { url: string; title?: string; query?: string } | null = null;
+  const contextPhotoMatch = safeContent.match(/\[CONTEXT_PHOTO:([^\]]+)\]/);
+  if (contextPhotoMatch) {
+    try {
+      contextPhoto = JSON.parse(contextPhotoMatch[1]);
+    } catch {
+      contextPhoto = null;
+    }
+  }
+
   let spotifyTracks: SpotifyTrack[] | null = null;
   let contentWithoutSpotify = safeContent
     .replace(/\[WEATHER_CITY:[^\]]+\]/g, '')
     .replace(/\[MAP_LOCATION:[^\]]+\]/g, '')
+    .replace(/\[CONTEXT_PHOTO:[^\]]+\]/g, '')
     .trim();
   try {
     const spotifyMatch = safeContent.match(/\[SPOTIFY_RESULTS:(.*?)\]/s);
@@ -1360,6 +1372,28 @@ function VideoPreviewCard({ name, uri, isDark, colors }: { name: string; uri?: s
           {/* TikTok preview card */}
           {tiktokCardData ? (
             <TikTokPreviewCard card={tiktokCardData} isDark={isDark} colors={colors} />
+          ) : null}
+
+          {/* Contextual Unsplash photo reference — shown for informational topics */}
+          {contextPhoto && contextPhoto.url ? (
+            <View style={{ marginTop: 10, marginBottom: 4 }}>
+              <TouchableOpacity
+                onPress={() => handleImagePress(contextPhoto!.url, [contextPhoto!.url], 0)}
+                activeOpacity={0.88}
+              >
+                <Image
+                  source={{ uri: contextPhoto.url }}
+                  style={{ width: '100%', height: 200, borderRadius: 16 }}
+                  contentFit="cover"
+                  transition={300}
+                />
+              </TouchableOpacity>
+              {contextPhoto.title ? (
+                <Text style={{ color: isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.4)', fontSize: 12, marginTop: 5, textAlign: 'center' }}>
+                  {contextPhoto.title} · via Unsplash
+                </Text>
+              ) : null}
+            </View>
           ) : null}
 
           {message.imageUrl && !isUser ? (
