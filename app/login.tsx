@@ -822,5 +822,4 @@ function GuestModalContent({ onStartGuest, onClose, isDark }: { onStartGuest: ()
     </View>
   );
 }
-
-fix home page no keyword needed in a normal conversation ai can add photo model refrence if require or user require via unplash.
+fix error when ask ai for reference img how display example ai says I'm not capable of providing direct image links or displaying images, add a function no keyword needed ai can display img idk via google ,serapi etc please.
