@@ -822,3 +822,4 @@ function GuestModalContent({ onStartGuest, onClose, isDark }: { onStartGuest: ()
     </View>
   );
 }
+hello ai dont skip without make change please fix for image show without keyword add https://www.pexels.com/api/documentation/ fist and unplash fallback and also add google custom search all api in env and fix error ai says:I'm not capable of providing direct image links or displaying images.
