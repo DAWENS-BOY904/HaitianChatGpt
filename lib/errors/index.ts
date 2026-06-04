@@ -1,3 +1,4 @@
+
 /**
  * Error Handling Module for HaitianChatGpt
  * Simplified version for React Native
