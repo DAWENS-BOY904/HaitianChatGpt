@@ -1312,46 +1312,145 @@ export async function callAI(
 // ─────────────────────────────────────────────────────────────────────────
 
 /**
- * Search for images using Unsplash API
+ * Search for images using Pexels API (primary)
  */
-export async function searchImages(
-  query: string, 
+async function searchPexels(
+  query: string,
   limit: number = 10
-): Promise<{
-  images: Array<{ url: string; title?: string; source: string; resolution?: string }>;
-  error?: string;
-}> {
-  const accessKey = getEnv('UNSPLASH_ACCESS_KEY');
-  if (!accessKey) {
-    return { images: [], error: 'Unsplash API key not configured' };
+): Promise<{ images: Array<{ url: string; title?: string; source: string; resolution?: string }>; error?: string }> {
+  const apiKey = getEnv('PEXELS_API_KEY');
+  if (!apiKey) return { images: [], error: 'Pexels key not configured' };
+
+  try {
+    const response = await fetch(
+      `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=${Math.min(limit, 15)}&orientation=landscape`,
+      {
+        headers: { Authorization: apiKey },
+        signal: createTimeoutSignal(10000),
+      }
+    );
+    if (!response.ok) return { images: [], error: `Pexels ${response.status}` };
+    const data = await response.json();
+    const photos: any[] = data.photos || [];
+    if (photos.length === 0) return { images: [], error: 'No results' };
+    return {
+      images: photos.map((p: any) => ({
+        url: p.src?.large || p.src?.original || p.src?.medium,
+        title: p.alt || query,
+        source: 'Pexels',
+        resolution: `${p.width}x${p.height}`,
+        link: p.url,
+      })).filter((i: any) => i.url),
+    };
+  } catch (e: any) {
+    return { images: [], error: e.message };
   }
+}
+
+/**
+ * Search for images using Unsplash API (secondary fallback)
+ */
+async function searchUnsplash(
+  query: string,
+  limit: number = 10
+): Promise<{ images: Array<{ url: string; title?: string; source: string; resolution?: string }>; error?: string }> {
+  const accessKey = getEnv('UNSPLASH_ACCESS_KEY');
+  if (!accessKey) return { images: [], error: 'Unsplash key not configured' };
 
   try {
     const response = await fetch(
       `https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&per_page=${limit}&orientation=landscape`,
       {
-        headers: { 'Authorization': `Client-ID ${accessKey}` },
+        headers: { Authorization: `Client-ID ${accessKey}` },
         signal: createTimeoutSignal(10000),
       }
     );
-
-    if (!response.ok) {
-      return { images: [], error: `Unsplash API error: ${response.status}` };
-    }
-
+    if (!response.ok) return { images: [], error: `Unsplash ${response.status}` };
     const data = await response.json();
-    const images = data.results.map((img: any) => ({
-      url: img.urls.regular,
-      title: img.description || img.alt_description || query,
-      source: 'Unsplash',
-      resolution: `${img.width}x${img.height}`,
-    }));
-
-    return { images };
-  } catch (error: any) {
-    console.log('[Image Search] Unsplash failed:', error.message);
-    return { images: [], error: error.message || 'Image search failed' };
+    const results: any[] = data.results || [];
+    if (results.length === 0) return { images: [], error: 'No results' };
+    return {
+      images: results.map((img: any) => ({
+        url: img.urls.regular,
+        title: img.description || img.alt_description || query,
+        source: 'Unsplash',
+        resolution: `${img.width}x${img.height}`,
+        link: img.links?.html,
+      })),
+    };
+  } catch (e: any) {
+    return { images: [], error: e.message };
   }
+}
+
+/**
+ * Search for images using Google Custom Search API (tertiary fallback)
+ */
+async function searchGoogleImages(
+  query: string,
+  limit: number = 10
+): Promise<{ images: Array<{ url: string; title?: string; source: string; resolution?: string }>; error?: string }> {
+  const apiKey = getEnv('GOOGLE_CUSTOM_SEARCH_API_KEY');
+  const cx = getEnv('GOOGLE_CUSTOM_SEARCH_CX');
+  if (!apiKey || !cx) return { images: [], error: 'Google Custom Search not configured' };
+
+  try {
+    const count = Math.min(limit, 10);
+    const url = `https://www.googleapis.com/customsearch/v1?key=${apiKey}&cx=${cx}&q=${encodeURIComponent(query)}&searchType=image&num=${count}&safe=active`;
+    const response = await fetch(url, { signal: createTimeoutSignal(10000) });
+    if (!response.ok) return { images: [], error: `Google CSE ${response.status}` };
+    const data = await response.json();
+    const items: any[] = data.items || [];
+    if (items.length === 0) return { images: [], error: 'No results' };
+    return {
+      images: items.map((item: any) => ({
+        url: item.link,
+        title: item.title || query,
+        source: 'Google',
+        resolution: item.image ? `${item.image.width}x${item.image.height}` : undefined,
+        link: item.image?.contextLink,
+      })).filter((i: any) => i.url),
+    };
+  } catch (e: any) {
+    return { images: [], error: e.message };
+  }
+}
+
+/**
+ * Search for images — Pexels first → Unsplash fallback → Google Custom Search fallback
+ */
+export async function searchImages(
+  query: string,
+  limit: number = 10
+): Promise<{
+  images: Array<{ url: string; title?: string; source: string; resolution?: string }>;
+  error?: string;
+}> {
+  // 1. Try Pexels first (best quality, generous free tier)
+  const pexels = await searchPexels(query, limit);
+  if (pexels.images.length > 0) {
+    console.log(`[Image Search] Pexels returned ${pexels.images.length} results`);
+    return pexels;
+  }
+  console.log('[Image Search] Pexels failed or empty, trying Unsplash:', pexels.error);
+
+  // 2. Fallback to Unsplash
+  const unsplash = await searchUnsplash(query, limit);
+  if (unsplash.images.length > 0) {
+    console.log(`[Image Search] Unsplash returned ${unsplash.images.length} results`);
+    return unsplash;
+  }
+  console.log('[Image Search] Unsplash failed or empty, trying Google CSE:', unsplash.error);
+
+  // 3. Fallback to Google Custom Search
+  const google = await searchGoogleImages(query, limit);
+  if (google.images.length > 0) {
+    console.log(`[Image Search] Google CSE returned ${google.images.length} results`);
+    return google;
+  }
+  console.log('[Image Search] All providers failed');
+
+  return { images: [], error: 'No image results found from any provider' };
 }
 
 // ─────────────────────────────────────────────────────────────────────────
