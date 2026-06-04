@@ -823,4 +823,4 @@ function GuestModalContent({ onStartGuest, onClose, isDark }: { onStartGuest: ()
   );
 }
 
-hello ai fix conversation titles in sidemenu recent chat: automatically generate smart chat titles from the first 1–4 words of the user's message. For example, if the conversation starts with "Hi", "Hello", or similar greetings, set the title to "Greeting" instead of displaying the exact message. Use concise, meaningful, and context-aware titles for all recent chats.
+
