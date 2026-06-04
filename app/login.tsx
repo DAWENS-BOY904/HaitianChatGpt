@@ -822,3 +822,4 @@ function GuestModalContent({ onStartGuest, onClose, isDark }: { onStartGuest: ()
     </View>
   );
 }
+hello ai Improve how [IMAGE_SEARCH:query] tags are rendered inline in MessageItem — ensure the AI-emitted tag triggers a real-time Pexels/Unsplash/Google CSE fetch and displays the result photo directly inside the chat bubble without requiring keywords also create a generate-img md for real fetch format card and for both.
