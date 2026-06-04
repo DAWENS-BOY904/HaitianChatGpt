@@ -822,4 +822,4 @@ function GuestModalContent({ onStartGuest, onClose, isDark }: { onStartGuest: ()
     </View>
   );
 }
-hello ai improve conversation flow: when a user sends a short message (1–4 words) such as "hi", "hello", or "good morning", automatically detect it as a greeting and respond naturally with a friendly greeting instead of treating it as a normal chat request.
+

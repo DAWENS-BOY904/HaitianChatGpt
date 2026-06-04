@@ -209,6 +209,52 @@ function generateCrisisResponse(): string {
   ].join('\n');
 }
 
+// ── Greeting Detector ──────────────────────────────────────────────────────
+
+const GREETINGS_BY_LANG: Record<string, string[]> = {
+  English: ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening', 'good night', 'howdy', 'what\'s up', 'whats up', 'sup', 'greetings', 'hiya', 'yo'],
+  'Haitian Creole': ['bonjou', 'bonswa', 'alo', 'koman ou ye', 'koman ou rele', 'sak pase', 'kouman', 'salut'],
+  French: ['bonjour', 'bonsoir', 'salut', 'coucou', 'allô', 'allo', 'bonne nuit', 'bonne matinée'],
+  Spanish: ['hola', 'buenos días', 'buenas tardes', 'buenas noches', 'buenas', 'qué tal', 'que tal', 'saludos'],
+  Portuguese: ['olá', 'ola', 'bom dia', 'boa tarde', 'boa noite', 'oi', 'ei'],
+  German: ['hallo', 'guten morgen', 'guten tag', 'guten abend', 'gute nacht', 'servus', 'moin'],
+  Italian: ['ciao', 'buongiorno', 'buona sera', 'buona notte', 'salve'],
+  Arabic: ['مرحبا', 'أهلا', 'السلام عليكم', 'صباح الخير', 'مساء الخير'],
+};
+
+function isGreeting(text: string): boolean {
+  const t = text.trim().toLowerCase();
+  // Only treat short messages (1-5 words) as potential greetings
+  const wordCount = t.split(/\s+/).filter(Boolean).length;
+  if (wordCount > 6) return false;
+
+  for (const phrases of Object.values(GREETINGS_BY_LANG)) {
+    for (const phrase of phrases) {
+      if (t === phrase || t.startsWith(phrase + ' ') || t.endsWith(' ' + phrase) || t === phrase + '!' || t === phrase + '.') {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function buildGreetingInstruction(lang: string): string {
+  return [
+    '',
+    '==============================',
+    'GREETING DETECTED:',
+    '==============================',
+    'The user has sent a short greeting message.',
+    'RULES:',
+    '1. Respond with a warm, friendly, natural greeting in ' + lang + '.',
+    '2. Keep it SHORT (1-3 sentences max).',
+    '3. Ask what you can help them with today.',
+    '4. Use a casual, welcoming tone — do NOT give a long formal response.',
+    '5. Do NOT ask them to describe their request in detail — just say hi back.',
+    '==============================',
+  ].join('\n');
+}
+
 // ── Language Detector ──────────────────────────────────────────────────────
 
 /**
@@ -1560,14 +1606,19 @@ Deno.serve(async function(req: Request) {
     const codingTaskType = detectCodingTaskType(lastUserContent);
     if (codingTaskType) console.log('[chat] Coding task detected:', codingTaskType);
 
+    // Greeting detection — short casual messages get a warm short reply
+    const isGreetingMessage = isGreeting(cleanedForLangDetect || lastUserContent);
+    if (isGreetingMessage) console.log('[chat] Greeting detected, using friendly short response mode');
+
     // ── Spotify music search detection ──────────────────────────────────────────
     const spotifyQuery = detectionResult.type === 'text' ? detectSpotifyIntent(lastUserContent) : null;
     if (spotifyQuery) console.log('[chat] Spotify intent detected, query:', spotifyQuery.slice(0, 80));
     // ───────────────────────────────────────────────────────────────────────
+    const greetingInstruction = isGreetingMessage ? buildGreetingInstruction(detectedLanguage) : '';
     const fullSystemPrompt = buildSystemPrompt(
       userLanguage, baseTone, customInstructions, nickname, occupation, interests,
       apiVersionContext, detectedLanguage, codingTaskType
-    );
+    ) + greetingInstruction;
 
     // ── URL Content Fetching ──────────────────────────────────────────────────
     let urlContext = '';
