@@ -822,4 +822,3 @@ function GuestModalContent({ onStartGuest, onClose, isDark }: { onStartGuest: ()
     </View>
   );
 }
-fix image creation overlay display in home like chat message not modal also the spotify please dont skip.

@@ -3079,13 +3079,13 @@ export default function HomeScreen() {
                               <Text style={{ color: isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.5)', fontSize: 14 }}>Searching Spotify...</Text>
                             </View>
                           ) : null}
-                          {(spotifySearching || spotifyResults.length > 0) ? (
+                          {spotifyResults.length > 0 ? (
                             <SpotifyMusicCard
                               tracks={spotifyResults}
                               hasAccount={spotifyHasAccount}
                               isDark={isDark}
                               isGuest={isGuest}
-                              isLoading={spotifySearching}
+                              isLoading={false}
                               searchQuery={spotifySearchQuery}
                               onConnectSpotify={() => router.push('/spotify-connect' as any)}
                             />
