@@ -101,6 +101,64 @@ const BlurredCard = ({ children, style, intensity = 90 }: any) => (
   </BlurView>
 );
 
+// ── Inline Image Search Card ────────────────────────────────────────────────
+const InlineImageCard = memo(function InlineImageCard({ query, isDark, colors, onPress }: { query: string; isDark: boolean; colors: any; onPress: (url: string) => void }) {
+  const supabaseHook = getSupabaseClient();
+  const [images, setImages] = useState<Array<{ url: string; title?: string }>>([]);
+  const [loading, setLoading] = useState(true);
+  const [imgError, setImgError] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data, error: fnErr } = await supabaseHook.functions.invoke('image-search', { body: { query, limit: 6 } });
+        if (cancelled) return;
+        if (fnErr || !data?.images?.length) { setImgError(true); setLoading(false); return; }
+        setImages(data.images.slice(0, 6));
+      } catch { if (!cancelled) setImgError(true); }
+      finally { if (!cancelled) setLoading(false); }
+    })();
+    return () => { cancelled = true; };
+  }, [query]);
+
+  if (loading) {
+    return (
+      <View style={{ marginVertical: 10 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <ActivityIndicator size='small' color={isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.4)'} />
+          <Text style={{ color: isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.4)', fontSize: 13 }}>{'Fetching images…'}</Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (imgError || images.length === 0) return null;
+
+  const CARD_W = images.length === 1 ? Math.min(Dimensions.get('window').width - 64, 280) : 146;
+  const CARD_H = images.length === 1 ? Math.round(CARD_W * 0.65) : 108;
+
+  return (
+    <View style={{ marginVertical: 8 }}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingRight: 4 }}>
+        {images.map((img, i) => (
+          <View key={`isearch-${i}`} style={{ width: CARD_W, borderRadius: 14, overflow: 'hidden', backgroundColor: isDark ? '#2C2C2E' : '#E5E5EA', borderWidth: StyleSheet.hairlineWidth, borderColor: isDark ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.07)' }}>
+            <TouchableOpacity onPress={() => onPress(img.url)} activeOpacity={0.86}>
+              <Image source={{ uri: img.url }} style={{ width: CARD_W, height: CARD_H }} contentFit='cover' transition={200} />
+            </TouchableOpacity>
+            {img.title ? (
+              <View style={{ paddingHorizontal: 8, paddingVertical: 5 }}>
+                <Text style={{ color: isDark ? '#FFF' : '#000', fontSize: 11, fontWeight: '600' }} numberOfLines={1}>{img.title}</Text>
+              </View>
+            ) : null}
+          </View>
+        ))}
+      </ScrollView>
+      <Text style={{ color: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.3)', fontSize: 11, marginTop: 4 }}>{`Photos: ${query.length > 40 ? query.slice(0, 40) + '\u2026' : query}`}</Text>
+    </View>
+  );
+});
+
 // ── TikTok Card Parser ───────────────────────────────────────────────────────
 interface TikTokCardData {
   title: string;
@@ -1100,6 +1158,17 @@ function VideoPreviewCard({ name, uri, isDark, colors }: { name: string; uri?: s
   // ── Assistant message ─────────────────────────────────────────────────────
   const isCurrentlyStreaming = !!(isGenerating || streaming);
 
+  // ── Parse inline [IMAGE_SEARCH:query] tags ─────────────────────────────────
+  const inlineImageSearchQueries: string[] = [];
+  try {
+    const isTagRegex = /\[IMAGE_SEARCH:([^\]]+)\]/g;
+    let isTagMatch: RegExpExecArray | null;
+    while ((isTagMatch = isTagRegex.exec(safeContent)) !== null) {
+      const q = (isTagMatch[1] || '').trim();
+      if (q && !inlineImageSearchQueries.includes(q)) inlineImageSearchQueries.push(q);
+    }
+  } catch (_e) {}
+
   // ── Parse Spotify results tag ───────────────────────────────────────────
   // ── Parse [WEATHER_CITY:city] tag
   let weatherCity: string | null = null;
@@ -1133,6 +1202,7 @@ function VideoPreviewCard({ name, uri, isDark, colors }: { name: string; uri?: s
     .replace(/\[WEATHER_CITY:[^\]]+\]/g, '')
     .replace(/\[MAP_LOCATION:[^\]]+\]/g, '')
     .replace(/\[CONTEXT_PHOTO:[^\]]+\]/g, '')
+    .replace(/\[IMAGE_SEARCH:[^\]]+\]/g, '')
     .trim();
   try {
     const spotifyMatch = safeContent.match(/\[SPOTIFY_RESULTS:(.*?)\]/s);
@@ -1373,6 +1443,17 @@ function VideoPreviewCard({ name, uri, isDark, colors }: { name: string; uri?: s
           {tiktokCardData ? (
             <TikTokPreviewCard card={tiktokCardData} isDark={isDark} colors={colors} />
           ) : null}
+
+          {/* Inline [IMAGE_SEARCH:query] cards */}
+          {inlineImageSearchQueries.map((q, qi) => (
+            <InlineImageCard
+              key={`isearch-${qi}`}
+              query={q}
+              isDark={isDark}
+              colors={colors}
+              onPress={(url) => handleImagePress(url, [url], 0)}
+            />
+          ))}
 
           {/* Contextual Unsplash photo reference — shown for informational topics */}
           {contextPhoto && contextPhoto.url ? (
