@@ -766,6 +766,38 @@ export const MessageItem = memo(function MessageItem({
   const [showFloatingCopy, setShowFloatingCopy] = useState(false);
   const [copiedFlash, setCopiedFlash] = useState(false);
   const { settings: messageSettings } = useSettings();
+ const { aiImages, realImages, cleanContent: contentWithoutImages } = parseImageSearchResults(contentWithoutSpotify);
+
+// If we have image search results, create a row set
+const hasImageSearchResults = aiImages.length > 0 || realImages.length > 0;
+
+// Use cleanContent for block parsing (without image search tags)
+let blocks: Block[] = [];
+try {
+  blocks = parseMarkdownBlocks(contentWithoutImages, isCurrentlyStreaming);
+} catch (_e) {
+  blocks = contentWithoutImages ? [{ type: 'paragraph', content: contentWithoutImages }] : [];
+}
+
+// ── Render image search carousel if results exist ──────────────────────────
+{hasImageSearchResults && (
+  <View style={{ marginVertical: 8 }}>
+    <ImageSearchCarousel
+      rowSets={[
+        {
+          id: `msg-${message.id}-images`,
+          aiImages,
+          realImages,
+          query: lastUserContent.slice(0, 50) || 'Image Search',
+          timestamp: Date.now(),
+        },
+      ]}
+      onImagePress={handleImagePress}
+      onSendToChat={handleSendImageToChat}
+    />
+  </View>
+)}
+
 
 
   // CRITICAL: Safe content — never undefined/null, prevents crash during streaming
