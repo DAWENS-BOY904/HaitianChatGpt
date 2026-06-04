@@ -1,3 +1,4 @@
+
 /**
  * Security Module for HaitianChatGpt
  * Input validation and sanitization
