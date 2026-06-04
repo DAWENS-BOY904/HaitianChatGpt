@@ -822,4 +822,3 @@ function GuestModalContent({ onStartGuest, onClose, isDark }: { onStartGuest: ()
     </View>
   );
 }
-fix image search UI to display results in a carousel with 2 rows per message, each row showing 5 items (1 row = AI top, second row = other response underneath), and automatically append a new paired row set after each message exchange.
