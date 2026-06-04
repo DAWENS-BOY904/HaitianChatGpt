@@ -1217,4 +1217,3 @@ export function useConversation() {
   if (context === undefined) throw new Error('useConversation must be used within a ConversationProvider');
   return context;
 }
-hello ai fix conversation titles in sidemenu recent chat: automatically generate smart chat titles from the first 1–4 words of the user's message for all message instead of displaying the exact message. Use concise, meaningful, and context-aware titles for all recent chats.
