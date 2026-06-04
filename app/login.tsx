@@ -823,4 +823,4 @@ function GuestModalContent({ onStartGuest, onClose, isDark }: { onStartGuest: ()
   );
 }
 
-
+hello ai Fix conversation titles: automatically generate smart chat titles from the first 1–4 words of the user's message instead of displaying the exact message. Use concise, meaningful, and context-aware titles for all recent chats.
