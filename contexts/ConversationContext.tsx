@@ -118,7 +118,6 @@ function generateFallbackTitle(firstMessage: string, hasImage: boolean): string 
     if (lower.includes('image') || lower.includes('photo')) return 'Image Creation';
     return 'Image Generation';
   }
-  if (/^(hi|hello|hey|bonjou|alo|salut|hola|bonsoir|good morning|good evening)\b/.test(lower.trim())) return 'Greeting';
   if (lower.includes('code') || lower.includes('bug') || lower.includes('function') || lower.includes('script')) {
     const langMatch = firstMessage.match(/(javascript|typescript|python|java|swift|kotlin|html|css|react|node)/i);
     return langMatch ? `${langMatch[1]} Help` : 'Coding Help';
@@ -1218,3 +1217,4 @@ export function useConversation() {
   if (context === undefined) throw new Error('useConversation must be used within a ConversationProvider');
   return context;
 }
+hello ai fix conversation titles in sidemenu recent chat: automatically generate smart chat titles from the first 1–4 words of the user's message for all message instead of displaying the exact message. Use concise, meaningful, and context-aware titles for all recent chats.
