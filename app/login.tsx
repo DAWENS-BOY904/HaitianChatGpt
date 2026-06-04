@@ -822,10 +822,3 @@ function GuestModalContent({ onStartGuest, onClose, isDark }: { onStartGuest: ()
     </View>
   );
 }
-also fix {
-  "eventMessage": "[image-search] Unhandled error: Module not found: file:///models/njpuoozygqtpvlzhnjpu/_shared/ai-providers.ts\n",
-  "functionId": "image-search",
-  "id": "ba4032b7-eba4-4f77-95ff-537ffd612a2c",
-  "logLevel": "ERROR",
-  "timestamp": 1780585352
-} make sure test it fist.

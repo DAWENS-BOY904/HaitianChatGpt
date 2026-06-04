@@ -1,15 +1,9 @@
 import { corsHeaders } from '../_shared/cors.ts';
+import { searchImages } from '../_shared/ai-providers.ts';
 
 const CORS_HEADERS = { ...corsHeaders, 'Content-Type': 'application/json' };
 
-// Lazy-load to avoid cold-start crashes
-async function getSearchImages() {
-  const mod = await import('../_shared/ai-providers.ts');
-  return mod.searchImages;
-}
-
 Deno.serve(async (req: Request) => {
-  // Always handle OPTIONS first
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -34,7 +28,6 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const searchImages = await getSearchImages();
     const result = await searchImages(query.trim().slice(0, 200), Math.min(Number(limit) || 6, 12));
 
     return new Response(JSON.stringify(result), {
