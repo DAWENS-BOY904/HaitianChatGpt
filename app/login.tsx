@@ -822,4 +822,4 @@ function GuestModalContent({ onStartGuest, onClose, isDark }: { onStartGuest: ()
     </View>
   );
 }
-fix error when ask ai for reference img how display example ai says I'm not capable of providing direct image links or displaying images, add a function no keyword needed ai can display img idk via google ,serapi etc please.
+hello ai dont skip withotu make change please fix for image show without keyword add https://www.pexels.com/api/documentation/ fist and unplash fallback and also add google custom search and fix error ai says:I'm not capable of providing direct image links or displaying images.
