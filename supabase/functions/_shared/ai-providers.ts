@@ -1574,4 +1574,3 @@ export const AI_MODELS = {
   'code-generator': { name: 'Code Generator', model: 'gpt-4o', specialization: 'code' },
   'general-assistant': { name: 'General Assistant', model: 'onspace-ai', specialization: 'general' },
 };
-hello ai dont skip without make change please fix for image show without keyword add https://www.pexels.com/api/documentation/ fist and unplash fallback and also add google custom search all api saved and fix error ai says:I'm not capable of providing direct image links or displaying images.
