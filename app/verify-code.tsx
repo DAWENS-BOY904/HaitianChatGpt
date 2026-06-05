@@ -306,3 +306,4 @@ export default function VerifyCodeScreen() {
     </View>
   );
 }
+please dont remove my message without change After a new user creates an account, send a welcome email via the Resend API using a new edge function `send-welcome-email`. The email should greet the user by name, confirm their account creation, and include a link to get started Update the verify-code screen to call the `send-verification-code` edge function (Resend API) instead of Supabase OTP for regular users, and display a countdown timer showing when the code expires.

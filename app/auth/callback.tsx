@@ -19,7 +19,7 @@ function getPostAuthRedirect(): string {
   const origin = window.location.origin.toLowerCase();
   if (origin.includes('davetopup.com')) return 'https://davetopup.com/home';
   if (origin.includes('dawinix')) return 'https://www.dawinix.com/home';
-  return '/home';
+  return `${window.location.origin}/home`;
 }
 
 export default function AuthCallback() {
@@ -148,4 +148,3 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
 });
-for web instead go to /home add ${window.location.origin}/ please.
