@@ -187,3 +187,4 @@ export async function signInWithGoogleCrossPlatform(): Promise<{ error: string |
   }
   return signInWithGoogleNative();
 }
+add onspace login as third fallback please.
