@@ -822,3 +822,4 @@ function GuestModalContent({ onStartGuest, onClose, isDark }: { onStartGuest: ()
     </View>
   );
 }
+hello ai add this little fix after creation account send real welcome edg via resend api and fix code verify by resend fix togle button login google.
