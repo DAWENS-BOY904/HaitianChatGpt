@@ -47,7 +47,7 @@ function getWebCallbackUrl(): string | undefined {
   }
 
   if (origin.includes('dawinix')) {
-    return 'https://dawinix.com/auth/callback';
+    return 'https://www.dawinix.com/auth/callback';
   }
 
   // Default: let Supabase use its configured Site URL
