@@ -408,4 +408,3 @@ export default function VerifyCodeScreen() {
     </View>
   );
 }
-fix code verify sending never use onspace supabase use only resend code please.
