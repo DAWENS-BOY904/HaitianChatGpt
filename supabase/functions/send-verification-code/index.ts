@@ -1,9 +1,11 @@
 /**
  * send-verification-code edge function
  *
- * Sends a 6-digit verification code via Resend API.
+ * Actions:
+ *   - send (default): Sends a 6-digit code via Resend API and stores it in DB.
+ *   - verify: Checks the code against the DB using service role key (bypasses RLS).
+ *
  * Supports types: login, registration, password_change, email_change, account_action
- * Stores the code in the `verification_codes` table with a 10-minute expiry.
  */
 
 import { corsHeaders } from '../_shared/cors.ts';
@@ -59,7 +61,6 @@ function buildEmailHtml(code: string, type: string, username?: string): string {
   const displayName = username || 'there';
   const year = new Date().getFullYear();
 
-  // Split code into individual digits for display
   const digits = code.split('').map(d =>
     `<span style="display:inline-block;width:52px;height:60px;line-height:60px;text-align:center;font-size:32px;font-weight:800;color:#ffffff;background:#1a1a1a;border:2px solid #333333;border-radius:12px;margin:0 4px;">${d}</span>`
   ).join('');
@@ -74,8 +75,6 @@ function buildEmailHtml(code: string, type: string, username?: string): string {
 <body style="margin:0;padding:0;background:#0a0a0a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#ffffff;">
   <div style="max-width:520px;margin:0 auto;padding:40px 16px;">
     <div style="background:#111111;border-radius:20px;overflow:hidden;border:1px solid #1e1e1e;">
-
-      <!-- Header -->
       <div style="background:linear-gradient(135deg,#10A37F 0%,#0096FF 100%);padding:40px 32px 36px;text-align:center;">
         <div style="width:72px;height:72px;background:#ffffff;border-radius:20px;margin:0 auto 16px;display:flex;align-items:center;justify-content:center;">
           <svg width="44" height="44" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -87,35 +86,26 @@ function buildEmailHtml(code: string, type: string, username?: string): string {
         <div style="font-size:26px;font-weight:800;color:#ffffff;letter-spacing:-0.5px;">Dawinix</div>
         <div style="font-size:13px;color:rgba(255,255,255,0.75);margin-top:4px;">AI Assistant · Haiti</div>
       </div>
-
-      <!-- Body -->
       <div style="padding:36px 32px 28px;">
         <h1 style="font-size:22px;font-weight:700;color:#ffffff;margin:0 0 10px;">${title}</h1>
         <p style="font-size:15px;color:#aaaaaa;line-height:1.7;margin:0 0 8px;">
           Hi <strong style="color:#ffffff;">${displayName}</strong>,
         </p>
         <p style="font-size:15px;color:#aaaaaa;line-height:1.7;margin:0 0 32px;">${intro}</p>
-
-        <!-- Code display -->
         <div style="text-align:center;margin:0 0 28px;">
           <div style="margin-bottom:8px;">${digits}</div>
           <p style="font-size:12px;color:#555555;margin:12px 0 0;">Expires in ${CODE_EXPIRY_MINUTES} minutes</p>
         </div>
-
-        <!-- Warning -->
         <div style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:12px;padding:16px;display:flex;gap:12px;align-items:flex-start;">
           <span style="font-size:18px;flex-shrink:0;">🔒</span>
           <p style="font-size:13px;color:#888888;margin:0;line-height:1.6;">
             For your security, never share this code with anyone — including Dawinix support. We will <strong style="color:#ffffff;">never</strong> ask for your code.
           </p>
         </div>
-
         <p style="font-size:13px;color:#555555;margin:24px 0 0;line-height:1.6;">
           If you did not request this code, you can safely ignore this email.
         </p>
       </div>
-
-      <!-- Footer -->
       <div style="background:#080808;padding:24px 32px;text-align:center;border-top:1px solid #1a1a1a;">
         <p style="font-size:12px;color:#444444;margin:0 0 8px;">
           <a href="https://dawinix.com/privacy" style="color:#555555;text-decoration:none;margin:0 8px;">Privacy</a>
@@ -130,13 +120,85 @@ function buildEmailHtml(code: string, type: string, username?: string): string {
 </html>`;
 }
 
+// ── Main handler ──────────────────────────────────────────────────────────────
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { email, type = 'login', username } = await req.json();
+    const body = await req.json();
+    const action = body.action ?? 'send';
+
+    // ── VERIFY action ─────────────────────────────────────────────────────────
+    if (action === 'verify') {
+      const { email, code } = body;
+
+      if (!email || !code) {
+        return new Response(
+          JSON.stringify({ error: 'email and code are required.' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+      const normalizedEmail = email.toLowerCase().trim();
+      const normalizedCode = code.trim();
+      const now = new Date().toISOString();
+
+      // Find the most recent unused, unexpired code for this email
+      const { data: rows, error: fetchError } = await supabase
+        .from('verification_codes')
+        .select('id, code, expires_at, used')
+        .eq('email', normalizedEmail)
+        .eq('used', false)
+        .gte('expires_at', now)
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      if (fetchError) {
+        console.error('[send-verification-code] verify fetch error:', fetchError);
+        return new Response(
+          JSON.stringify({ error: 'Failed to verify code. Please try again.' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      if (!rows || rows.length === 0) {
+        console.log(`[send-verification-code] No valid codes found for ${normalizedEmail}`);
+        return new Response(
+          JSON.stringify({ error: 'Code expired or not found. Please request a new one.' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Check if any of the valid codes match
+      const matchedRow = rows.find((r: any) => r.code === normalizedCode);
+
+      if (!matchedRow) {
+        console.log(`[send-verification-code] Code mismatch for ${normalizedEmail}`);
+        return new Response(
+          JSON.stringify({ error: 'Incorrect code. Please check and try again.' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Mark as used
+      await supabase
+        .from('verification_codes')
+        .update({ used: true })
+        .eq('id', matchedRow.id);
+
+      console.log(`[send-verification-code] Code verified for ${normalizedEmail}`);
+      return new Response(
+        JSON.stringify({ success: true }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // ── SEND action (default) ─────────────────────────────────────────────────
+    const { email, type = 'login', username } = body;
 
     if (!email || typeof email !== 'string' || !email.includes('@')) {
       return new Response(
@@ -161,11 +223,9 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Generate code
     const code = generateCode();
     const expiresAt = new Date(Date.now() + CODE_EXPIRY_MINUTES * 60 * 1000).toISOString();
 
-    // Store code in database
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     const { error: dbError } = await supabase.from('verification_codes').insert({
       email: email.toLowerCase().trim(),
@@ -183,7 +243,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Send email via Resend
     const { subject } = getEmailSubjectAndTitle(type);
     const html = buildEmailHtml(code, type, username);
 
@@ -217,6 +276,7 @@ Deno.serve(async (req) => {
       JSON.stringify({ success: true }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
+
   } catch (err: any) {
     console.error('[send-verification-code] Unhandled error:', err);
     return new Response(

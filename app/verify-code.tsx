@@ -231,30 +231,20 @@ export default function VerifyCodeScreen() {
 
     setVerifying(true);
     try {
-      const supabase = getSupabaseClient();
+      // Verify via edge function (uses service role key — bypasses RLS)
+      const { data, error } = await callEdgeFunction('send-verification-code', {
+        action: 'verify',
+        email: email.toLowerCase().trim(),
+        code: finalCode,
+      });
 
-      // Verify code against database (verification_codes table)
-      const { data: codeData, error: codeError } = await supabase
-        .from('verification_codes')
-        .select('*')
-        .eq('email', email.toLowerCase().trim())
-        .eq('code', finalCode)
-        .eq('used', false)
-        .gte('expires_at', new Date().toISOString())
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single();
-
-      if (codeError || !codeData) {
-        showAlert('Invalid Code', 'The code you entered is incorrect or has expired. Please try again.');
+      if (error || !data?.success) {
+        showAlert(
+          'Invalid Code',
+          error ?? 'The code you entered is incorrect or has expired. Please try again.'
+        );
         return;
       }
-
-      // Mark code as used
-      await supabase
-        .from('verification_codes')
-        .update({ used: true })
-        .eq('id', codeData.id);
 
       // Stop timers
       if (timerRef.current) clearInterval(timerRef.current);
@@ -664,4 +654,3 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
 });
-fix error when i enter a code its says code expired or incorrect.
