@@ -36,7 +36,7 @@ async function sendEmailViaResend(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      from: 'Haitian ChatGPT <noreply@resend.dev>',
+      from: 'Dawinix <code@dawinix.com>',
       to: [to],
       subject,
       html,
@@ -131,7 +131,7 @@ Deno.serve(async (req) => {
     }
 
     // ── Build email HTML ──
-    const subject = 'Your Verification Code — Haitian ChatGPT';
+    const subject = 'Your Verification Code — Dawinix';
     const html = `
       <!DOCTYPE html>
 <html lang="${lang || 'en'}">
@@ -348,7 +348,7 @@ Deno.serve(async (req) => {
             </defs>
           </svg>
         </div>
-        <div class="brand-name">Dawinix HT</div>
+        <div class="brand-name">Dawinix</div>
         <div class="brand-sub">Secure Verification</div>
       </div>
       
@@ -430,7 +430,7 @@ Deno.serve(async (req) => {
       <div class="footer">
         <div class="footer-brand">
           <svg viewBox="0 0 24 24" fill="none"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="#10A37F"/><circle cx="12" cy="9" r="2.5" fill="#ffffff"/></svg>
-          <span>Dawinix HT</span>
+          <span>Dawinix</span>
         </div>
         
         <div class="footer-links">
@@ -466,7 +466,7 @@ Deno.serve(async (req) => {
           Dawinix S.A. · Port-au-Prince, Haiti · HT6110
         </div>
         
-        <p class="footer-copy">© ${new Date().getFullYear()} Dawinix HT. All rights reserved.</p>
+        <p class="footer-copy">© ${new Date().getFullYear()} Dawinix. All rights reserved.</p>
       </div>
     </div>
   </div>
