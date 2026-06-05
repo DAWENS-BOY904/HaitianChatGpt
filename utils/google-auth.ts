@@ -238,3 +238,4 @@ export async function signInWithGoogleCrossPlatform(): Promise<GoogleAuthResult>
   }
   return signInWithGoogleNative();
 }
+add this link https://davetopup.com/ fallback for auth login both must work.
