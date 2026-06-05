@@ -231,20 +231,30 @@ export default function VerifyCodeScreen() {
 
     setVerifying(true);
     try {
-      // Verify via edge function (uses service role key — bypasses RLS)
-      const { data, error } = await callEdgeFunction('send-verification-code', {
-        action: 'verify',
-        email: email.toLowerCase().trim(),
-        code: finalCode,
-      });
+      const supabase = getSupabaseClient();
 
-      if (error || !data?.success) {
-        showAlert(
-          'Invalid Code',
-          error ?? 'The code you entered is incorrect or has expired. Please try again.'
-        );
+      // Verify code against database (verification_codes table)
+      const { data: codeData, error: codeError } = await supabase
+        .from('verification_codes')
+        .select('*')
+        .eq('email', email.toLowerCase().trim())
+        .eq('code', finalCode)
+        .eq('used', false)
+        .gte('expires_at', new Date().toISOString())
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (codeError || !codeData) {
+        showAlert('Invalid Code', 'The code you entered is incorrect or has expired. Please try again.');
         return;
       }
+
+      // Mark code as used
+      await supabase
+        .from('verification_codes')
+        .update({ used: true })
+        .eq('id', codeData.id);
 
       // Stop timers
       if (timerRef.current) clearInterval(timerRef.current);
@@ -306,26 +316,7 @@ export default function VerifyCodeScreen() {
     }
 
     if (mode === 'login') {
-      // If password provided, sign in with it
-      if (password) {
-        const { error: loginError } = await supabase.auth.signInWithPassword({ email, password });
-        if (loginError) {
-          // Non-fatal: still navigate since OTP was valid
-          console.warn('[verify-code] signInWithPassword error:', loginError.message);
-        }
-      } else {
-        // No password — generate a magic-link session via edge function
-        const { data: signInData, error: signInError } = await callEdgeFunction(
-          'send-verification-code',
-          { action: 'create-session', email: email.toLowerCase().trim() }
-        );
-        if (!signInError && signInData?.token_hash) {
-          await supabase.auth.verifyOtp({
-            token_hash: signInData.token_hash,
-            type: 'email',
-          });
-        }
-      }
+      // For email/OTP login we just navigate — the session was established upstream
       router.replace(redirectTo as any);
       return;
     }
