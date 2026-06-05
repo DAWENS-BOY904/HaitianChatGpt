@@ -654,12 +654,3 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
 });
-fix this {
-  "eventMessage": "POST | 400 | http://njpuoozygqtpvlzhnjpu.backend.onspace.ai/functions/v1/send-verification-code | Bad Request",
-  "functionId": "send-verification-code",
-  "id": "64a2f97f-732a-4a37-9889-b4bf8f0d8071",
-  "logLevel": "ERROR",
-  "method": "POST",
-  "statusCode": 400,
-  "timestamp": 1780640484
-} please.
