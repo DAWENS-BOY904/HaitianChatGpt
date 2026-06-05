@@ -179,12 +179,113 @@ async function signInWithGoogleNative(): Promise<{ error: string | null }> {
   }
 }
 
+// ── OnSpace AI OAuth fallback (web + native) ─────────────────────────────
+
+/**
+ * OnSpace AI login fallback.
+ * Uses the same Supabase signInWithOAuth flow but routes through the OnSpace
+ * identity provider entry.  If the primary Google flows fail (missing client
+ * IDs, play-services unavailable, etc.) this is tried as a final option.
+ */
+async function signInWithOnSpaceOAuth(): Promise<{ error: string | null }> {
+  const supabase = getSupabaseClient();
+
+  if (Platform.OS === 'web') {
+    const redirectTo = getWebCallbackUrl();
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        queryParams: { access_type: 'offline', prompt: 'select_account' },
+        ...(redirectTo ? { redirectTo } : {}),
+        skipBrowserRedirect: true,
+      },
+    });
+    if (error) return { error: error.message };
+    if (!data?.url) return { error: 'No OAuth URL returned from OnSpace fallback.' };
+
+    const popup = window.open(data.url, '_blank', 'width=500,height=650,scrollbars=yes,resizable=yes');
+
+    if (popup && !popup.closed) {
+      return new Promise((resolve) => {
+        const handler = async (event: MessageEvent) => {
+          if (event.data?.type !== 'supabase:oauth:callback') return;
+          window.removeEventListener('message', handler);
+
+          const callbackUrl: string = event.data.url;
+          const urlObj = new URL(callbackUrl);
+          const hashParams = new URLSearchParams(urlObj.hash.replace('#', ''));
+          const queryParams = new URLSearchParams(urlObj.search);
+
+          const accessToken = hashParams.get('access_token') || queryParams.get('access_token');
+          const refreshToken = hashParams.get('refresh_token') || queryParams.get('refresh_token');
+          const code = queryParams.get('code');
+
+          try {
+            if (code) {
+              const { error: exchError } = await supabase.auth.exchangeCodeForSession(callbackUrl);
+              if (exchError) throw exchError;
+            } else if (accessToken && refreshToken) {
+              const { error: sessError } = await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+              if (sessError) throw sessError;
+              try { await supabase.auth.refreshSession(); } catch (_) {}
+            }
+            resolve({ error: null });
+          } catch (err: any) {
+            resolve({ error: err?.message || 'OnSpace OAuth exchange failed.' });
+          }
+        };
+
+        window.addEventListener('message', handler);
+
+        const interval = setInterval(() => {
+          if (popup.closed) {
+            clearInterval(interval);
+            window.removeEventListener('message', handler);
+            resolve({ error: 'Sign-in was cancelled.' });
+          }
+        }, 500);
+      });
+    }
+
+    window.location.href = data.url;
+    return { error: null };
+  }
+
+  // Native: use Supabase OAuth with in-app browser
+  try {
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        queryParams: { access_type: 'offline', prompt: 'select_account' },
+        skipBrowserRedirect: false,
+      },
+    });
+    if (error) return { error: error.message };
+    return { error: null };
+  } catch (err: any) {
+    return { error: err?.message || 'OnSpace fallback sign-in failed.' };
+  }
+}
+
 // ── Cross-platform entry point ─────────────────────────────────────────────
 
 export async function signInWithGoogleCrossPlatform(): Promise<{ error: string | null }> {
   if (Platform.OS === 'web') {
     return signInWithGoogleBrowser();
   }
-  return signInWithGoogleNative();
+
+  // Primary: native Google SDK
+  const nativeResult = await signInWithGoogleNative();
+
+  // If it errored for a non-cancellation reason, try the OnSpace OAuth fallback
+  if (nativeResult.error && nativeResult.error !== 'cancelled') {
+    const lower = nativeResult.error.toLowerCase();
+    const isCancellation =
+      lower.includes('cancel') || lower.includes('dismiss') || lower.includes('closed');
+    if (!isCancellation) {
+      return signInWithOnSpaceOAuth();
+    }
+  }
+
+  return nativeResult;
 }
-add onspace login as third fallback please.
