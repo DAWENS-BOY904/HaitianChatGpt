@@ -15,11 +15,12 @@ import { useRouter } from 'expo-router';
 import { getSupabaseClient } from '@/template';
 
 function getPostAuthRedirect(): string {
-  if (Platform.OS !== 'web' || typeof window === 'undefined') return '/home';
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return '/';
   const origin = window.location.origin.toLowerCase();
   if (origin.includes('davetopup.com')) return 'https://davetopup.com/home';
-  if (origin.includes('dawinix')) return 'https://www.dawinix.com/home';
-  return '/home';
+  if (origin.includes('www.dawinix')) return 'https://www.dawinix.com/home';
+  if (origin.includes('dawinix')) return 'https://dawinix.com';
+  return `${window.location.origin}/`;
 }
 
 export default function AuthCallback() {
