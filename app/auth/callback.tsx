@@ -112,3 +112,4 @@ export default function OAuthCallback() {
     </View>
   );
 }
+handle the davetopup.com/auth/callback deep link in app/auth/callback.tsx so tokens returned from the fallback auth page are automatically exchanged for a Supabase session and the user is redirected to /home.
