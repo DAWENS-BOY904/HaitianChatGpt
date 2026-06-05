@@ -822,4 +822,3 @@ function GuestModalContent({ onStartGuest, onClose, isDark }: { onStartGuest: ()
     </View>
   );
 }
-fix google auth web auto detetc if davetopup.com and use only auth for this if link dawinix use dawinix.com function.
