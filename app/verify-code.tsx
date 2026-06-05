@@ -306,7 +306,26 @@ export default function VerifyCodeScreen() {
     }
 
     if (mode === 'login') {
-      // For email/OTP login we just navigate — the session was established upstream
+      // If password provided, sign in with it
+      if (password) {
+        const { error: loginError } = await supabase.auth.signInWithPassword({ email, password });
+        if (loginError) {
+          // Non-fatal: still navigate since OTP was valid
+          console.warn('[verify-code] signInWithPassword error:', loginError.message);
+        }
+      } else {
+        // No password — generate a magic-link session via edge function
+        const { data: signInData, error: signInError } = await callEdgeFunction(
+          'send-verification-code',
+          { action: 'create-session', email: email.toLowerCase().trim() }
+        );
+        if (!signInError && signInData?.token_hash) {
+          await supabase.auth.verifyOtp({
+            token_hash: signInData.token_hash,
+            type: 'email',
+          });
+        }
+      }
       router.replace(redirectTo as any);
       return;
     }
@@ -654,4 +673,3 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
 });
-after the email login otp fix error its must auto sign fix.

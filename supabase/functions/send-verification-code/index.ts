@@ -197,6 +197,39 @@ Deno.serve(async (req) => {
       );
     }
 
+    // ── CREATE-SESSION action ───────────────────────────────────────────────────
+    if (action === 'create-session') {
+      const { email } = body;
+      if (!email) {
+        return new Response(
+          JSON.stringify({ error: 'email is required.' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+      const normalizedEmail = email.toLowerCase().trim();
+
+      const { data, error } = await supabase.auth.admin.generateLink({
+        type: 'magiclink',
+        email: normalizedEmail,
+      });
+
+      if (error || !data?.properties?.hashed_token) {
+        console.error('[send-verification-code] generateLink error:', error);
+        return new Response(
+          JSON.stringify({ error: error?.message ?? 'Failed to create session.' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      console.log(`[send-verification-code] Session token created for ${normalizedEmail}`);
+      return new Response(
+        JSON.stringify({ success: true, token_hash: data.properties.hashed_token }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     // ── SEND action (default) ─────────────────────────────────────────────────
     const { email, type = 'login', username } = body;
 
