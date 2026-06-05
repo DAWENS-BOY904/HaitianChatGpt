@@ -35,7 +35,7 @@ Deno.serve(async (req) => {
     const displayName = username || email.split('@')[0] || 'there';
     const year = new Date().getFullYear();
 
-    const subject = `Welcome to Haitian ChatGPT 🎉`;
+    const subject = `Welcome to Dawinix 🎉`;
 
     const html = `
 <!DOCTYPE html>
@@ -180,8 +180,8 @@ Deno.serve(async (req) => {
             </defs>
           </svg>
         </div>
-        <div class="brand-name">Haitian ChatGPT</div>
-        <div class="brand-sub">Your AI Assistant, Powered by Dawinix HT</div>
+        <div class="brand-name">DawinixT</div>
+        <div class="brand-sub">Your AI Assistant, Powered by Dawine</div>
       </div>
 
       <!-- Body -->
@@ -281,7 +281,7 @@ Deno.serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: 'Haitian ChatGPT <noreply@resend.dev>',
+        from: 'Dawinix <noreply@dawinix.com>',
         to: [email],
         subject,
         html,
