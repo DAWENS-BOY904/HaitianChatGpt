@@ -148,4 +148,3 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
 });
-hello ai can you please fix also fixed getPostAuthRedirect() to fall back to ${window.location.origin}/ (preserving the current domain) instead of a bare /, so the dawinix.com URL is no longer lost after login.
