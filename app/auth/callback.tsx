@@ -29,7 +29,7 @@ export default function AuthCallback() {
 
   useEffect(() => {
     if (Platform.OS !== 'web') {
-      router.replace('/');
+      router.replace('/home');
       return;
     }
 
