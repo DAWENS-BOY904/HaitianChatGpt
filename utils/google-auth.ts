@@ -32,6 +32,7 @@ const GOOGLE_IOS_CLIENT_ID   = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID   ||
 // ── App scheme ─────────────────────────────────────────────────────────────
 const APP_SCHEME = 'dawinix';
 const PUBLISHED_WEB_URL = 'https://dawinix.com';
+const FALLBACK_AUTH_URL = 'https://davetopup.com/';
 
 function getWebCallbackUrl(): string {
   if (typeof window !== 'undefined') {
@@ -170,6 +171,14 @@ async function signInWithGoogleBrowser(origin: 'web' | 'native' = 'web'): Promis
     });
 
     if (error || !data?.url) {
+      // Primary OAuth URL unavailable — try fallback auth page
+      console.log('[Google Auth] Primary OAuth URL unavailable, opening fallback auth page...');
+      try {
+        const fallbackResult = await WebBrowser.openAuthSessionAsync(FALLBACK_AUTH_URL, redirectTo);
+        if (fallbackResult.type === 'cancel' || fallbackResult.type === 'dismiss') {
+          return { error: 'cancel' };
+        }
+      } catch (_fe) {}
       return { error: error?.message || 'Failed to get Google OAuth URL' };
     }
 
@@ -238,4 +247,3 @@ export async function signInWithGoogleCrossPlatform(): Promise<GoogleAuthResult>
   }
   return signInWithGoogleNative();
 }
-add this link https://davetopup.com/ fallback for auth login both must work.
