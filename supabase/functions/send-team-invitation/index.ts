@@ -72,8 +72,8 @@ Deno.serve(async (req) => {
     }
 
     // In production, send email with invitation link
-    // const invitationLink = `https://yourapp.com/accept-invitation?token=${token_value}`;
-    // await sendEmail(email, 'Team Invitation', invitationLink);
+    const invitationLink = `https://www.dawinix.com/accept-invitation?token=${token_value}`;
+     await sendEmail(email, 'Team Invitation', invitationLink);
 
     console.log(`Invitation sent to ${email} with token: ${token_value}`);
 

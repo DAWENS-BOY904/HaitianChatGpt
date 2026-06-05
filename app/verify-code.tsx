@@ -1,136 +1,68 @@
-
-/**
- * verify-code.tsx
- *
- * OTP verification screen.
- * - Sends codes exclusively via the `send-verification-code` edge function (Resend API).
- * - Verifies codes via the `verify-code-check` logic inside the same edge function.
- * - No Supabase OTP paths used.
- * - Shows a 10-minute countdown timer.
- * - Calls `send-welcome-email` after successful new-user registration.
- */
-
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  KeyboardAvoidingView,
+  StatusBar,
   Platform,
-  ScrollView,
-  ActivityIndicator,
-  Dimensions,
 } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useAuth, useAlert, getSupabaseClient } from '@/template';
+import { useTheme } from '../hooks/useTheme';
+import { Spacing, Typography, BorderRadius } from '../constants/theme';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { getSupabaseClient } from '@/template';
-import { useAlert } from '@/template';
-import { useTheme } from '@/hooks/useTheme';
-import { FunctionsHttpError } from '@supabase/supabase-js';
 
-// ── Types ──────────────────────────────────────────────────────────────────
+// ── MEME SUPABASE KONFIGIRASYON KI NAN LoginScreen ──
+const MY_SUPABASE_URL = 'https://uzxmmddivzqjhcnnrkns.supabase.co';
+const MY_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV6eG1tZGRpdnpxamhjbm5ya25zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY0MTY5MjEsImV4cCI6MjA5MTk5MjkyMX0.6PYtbRps9YJjvX5ibxGy346uA82RadEEpFrhSHa1UIE';
 
-type VerifyMode =
-  | 'registration'
-  | 'login'
-  | 'password_change'
-  | 'email_change'
-  | 'account_action';
-
-// ── Constants ──────────────────────────────────────────────────────────────
-
-const CODE_EXPIRY_SECONDS = 600; // 10 minutes
-const CODE_LENGTH = 6;
-
-// ── Helper: call edge function ─────────────────────────────────────────────
-
-async function callEdgeFunction(
-  name: string,
-  body: Record<string, unknown>
-): Promise<{ data: any; error: string | null }> {
-  const supabase = getSupabaseClient();
-  const { data, error } = await supabase.functions.invoke(name, { body });
-
-  if (error) {
-    let msg = error.message;
-    if (error instanceof FunctionsHttpError) {
-      try {
-        const text = await (error as any).context?.text?.();
-        msg = text || msg;
-      } catch (_) {}
-    }
-    return { data: null, error: msg };
-  }
-
-  return { data, error: null };
-}
-
-// ── Main Component ─────────────────────────────────────────────────────────
+import { createClient } from '@supabase/supabase-js';
+const phoneSupabase = createClient(MY_SUPABASE_URL, MY_SUPABASE_ANON_KEY, {
+  auth: { autoRefreshToken: true, persistSession: true, detectSessionInUrl: false },
+});
 
 export default function VerifyCodeScreen() {
+  const { colors } = useTheme();
+  const { verifyOTPAndLogin, sendOTP, operationLoading } = useAuth();
+  const { showAlert } = useAlert();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { showAlert } = useAlert();
-  const { isDark } = useTheme();
 
-  // Route params
-  const params = useLocalSearchParams<{
-    email?: string;
-    mode?: VerifyMode;
-    username?: string;
-    password?: string;
-    redirectTo?: string;
+  const {
+    email,
+    password,
+    mode,
+    phone,
+    formattedPhone,
+  } = useLocalSearchParams<{
+    email: string;
+    password: string;
+    mode: string;
+    phone: string;
+    formattedPhone: string;
   }>();
 
-  const email = params.email ?? '';
-  const mode: VerifyMode = (params.mode as VerifyMode) ?? 'login';
-  const username = params.username ?? '';
-  const password = params.password ?? '';
-  const redirectTo = params.redirectTo ?? '/home';
+  const isAdminLogin = mode === 'admin_login';
+  const isPhoneMode = mode === 'phone_login' || !!phone;
 
-  // State
-  const [code, setCode] = useState('');
-  const [sending, setSending] = useState(false);
-  const [verifying, setVerifying] = useState(false);
-  const [codeSent, setCodeSent] = useState(false);
-  const [secondsLeft, setSecondsLeft] = useState(CODE_EXPIRY_SECONDS);
-  const [canResend, setCanResend] = useState(false);
-  const [resendCooldown, setResendCooldown] = useState(60);
-
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const resendRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
+  const [code, setCode] = useState(['', '', '', '', '', '']);
   const inputRefs = useRef<(TextInput | null)[]>([]);
-  const [digits, setDigits] = useState<string[]>(Array(CODE_LENGTH).fill(''));
 
-  // ── Countdown timer ──────────────────────────────────────────────────────
+  const [resendCount, setResendCount] = useState(0);
+  const [cooldown, setCooldown] = useState(isPhoneMode ? 60 : 0);
+  const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [resendLoading, setResendLoading] = useState(false);
 
-  const startExpiryTimer = useCallback(() => {
-    if (timerRef.current) clearInterval(timerRef.current);
-    setSecondsLeft(CODE_EXPIRY_SECONDS);
-    timerRef.current = setInterval(() => {
-      setSecondsLeft((prev) => {
+  const startCooldown = useCallback((seconds: number) => {
+    setCooldown(seconds);
+    cooldownRef.current && clearInterval(cooldownRef.current);
+    cooldownRef.current = setInterval(() => {
+      setCooldown(prev => {
         if (prev <= 1) {
-          clearInterval(timerRef.current!);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-  }, []);
-
-  const startResendCooldown = useCallback(() => {
-    if (resendRef.current) clearInterval(resendRef.current);
-    setCanResend(false);
-    setResendCooldown(60);
-    resendRef.current = setInterval(() => {
-      setResendCooldown((prev) => {
-        if (prev <= 1) {
-          clearInterval(resendRef.current!);
-          setCanResend(true);
+          cooldownRef.current && clearInterval(cooldownRef.current!);
           return 0;
         }
         return prev - 1;
@@ -139,528 +71,238 @@ export default function VerifyCodeScreen() {
   }, []);
 
   useEffect(() => {
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-      if (resendRef.current) clearInterval(resendRef.current);
-    };
-  }, []);
+    if (isPhoneMode) startCooldown(60);
+    setTimeout(() => inputRefs.current[0]?.focus(), 100);
+    return () => { cooldownRef.current && clearInterval(cooldownRef.current!); };
+  }, [isPhoneMode, startCooldown]);
 
-  // ── Send code on mount ───────────────────────────────────────────────────
+  const handleCodeChange = (index: number, value: string) => {
+    if (value && !/^\d+$/.test(value)) return;
+    const newCode = [...code];
+    newCode[index] = value;
+    setCode(newCode);
+    if (value && index < 5) inputRefs.current[index + 1]?.focus();
+    if (index === 5 && value) handleVerify(newCode.join(''));
+  };
 
-  useEffect(() => {
-    if (email) {
-      sendVerificationCode();
-    }
-  }, [email]); // Added email to dependency array
-
-  // ── Send code via edge function ──────────────────────────────────────────
-
-  async function sendVerificationCode() {
-    if (!email) {
-      showAlert('Error', 'Email address is required.');
-      return;
-    }
-
-    setSending(true);
-    try {
-      const codeType = mode === 'registration' ? 'registration' : mode === 'login' ? 'login' : mode;
-      const { data, error } = await callEdgeFunction('send-verification-code', {
-        email,
-        type: codeType,
-        username: username || undefined,
-      });
-
-      if (error) {
-        showAlert('Failed to Send Code', error);
-        return;
-      }
-
-      setCodeSent(true);
-      startExpiryTimer();
-      startResendCooldown();
-    } finally {
-      setSending(false);
-    }
-  }
-
-  // ── Handle digit input ───────────────────────────────────────────────────
-
-  function handleDigitChange(value: string, index: number) {
-    const sanitized = value.replace(/[^0-9]/g, '').slice(-1);
-    const newDigits = [...digits];
-    newDigits[index] = sanitized;
-    setDigits(newDigits);
-    setCode(newDigits.join(''));
-
-    if (sanitized && index < CODE_LENGTH - 1) {
-      inputRefs.current[index + 1]?.focus();
-    }
-
-    // Auto-submit when all digits entered
-    if (sanitized && index === CODE_LENGTH - 1) {
-      const full = newDigits.join('');
-      if (full.length === CODE_LENGTH) {
-        verifyCode(full);
-      }
-    }
-  }
-
-  function handleDigitKeyPress(key: string, index: number) {
-    if (key === 'Backspace' && !digits[index] && index > 0) {
+  const handleKeyPress = (index: number, key: string) => {
+    if (key === 'Backspace' && !code[index] && index > 0) {
       inputRefs.current[index - 1]?.focus();
-      const newDigits = [...digits];
-      newDigits[index - 1] = '';
-      setDigits(newDigits);
-      setCode(newDigits.join(''));
     }
-  }
+  };
 
-  // ── Verify code ──────────────────────────────────────────────────────────
-
-  async function verifyCode(codeToVerify?: string) {
-    const finalCode = (codeToVerify ?? code).trim();
-    if (finalCode.length !== CODE_LENGTH) {
-      showAlert('Invalid Code', `Please enter the ${CODE_LENGTH}-digit code.`);
+  const handleVerify = async (codeValue?: string) => {
+    const otp = codeValue || code.join('');
+    if (otp.length !== 6) {
+      showAlert('Error', 'Please enter the 6-digit code');
       return;
     }
 
-    if (secondsLeft === 0) {
-      showAlert('Code Expired', 'Your verification code has expired. Please request a new one.');
-      return;
-    }
-
-    setVerifying(true);
-    try {
-      const supabase = getSupabaseClient();
-
-      // Verify code against database (verification_codes table)
-      const { data: codeData, error: codeError } = await supabase
-        .from('verification_codes')
-        .select('*')
-        .eq('email', email.toLowerCase().trim())
-        .eq('code', finalCode)
-        .eq('used', false)
-        .gte('expires_at', new Date().toISOString())
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single();
-
-      if (codeError || !codeData) {
-        showAlert('Invalid Code', 'The code you entered is incorrect or has expired. Please try again.');
-        return;
-      }
-
-      // Mark code as used
-      await supabase
-        .from('verification_codes')
-        .update({ used: true })
-        .eq('id', codeData.id);
-
-      // Stop timers
-      if (timerRef.current) clearInterval(timerRef.current);
-      if (resendRef.current) clearInterval(resendRef.current);
-
-      // Handle post-verification actions per mode
-      await handlePostVerification();
-    } finally {
-      setVerifying(false);
-    }
-  }
-
-  // ── Post-verification logic per mode ────────────────────────────────────
-
-  async function handlePostVerification() {
-    const supabase = getSupabaseClient();
-
-    if (mode === 'registration') {
-      // Create account via Supabase signUp
-      if (!password) {
-        showAlert('Error', 'Password is missing. Please restart registration.');
-        router.replace('/signup');
-        return;
-      }
-
-      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: { username: username || email.split('@')[0] },
-        },
-      });
-
-      if (signUpError) {
-        // If user already exists, try signing in
-        if (signUpError.message.toLowerCase().includes('already')) {
-          const { error: loginError } = await supabase.auth.signInWithPassword({ email, password });
-          if (loginError) {
-            showAlert('Account Error', loginError.message);
-            return;
-          }
-        } else {
-          showAlert('Registration Failed', signUpError.message);
-          return;
-        }
-      }
-
-      // Send welcome email (non-fatal)
+    // ── PHONE OTP VERIFY AK MEME SUPABASE ──
+    if (isPhoneMode) {
       try {
-        await callEdgeFunction('send-welcome-email', {
-          email,
-          username: username || email.split('@')[0],
-          userId: signUpData?.user?.id,
+        const { error, data } = await phoneSupabase.auth.verifyOtp({
+          phone: phone!,
+          token: otp,
+          type: 'sms',
         });
-      } catch (_) {}
-
-      router.replace(redirectTo as any);
+        if (error) {
+          showAlert('Error', error.message);
+          setCode(['', '', '', '', '', '']);
+          inputRefs.current[0]?.focus();
+        } else if (data?.user) {
+          setTimeout(() => router.replace('/'), 100);
+        }
+      } catch (err: any) {
+        showAlert('Error', err?.message || 'Verification failed');
+        setCode(['', '', '', '', '', '']);
+      }
       return;
     }
 
-    if (mode === 'login') {
-      // For email/OTP login we just navigate — the session was established upstream
-      router.replace(redirectTo as any);
+    // Email OTP (pa chanje)
+    if (isAdminLogin) {
+      const { error: otpError, user: otpUser } = await verifyOTPAndLogin(email, otp);
+      if (otpError) {
+        showAlert('Error', otpError);
+        setCode(['', '', '', '', '', '']);
+        inputRefs.current[0]?.focus();
+      } else if (otpUser) {
+        setTimeout(() => router.replace('/'), 100);
+      }
       return;
     }
 
-    if (mode === 'password_change') {
-      router.push({ pathname: '/security', params: { verified: '1' } } as any);
-      return;
+    const { error } = await verifyOTPAndLogin(email, otp, { password });
+    if (error) {
+      showAlert('Error', error);
+      setCode(['', '', '', '', '', '']);
+      inputRefs.current[0]?.focus();
     }
-
-    if (mode === 'email_change') {
-      router.push({ pathname: '/settings', params: { verified: '1' } } as any);
-      return;
-    }
-
-    // Default
-    router.replace(redirectTo as any);
-  }
-
-  // ── Resend ───────────────────────────────────────────────────────────────
-
-  async function handleResend() {
-    if (!canResend || sending) return;
-    setDigits(Array(CODE_LENGTH).fill(''));
-    setCode('');
-    await sendVerificationCode();
-  }
-
-  // ── UI helpers ───────────────────────────────────────────────────────────
-
-  const formatTime = (secs: number) => {
-    const m = Math.floor(secs / 60).toString().padStart(2, '0');
-    const s = (secs % 60).toString().padStart(2, '0');
-    return `${m}:${s}`;
   };
 
-  const timerColor =
-    secondsLeft > 120 ? '#10A37F' : secondsLeft > 30 ? '#FF9F0A' : '#FF453A';
-
-  // ── Theme colors ──────────────────────────────────────────────────────────
-
-  const bg = isDark ? '#0a0a0a' : '#F2F2F7';
-  const cardBg = isDark ? '#111111' : '#FFFFFF';
-  const textColor = isDark ? '#FFFFFF' : '#000000';
-  const subtleText = isDark ? '#888888' : '#6B6B6B';
-  const borderColor = isDark ? '#2C2C2E' : '#E5E5EA';
-  const inputBg = isDark ? '#1C1C1E' : '#F2F2F7';
-  const accentColor = '#10A37F';
-
-  // ── Render ────────────────────────────────────────────────────────────────
-
-  const modeLabel: Record<VerifyMode, string> = {
-    registration: 'Verify Your Email',
-    login: 'Enter Verification Code',
-    password_change: 'Confirm Identity',
-    email_change: 'Verify New Email',
-    account_action: 'Verify Action',
+  const handleResend = async () => {
+    if (cooldown > 0 || resendLoading) return;
+    setResendLoading(true);
+    try {
+      if (isPhoneMode) {
+        // ── RESEND PHONE OTP AK MEME SUPABASE ──
+        const { error } = await phoneSupabase.auth.signInWithOtp({ phone: phone! });
+        if (error) throw error;
+        showAlert('Code Sent', `Verification code resent to ${formattedPhone || phone}.`);
+      } else {
+        const { error } = await sendOTP(email);
+        if (error) throw new Error(error);
+        showAlert('Code Sent', 'Verification code sent to your email.');
+      }
+      setResendCount(c => c + 1);
+      startCooldown(60);
+    } catch (e: any) {
+      showAlert('Error', e?.message || 'Failed to resend code.');
+    } finally {
+      setResendLoading(false);
+    }
   };
 
-  const modeDescription: Record<VerifyMode, string> = {
-    registration: `We sent a ${CODE_LENGTH}-digit code to confirm your email address.`,
-    login: `We sent a ${CODE_LENGTH}-digit sign-in code to your email.`,
-    password_change: `Enter the ${CODE_LENGTH}-digit code to authorize this password change.`,
-    email_change: `Enter the ${CODE_LENGTH}-digit code sent to your new email.`,
-    account_action: `Enter the ${CODE_LENGTH}-digit code to complete this action.`,
-  };
+  const styles = StyleSheet.create({
+    container: { flex: 1, backgroundColor: colors.background },
+    closeButton: {
+      position: 'absolute',
+      top: Platform.select({ ios: insets.top + 16, android: insets.top + 16, default: 16 }),
+      right: 20,
+    },
+    content: {
+      flex: 1, paddingHorizontal: Spacing.xl,
+      paddingTop: Platform.select({ ios: insets.top + 80, android: insets.top + 80, default: 80 }),
+    },
+    icon: {
+      width: 64, height: 64, borderRadius: 32,
+      backgroundColor: colors.text, alignItems: 'center', justifyContent: 'center',
+      alignSelf: 'center', marginBottom: Spacing.xl,
+    },
+    iconSymbol: { fontSize: 32, fontWeight: '700', color: colors.background },
+    title: {
+      fontSize: 28, fontWeight: '700', color: colors.text,
+      marginBottom: Spacing.md, textAlign: 'center',
+    },
+    subtitle: {
+      ...Typography.body, color: colors.textSecondary,
+      textAlign: 'center', marginBottom: Spacing.xxl, lineHeight: 22,
+    },
+    highlight: { color: colors.text, fontWeight: '600' },
+    codeInputContainer: {
+      flexDirection: 'row', justifyContent: 'center',
+      gap: Spacing.sm, marginBottom: Spacing.xl,
+    },
+    codeInput: {
+      width: 50, height: 56, backgroundColor: colors.surface,
+      borderRadius: BorderRadius.lg, borderWidth: 2, borderColor: colors.border,
+      textAlign: 'center', fontSize: 24, fontWeight: '600', color: colors.text,
+    },
+    codeInputFocused: { borderColor: colors.text },
+    continueButton: {
+      backgroundColor: colors.text, borderRadius: BorderRadius.full,
+      padding: Spacing.md, alignItems: 'center', marginBottom: Spacing.md,
+    },
+    continueButtonDisabled: { opacity: 0.3 },
+    continueButtonText: {
+      ...Typography.body, color: colors.background, fontWeight: '600', fontSize: 16,
+    },
+    resendButton: { alignItems: 'center', padding: Spacing.sm },
+    resendButtonText: { ...Typography.body, color: colors.text, fontWeight: '600' },
+    phoneHint: {
+      ...Typography.caption, color: colors.textSecondary,
+      textAlign: 'center', marginTop: Spacing.md, lineHeight: 18,
+    },
+    footer: {
+      position: 'absolute',
+      bottom: Platform.select({ ios: insets.bottom + Spacing.lg, android: Spacing.lg, default: Spacing.lg }),
+      left: Spacing.xl, right: Spacing.xl,
+      flexDirection: 'row', justifyContent: 'center', gap: Spacing.md,
+    },
+    footerLink: { ...Typography.caption, color: colors.textSecondary },
+  });
+
+  const isCodeComplete = code.every(d => d !== '');
 
   return (
-    <KeyboardAvoidingView
-      style={[styles.flex, { backgroundColor: bg }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <ScrollView
-        contentContainerStyle={[
-          styles.scroll,
-          { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 32 },
-        ]}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Back button */}
+    <View style={styles.container}>
+      <StatusBar barStyle={colors.text === '#FFFFFF' ? 'light-content' : 'dark-content'} />
+
+      <TouchableOpacity style={styles.closeButton} onPress={() => router.back()}>
+        <Ionicons name="close" size={28} color={colors.text} />
+      </TouchableOpacity>
+
+      <View style={styles.content}>
+        <View style={styles.icon}>
+          <Text style={styles.iconSymbol}>{isPhoneMode ? '📱' : '✦'}</Text>
+        </View>
+
+        <Text style={styles.title}>
+          {isPhoneMode ? 'Check your messages' : 'Check your inbox'}
+        </Text>
+        <Text style={styles.subtitle}>
+          {isPhoneMode
+            ? 'Enter the 6-digit code we sent to '
+            : 'Enter the verification code we just sent to '}
+          <Text style={styles.highlight}>
+            {isPhoneMode ? (formattedPhone || phone) : email}
+          </Text>
+          {'.'}
+        </Text>
+
+        <View style={styles.codeInputContainer}>
+          {code.map((digit, index) => (
+            <TextInput
+              key={index}
+              ref={ref => { inputRefs.current[index] = ref; }}
+              style={[styles.codeInput, digit && styles.codeInputFocused]}
+              value={digit}
+              onChangeText={value => handleCodeChange(index, value)}
+              onKeyPress={({ nativeEvent: { key } }) => handleKeyPress(index, key)}
+              keyboardType="number-pad"
+              maxLength={1}
+              editable={!operationLoading}
+            />
+          ))}
+        </View>
+
         <TouchableOpacity
-          style={styles.backBtn}
-          onPress={() => router.back()}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          style={[styles.continueButton, !isCodeComplete && styles.continueButtonDisabled]}
+          onPress={() => handleVerify()}
+          disabled={!isCodeComplete || operationLoading}
         >
-          <Ionicons name="chevron-back" size={24} color={textColor} />
+          <Text style={styles.continueButtonText}>
+            {operationLoading ? 'Verifying...' : 'Continue'}
+          </Text>
         </TouchableOpacity>
 
-        {/* Icon */}
-        <View style={[styles.iconWrap, { backgroundColor: `${accentColor}20` }]}>
-          <Ionicons name="mail-unread-outline" size={36} color={accentColor} />
-        </View>
+        <TouchableOpacity
+          style={[styles.resendButton, (cooldown > 0 || resendLoading) && { opacity: 0.4 }]}
+          onPress={handleResend}
+          disabled={operationLoading || cooldown > 0 || resendLoading}
+        >
+          <Text style={styles.resendButtonText}>
+            {resendLoading
+              ? 'Sending...'
+              : cooldown > 0
+              ? `Resend code in ${cooldown}s`
+              : isPhoneMode ? 'Resend SMS' : 'Resend email'}
+          </Text>
+        </TouchableOpacity>
 
-        {/* Title */}
-        <Text style={[styles.title, { color: textColor }]}>
-          {modeLabel[mode]}
-        </Text>
-
-        <Text style={[styles.subtitle, { color: subtleText }]}>
-          {modeDescription[mode]}
-        </Text>
-
-        {!!email && (
-          <Text style={[styles.emailLabel, { color: accentColor }]}>
-            {email}
+        {isPhoneMode && (
+          <Text style={styles.phoneHint}>
+            {"Didn't receive it? Check that your number is correct or try a different method."}
           </Text>
         )}
+      </View>
 
-        {/* Loading state while sending */}
-        {sending && !codeSent && (
-          <View style={styles.sendingWrap}>
-            <ActivityIndicator size="small" color={accentColor} />
-            <Text style={[styles.sendingText, { color: subtleText }]}>Sending code…</Text>
-          </View>
-        )}
-
-        {/* Code input */}
-        {(codeSent || sending) && (
-          <>
-            <View style={styles.codeRow}>
-              {digits.map((digit, i) => (
-                <TextInput
-                  key={i}
-                  ref={(ref) => { inputRefs.current[i] = ref; }}
-                  style={[
-                    styles.codeInput,
-                    {
-                      backgroundColor: inputBg,
-                      borderColor: digit ? accentColor : borderColor,
-                      color: textColor,
-                    },
-                  ]}
-                  value={digit}
-                  onChangeText={(v) => handleDigitChange(v, i)}
-                  onKeyPress={({ nativeEvent }) => handleDigitKeyPress(nativeEvent.key, i)}
-                  keyboardType="number-pad"
-                  maxLength={1}
-                  textAlign="center"
-                  selectTextOnFocus
-                  returnKeyType="done"
-                  accessibilityLabel={`Digit ${i + 1}`}
-                />
-              ))}
-            </View>
-
-            {/* Timer */}
-            <View style={styles.timerRow}>
-              <Ionicons name="time-outline" size={16} color={timerColor} />
-              <Text style={[styles.timerText, { color: timerColor }]}>
-                {secondsLeft > 0
-                  ? `Code expires in ${formatTime(secondsLeft)}`
-                  : 'Code expired — please request a new one'}
-              </Text>
-            </View>
-
-            {/* Verify button */}
-            <TouchableOpacity
-              style={[
-                styles.verifyBtn,
-                {
-                  backgroundColor:
-                    code.length === CODE_LENGTH && secondsLeft > 0
-                      ? accentColor
-                      : isDark ? '#2C2C2E' : '#E5E5EA',
-                },
-              ]}
-              onPress={() => verifyCode()}
-              disabled={verifying || code.length !== CODE_LENGTH || secondsLeft === 0}
-              activeOpacity={0.8}
-            >
-              {verifying ? (
-                <ActivityIndicator size="small" color="#FFF" />
-              ) : (
-                <Text
-                  style={[
-                    styles.verifyBtnText,
-                    {
-                      color:
-                        code.length === CODE_LENGTH && secondsLeft > 0
-                          ? '#FFF'
-                          : subtleText,
-                    },
-                  ]}
-                >
-                  Verify Code
-                </Text>
-              )}
-            </TouchableOpacity>
-
-            {/* Resend */}
-            <View style={styles.resendRow}>
-              <Text style={[styles.resendLabel, { color: subtleText }]}>
-                {"Didn't receive a code? "}
-              </Text>
-              {canResend ? (
-                <TouchableOpacity onPress={handleResend} disabled={sending}>
-                  <Text style={[styles.resendLink, { color: accentColor }]}>
-                    Resend
-                  </Text>
-                </TouchableOpacity>
-              ) : (
-                <Text style={[styles.resendCooldown, { color: subtleText }]}>
-                  Resend in {resendCooldown}s
-                </Text>
-              )}
-            </View>
-          </>
-        )}
-
-        {/* Info card */}
-        <View style={[styles.infoCard, { backgroundColor: cardBg, borderColor }]}>
-          <Ionicons name="shield-checkmark-outline" size={20} color={accentColor} style={styles.infoIcon} />
-          <Text style={[styles.infoText, { color: subtleText }]}>
-            {'For your security, do not share this code with anyone — including support staff.'}
-          </Text>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+      <View style={styles.footer}>
+        <Text style={styles.footerLink}>Terms of Use</Text>
+        <Text style={styles.footerLink}>•</Text>
+        <Text style={styles.footerLink}>Privacy Policy</Text>
+      </View>
+    </View>
   );
 }
-
-// ── Styles ─────────────────────────────────────────────────────────────────
-
-const styles = StyleSheet.create({
-  flex: { flex: 1 },
-  scroll: {
-    flexGrow: 1,
-    paddingHorizontal: 24,
-    alignItems: 'center',
-  },
-  backBtn: {
-    alignSelf: 'flex-start',
-    marginBottom: 24,
-    padding: 4,
-  },
-  iconWrap: {
-    width: 80,
-    height: 80,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 24,
-  },
-  title: {
-    fontSize: 26,
-    fontWeight: '700',
-    textAlign: 'center',
-    marginBottom: 10,
-    letterSpacing: -0.4,
-  },
-  subtitle: {
-    fontSize: 16,
-    textAlign: 'center',
-    lineHeight: 24,
-    marginBottom: 8,
-    maxWidth: 320,
-  },
-  emailLabel: {
-    fontSize: 15,
-    fontWeight: '600',
-    textAlign: 'center',
-    marginBottom: 32,
-  },
-  sendingWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginBottom: 24,
-  },
-  sendingText: {
-    fontSize: 15,
-  },
-  codeRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: 20,
-    justifyContent: 'center',
-  },
-  codeInput: {
-    width: 48,
-    height: 58,
-    borderRadius: 14,
-    borderWidth: 1.5,
-    fontSize: 24,
-    fontWeight: '700',
-    textAlign: 'center',
-    ...(Platform.OS === 'android' ? { includeFontPadding: false } : {}),
-  },
-  timerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 28,
-  },
-  timerText: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  verifyBtn: {
-    width: '100%',
-    maxWidth: 360,
-    height: 52,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
-  },
-  verifyBtnText: {
-    fontSize: 16,
-    fontWeight: '700',
-    letterSpacing: 0.2,
-  },
-  resendRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 36,
-  },
-  resendLabel: {
-    fontSize: 14,
-  },
-  resendLink: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  resendCooldown: {
-    fontSize: 14,
-  },
-  infoCard: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    padding: 16,
-    maxWidth: 360,
-    width: '100%',
-  },
-  infoIcon: {
-    marginTop: 1,
-    flexShrink: 0,
-  },
-  infoText: {
-    flex: 1,
-    fontSize: 13,
-    lineHeight: 20,
-  },
-});

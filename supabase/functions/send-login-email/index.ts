@@ -68,7 +68,7 @@ Deno.serve(async (req) => {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Successful Login – Dawinix AI</title>
+  <title>Successful Login – Dawinix</title>
   <style>
     body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; background: #0a0a0a; color: #ffffff; }
     .wrapper { max-width: 560px; margin: 0 auto; padding: 32px 16px; }
@@ -199,14 +199,14 @@ Deno.serve(async (req) => {
             <circle cx="12" cy="9" r="2.5" fill="#ffffff"/>
           </svg>
         </div>
-        <div class="logo-text">Haitian AI</div>
+        <div class="logo-text">Dawinix</div>
         <div class="sub">Successful Sign-In</div>
       </div>
       
       <div class="body">
         <div class="greeting">Welcome back, ${username}!</div>
         <div class="message">
-          A successful sign-in to your Dawinix-HT account was detected. Here are the details:
+          A successful sign-in to your Dawinix account was detected. Here are the details:
         </div>
         <div class="info-box">
           <div class="info-row">
@@ -231,7 +231,7 @@ Deno.serve(async (req) => {
       
       <!-- App Download Section -->
       <div class="app-downloads">
-        <div class="app-downloads-title">Download the Haitian AI App</div>
+        <div class="app-downloads-title">Download the Dawinix App</div>
         <div class="store-btns">
           <!-- App Store -->
           <a href="https://apps.apple.com/app/haitian-ai" class="store-btn" target="_blank">
@@ -327,9 +327,9 @@ Deno.serve(async (req) => {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              from: 'Haitian AI <noreply@dawinix.com>',
+              from: 'Dawinix <noreply@dawinix.com>',
               to: [email],
-              subject: '✅ Successful Sign-In to Haitian AI',
+              subject: '✅ Successful Sign-In to Dawinix',
               html: emailHTML,
             }),
           });

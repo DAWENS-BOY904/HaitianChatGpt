@@ -15,7 +15,7 @@ async function sendViaResend(to: string, subject: string, html: string): Promise
     method: 'POST',
     headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      from: 'Dawinix HT <noreply@resend.dev>',
+      from: 'Dawinix <noreply@dawinix.com>',
       to: [to],
       subject,
       html,
@@ -115,7 +115,7 @@ Deno.serve(async (req) => {
             <defs><linearGradient id="g1" x1="12" y1="8" x2="36" y2="32" gradientUnits="userSpaceOnUse"><stop stop-color="#10A37F"/><stop offset="1" stop-color="#0096FF"/></linearGradient></defs>
           </svg>
         </div>
-        <div class="brand-name">Dawinix HT</div>
+        <div class="brand-name">Dawinix</div>
         <div class="brand-sub">Family Invitation</div>
       </div>
 
@@ -137,7 +137,7 @@ Deno.serve(async (req) => {
           <p class="steps-title">How to accept</p>
           <div class="step">
             <div class="step-num">1</div>
-            <div class="step-text">Open the <strong>Dawinix HT</strong> app on your device</div>
+            <div class="step-text">Open the <strong>Dawinix</strong> app on your device</div>
           </div>
           <div class="step">
             <div class="step-num">2</div>
