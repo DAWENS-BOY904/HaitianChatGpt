@@ -247,4 +247,3 @@ export async function signInWithGoogleCrossPlatform(): Promise<GoogleAuthResult>
   }
   return signInWithGoogleNative();
 }
-please ai Update utils/google-auth.ts so that on web, signInWithGoogleBrowser auto-detects the current origin: if it contains 'davetopup.com' it routes through the davetopup auth flow, and if it contains 'dawinix' it uses the dawinix.com callback — replacing the current hardcoded PUBLISHED_WEB_URL fallback logic.
