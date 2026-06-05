@@ -822,4 +822,3 @@ function GuestModalContent({ onStartGuest, onClose, isDark }: { onStartGuest: ()
     </View>
   );
 }
-hello ai dont remove my message without change create new-login-setupweb to document the origin auto-detection logic in utils/google-auth and app/auth/callback, covering the davetopup.com and dawinix.com redirect flows for web.
