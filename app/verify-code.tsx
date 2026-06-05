@@ -654,3 +654,4 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
 });
+after the email login otp fix error its must auto sign fix.

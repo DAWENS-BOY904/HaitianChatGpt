@@ -208,12 +208,8 @@ Deno.serve(async (req) => {
     }
 
     const validTypes = ['login', 'registration', 'password_change', 'email_change', 'account_action'];
-    if (!validTypes.includes(type)) {
-      return new Response(
-        JSON.stringify({ error: `Invalid type. Must be one of: ${validTypes.join(', ')}` }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+    const normalizedType = validTypes.includes(type) ? type : 'login';
+    const resolvedType = normalizedType;
 
     if (!RESEND_API_KEY) {
       console.error('[send-verification-code] RESEND_API_KEY not configured.');
@@ -230,7 +226,7 @@ Deno.serve(async (req) => {
     const { error: dbError } = await supabase.from('verification_codes').insert({
       email: email.toLowerCase().trim(),
       code,
-      type,
+      type: resolvedType,
       expires_at: expiresAt,
       used: false,
     });
@@ -243,8 +239,8 @@ Deno.serve(async (req) => {
       );
     }
 
-    const { subject } = getEmailSubjectAndTitle(type);
-    const html = buildEmailHtml(code, type, username);
+    const { subject } = getEmailSubjectAndTitle(resolvedType);
+    const html = buildEmailHtml(code, resolvedType, username);
 
     const resendRes = await fetch('https://api.resend.com/emails', {
       method: 'POST',
@@ -270,7 +266,7 @@ Deno.serve(async (req) => {
     }
 
     const resendData = await resendRes.json();
-    console.log(`[send-verification-code] Code sent to ${email} (type: ${type}), id: ${resendData.id}`);
+    console.log(`[send-verification-code] Code sent to ${email} (type: ${resolvedType}), id: ${resendData.id}`);
 
     return new Response(
       JSON.stringify({ success: true }),
