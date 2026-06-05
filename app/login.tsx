@@ -822,4 +822,3 @@ function GuestModalContent({ onStartGuest, onClose, isDark }: { onStartGuest: ()
     </View>
   );
 }
-hello ai please for the app login fix login use onspace auth login google in app function no same as web login please
