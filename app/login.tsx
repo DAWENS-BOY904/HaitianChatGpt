@@ -822,4 +822,3 @@ function GuestModalContent({ onStartGuest, onClose, isDark }: { onStartGuest: ()
     </View>
   );
 }
-hello ai can you edit GOOGLE_OAUTH_SETUP md to fetch the new google login also the app/auth please for web version.
