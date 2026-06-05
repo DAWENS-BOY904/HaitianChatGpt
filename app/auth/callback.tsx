@@ -148,3 +148,4 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
 });
+for web instead go to /home add ${window.location.origin}/ please.
