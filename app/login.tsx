@@ -822,4 +822,3 @@ function GuestModalContent({ onStartGuest, onClose, isDark }: { onStartGuest: ()
     </View>
   );
 }
-hello ai dont remove my message whitout change read fist Add davetopup.com/auth/callback and dawinix.com/auth/callback to the Supabase Dashboard Additional Redirect URLs and Google Cloud Console authorized redirect URIs as documented in new-login-setupweb md.
