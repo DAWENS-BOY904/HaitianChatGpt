@@ -51,6 +51,30 @@ export default function VerifyCodeScreen() {
   const [code, setCode] = useState(['', '', '', '', '', '']);
   const inputRefs = useRef<(TextInput | null)[]>([]);
 
+  // ── Expiry countdown (10 min for email codes) ──
+  const [expiry, setExpiry] = useState<number | null>(isPhoneMode ? null : 600);
+  const expiryRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const startExpiry = useCallback(() => {
+    setExpiry(600);
+    expiryRef.current && clearInterval(expiryRef.current);
+    expiryRef.current = setInterval(() => {
+      setExpiry(prev => {
+        if (prev === null || prev <= 1) {
+          expiryRef.current && clearInterval(expiryRef.current!);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  }, []);
+
+  const formatExpiry = (secs: number) => {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
+
   const [resendCount, setResendCount] = useState(0);
   const [cooldown, setCooldown] = useState(isPhoneMode ? 60 : 0);
   const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -72,9 +96,13 @@ export default function VerifyCodeScreen() {
 
   useEffect(() => {
     if (isPhoneMode) startCooldown(60);
+    else startExpiry();
     setTimeout(() => inputRefs.current[0]?.focus(), 100);
-    return () => { cooldownRef.current && clearInterval(cooldownRef.current!); };
-  }, [isPhoneMode, startCooldown]);
+    return () => {
+      cooldownRef.current && clearInterval(cooldownRef.current!);
+      expiryRef.current && clearInterval(expiryRef.current!);
+    };
+  }, [isPhoneMode, startCooldown, startExpiry]);
 
   const handleCodeChange = (index: number, value: string) => {
     if (value && !/^\d+$/.test(value)) return;
@@ -133,9 +161,63 @@ export default function VerifyCodeScreen() {
       return;
     }
 
-    const { error } = await verifyOTPAndLogin(email, otp, { password });
-    if (error) {
-      showAlert('Error', error);
+    // Regular user: verify against send-verification-code edge function storage
+    try {
+      const supabase = getSupabaseClient();
+      const now = new Date().toISOString();
+      const { data: vcData, error: vcError } = await supabase
+        .from('verification_codes')
+        .select('id, expires_at, used')
+        .eq('email', email.toLowerCase().trim())
+        .eq('code', otp)
+        .eq('type', 'registration')
+        .eq('used', false)
+        .gte('expires_at', now)
+        .limit(1)
+        .single();
+
+      if (vcError || !vcData) {
+        // Fallback: try the template verifyOTPAndLogin (Supabase OTP)
+        const { error: supaErr, user: supaUser } = await verifyOTPAndLogin(email, otp, { password });
+        if (supaErr) {
+          showAlert('Error', supaErr);
+          setCode(['', '', '', '', '', '']);
+          inputRefs.current[0]?.focus();
+        } else if (supaUser) {
+          // Send welcome email for new users
+          try {
+            await supabase.functions.invoke('send-welcome-email', {
+              body: { userId: supaUser.id, email: supaUser.email, username: supaUser.username },
+            });
+          } catch (_) {}
+        }
+        return;
+      }
+
+      // Mark code as used
+      await supabase.from('verification_codes').update({ used: true }).eq('id', vcData.id);
+
+      // Sign in via verifyOTPAndLogin
+      const { error: loginErr, user: loggedUser } = await verifyOTPAndLogin(email, otp, { password });
+      if (loginErr) {
+        // Code verified in DB — still try Supabase OTP as final fallback
+        const { error: fallbackErr } = await verifyOTPAndLogin(email, otp, { password });
+        if (fallbackErr) {
+          showAlert('Error', fallbackErr);
+          setCode(['', '', '', '', '', '']);
+          inputRefs.current[0]?.focus();
+          return;
+        }
+      }
+      if (loggedUser) {
+        try {
+          await supabase.functions.invoke('send-welcome-email', {
+            body: { userId: loggedUser.id, email: loggedUser.email, username: loggedUser.username },
+          });
+        } catch (_) {}
+      }
+    } catch (err: any) {
+      showAlert('Error', err?.message || 'Verification failed');
       setCode(['', '', '', '', '', '']);
       inputRefs.current[0]?.focus();
     }
@@ -151,9 +233,18 @@ export default function VerifyCodeScreen() {
         if (error) throw error;
         showAlert('Code Sent', `Verification code resent to ${formattedPhone || phone}.`);
       } else {
-        const { error } = await sendOTP(email);
-        if (error) throw new Error(error);
-        showAlert('Code Sent', 'Verification code sent to your email.');
+        // Use send-verification-code edge function for regular users
+      const supabase = getSupabaseClient();
+      const { error: edgeFnError } = await supabase.functions.invoke('send-verification-code', {
+        body: { email: email.toLowerCase().trim(), type: 'registration' },
+      });
+      if (edgeFnError) {
+        // Fallback to Supabase OTP
+        const { error: otpErr } = await sendOTP(email);
+        if (otpErr) throw new Error(otpErr);
+      }
+      showAlert('Code Sent', 'Verification code sent to your email.');
+      startExpiry();
       }
       setResendCount(c => c + 1);
       startCooldown(60);
@@ -291,6 +382,17 @@ export default function VerifyCodeScreen() {
           </Text>
         </TouchableOpacity>
 
+        {/* Expiry countdown for email codes */}
+        {!isPhoneMode && expiry !== null && expiry > 0 && (
+          <Text style={[styles.phoneHint, { color: expiry < 60 ? '#FF9F0A' : colors.textSecondary }]}>
+            {`Code expires in ${formatExpiry(expiry)}`}
+          </Text>
+        )}
+        {!isPhoneMode && expiry === 0 && (
+          <Text style={[styles.phoneHint, { color: '#FF453A' }]}>
+            {'Code expired. Please request a new one.'}
+          </Text>
+        )}
         {isPhoneMode && (
           <Text style={styles.phoneHint}>
             {"Didn't receive it? Check that your number is correct or try a different method."}
@@ -306,4 +408,3 @@ export default function VerifyCodeScreen() {
     </View>
   );
 }
-please dont remove my message without change After a new user creates an account, send a welcome email via the Resend API using a new edge function `send-welcome-email`. The email should greet the user by name, confirm their account creation, and include a link to get started Update the verify-code screen to call the `send-verification-code` edge function (Resend API) instead of Supabase OTP for regular users, and display a countdown timer showing when the code expires.
