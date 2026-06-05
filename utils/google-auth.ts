@@ -26,8 +26,8 @@ import { Platform } from 'react-native';
 import { getSupabaseClient } from '@/template';
 
 // ── Your Google Client IDs ─────────────────────────────────────────────────
-const IOS_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || '153408485563-5nom14bpg7re9m36pk91ndv45vqpcvsv.apps.googleusercontent.com';
-const WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || '153408485563-rlq4fqkp66lsapggf7hr017vkbkjgipd.apps.googleusercontent.com';
+const IOS_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || '';
+const WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || '';
 
 // ── Redirect URL helpers ───────────────────────────────────────────────────
 
