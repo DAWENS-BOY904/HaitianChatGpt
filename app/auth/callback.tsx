@@ -15,11 +15,11 @@ import { useRouter } from 'expo-router';
 import { getSupabaseClient } from '@/template';
 
 function getPostAuthRedirect(): string {
-  if (Platform.OS !== 'web' || typeof window === 'undefined') return '/home';
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return '/';
   const origin = window.location.origin.toLowerCase();
-  if (origin.includes('davetopup.com')) return 'https://davetopup.com/home';
-  if (origin.includes('dawinix')) return 'https://www.dawinix.com/home';
-  return '/home';
+  if (origin.includes('davetopup.com')) return 'https://davetopup.com/';
+  if (origin.includes('dawinix')) return 'https://www.dawinix.com/';
+  return `${window.location.origin}/`;
 }
 
 export default function AuthCallback() {
@@ -29,7 +29,7 @@ export default function AuthCallback() {
 
   useEffect(() => {
     if (Platform.OS !== 'web') {
-      router.replace('/home');
+      router.replace('/');
       return;
     }
 
@@ -41,7 +41,7 @@ export default function AuthCallback() {
       const supabase = getSupabaseClient();
 
       if (typeof window === 'undefined') {
-        router.replace('/home');
+        router.replace('/');
         return;
       }
 
@@ -148,4 +148,3 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
 });
-for web instead go to /home add ${window.location.origin}/ please.
