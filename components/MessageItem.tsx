@@ -1650,3 +1650,4 @@ const assistantStyles = StyleSheet.create({
   sourcesBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 7, paddingHorizontal: 6 },
   sourcesLabel: { fontSize: 13, fontWeight: '500' },
 });
+Optimize the chat edge function for faster response times: add streaming SSE to deliver partial responses word-by-word, reduce cold start overhead by reusing the AI provider client across requests, and implement a response cache for repeated identical queries using an in-memory Map with TTL expiry.
