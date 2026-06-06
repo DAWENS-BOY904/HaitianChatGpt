@@ -1104,8 +1104,8 @@ export default function SettingsScreen() {
         <Card>
           <Row icon="bug-outline" label="Report bug" showChevron={false} onPress={() => openLink('/bugreport')} />
           <Row icon="help-circle-outline" label="Help Center" showChevron={false} onPress={() => openLink('https://yourapp.com/help')} />
-          <Row icon="document-text-outline" label="Terms of Use" showChevron={false} onPress={() => openLink('https://yourapp.com/terms')} />
-          <Row icon="shield-outline" label="Privacy Policy" showChevron={false} onPress={() => openLink('https://yourapp.com/privacy')} />
+          <Row icon="document-text-outline" label="Terms of Use" showChevron={false} onPress={() => openLink('https://developers.dawinix.com/legal/terms')} />
+          <Row icon="shield-outline" label="Privacy Policy" showChevron={false} onPress={() => openLink('https://developers.dawinix.com/legal/privacy')} />
           <Row
             icon="refresh-circle-outline"
             label="Check for updates"
