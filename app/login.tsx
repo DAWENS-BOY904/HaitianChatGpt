@@ -822,3 +822,4 @@ function GuestModalContent({ onStartGuest, onClose, isDark }: { onStartGuest: ()
     </View>
   );
 }
+optimize the chat edge function for faster response times: reduce cold start overhead, implement connection pooling, add response caching for repeated queries, and use streaming SSE to deliver partial responses to the client immediately as they arrive.
