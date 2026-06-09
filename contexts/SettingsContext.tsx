@@ -16,6 +16,8 @@ interface UserSettings {
   autocomplete: boolean;
   trendingSearches: boolean;
   followupSuggestions: boolean;
+  // Extended voice settings (stored in DB as voice_selection etc.)
+  preferredAiModel: string;
 }
 
 interface SettingsContextType {
@@ -31,11 +33,12 @@ const defaultSettings: UserSettings = {
   hapticFeedback: true,
   autoSpelling: true,
   mainLanguage: 'English',
-  voiceSelection: 'Default',
+  voiceSelection: 'pNInz6obpgDQGcFmaJgB', // Adam — default ElevenLabs voice
   backgroundConversations: false,
   autocomplete: true,
   trendingSearches: true,
   followupSuggestions: true,
+  preferredAiModel: 'gemini',
 };
 
 export const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
@@ -64,32 +67,41 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
     if (!error && data) {
       setSettings({
-        appLanguage: data.app_language,
-        appearance: data.appearance as Appearance,
-        accentColor: data.accent_color,
-        hapticFeedback: data.haptic_feedback,
-        autoSpelling: data.auto_spelling,
-        mainLanguage: data.main_language,
-        voiceSelection: data.voice_selection,
-        backgroundConversations: data.background_conversations,
-        autocomplete: data.autocomplete,
-        trendingSearches: data.trending_searches,
-        followupSuggestions: data.followup_suggestions,
+        appLanguage: data.app_language ?? defaultSettings.appLanguage,
+        appearance: (data.appearance as Appearance) ?? defaultSettings.appearance,
+        // Ensure accent_color is always loaded from DB — never fall back to a stale default
+        accentColor: data.accent_color || defaultSettings.accentColor,
+        hapticFeedback: data.haptic_feedback ?? defaultSettings.hapticFeedback,
+        autoSpelling: data.auto_spelling ?? defaultSettings.autoSpelling,
+        mainLanguage: data.main_language ?? defaultSettings.mainLanguage,
+        voiceSelection: data.voice_selection || defaultSettings.voiceSelection,
+        backgroundConversations: data.background_conversations ?? defaultSettings.backgroundConversations,
+        autocomplete: data.autocomplete ?? defaultSettings.autocomplete,
+        trendingSearches: data.trending_searches ?? defaultSettings.trendingSearches,
+        followupSuggestions: data.followup_suggestions ?? defaultSettings.followupSuggestions,
+        preferredAiModel: data.preferred_ai_model || defaultSettings.preferredAiModel,
       });
     }
     setLoading(false);
   };
 
   const updateSetting = async <K extends keyof UserSettings>(key: K, value: UserSettings[K]) => {
-    if (!user) return;
-
+    // Optimistic UI update
     setSettings(prev => ({ ...prev, [key]: value }));
 
+    if (!user) return;
+
+    // Convert camelCase key to snake_case for DB column name
     const dbKey = key.replace(/([A-Z])/g, '_$1').toLowerCase();
+
+    // Upsert so the row is created if it doesn't exist yet
     await supabase
       .from('user_settings')
-      .update({ [dbKey]: value, updated_at: new Date().toISOString() })
-      .eq('user_id', user.id);
+      .upsert(
+        { user_id: user.id, [dbKey]: value, updated_at: new Date().toISOString() },
+        { onConflict: 'user_id' }
+      )
+      .catch((err: any) => console.log('[Settings] upsert error:', err?.message));
   };
 
   return (
